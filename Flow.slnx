@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Flow.Domain/Flow.Domain.csproj" />
+    <Project Path="src/Flow.Application/Flow.Application.csproj" />
+    <Project Path="src/Flow.Infrastructure/Flow.Infrastructure.csproj" />
+    <Project Path="src/Flow.Api/Flow.Api.csproj" />
+    <Project Path="src/Flow.Client/Flow.Client.csproj" />
+    <Project Path="src/Flow.Shared/Flow.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Flow.Application.Tests/Flow.Application.Tests.csproj" />
+    <Project Path="tests/Flow.Infrastructure.Tests/Flow.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

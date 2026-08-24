@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Flow.Application\Flow.Application.csproj" />
+        <ProjectReference Include="..\Flow.Infrastructure\Flow.Infrastructure.csproj" />
+        <ProjectReference Include="..\Flow.Shared\Flow.Shared.csproj" />
+    </ItemGroup>
+
+</Project>
