@@ -1,0 +1,7 @@
+<span class="flow-chip @(Selected ? "selected" : "")" style="@Style">@ChildContent</span>
+
+@code {
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

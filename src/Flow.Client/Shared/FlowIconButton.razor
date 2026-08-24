@@ -1,0 +1,15 @@
+<button type="button" class="flow-icon-btn variant-@Variant" title="@Title"
+        style="@($"width:{Size}px;height:{Size}px;{Style}")" @onclick="OnClick">
+    <Icon Name="@IconName" Size="@IconSize" />
+</button>
+
+@code {
+    [Parameter] public string IconName { get; set; } = "";
+    [Parameter] public string Variant { get; set; } = "ghost"; // ghost | accent | secondary
+    [Parameter] public int Size { get; set; } = 34;
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+
+    private int IconSize => (int)Math.Round(Size * 0.44);
+}

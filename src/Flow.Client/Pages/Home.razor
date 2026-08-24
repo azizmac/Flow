@@ -1,7 +1,57 @@
-﻿@page "/"
+@page "/"
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Главная — Flow</PageTitle>
 
-<h1>Hello, world!</h1>
+<FlowTopBar Title="Привет, Ирина 👋">
+    <div class="search">
+        <Icon Name="search" Size="16" />
+        <input placeholder="Поиск..." />
+    </div>
+    <FlowIconButton IconName="message" Variant="ghost" Size="38" Title="Сообщения" />
+    <Avatar Initials="И" Size="38" />
+</FlowTopBar>
 
-Welcome to your new app.
+<div class="content">
+    <div style="display:grid;grid-template-columns:2fr 1fr;grid-template-rows:auto 1fr;gap:20px;flex:1;min-height:0;">
+        <div class="stat-strip" style="grid-column:1;grid-row:1;">
+            <div class="stat-item"><span class="n">6</span><span class="stat-lbl">задач на сегодня</span></div>
+            <div class="divider"></div>
+            <div class="stat-item"><span class="n" style="color:#E2604F;">2</span><span class="stat-lbl">просрочено</span></div>
+            <div class="divider"></div>
+            <div class="stat-item"><span class="n" style="color:#FFBA00;">12</span><span class="stat-lbl">в работе</span></div>
+            <div class="divider"></div>
+            <div class="stat-item"><span class="n" style="color:#6D9773;">34</span><span class="stat-lbl">завершено за неделю</span></div>
+        </div>
+
+        <div class="panel" style="grid-column:1;grid-row:2;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div class="section-title">Мои задачи на сегодня</div>
+                <a href="/tasks">Все задачи</a>
+            </div>
+            @foreach (var t in SampleData.HomeTasks)
+            {
+                <div class="task-row">
+                    <div class="dot" style="background:@t.Color"></div>
+                    <div class="task-title">@t.Title</div>
+                    <div class="task-tag">@t.Project</div>
+                    <div class="task-meta">@t.Due</div>
+                    <Avatar Initials="@t.Initials" />
+                </div>
+            }
+        </div>
+
+        <div class="panel" style="grid-column:2;grid-row:1 / 3;">
+            <div class="section-title">Активность команды</div>
+            @foreach (var a in SampleData.Activity)
+            {
+                <div style="display:flex;gap:10px;align-items:flex-start;">
+                    <Avatar Initials="@a.Initials" Style="margin-top:1px;" />
+                    <div style="font:500 12.5px/1.5 Inter,sans-serif;color:var(--text-secondary);">
+                        <span style="color:#fff;font-weight:700;">@a.Name</span> @a.Text
+                        <div style="color:var(--text-tertiary);font-size:11px;margin-top:2px;">@a.Time</div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>

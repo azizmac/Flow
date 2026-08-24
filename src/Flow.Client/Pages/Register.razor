@@ -1,0 +1,64 @@
+@page "/register"
+@layout AuthLayout
+
+<PageTitle>Регистрация — Flow</PageTitle>
+
+<div class="auth-screen">
+    <div class="auth-brand">
+        <div class="auth-mark-row">
+            <div class="auth-mark">F</div>
+            <div class="auth-word">FLOW</div>
+        </div>
+        <div>
+            <h2 style="font:900 32px/1.15 Inter,sans-serif;letter-spacing:-0.6px;margin:0 0 16px;color:#fff;">
+                Создай workspace для своей команды.
+            </h2>
+            <p style="font:500 14.5px/1.6 Inter,sans-serif;color:rgba(255,255,255,0.6);max-width:400px;margin:0;">
+                Бесплатно и open source. Пригласи команду после регистрации по ссылке-приглашению.
+            </p>
+        </div>
+        <p style="font:500 12px Inter,sans-serif;color:rgba(255,255,255,0.35);margin:0;">© Flow — open source project</p>
+    </div>
+
+    <div class="auth-panel-wrap">
+        <div class="auth-card" style="padding:28px 32px;gap:18px;">
+            <div>
+                <h2 style="font:800 24px Inter,sans-serif;margin:0 0 6px;color:#fff;">Создать аккаунт</h2>
+                <p style="font:500 13.5px Inter,sans-serif;color:var(--text-tertiary);margin:0;">Это займёт меньше минуты</p>
+            </div>
+
+            <FlowInput Label="Имя" IconName="user" Placeholder="Ирина Волкова" @bind-Value="_name" />
+            <FlowInput Label="Рабочий email" IconName="mail" Placeholder="you@company.com" @bind-Value="_email" />
+            <FlowInput Label="Название workspace" IconName="house" Placeholder="Acme Inc" @bind-Value="_workspace" />
+            <FlowInput Label="Пароль" IconName="key" TrailingIconName="eye" Type="password" Placeholder="минимум 8 символов" @bind-Value="_password" />
+
+            <p style="font:500 11.5px/1.5 Inter,sans-serif;color:var(--text-tertiary);margin:-6px 0 0;">
+                Создавая аккаунт, вы соглашаетесь с <a href="#">условиями использования</a>.
+            </p>
+
+            <FlowButton Variant="primary" Size="lg" FullWidth="true" OnClick="DoRegister">Создать аккаунт</FlowButton>
+
+            <div class="auth-divider"><div class="line"></div>OR<div class="line"></div></div>
+
+            <div style="display:flex;gap:12px;">
+                <FlowButton Variant="secondary" Size="lg" FullWidth="true" Icon="laptop">Google</FlowButton>
+                <FlowButton Variant="secondary" Size="lg" FullWidth="true" Icon="browser">GitHub</FlowButton>
+            </div>
+
+            <p style="text-align:center;font:500 12.5px Inter,sans-serif;color:var(--text-tertiary);margin:0;">
+                Уже есть аккаунт? <a href="/login">Войти</a>
+            </p>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _name = "";
+    private string _email = "";
+    private string _workspace = "";
+    private string _password = "";
+
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private void DoRegister() => Nav.NavigateTo("/");
+}

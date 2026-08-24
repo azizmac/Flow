@@ -1,0 +1,9 @@
+
+<div style="width:220px;display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
+    @foreach (var s in SampleData.SettingsNav())
+    {
+        <NavLink class="settings-nav-item" href="@s.Href">
+            <Icon Name="@s.Icon" Size="17" />@s.Label
+        </NavLink>
+    }
+</div>

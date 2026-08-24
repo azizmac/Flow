@@ -1,0 +1,49 @@
+<div class="flow-field" style="@Style">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="flow-field-label">@Label</label>
+    }
+    <div class="flow-input-wrap">
+        @if (!string.IsNullOrEmpty(IconName))
+        {
+            <Icon Name="@IconName" Size="15" />
+        }
+        <input type="@EffectiveType" placeholder="@Placeholder" value="@Value"
+               @oninput="OnInput" />
+        @if (!string.IsNullOrEmpty(TrailingIconName))
+        {
+            <span class="trailing" @onclick="ToggleReveal">
+                <Icon Name="@TrailingIconName" Size="15" />
+            </span>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? IconName { get; set; }
+    [Parameter] public string? TrailingIconName { get; set; }
+    [Parameter] public string Type { get; set; } = "text";
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? Style { get; set; }
+
+    private bool _reveal;
+
+    private string EffectiveType => Type == "password" && _reveal ? "text" : Type;
+
+    private void ToggleReveal()
+    {
+        if (Type == "password")
+        {
+            _reveal = !_reveal;
+        }
+    }
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        Value = e.Value?.ToString() ?? "";
+        await ValueChanged.InvokeAsync(Value);
+    }
+}

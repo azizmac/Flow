@@ -1,0 +1,74 @@
+@page "/tasks/{TaskId}/bpmn"
+
+<PageTitle>Редактор BPMN — Flow</PageTitle>
+
+<FlowTopBar BackHref="@($"/tasks/{TaskId}")" Breadcrumb="Задачи /" Title="Приём заказа в кофейне (пример BPMN)" />
+
+<div class="content">
+    <div class="panel" style="flex:1;min-height:0;flex-direction:row;gap:0;padding:0;overflow:hidden;">
+        <div style="flex:1.6;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--border);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;gap:10px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <Icon Name="chart" Size="16" Style="color:#FFBA00" />
+                    <div class="section-title">Редактор BPMN</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <FlowButton Variant="secondary" Size="sm" Icon="plus">Узел</FlowButton>
+                    <FlowButton Variant="secondary" Size="sm" Icon="laptop">Экспорт в Miro</FlowButton>
+                    <FlowButton Variant="secondary" Size="sm" Icon="file">Экспорт в Draw.io</FlowButton>
+                    <FlowIconButton IconName="close" Variant="ghost" Size="24" Title="Закрыть" OnClick="@(() => Nav.NavigateTo($"/tasks/{TaskId}"))" />
+                </div>
+            </div>
+
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto;min-height:0;background:repeating-linear-gradient(0deg,transparent,transparent 23px,rgba(255,255,255,0.035) 23px,rgba(255,255,255,0.035) 24px),repeating-linear-gradient(90deg,transparent,transparent 23px,rgba(255,255,255,0.035) 23px,rgba(255,255,255,0.035) 24px);">
+                <div style="display:flex;align-items:center;gap:0;transform:scale(0.82);">
+                    <div style="width:40px;height:40px;border-radius:50%;border:2px solid #6D9773;display:flex;align-items:center;justify-content:center;font:600 9.5px Inter,sans-serif;color:#6D9773;text-align:center;flex-shrink:0;">Старт</div>
+                    <div style="width:28px;height:2px;background:var(--border);flex-shrink:0;"></div>
+                    <div style="width:130px;padding:11px;border-radius:10px;background:var(--surface-raised);border:1px solid var(--border);font:600 11px/1.3 Inter,sans-serif;color:#fff;text-align:center;flex-shrink:0;cursor:grab;">Клиент делает заказ</div>
+                    <div style="width:28px;height:2px;background:var(--border);flex-shrink:0;"></div>
+                    <div style="width:80px;height:80px;transform:rotate(45deg);border:2px solid #FFBA00;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:grab;">
+                        <span style="transform:rotate(-45deg);font:700 9.5px/1.2 Inter,sans-serif;color:#FFBA00;text-align:center;width:58px;display:inline-block;">Есть в наличии?</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:24px;margin-left:28px;">
+                        <div style="display:flex;align-items:center;">
+                            <span style="font:600 9.5px Inter,sans-serif;color:#6D9773;margin-right:6px;">да</span>
+                            <div style="width:130px;padding:11px;border-radius:10px;background:var(--surface-raised);border:1px solid var(--border);font:600 11px/1.3 Inter,sans-serif;color:#fff;text-align:center;cursor:grab;">Бариста готовит напиток</div>
+                            <div style="width:28px;height:2px;background:var(--border);"></div>
+                            <div style="width:130px;padding:11px;border-radius:10px;background:var(--surface-raised);border:1px solid var(--border);font:600 11px/1.3 Inter,sans-serif;color:#fff;text-align:center;cursor:grab;">Оплата и выдача заказа</div>
+                            <div style="width:28px;height:2px;background:var(--border);"></div>
+                            <div style="width:40px;height:40px;border-radius:50%;border:2px solid #E2604F;display:flex;align-items:center;justify-content:center;font:600 9.5px Inter,sans-serif;color:#E2604F;flex-shrink:0;">Конец</div>
+                        </div>
+                        <div style="display:flex;align-items:center;">
+                            <span style="font:600 9.5px Inter,sans-serif;color:#BB8A52;margin-right:6px;">нет</span>
+                            <div style="width:130px;padding:11px;border-radius:10px;background:var(--surface-raised);border:1px solid var(--border);font:600 11px/1.3 Inter,sans-serif;color:#fff;text-align:center;cursor:grab;">Предложить замену напитка</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p style="font:500 11.5px/1.5 Inter,sans-serif;color:var(--text-tertiary);margin:0;border-top:1px solid var(--border);padding:14px 20px;flex-shrink:0;">Пример визуализации бизнес-процесса (кофейня) — узлы перетаскиваются и редактируются вручную.</p>
+        </div>
+
+        <div style="width:320px;flex-shrink:0;display:flex;flex-direction:column;">
+            <div style="padding:16px 18px;border-bottom:1px solid var(--border);flex-shrink:0;"><div class="section-title" style="font-size:13px;">Чат с ИИ</div></div>
+            <div style="flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:16px 18px;">
+                <div style="display:flex;gap:8px;">
+                    <div style="width:22px;height:22px;border-radius:6px;background:var(--accent-soft);color:#FFBA00;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><Icon Name="sparkle" Size="12" /></div>
+                    <div style="font:500 12px/1.5 Inter,sans-serif;color:var(--text-secondary);background:rgba(255,255,255,0.04);border-radius:10px;padding:8px 10px;">Построил диаграмму процесса приёма заказа. Могу добавить шаг возврата средств или разветвление по способу оплаты.</div>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <div style="font:500 12px/1.5 Inter,sans-serif;color:#fff;background:var(--surface-raised);border-radius:10px;padding:8px 10px;max-width:85%;">Добавь шаг проверки оплаты</div>
+                </div>
+            </div>
+            <div style="padding:14px 18px;border-top:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.03);">
+                <input placeholder="Изменить диаграмму..." style="flex:1;background:transparent;border:none;outline:none;color:#fff;font:500 12.5px Inter,sans-serif;" />
+                <FlowIconButton IconName="arrow-up" Variant="accent" Size="26" Title="Отправить" />
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string TaskId { get; set; } = "";
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+}

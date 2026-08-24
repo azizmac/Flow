@@ -1,0 +1,41 @@
+@page "/settings"
+@page "/settings/profile"
+
+<PageTitle>Настройки — Профиль — Flow</PageTitle>
+
+<FlowTopBar Title="Настройки" />
+
+<div class="content" style="flex-direction:row;gap:24px;">
+    <SettingsNav />
+    <div class="panel" style="flex:1;height:fit-content;">
+        <div class="section-title">Профиль пользователя</div>
+        <div style="display:flex;align-items:center;gap:14px;">
+            <Avatar Initials="ИВ" Size="56" />
+            <FlowButton Variant="secondary" Size="sm">Изменить фото</FlowButton>
+        </div>
+        <FlowInput Label="Имя" Placeholder="Ирина Волкова" @bind-Value="_name" />
+        <FlowInput Label="Email" Placeholder="irina@acme.com" @bind-Value="_email" />
+        <div class="settings-row">
+            <div>
+                <div style="font:700 13.5px Inter,sans-serif;color:#fff;">Уведомления на email</div>
+                <div style="font:500 12px Inter,sans-serif;color:var(--text-tertiary);">Дедлайны и упоминания</div>
+            </div>
+            <FlowSwitch @bind-Checked="_emailNotifications" />
+        </div>
+        <div class="settings-row">
+            <div>
+                <div style="font:700 13.5px Inter,sans-serif;color:#fff;">Двухфакторная аутентификация</div>
+                <div style="font:500 12px Inter,sans-serif;color:var(--text-tertiary);">Дополнительная защита аккаунта</div>
+            </div>
+            <FlowSwitch @bind-Checked="_twoFactor" />
+        </div>
+        <FlowButton Variant="primary" Size="lg">Сохранить изменения</FlowButton>
+    </div>
+</div>
+
+@code {
+    private string _name = "Ирина Волкова";
+    private string _email = "irina@acme.com";
+    private bool _emailNotifications = true;
+    private bool _twoFactor;
+}

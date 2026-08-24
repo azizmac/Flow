@@ -1,0 +1,28 @@
+/* Flow design tokens — from design handoff (design_handoff_flow_crm) */
+.flow-app {
+    --bg-page: #EFE9DD;
+    --bg-deep: #082019;
+    --bg-content: #153E32;
+    --surface: #1B4A3B;
+    --surface-raised: #245A48;
+
+    --accent: #FFBA00;
+    --accent-hover: #ffcb40;
+    --accent-soft: rgba(255, 186, 0, 0.14);
+
+    --sage: #6D9773;
+    --tan: #BB8A52;
+    --danger: #E2604F;
+
+    --text-primary: #FFFFFF;
+    --text-secondary: rgba(255, 255, 255, 0.68);
+    --text-tertiary: rgba(255, 255, 255, 0.42);
+
+    --border: rgba(255, 255, 255, 0.1);
+    --on-accent: #0C3B2E;
+
+    --shadow-card: 0 40px 80px -30px rgba(0, 0, 0, 0.35);
+    --shadow-popover: 0 20px 40px rgba(0, 0, 0, 0.4);
+
+    font-family: 'Inter', system-ui, sans-serif;
+}

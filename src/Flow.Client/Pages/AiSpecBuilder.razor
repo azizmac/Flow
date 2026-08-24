@@ -1,0 +1,105 @@
+@page "/tasks/{TaskId}/spec"
+
+<PageTitle>ТЗ — sso-workspace.md — Flow</PageTitle>
+
+<FlowTopBar BackHref="@($"/tasks/{TaskId}")" Breadcrumb="Задачи /" Title="Настроить SSO для воркспейса" />
+
+<div class="content">
+    <div class="panel" style="flex:1;min-height:0;flex-direction:row;gap:0;padding:0;overflow:hidden;">
+        <div style="flex:1.4;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--border);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <Icon Name="sparkle" Size="16" Style="color:#FFBA00" />
+                    <div class="section-title">ТЗ — sso-workspace.md</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="display:flex;background:var(--surface-raised);border-radius:8px;padding:2px;gap:2px;">
+                        <div style="padding:5px 12px;border-radius:6px;cursor:pointer;font:700 11.5px Inter,sans-serif;@(_mdMode ? "color:var(--text-secondary);" : "background:var(--accent);color:var(--on-accent);")"
+                             @onclick="@(() => _mdMode = false)">Превью</div>
+                        <div style="padding:5px 12px;border-radius:6px;cursor:pointer;font:700 11.5px Inter,sans-serif;@(_mdMode ? "background:var(--accent);color:var(--on-accent);" : "color:var(--text-secondary);")"
+                             @onclick="@(() => _mdMode = true)">&lt;/&gt; .md редактор</div>
+                    </div>
+                    <FlowIconButton IconName="close" Variant="ghost" Size="24" Title="Закрыть" OnClick="@(() => Nav.NavigateTo($"/tasks/{TaskId}"))" />
+                </div>
+            </div>
+
+            @if (!_mdMode)
+            {
+                <div style="flex:1;overflow:auto;display:flex;flex-direction:column;gap:16px;padding:20px;">
+                    <div>
+                        <div style="font:800 13px Inter,sans-serif;color:#FFBA00;margin-bottom:6px;">## Цель</div>
+                        <p style="font:500 13px/1.6 Inter,sans-serif;color:var(--text-secondary);margin:0;">Добавить единый вход (SSO) на уровне workspace через Google и GitHub, чтобы участники команды могли авторизовываться корпоративными аккаунтами без отдельного пароля Flow.</p>
+                    </div>
+                    <div>
+                        <div style="font:800 13px Inter,sans-serif;color:#FFBA00;margin-bottom:6px;">## Требования</div>
+                        <div style="display:flex;flex-direction:column;gap:6px;">
+                            <div style="display:flex;gap:8px;font:500 13px/1.5 Inter,sans-serif;color:var(--text-secondary);"><span style="color:#6D9773;">•</span>OAuth 2.0 для Google Workspace и GitHub Organizations</div>
+                            <div style="display:flex;gap:8px;font:500 13px/1.5 Inter,sans-serif;color:var(--text-secondary);"><span style="color:#6D9773;">•</span>Маппинг ролей по домену компании при первом входе</div>
+                            <div style="display:flex;gap:8px;font:500 13px/1.5 Inter,sans-serif;color:var(--text-secondary);"><span style="color:#6D9773;">•</span>Фолбэк на email/пароль для аккаунтов без SSO</div>
+                            <div style="display:flex;gap:8px;font:500 13px/1.5 Inter,sans-serif;color:var(--text-secondary);"><span style="color:#6D9773;">•</span>Логирование входов для аудита безопасности</div>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font:800 13px Inter,sans-serif;color:#FFBA00;margin-bottom:6px;">## Критерии приёмки</div>
+                        <div style="display:flex;flex-direction:column;gap:6px;">
+                            <div style="display:flex;gap:8px;align-items:flex-start;font:500 13px/1.5 Inter,sans-serif;color:var(--text-secondary);"><Icon Name="check" Size="15" Style="color:#6D9773;margin-top:2px;flex-shrink:0;" />Новый участник входит через Google/GitHub и попадает в нужный workspace</div>
+                            <div style="display:flex;gap:8px;align-items:flex-start;font:500 13px/1.5 Inter,sans-serif;color:var(--text-secondary);"><Icon Name="check" Size="15" Style="color:#6D9773;margin-top:2px;flex-shrink:0;" />Роль назначается автоматически по домену почты</div>
+                            <div style="display:flex;gap:8px;align-items:flex-start;font:500 13px/1.5 Inter,sans-serif;color:var(--text-secondary);"><Icon Name="check" Size="15" Style="color:#6D9773;margin-top:2px;flex-shrink:0;" />Отказ входа обрабатывается понятной ошибкой</div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div style="flex:1;overflow:auto;display:flex;background:#0C1210;">
+                    <div style="width:38px;flex-shrink:0;padding:20px 0;display:flex;flex-direction:column;font:500 12px/1.7 'SF Mono',Menlo,monospace;color:rgba(255,255,255,0.25);text-align:right;padding-right:10px;">
+                        @foreach (var ln in SampleData.MdLines)
+                        {
+                            <div>@ln.N</div>
+                        }
+                    </div>
+                    <div style="flex:1;padding:20px 16px;font:500 12px/1.7 'SF Mono',Menlo,monospace;overflow:hidden;">
+                        @foreach (var ln in SampleData.MdLines)
+                        {
+                            <div style="color:@ln.Color;white-space:pre;">@ln.Text</div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <div style="display:flex;gap:10px;border-top:1px solid var(--border);padding:14px 20px;flex-shrink:0;">
+                <FlowButton Variant="secondary" Size="sm" Icon="paste">Вставить в описание задачи</FlowButton>
+                <FlowButton Variant="primary" Size="sm" Icon="add-file">Создать подзадачи из требований</FlowButton>
+            </div>
+        </div>
+
+        <div style="width:340px;flex-shrink:0;display:flex;flex-direction:column;">
+            <div style="padding:16px 18px;border-bottom:1px solid var(--border);flex-shrink:0;"><div class="section-title" style="font-size:13px;">Уточнить с ИИ</div></div>
+            <div style="flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:16px 18px;">
+                <div style="display:flex;gap:8px;">
+                    <div style="width:22px;height:22px;border-radius:6px;background:var(--accent-soft);color:#FFBA00;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><Icon Name="sparkle" Size="12" /></div>
+                    <div style="font:500 12px/1.5 Inter,sans-serif;color:var(--text-secondary);background:rgba(255,255,255,0.04);border-radius:10px;padding:8px 10px;">
+                        @(_mdMode ? "Можно редактировать ТЗ напрямую в Markdown — изменения синхронизируются с превью." : "ТЗ готово в формате Markdown. Могу дополнить раздел рисков или переписать критерии приёмки.")
+                    </div>
+                </div>
+                @if (!_mdMode)
+                {
+                    <div style="display:flex;gap:8px;justify-content:flex-end;">
+                        <div style="font:500 12px/1.5 Inter,sans-serif;color:#fff;background:var(--surface-raised);border-radius:10px;padding:8px 10px;max-width:85%;">Добавь раздел «Риски»</div>
+                    </div>
+                }
+            </div>
+            <div style="padding:14px 18px;border-top:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.03);">
+                <input placeholder="Дополнить или скорректировать ТЗ..." style="flex:1;background:transparent;border:none;outline:none;color:#fff;font:500 12.5px Inter,sans-serif;" />
+                <FlowIconButton IconName="arrow-up" Variant="accent" Size="26" Title="Отправить" />
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string TaskId { get; set; } = "";
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private bool _mdMode;
+}

@@ -1,0 +1,28 @@
+@page "/settings/language"
+
+<PageTitle>Настройки — Язык — Flow</PageTitle>
+
+<FlowTopBar Title="Настройки" />
+
+<div class="content" style="flex-direction:row;gap:24px;">
+    <SettingsNav />
+    <div class="panel" style="flex:1;height:fit-content;">
+        <div class="section-title">Язык интерфейса</div>
+        <FlowSelect Label="Язык" Options="_languages" @bind-Value="_language" Style="width:320px;" />
+        <div class="section-title" style="margin-top:8px;">Формат даты</div>
+        <FlowSelect Label="Формат" Options="_dateFormats" @bind-Value="_dateFormat" Style="width:320px;" />
+        <div class="section-title" style="margin-top:8px;">Часовой пояс</div>
+        <FlowSelect Label="Часовой пояс" Options="_timezones" @bind-Value="_timezone" Style="width:320px;" />
+        <FlowButton Variant="primary" Size="lg">Сохранить изменения</FlowButton>
+    </div>
+</div>
+
+@code {
+    private readonly string[] _languages = ["Русский", "English"];
+    private readonly string[] _dateFormats = ["ДД.ММ.ГГГГ", "ММ/ДД/ГГГГ", "ГГГГ-ММ-ДД"];
+    private readonly string[] _timezones = ["(GMT+3) Москва", "(GMT+0) Лондон", "(GMT-5) Нью-Йорк"];
+
+    private string _language = "Русский";
+    private string _dateFormat = "ДД.ММ.ГГГГ";
+    private string _timezone = "(GMT+3) Москва";
+}

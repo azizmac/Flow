@@ -1,0 +1,77 @@
+@page "/teams/{TeamName}"
+
+<PageTitle>@TeamName — Flow</PageTitle>
+
+<FlowTopBar BackHref="/teams" Title="@TeamName">
+    <FlowIconButton IconName="more-h" Variant="ghost" Size="34" Title="Ещё" />
+</FlowTopBar>
+
+<div class="content">
+    <div style="display:flex;gap:16px;align-items:center;padding:18px 20px;background:var(--surface);border:1px solid var(--border);border-radius:14px;">
+        <div style="width:56px;height:56px;border-radius:14px;background:var(--accent-soft);color:#FFBA00;display:flex;align-items:center;justify-content:center;font:900 20px Inter,sans-serif;flex-shrink:0;">@InitialLetter</div>
+        <div style="flex:1;">
+            <div style="font:800 15px Inter,sans-serif;color:#fff;margin-bottom:4px;">@TeamName</div>
+            <p style="font:500 13.5px/1.6 Inter,sans-serif;color:var(--text-secondary);margin:0;max-width:520px;">Отвечает за клиентские интерфейсы и дизайн-систему продукта.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding-left:16px;border-left:1px solid var(--border);flex-shrink:0;">
+            <Avatar Initials="ИВ" Size="36" />
+            <div>
+                <div class="field-lbl">Глава команды</div>
+                <div style="font:700 13.5px Inter,sans-serif;color:#fff;">Ирина Волкова</div>
+            </div>
+        </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:0.8fr 1.2fr;gap:20px;flex:1;min-height:0;">
+        <div class="panel">
+            <div class="section-title">Участники</div>
+            <div style="overflow:auto;">
+                @foreach (var m in SampleData.Members)
+                {
+                    <div style="display:flex;align-items:center;gap:10px;padding:7px 2px;border-bottom:1px solid var(--border);">
+                        <Avatar Initials="@m.Initials" Size="22" />
+                        <div style="flex:1;min-width:0;">
+                            <div style="font:700 12px Inter,sans-serif;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@m.Name</div>
+                            <div style="font:500 10.5px Inter,sans-serif;color:var(--text-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@m.Role</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="section-title">Активные задачи</div>
+            <div style="overflow:auto;display:flex;flex-direction:column;gap:12px;">
+                @foreach (var t in SampleData.TeamTasksBig)
+                {
+                    <div class="sub-block" style="padding:14px 16px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <div class="dot" style="background:@t.Color"></div>
+                                <span style="font:700 14px Inter,sans-serif;color:#fff;">@t.Title</span>
+                            </div>
+                            <span class="task-meta">@t.Due</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(t.Pr))
+                        {
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <Icon Name="browser" Size="14" Style="color:#6D9773" />
+                                <span style="font:600 12px Inter,sans-serif;color:#6D9773;">@t.Pr</span>
+                            </div>
+                        }
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <Avatar Initials="@t.Initials" Size="22" />
+                            <span class="task-meta">@t.Owner</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string TeamName { get; set; } = "";
+
+    private string InitialLetter => string.IsNullOrEmpty(TeamName) ? "?" : TeamName[..1].ToUpperInvariant();
+}

@@ -1,0 +1,41 @@
+
+<div class="topbar">
+    <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+        @if (!string.IsNullOrEmpty(BackHref))
+        {
+            <FlowIconButton IconName="chevron-left" Variant="ghost" Size="34" Title="Назад" OnClick="GoBack" />
+        }
+        @if (!string.IsNullOrEmpty(Breadcrumb))
+        {
+            <span class="topbar-crumb">@Breadcrumb</span>
+        }
+        @if (TitleContent is not null)
+        {
+            @TitleContent
+        }
+        else
+        {
+            <h2 style="@(string.IsNullOrEmpty(Breadcrumb) ? "" : "font-size:16px;")">@Title</h2>
+        }
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;flex-shrink:0;">
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? BackHref { get; set; }
+    [Parameter] public string? Breadcrumb { get; set; }
+    [Parameter] public RenderFragment? TitleContent { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private void GoBack()
+    {
+        if (!string.IsNullOrEmpty(BackHref))
+        {
+            Nav.NavigateTo(BackHref);
+        }
+    }
+}

@@ -1,0 +1,25 @@
+@page "/settings/members"
+
+<PageTitle>Настройки — Участники и роли — Flow</PageTitle>
+
+<FlowTopBar Title="Настройки">
+    <FlowButton Variant="primary" Size="sm" Icon="users-add">Пригласить</FlowButton>
+</FlowTopBar>
+
+<div class="content" style="flex-direction:row;gap:24px;">
+    <SettingsNav />
+    <div class="panel" style="flex:1;height:fit-content;">
+        <div class="section-title">Участники рабочего пространства</div>
+        @foreach (var m in SampleData.Members)
+        {
+            <div class="task-row">
+                <Avatar Initials="@m.Initials" />
+                <div style="flex:1;">
+                    <div style="font:700 13px Inter,sans-serif;color:#fff;">@m.Name</div>
+                    <div style="font:500 11.5px Inter,sans-serif;color:var(--text-tertiary);">@m.Role</div>
+                </div>
+                <FlowTag>Участник</FlowTag>
+            </div>
+        }
+    </div>
+</div>

@@ -1,0 +1,14 @@
+<button type="button" class="flow-switch @(Checked ? "checked" : "")" @onclick="Toggle" aria-pressed="@Checked">
+    <span class="knob"></span>
+</button>
+
+@code {
+    [Parameter] public bool Checked { get; set; }
+    [Parameter] public EventCallback<bool> CheckedChanged { get; set; }
+
+    private async Task Toggle()
+    {
+        Checked = !Checked;
+        await CheckedChanged.InvokeAsync(Checked);
+    }
+}

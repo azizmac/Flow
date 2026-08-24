@@ -1,0 +1,178 @@
+@page "/tasks/{TaskId}"
+
+<PageTitle>Настроить SSO для воркспейса — Flow</PageTitle>
+
+<FlowTopBar BackHref="/tasks" Breadcrumb="Задачи /" Title="Настроить SSO для воркспейса">
+    <FlowIconButton IconName="more-h" Variant="ghost" Size="34" Title="Ещё" />
+</FlowTopBar>
+
+<div class="content" style="flex-direction:row;gap:24px;">
+    <div class="panel" style="flex:2;">
+        <div class="sub-block">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <FlowChip Selected="true">В работе</FlowChip>
+                <div class="task-meta"><div class="dot" style="background:#E2604F;"></div>Высокий приоритет</div>
+            </div>
+            <h2 style="font:800 22px Inter,sans-serif;margin:2px 0 0;color:#fff;">Настроить SSO для воркспейса</h2>
+            <p style="font:500 13.5px/1.6 Inter,sans-serif;color:var(--text-secondary);margin:0;">
+                Добавить вход через Google и GitHub на уровне workspace, включая маппинг ролей.
+            </p>
+        </div>
+
+        <div class="sub-block">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div class="section-title">Чек-лист · @_checklist.Count(c => c.Done)/@_checklist.Count</div>
+                <FlowButton Variant="secondary" Size="sm" Icon="plus" OnClick="ShowAddItem">Добавить пункт</FlowButton>
+            </div>
+            @foreach (var c in _checklist)
+            {
+                <div style="display:flex;align-items:center;gap:10px;font:500 13.5px Inter,sans-serif;color:#fff;">
+                    <span style="cursor:pointer;color:@(c.Done ? "#6D9773" : "rgba(255,255,255,0.3)")" @onclick="() => c.Done = !c.Done">
+                        <Icon Name="check" Size="18" />
+                    </span>
+                    <span style="flex:1;@(c.Done ? "text-decoration:line-through;opacity:0.5" : "")">@c.Label</span>
+                    <FlowIconButton IconName="edit" Variant="ghost" Size="22" Title="Изменить" />
+                    <FlowIconButton IconName="close" Variant="ghost" Size="22" Title="Удалить" OnClick="() => RemoveItem(c)" />
+                </div>
+            }
+            @if (_addingItem)
+            {
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <input @bind="_newItemText" @bind:event="oninput" @onkeydown="OnNewItemKeyDown"
+                           placeholder="Новый пункт чек-листа..." autofocus
+                           style="flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:#fff;font:500 13px Inter,sans-serif;outline:none;" />
+                    <FlowButton Variant="primary" Size="sm" OnClick="CommitAddItem">Добавить</FlowButton>
+                </div>
+            }
+        </div>
+
+        <div class="sub-block" style="flex:1;min-height:0;">
+            <div class="section-title">Комментарии · @_comments.Count</div>
+            <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;">
+                @foreach (var c in _comments)
+                {
+                    <div style="display:flex;gap:10px;">
+                        <Avatar Initials="@c.Initials" />
+                        <div>
+                            <div style="font:700 12.5px Inter,sans-serif;color:#fff;">@c.Name</div>
+                            <div style="font:500 13px Inter,sans-serif;color:var(--text-secondary);">@c.Text</div>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div style="display:flex;gap:12px;align-items:center;border-top:1px solid var(--border);padding-top:14px;margin-top:2px;">
+                <Avatar Initials="ИВ" Size="34" />
+                <div style="flex:1;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:12px;padding:12px 14px;">
+                    <input @bind="_newComment" @bind:event="oninput" @onkeydown="OnCommentKeyDown"
+                           placeholder="Написать комментарий..."
+                           style="flex:1;background:transparent;border:none;outline:none;color:#fff;font:500 13.5px Inter,sans-serif;" />
+                    <FlowIconButton IconName="attachment" Variant="ghost" Size="30" Title="Прикрепить файл" />
+                    <FlowIconButton IconName="arrow-up" Variant="accent" Size="30" Title="Отправить" OnClick="SendComment" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="flex:1;display:flex;flex-direction:column;gap:16px;min-height:0;">
+        <div class="panel" style="height:fit-content;gap:7px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+                <div class="section-title" style="font-size:12px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;">Данные задачи</div>
+                <FlowIconButton IconName="more-h" Variant="ghost" Size="22" Title="Ещё" />
+            </div>
+            <div class="field-lbl">Исполнитель</div>
+            <div class="field-val" style="display:flex;align-items:center;gap:8px;"><Avatar Initials="ИВ" />Ирина Волкова</div>
+            <div class="field-lbl">Проект</div>
+            <div class="field-val">DevOps</div>
+            <div class="field-lbl">Дедлайн</div>
+            <div class="field-val">28 августа</div>
+            <div class="field-lbl">Теги</div>
+            <div style="display:flex;gap:6px;">
+                <FlowTag>безопасность</FlowTag>
+                <FlowTag>инфра</FlowTag>
+            </div>
+            <div class="field-lbl">Вложения · 2</div>
+        </div>
+
+        <div class="panel" style="flex:1;min-height:0;gap:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <Icon Name="sparkle" Size="16" Style="color:#FFBA00" />
+                    <div class="section-title">ИИ-помощник</div>
+                </div>
+                <FlowIconButton IconName="expand" Variant="ghost" Size="24" Title="Развернуть" />
+            </div>
+            <p style="font:500 11.5px/1.5 Inter,sans-serif;color:var(--text-tertiary);margin:0;">Учитывает текст задачи и вложения как контекст</p>
+            <div style="display:flex;gap:8px;">
+                <FlowButton Variant="secondary" Size="sm" Icon="file" FullWidth="true" OnClick="@(() => Nav.NavigateTo($"/tasks/{TaskId}/spec"))">ТЗ</FlowButton>
+                <FlowButton Variant="secondary" Size="sm" Icon="chart" FullWidth="true" OnClick="@(() => Nav.NavigateTo($"/tasks/{TaskId}/bpmn"))">Диаграмма</FlowButton>
+            </div>
+            <div style="flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;overflow:auto;border-top:1px solid var(--border);padding-top:12px;">
+                <div style="display:flex;gap:8px;">
+                    <div style="width:22px;height:22px;border-radius:6px;background:var(--accent-soft);color:#FFBA00;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><Icon Name="sparkle" Size="12" /></div>
+                    <div style="font:500 12.5px/1.5 Inter,sans-serif;color:var(--text-secondary);background:rgba(255,255,255,0.04);border-radius:10px;padding:8px 10px;">Изучил задачу и вложения. Могу расписать ТЗ по OAuth-флоу или собрать диаграмму последовательности входа.</div>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <div style="font:500 12.5px/1.5 Inter,sans-serif;color:#fff;background:var(--surface-raised);border-radius:10px;padding:8px 10px;max-width:80%;">Сделай диаграмму флоу для GitHub OAuth</div>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;padding:8px 10px;">
+                <input placeholder="Спросить ИИ про задачу..." style="flex:1;background:transparent;border:none;outline:none;color:#fff;font:500 12.5px Inter,sans-serif;" />
+                <FlowIconButton IconName="attachment" Variant="ghost" Size="26" Title="Прикрепить файл" />
+                <FlowIconButton IconName="arrow-up" Variant="accent" Size="26" Title="Отправить" />
+            </div>
+            <p style="font:500 10.5px Inter,sans-serif;color:var(--text-tertiary);margin:0;">Прикреплённые файлы добавляются во вложения задачи</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string TaskId { get; set; } = "";
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private List<MutableChecklistEntry> _checklist =
+        SampleData.Checklist.Select(c => new MutableChecklistEntry(c.Label, c.Done)).ToList();
+    private List<CommentItem> _comments = new(SampleData.Comments);
+
+    private bool _addingItem;
+    private string _newItemText = "";
+    private string _newComment = "";
+
+    private void ShowAddItem() => _addingItem = true;
+
+    private void CommitAddItem()
+    {
+        if (!string.IsNullOrWhiteSpace(_newItemText))
+        {
+            _checklist.Add(new MutableChecklistEntry(_newItemText.Trim(), false));
+        }
+        _newItemText = "";
+        _addingItem = false;
+    }
+
+    private void OnNewItemKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") CommitAddItem();
+    }
+
+    private void RemoveItem(MutableChecklistEntry c) => _checklist.Remove(c);
+
+    private void SendComment()
+    {
+        if (!string.IsNullOrWhiteSpace(_newComment))
+        {
+            _comments.Add(new CommentItem("Ирина Волкова", "ИВ", _newComment.Trim()));
+            _newComment = "";
+        }
+    }
+
+    private void OnCommentKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") SendComment();
+    }
+
+    private class MutableChecklistEntry(string label, bool done)
+    {
+        public string Label { get; } = label;
+        public bool Done { get; set; } = done;
+    }
+}

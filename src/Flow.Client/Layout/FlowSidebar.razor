@@ -1,0 +1,42 @@
+
+<div class="sb">
+    <div class="sb-brand">
+        <div class="sb-mark">F</div>
+        <div class="sb-word">FLOW</div>
+    </div>
+
+    <div class="sb-ws">
+        <div>
+            <div class="sb-ws-name">Acme Inc</div>
+            <div class="sb-ws-sub">Workspace</div>
+        </div>
+        <Icon Name="chevron-up-down" Size="14" Style="color:rgba(255,255,255,0.4)" />
+    </div>
+
+    <div class="sb-section">Рабочее пространство</div>
+
+    <NavLink class="sb-item" href="/" Match="NavLinkMatch.All">
+        <Icon Name="grid" Size="18" />Главная
+    </NavLink>
+    <NavLink class="sb-item" href="/tasks">
+        <Icon Name="check-square" Size="18" />Задачи
+    </NavLink>
+    <NavLink class="sb-item" href="/teams">
+        <Icon Name="users-add" Size="18" />Команды
+    </NavLink>
+    <NavLink class="sb-item" href="/dashboard">
+        <Icon Name="chart" Size="18" />Дашборды
+    </NavLink>
+    <NavLink class="sb-item" href="/settings" Match="NavLinkMatch.Prefix">
+        <Icon Name="settings" Size="18" />Настройки
+    </NavLink>
+
+    <div class="sb-foot">
+        <Avatar Initials="ИВ" Size="32" />
+        <div style="flex:1;min-width:0;">
+            <div class="sb-un">Ирина Волкова</div>
+            <div class="sb-ur">Product Designer</div>
+        </div>
+        <FlowIconButton IconName="more-v" Size="26" Style="color:rgba(255,255,255,0.5)" Title="Меню профиля" />
+    </div>
+</div>

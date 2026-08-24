@@ -1,0 +1,25 @@
+<div class="flow-field" style="@Style">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="flow-field-label">@Label</label>
+    }
+    <div class="flow-select-wrap">
+        <select @bind="Value" @bind:after="NotifyChanged">
+            @foreach (var opt in Options)
+            {
+                <option value="@opt">@opt</option>
+            }
+        </select>
+        <Icon Name="chevron-down" Size="14" Style="color:var(--text-tertiary)" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public IReadOnlyList<string> Options { get; set; } = Array.Empty<string>();
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? Style { get; set; }
+
+    private Task NotifyChanged() => ValueChanged.InvokeAsync(Value);
+}

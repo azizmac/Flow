@@ -1,0 +1,47 @@
+@page "/settings/theme"
+
+<PageTitle>Настройки — Тема оформления — Flow</PageTitle>
+
+<FlowTopBar Title="Настройки" />
+
+<div class="content" style="flex-direction:row;gap:24px;">
+    <SettingsNav />
+    <div class="panel" style="flex:1;height:fit-content;">
+        <div class="section-title">Тема оформления</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+            @foreach (var opt in _themes)
+            {
+                var borderStyle = opt.Name == _selectedTheme ? "border:2px solid var(--accent);" : "border:1px solid var(--border);";
+                var labelColor = opt.Name == _selectedTheme ? "#fff" : "var(--text-secondary)";
+                <div style="@(borderStyle)cursor:pointer;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;"
+                     @onclick="() => _selectedTheme = opt.Name">
+                    <div style="height:60px;border-radius:8px;background:@opt.Preview;border:1px solid var(--border);"></div>
+                    <span style="font:700 12.5px Inter,sans-serif;color:@(labelColor);">@opt.Name</span>
+                </div>
+            }
+        </div>
+
+        <div class="section-title" style="margin-top:8px;">Акцентный цвет</div>
+        <div style="display:flex;gap:10px;">
+            @foreach (var color in _accentColors)
+            {
+                <div style="width:32px;height:32px;border-radius:50%;background:@color;cursor:pointer;@(color == _selectedAccent ? "border:2px solid #fff;" : "")"
+                     @onclick="() => _selectedAccent = color"></div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _selectedTheme = "Тёмная";
+    private string _selectedAccent = "#FFBA00";
+
+    private readonly (string Name, string Preview)[] _themes =
+    [
+        ("Тёмная", "#0C1210"),
+        ("Светлая", "#F5F0E6"),
+        ("Системная", "linear-gradient(90deg,#0C1210 50%,#F5F0E6 50%)"),
+    ];
+
+    private readonly string[] _accentColors = ["#FFBA00", "#6D9773", "#BB8A52", "#E2604F"];
+}

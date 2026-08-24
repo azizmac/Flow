@@ -1,0 +1,11 @@
+<div class="progress-track" style="@Style">
+    <div class="progress-fill" style="width:@(Percent)%;@FillStyle"></div>
+</div>
+
+@code {
+    [Parameter] public double Percent { get; set; }
+    [Parameter] public string? Color { get; set; }
+    [Parameter] public string? Style { get; set; }
+
+    private string? FillStyle => string.IsNullOrEmpty(Color) ? null : $"background:{Color};";
+}

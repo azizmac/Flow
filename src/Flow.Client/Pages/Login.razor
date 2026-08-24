@@ -1,0 +1,60 @@
+@page "/login"
+@layout AuthLayout
+
+<PageTitle>Вход — Flow</PageTitle>
+
+<div class="auth-screen">
+    <div class="auth-brand">
+        <div class="auth-mark-row">
+            <div class="auth-mark">F</div>
+            <div class="auth-word">FLOW</div>
+        </div>
+        <div>
+            <h2 style="font:900 40px/1.1 Inter,sans-serif;letter-spacing:-0.8px;margin:0 0 16px;color:#fff;">
+                Одно пространство для команд, задач и дедлайнов.
+            </h2>
+            <p style="font:500 14.5px/1.6 Inter,sans-serif;color:rgba(255,255,255,0.6);max-width:400px;margin:0;">
+                Open source CRM для IT и продуктовых команд: задачи, нагрузка команд и дашборды в одном месте.
+            </p>
+        </div>
+        <p style="font:500 12px Inter,sans-serif;color:rgba(255,255,255,0.35);margin:0;">© Flow — open source project</p>
+    </div>
+
+    <div class="auth-panel-wrap">
+        <div class="auth-card">
+            <div>
+                <h2 style="font:800 24px Inter,sans-serif;margin:0 0 6px;color:#fff;">Вход в аккаунт</h2>
+                <p style="font:500 13.5px Inter,sans-serif;color:var(--text-tertiary);margin:0;">Рады видеть снова</p>
+            </div>
+
+            <FlowInput Label="Email или логин" IconName="mail" Placeholder="you@company.com" @bind-Value="_email" />
+            <FlowInput Label="Пароль" IconName="key" TrailingIconName="eye" Type="password" Placeholder="••••••••" @bind-Value="_password" />
+
+            <div style="display:flex;justify-content:flex-end;margin-top:-10px;">
+                <a href="#">Забыли пароль?</a>
+            </div>
+
+            <FlowButton Variant="primary" Size="lg" FullWidth="true" OnClick="DoLogin">Войти</FlowButton>
+
+            <div class="auth-divider"><div class="line"></div>OR<div class="line"></div></div>
+
+            <div style="display:flex;gap:12px;">
+                <FlowButton Variant="secondary" Size="lg" FullWidth="true" Icon="laptop">Google</FlowButton>
+                <FlowButton Variant="secondary" Size="lg" FullWidth="true" Icon="browser">GitHub</FlowButton>
+            </div>
+
+            <p style="text-align:center;font:500 12.5px Inter,sans-serif;color:var(--text-tertiary);margin:0;">
+                Нет аккаунта? <a href="/register">Создать workspace</a>
+            </p>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _email = "";
+    private string _password = "";
+
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private void DoLogin() => Nav.NavigateTo("/");
+}

@@ -1,0 +1,19 @@
+<div class="flow-segmented" style="@Style">
+    @foreach (var opt in Options)
+    {
+        <button type="button" class="seg-opt @(opt == Value ? "active" : "")" @onclick="() => Select(opt)">@opt</button>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<string> Options { get; set; } = Array.Empty<string>();
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? Style { get; set; }
+
+    private async Task Select(string opt)
+    {
+        Value = opt;
+        await ValueChanged.InvokeAsync(opt);
+    }
+}

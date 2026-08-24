@@ -1,0 +1,48 @@
+@page "/settings/notifications"
+
+<PageTitle>Настройки — Уведомления — Flow</PageTitle>
+
+<FlowTopBar Title="Настройки" />
+
+<div class="content" style="flex-direction:row;gap:24px;">
+    <SettingsNav />
+    <div class="panel" style="flex:1;height:fit-content;">
+        <div class="section-title">Уведомления</div>
+        <div class="settings-row">
+            <div>
+                <div style="font:700 13.5px Inter,sans-serif;color:#fff;">Новые задачи на меня</div>
+                <div style="font:500 12px Inter,sans-serif;color:var(--text-tertiary);">Когда меня назначают исполнителем</div>
+            </div>
+            <FlowSwitch @bind-Checked="_newTasks" />
+        </div>
+        <div class="settings-row">
+            <div>
+                <div style="font:700 13.5px Inter,sans-serif;color:#fff;">Дедлайны завтра</div>
+                <div style="font:500 12px Inter,sans-serif;color:var(--text-tertiary);">Ежедневно в 9:00</div>
+            </div>
+            <FlowSwitch @bind-Checked="_deadlinesTomorrow" />
+        </div>
+        <div class="settings-row">
+            <div>
+                <div style="font:700 13.5px Inter,sans-serif;color:#fff;">Упоминания в комментариях</div>
+                <div style="font:500 12px Inter,sans-serif;color:var(--text-tertiary);">Когда вас упомянули через @@</div>
+            </div>
+            <FlowSwitch @bind-Checked="_mentions" />
+        </div>
+        <div class="settings-row">
+            <div>
+                <div style="font:700 13.5px Inter,sans-serif;color:#fff;">Ежедневный дайджест</div>
+                <div style="font:500 12px Inter,sans-serif;color:var(--text-tertiary);">Сводка активности команды на почту</div>
+            </div>
+            <FlowSwitch @bind-Checked="_digest" />
+        </div>
+        <FlowButton Variant="primary" Size="lg">Сохранить изменения</FlowButton>
+    </div>
+</div>
+
+@code {
+    private bool _newTasks = true;
+    private bool _deadlinesTomorrow = true;
+    private bool _mentions = true;
+    private bool _digest;
+}

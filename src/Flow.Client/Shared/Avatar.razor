@@ -1,0 +1,9 @@
+<div class="av" style="@($"width:{Size}px;height:{Size}px;font-size:{FontSize}px;{Style}")">@Initials</div>
+
+@code {
+    [Parameter] public string Initials { get; set; } = "";
+    [Parameter] public int Size { get; set; } = 26;
+    [Parameter] public string? Style { get; set; }
+
+    private double FontSize => Math.Round(Size * 0.42, 1);
+}

@@ -1,0 +1,39 @@
+@page "/settings/security"
+
+<PageTitle>Настройки — Безопасность — Flow</PageTitle>
+
+<FlowTopBar Title="Настройки" />
+
+<div class="content" style="flex-direction:row;gap:24px;">
+    <SettingsNav />
+    <div class="panel" style="flex:1;height:fit-content;">
+        <div class="section-title">Безопасность</div>
+        <FlowInput Label="Текущий пароль" Type="password" Placeholder="••••••••" @bind-Value="_currentPassword" />
+        <FlowInput Label="Новый пароль" Type="password" Placeholder="минимум 8 символов" @bind-Value="_newPassword" />
+        <div class="settings-row">
+            <div>
+                <div style="font:700 13.5px Inter,sans-serif;color:#fff;">Двухфакторная аутентификация</div>
+                <div style="font:500 12px Inter,sans-serif;color:var(--text-tertiary);">Дополнительная защита аккаунта</div>
+            </div>
+            <FlowSwitch @bind-Checked="_twoFactor" />
+        </div>
+        <div class="section-title" style="margin-top:8px;">Активные сессии</div>
+        <div class="task-row">
+            <Icon Name="laptop" Size="18" />
+            <div class="task-title">MacBook Pro · Москва</div>
+            <span class="task-meta">текущая сессия</span>
+        </div>
+        <div class="task-row">
+            <Icon Name="desktop" Size="18" />
+            <div class="task-title">iPhone 15 · Москва</div>
+            <span class="task-meta">2 дня назад</span>
+        </div>
+        <FlowButton Variant="secondary" Size="sm">Завершить все другие сессии</FlowButton>
+    </div>
+</div>
+
+@code {
+    private string _currentPassword = "";
+    private string _newPassword = "";
+    private bool _twoFactor;
+}

@@ -1,0 +1,76 @@
+@page "/dashboard"
+
+<PageTitle>Дашборд — Flow</PageTitle>
+
+<FlowTopBar Title="Дашборд">
+    <SegmentedControl Options="SampleData.PeriodOptions" @bind-Value="_period" />
+</FlowTopBar>
+
+<div class="content">
+    <div class="stat-strip">
+        <div class="stat-item"><span class="n">48</span><span class="stat-lbl">всего задач</span></div>
+        <div class="divider"></div>
+        <div class="stat-item"><span class="n" style="color:#E2604F;">5</span><span class="stat-lbl">просрочено</span></div>
+        <div class="divider"></div>
+        <div class="stat-item"><span class="n" style="color:#6D9773;">34</span><span class="stat-lbl">выполнено</span></div>
+        <div class="divider"></div>
+        <div class="stat-item"><span class="n" style="color:#BB8A52;">4</span><span class="stat-lbl">команды</span></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1;min-height:0;">
+        <div class="panel">
+            <div class="section-title">Задачи по статусам</div>
+            @foreach (var s in SampleData.StatusBreakdownList)
+            {
+                <div>
+                    <div style="display:flex;justify-content:space-between;font:600 12px Inter,sans-serif;color:#fff;margin-bottom:5px;">
+                        <span>@s.Label</span><span style="color:var(--text-tertiary);">@s.Count</span>
+                    </div>
+                    <ProgressBar Percent="s.Pct" Color="@s.Color" />
+                </div>
+            }
+        </div>
+        <div class="panel">
+            <div class="section-title">Нагрузка по командам</div>
+            @foreach (var team in SampleData.Teams)
+            {
+                <div>
+                    <div style="display:flex;justify-content:space-between;font:600 12px Inter,sans-serif;color:#fff;margin-bottom:5px;">
+                        <span>@team.Name</span><span style="color:var(--text-tertiary);">@(team.Load)%</span>
+                    </div>
+                    <ProgressBar Percent="team.Load" />
+                </div>
+            }
+        </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1;min-height:0;">
+        <div class="panel">
+            <div class="section-title">Ближайшие дедлайны</div>
+            @foreach (var d in SampleData.Deadlines)
+            {
+                <div class="task-row">
+                    <div class="dot" style="background:@d.Color"></div>
+                    <div class="task-title">@d.Title</div>
+                    <div class="task-meta">@d.Due</div>
+                </div>
+            }
+        </div>
+        <div class="panel">
+            <div class="section-title">Активность</div>
+            @foreach (var a in SampleData.Activity)
+            {
+                <div style="display:flex;gap:10px;align-items:flex-start;">
+                    <Avatar Initials="@a.Initials" />
+                    <div style="font:500 12.5px/1.5 Inter,sans-serif;color:var(--text-secondary);">
+                        <span style="color:#fff;font-weight:700;">@a.Name</span> @a.Text
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _period = "Неделя";
+}

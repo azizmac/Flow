@@ -1,0 +1,42 @@
+@page "/teams"
+
+<PageTitle>Команды — Flow</PageTitle>
+
+<FlowTopBar Title="Команды">
+    <FlowButton Variant="primary" Size="sm" Icon="users-add">Новая команда</FlowButton>
+</FlowTopBar>
+
+<div class="content">
+    <div class="team-grid">
+        @foreach (var team in SampleData.Teams)
+        {
+            <div class="team-card" style="cursor:pointer;" @onclick="() => OpenTeam(team)">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                    <div>
+                        <div style="font:800 15px Inter,sans-serif;color:#fff;">@team.Name</div>
+                        <div style="font:500 12px Inter,sans-serif;color:var(--text-tertiary);">@team.Size участников</div>
+                    </div>
+                    <div class="avatar-stack">
+                        @foreach (var a in team.Initials)
+                        {
+                            <Avatar Initials="@a" />
+                        }
+                    </div>
+                </div>
+                <div>
+                    <div style="display:flex;justify-content:space-between;font:600 11px Inter,sans-serif;color:var(--text-tertiary);margin-bottom:6px;">
+                        <span>Нагрузка</span><span>@(team.Load)%</span>
+                    </div>
+                    <ProgressBar Percent="team.Load" />
+                </div>
+                <div style="font:500 12px Inter,sans-serif;color:var(--text-tertiary);">@team.ActiveTasks активных задач</div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private void OpenTeam(TeamSummary team) => Nav.NavigateTo($"/teams/{team.Name}");
+}
