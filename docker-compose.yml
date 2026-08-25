@@ -50,6 +50,8 @@ services:
       mc alias set local http://s3:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
       mc mb -p local/$$S3_BUCKET || true
       "
+    networks:
+      - flow-network
 
   api:
     build:
@@ -71,6 +73,13 @@ services:
       S3__UseSsl: "false"
     ports:
       - "${API_PORT:-8080}:8080"
+    networks:
+      - flow-network
+
+networks:
+  flow-network:
+    name: flow-network
+    driver: bridge
 
 volumes:
   postgres-data:
