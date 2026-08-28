@@ -3,6 +3,7 @@
     <Project Path="src/Flow.Domain/Flow.Domain.csproj" />
     <Project Path="src/Flow.Application/Flow.Application.csproj" />
     <Project Path="src/Flow.Infrastructure/Flow.Infrastructure.csproj" />
+    <Project Path="src/Flow.Ai/Flow.Ai.csproj" />
     <Project Path="src/Flow.Api/Flow.Api.csproj" />
     <Project Path="src/Flow.Client/Flow.Client.csproj" />
     <Project Path="src/Flow.Shared/Flow.Shared.csproj" />
