@@ -8,6 +8,13 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Flow.Domain\Flow.Domain.csproj" />
+        <ProjectReference Include="..\Flow.Shared\Flow.Shared.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+        <!-- Зафиксировано на 12.4.1 намеренно: с версии 13 у MediatR частично платная лицензия. -->
+        <PackageReference Include="MediatR" Version="12.4.1" />
     </ItemGroup>
 
 </Project>

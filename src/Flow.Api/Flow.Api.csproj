@@ -9,8 +9,15 @@
     <ItemGroup>
         <ProjectReference Include="..\Flow.Application\Flow.Application.csproj" />
         <ProjectReference Include="..\Flow.Infrastructure\Flow.Infrastructure.csproj" />
-        <ProjectReference Include="..\Flow.Ai\Flow.Ai.csproj" />
         <ProjectReference Include="..\Flow.Shared\Flow.Shared.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Нужно самому startup-проекту для dotnet ef (DbContext живёт в Flow.Infrastructure). -->
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
     </ItemGroup>
 
 </Project>
