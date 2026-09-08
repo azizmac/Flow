@@ -1,3 +1,5 @@
+using Flow.Shared.Ids;
+
 namespace Flow.Domain.Entities;
 
 /// <summary>
@@ -6,9 +8,9 @@ namespace Flow.Domain.Entities;
 /// </summary>
 public sealed class TaskItem
 {
-    public Guid Id { get; private set; }
+    public TaskId Id { get; private set; } = null!;
 
-    public Guid BoardId { get; private set; }
+    public BoardId BoardId { get; private set; } = null!;
 
     public TaskCode Code { get; private set; } = null!;
 
@@ -16,7 +18,7 @@ public sealed class TaskItem
 
     public string? Description { get; private set; }
 
-    public Guid StatusId { get; private set; }
+    public StatusId StatusId { get; private set; } = null!;
 
     public DateTime CreatedAt { get; private set; }
 
@@ -25,9 +27,9 @@ public sealed class TaskItem
         // EF Core
     }
 
-    internal TaskItem(Guid boardId, TaskCode code, string title, string? description, Guid statusId)
+    internal TaskItem(BoardId boardId, TaskCode code, string title, string? description, StatusId statusId)
     {
-        Id = Guid.NewGuid();
+        Id = TaskId.New();
         BoardId = boardId;
         Code = code;
         Title = ValidateTitle(title);
@@ -45,7 +47,7 @@ public sealed class TaskItem
     /// эту проверку делает вызывающая сторона, у которой есть доступ к списку статусов доски
     /// (см. Board.Statuses / соответствующий эндпоинт).
     /// </summary>
-    public void ChangeStatus(Guid statusId) => StatusId = statusId;
+    public void ChangeStatus(StatusId statusId) => StatusId = statusId;
 
     private static string ValidateTitle(string title)
     {

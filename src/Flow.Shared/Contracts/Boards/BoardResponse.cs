@@ -1,7 +1,9 @@
+using Flow.Shared.Ids;
+
 namespace Flow.Shared.Contracts.Boards;
 
 public sealed record BoardResponse(
-    Guid Id,
+    BoardId Id,
     string Key,
     string Name,
     DateTime CreatedAt,

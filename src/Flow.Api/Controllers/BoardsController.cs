@@ -4,6 +4,7 @@ using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
 using Flow.Application.Features.Boards.Queries.BoardListQuery;
 using Flow.Shared.Contracts.Boards;
+using Flow.Shared.Ids;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,7 +27,7 @@ public class BoardsController(IMediator mediator) : ControllerBase
                 return Conflict(new { Message = result.ValidationError });
 
             var response = result.Response!;
-            return CreatedAtAction(nameof(GetBoard), new { id = response.Id }, response);
+            return CreatedAtAction(nameof(GetBoard), new { id = response.Id.ToString() }, response);
         }
         catch (ArgumentException ex)
         {
@@ -41,20 +42,30 @@ public class BoardsController(IMediator mediator) : ControllerBase
         return Ok(boards);
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetBoard(Guid id, CancellationToken cancellationToken)
+    /// <summary>
+    /// Id приходит строкой формата "boa_..." (маршрут без :guid-констрейнта) и парсится вручную —
+    /// чужой префикс или битый Guid дают 400, а не 404.
+    /// </summary>
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetBoard(string id, CancellationToken cancellationToken)
     {
-        var board = await mediator.Send(new BoardGetQuery(id), cancellationToken);
+        if (!BoardId.TryParse(id, out var boardId))
+            return InvalidId(id);
+
+        var board = await mediator.Send(new BoardGetQuery(boardId), cancellationToken);
         return board is null ? NotFound() : Ok(board);
     }
 
-    [HttpPatch("{id:guid}/name")]
-    public async Task<IActionResult> RenameBoard(Guid id, RenameBoardRequest request, CancellationToken cancellationToken)
+    [HttpPatch("{id}/name")]
+    public async Task<IActionResult> RenameBoard(string id, RenameBoardRequest request, CancellationToken cancellationToken)
     {
+        if (!BoardId.TryParse(id, out var boardId))
+            return InvalidId(id);
+
         try
         {
             var response = await mediator.Send(
-                new BoardRenameCommand(id, request.Name),
+                new BoardRenameCommand(boardId, request.Name),
                 cancellationToken);
 
             return response is null ? NotFound() : Ok(response);
@@ -65,10 +76,16 @@ public class BoardsController(IMediator mediator) : ControllerBase
         }
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> DeleteBoard(Guid id, CancellationToken cancellationToken)
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteBoard(string id, CancellationToken cancellationToken)
     {
-        var deleted = await mediator.Send(new BoardDeleteCommand(id), cancellationToken);
+        if (!BoardId.TryParse(id, out var boardId))
+            return InvalidId(id);
+
+        var deleted = await mediator.Send(new BoardDeleteCommand(boardId), cancellationToken);
         return deleted ? NoContent() : NotFound();
     }
+
+    private BadRequestObjectResult InvalidId(string id) =>
+        new(new { Message = $"Invalid board id '{id}', expected format '{BoardId.Prefix}_<guid>'." });
 }

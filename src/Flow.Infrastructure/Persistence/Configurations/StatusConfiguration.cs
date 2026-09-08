@@ -1,4 +1,5 @@
 using Flow.Domain.Entities;
+using Flow.Shared.Ids;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -9,6 +10,12 @@ public sealed class StatusConfiguration : IEntityTypeConfiguration<Status>
     public void Configure(EntityTypeBuilder<Status> builder)
     {
         builder.HasKey(s => s.Id);
+
+        builder.Property(s => s.Id)
+            .HasConversion(id => id.Value, value => StatusId.Create(value));
+
+        builder.Property(s => s.BoardId)
+            .HasConversion(id => id.Value, value => BoardId.Create(value));
 
         builder.Property(s => s.Name)
             .IsRequired()

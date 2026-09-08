@@ -1,4 +1,5 @@
 using Flow.Domain.Entities;
+using Flow.Shared.Ids;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -9,6 +10,15 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
     public void Configure(EntityTypeBuilder<TaskItem> builder)
     {
         builder.HasKey(t => t.Id);
+
+        builder.Property(t => t.Id)
+            .HasConversion(id => id.Value, value => TaskId.Create(value));
+
+        builder.Property(t => t.BoardId)
+            .HasConversion(id => id.Value, value => BoardId.Create(value));
+
+        builder.Property(t => t.StatusId)
+            .HasConversion(id => id.Value, value => StatusId.Create(value));
 
         builder.Property(t => t.Code)
             .IsRequired()

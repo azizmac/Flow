@@ -1,3 +1,5 @@
+using Flow.Shared.Ids;
+
 namespace Flow.Domain.Entities;
 
 /// <summary>
@@ -7,9 +9,9 @@ namespace Flow.Domain.Entities;
 /// </summary>
 public sealed class Status
 {
-    public Guid Id { get; private set; }
+    public StatusId Id { get; private set; } = null!;
 
-    public Guid BoardId { get; private set; }
+    public BoardId BoardId { get; private set; } = null!;
 
     public string Name { get; private set; } = string.Empty;
 
@@ -28,9 +30,9 @@ public sealed class Status
         // EF Core
     }
 
-    internal Status(Guid boardId, string name, int sortOrder, bool isInitial, bool isFinal, StatusType? type = null)
+    internal Status(BoardId boardId, string name, int sortOrder, bool isInitial, bool isFinal, StatusType? type = null)
     {
-        Id = Guid.NewGuid();
+        Id = StatusId.New();
         BoardId = boardId;
         Name = ValidateName(name);
         SortOrder = sortOrder;

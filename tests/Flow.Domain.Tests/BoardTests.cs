@@ -1,4 +1,5 @@
 using Flow.Domain.Entities;
+using Flow.Shared.Ids;
 using Xunit;
 
 namespace Flow.Domain.Tests;
@@ -100,7 +101,7 @@ public class BoardTests
     public void CreateTask_Should_Throw_When_StatusDoesNotBelongToBoard()
     {
         var board = Board.Create("Flow Project", "FLW");
-        var foreignStatusId = Guid.NewGuid();
+        var foreignStatusId = StatusId.New();
 
         Assert.Throws<InvalidOperationException>(() => board.CreateTask("Test task", statusId: foreignStatusId));
     }

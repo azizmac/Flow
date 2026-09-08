@@ -3,13 +3,13 @@
 ## Слойная архитектура
 ```
 Flow.Api           → контроллеры (только IMediator)
-Flow.Shared        → DTO-контракты (Boards, Tasks) — общий
+Flow.Shared        → DTO-контракты (Boards, Tasks) + типизированные Id (Ids/) — общий
 Flow.Application   → Features/{Boards,Tasks}/{Commands,Queries}/*, Abstractions (IBoardRepository, ITaskItemRepository, IUnitOfWork)
 Flow.Domain        → сущности Board, Status, TaskItem, TaskCode, StatusType, DefaultStatuses
 Flow.Infrastructure→ EF Core (Postgres/Npgsql), репозитории, UnitOfWork, миграции
 Flow.Client        → Blazor WebAssembly (заглушки, не связан с API)
 ```
-Зависимости: Domain ← Application ← Infrastructure ← Api.
+Зависимости: Shared ← Domain ← Application ← Infrastructure ← Api (Domain зависит от Shared только ради типизированных Id).
 Shared намеренно **не ссылается** на Domain (свой enum `StatusType`).
 
 ## Ключевые инварианты Board (aggregate root)
@@ -18,6 +18,14 @@ Shared намеренно **не ссылается** на Domain (свой enum
 - Максимум 1 начальный и 1 финальный статус на доску (проверяется в `AddStatus`/`SetInitialStatus`).
 - `CreateTask`: без `statusId` → в начальный; `NextTaskNumber++` → TaskCode; **новые задачи регистрируются через `ITaskItemRepository.Add`**, не через коллекцию `Board.Tasks`.
 - Все поля `{ get; private set; }`, мутации только через методы.
+
+## Типизированные Id (Strongly Typed Id, формат Stripe)
+- `Flow.Shared/Ids`: `ITypedId<TSelf>` (static abstract `Prefix`/`TryParse`), `TypedIdFormat` (формат/парсинг), `TypedIdJsonConverter<T>` (JSON-строка "префикс_guid").
+- Id: `BoardId` ("boa"), `TaskId` ("tas"), `StatusId` ("sta") — sealed record, `New()`/`Create()`/`TryParse()`/`Parse()`, `ToString()` → `префикс_guid(N)` (32 hex без дефисов). Чужой префикс не парсится — перепутать id сущностей на входе нельзя.
+- Сущности: `Board.Id`, `TaskItem.Id/BoardId/StatusId`, `Status.Id/BoardId` — типизированные; свойства инициализируются `= null!` (EF использует приватный конструктор без параметров).
+- БД: id хранятся как обычный `uuid` (EF value converter в `Configurations/`) — схема и миграции от типизации не меняются.
+- API: маршруты `{id}`/`{boardId}` — строки без констрейнта `:guid`; провал `TryParse` → 400. Id в JSON-теле парсит конвертер по атрибуту, `[ApiController]` сам отдаёт 400 при битом значении.
+- Тесты id: `tests/Flow.Domain.Tests/TypedIdTests.cs` (Flow.Shared доступен транзитивно через Flow.Domain).
 
 ## MediatR и DI
 - `AddFlowApplication()` регистрирует MediatR с reflection-сканированием сущности `Flow.Application` — хендлеры `internal`, commands/queries `public sealed record`.

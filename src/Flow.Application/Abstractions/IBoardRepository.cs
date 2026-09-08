@@ -1,4 +1,5 @@
 using Flow.Domain.Entities;
+using Flow.Shared.Ids;
 
 namespace Flow.Application.Abstractions;
 
@@ -9,7 +10,7 @@ namespace Flow.Application.Abstractions;
 public interface IBoardRepository
 {
     /// <summary>Доска вместе со статусами, отслеживаемая (для последующего изменения).</summary>
-    Task<Board?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task<Board?> GetByIdAsync(BoardId id, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<Board>> GetAllAsync(CancellationToken cancellationToken);
 

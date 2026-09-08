@@ -52,7 +52,7 @@ var response = await sender.SendAsync(new BoardCreateCommand(request.Name, reque
 ### `Board` — aggregate root
 | Поле | Тип | Описание |
 |---|---|---|
-| `Id` | `Guid` | Первичный ключ |
+| `Id` | `BoardId` | Первичный ключ — типизированный Id (см. «Типизированные Id» ниже) |
 | `Key` | `string` | Короткий код доски в верхнем регистре (`^[A-Z][A-Z0-9]{1,9}$`), префикс кода задачи |
 | `Name` | `string` | Название доски |
 | `CreatedAt` | `DateTime` | Дата создания |
@@ -67,8 +67,8 @@ var response = await sender.SendAsync(new BoardCreateCommand(request.Name, reque
 ### `Status` — сущность, настраиваемая на уровне доски
 | Поле | Тип | Описание |
 |---|---|---|
-| `Id` | `Guid` | Первичный ключ |
-| `BoardId` | `Guid` | FK на `Board` |
+| `Id` | `StatusId` | Первичный ключ — типизированный Id (см. «Типизированные Id» ниже) |
+| `BoardId` | `BoardId` | FK на `Board` |
 | `Name` | `string` | Название статуса |
 | `SortOrder` | `int` | Порядковый номер колонки на доске |
 | `IsInitial` | `bool` | Статус по умолчанию для новых задач (максимум один на доску) |
@@ -83,18 +83,21 @@ var response = await sender.SendAsync(new BoardCreateCommand(request.Name, reque
 ### `TaskItem` — сущность
 | Поле | Тип | Описание |
 |---|---|---|
-| `Id` | `Guid` | Первичный ключ |
-| `BoardId` | `Guid` | FK на `Board` |
+| `Id` | `TaskId` | Первичный ключ — типизированный Id (см. «Типизированные Id» ниже) |
+| `BoardId` | `BoardId` | FK на `Board` |
 | `Code` | `TaskCode` | Человекочитаемый код (`FLW-42`), хранится как `string` через value converter |
 | `Title` | `string` | Название задачи |
 | `Description` | `string?` | Описание задачи |
-| `StatusId` | `Guid` | FK на `Status` |
+| `StatusId` | `StatusId` | FK на `Status` |
 | `CreatedAt` | `DateTime` | Дата создания задачи |
 
 Создаётся только через `Board.CreateTask(...)`. Методы: `Rename(title)`, `UpdateDescription(description)`, `ChangeStatus(statusId)`.
 
 ### `TaskCode` — value object
 Оборачивает строку `{Key доски}-{NextTaskNumber}`. Создаётся через `TaskCode.Create(boardKey, number)` (генерация) или `TaskCode.FromValue(value)` (восстановление из БД, используется в EF Core value converter).
+
+### Типизированные Id — Strongly Typed Id (`src/Flow.Shared/Ids`)
+У каждой сущности свой тип идентификатора, оборачивающий `Guid` (подход Stripe: префикс сразу говорит, что за сущность): `BoardId` («boa»), `TaskId` («tas»), `StatusId` («sta»). `ToString()` возвращает `префикс_guid(N)` — 32 hex-символа без дефисов, например `boa_9d0f1c2e4b7a4d3e8f1a2b3c4d5e6f70`; `TryParse`/`Parse` разбирают строку обратно и отвергают чужой префикс, поэтому перепутать id доски и задачи становится невозможно и в коде (разные типы), и на входе API. В БД все id хранятся обычным `uuid` (EF Core value converter в `Persistence/Configurations/`) — схема и миграции от типизации не меняются. В JSON id сериализуются строкой через `TypedIdJsonConverter` (атрибут `[JsonConverter]` на каждом типе).
 
 ## Схема БД (PostgreSQL, стандартная EF Core-нотация — PascalCase, без `snake_case`)
 
@@ -103,6 +106,8 @@ var response = await sender.SendAsync(new BoardCreateCommand(request.Name, reque
 | `Boards` | PK `Id`; уникальный индекс на `Key` |
 | `Statuses` | PK `Id`; FK `BoardId` → `Boards` (cascade delete); уникальные индексы на `(BoardId, SortOrder)` и `(BoardId, Name)` |
 | `TaskItems` | PK `Id`; FK `BoardId` → `Boards` (cascade delete); FK `StatusId` → `Statuses` (restrict delete); уникальный индекс на `Code` |
+
+Типы PK/FK в C# — типизированные Id (`BoardId`/`TaskId`/`StatusId`), но в БД это по-прежнему `uuid`: конвертация происходит EF Core value converter'ами, на схему не влияет.
 
 ## Конфигурация PostgreSQL
 
@@ -121,7 +126,7 @@ dotnet ef database update --project src/Flow.Infrastructure --startup-project sr
 
 ## API-эндпоинты (`src/Flow.Api/Controllers`)
 
-Классические MVC-контроллеры (`[ApiController]`, `ControllerBase`, DI через конструктор) — `BoardsController` (`[Route("boards")]`) и `TasksController` (без общего префикса, у каждого action свой полный путь, т.к. задачи живут и под `boards/{boardId}/tasks`, и под `tasks/{id}`).
+Классические MVC-контроллеры (`[ApiController]`, `ControllerBase`, DI через конструктор) — `BoardsController` (`[Route("boards")]`) и `TasksController` (без общего префикса, у каждого action свой полный путь, т.к. задачи живут и под `boards/{boardId}/tasks`, и под `tasks/{id}`). Id в маршрутах — строки формата `boa_...`/`tas_...` (без констрейнта `:guid`): контроллер парсит их `BoardId.TryParse`/`TaskId.TryParse`, неразобранный id → 400.
 
 
 | Метод | Путь | Описание |

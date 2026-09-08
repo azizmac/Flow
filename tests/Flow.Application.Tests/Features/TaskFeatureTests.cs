@@ -6,6 +6,7 @@ using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskListQuery;
 using Flow.Application.Tests.Fakes;
 using Flow.Shared.Contracts.Boards;
+using Flow.Shared.Ids;
 using MediatR;
 using Xunit;
 
@@ -50,7 +51,7 @@ public class TaskFeatureTests
         var (mediator, _, _) = TestMediatorFactory.Create();
 
         var response = await mediator.Send(
-            new TaskCreateCommand(Guid.NewGuid(), "Test task", null, null),
+            new TaskCreateCommand(BoardId.New(), "Test task", null, null),
             CancellationToken.None);
 
         Assert.Null(response);
@@ -109,7 +110,7 @@ public class TaskFeatureTests
         var (mediator, _, _) = TestMediatorFactory.Create();
 
         var result = await mediator.Send(
-            new TaskUpdateCommand(Guid.NewGuid(), "New title", null, null),
+            new TaskUpdateCommand(TaskId.New(), "New title", null, null),
             CancellationToken.None);
 
         Assert.True(result.IsNotFound);
@@ -170,7 +171,7 @@ public class TaskFeatureTests
     {
         var (mediator, _, _) = TestMediatorFactory.Create();
 
-        var deleted = await mediator.Send(new TaskDeleteCommand(Guid.NewGuid()), CancellationToken.None);
+        var deleted = await mediator.Send(new TaskDeleteCommand(TaskId.New()), CancellationToken.None);
 
         Assert.False(deleted);
     }

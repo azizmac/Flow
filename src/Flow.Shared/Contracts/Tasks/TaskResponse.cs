@@ -1,9 +1,11 @@
+using Flow.Shared.Ids;
+
 namespace Flow.Shared.Contracts.Tasks;
 
 public sealed record TaskResponse(
-    Guid Id,
+    TaskId Id,
     string Code,
     string Title,
     string? Description,
-    Guid StatusId,
+    StatusId StatusId,
     DateTime CreatedAt);

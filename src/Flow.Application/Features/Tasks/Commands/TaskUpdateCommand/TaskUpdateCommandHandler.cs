@@ -16,9 +16,9 @@ internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IUnitO
 
         if (request.StatusId is not null)
         {
-            var statusBelongsToBoard = await tasks.StatusBelongsToBoardAsync(request.StatusId.Value, task.BoardId, cancellationToken);
+            var statusBelongsToBoard = await tasks.StatusBelongsToBoardAsync(request.StatusId, task.BoardId, cancellationToken);
             if (!statusBelongsToBoard)
-                return TaskUpdateResult.InvalidStatus(request.StatusId.Value);
+                return TaskUpdateResult.InvalidStatus(request.StatusId);
         }
 
         if (request.Title is not null)
@@ -28,7 +28,7 @@ internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IUnitO
             task.UpdateDescription(request.Description);
 
         if (request.StatusId is not null)
-            task.ChangeStatus(request.StatusId.Value);
+            task.ChangeStatus(request.StatusId);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

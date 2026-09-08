@@ -1,4 +1,5 @@
 using Flow.Shared.Contracts.Tasks;
+using Flow.Shared.Ids;
 
 namespace Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 
@@ -23,7 +24,7 @@ public sealed class TaskUpdateResult
 
     public static TaskUpdateResult NotFound() => new(true, null, null);
 
-    public static TaskUpdateResult InvalidStatus(Guid statusId) =>
+    public static TaskUpdateResult InvalidStatus(StatusId statusId) =>
         new(false, $"Status {statusId} does not belong to task's board.", null);
 
     public static TaskUpdateResult Success(TaskResponse response) => new(false, null, response);

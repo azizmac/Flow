@@ -6,4 +6,9 @@
         <ImplicitUsings>enable</ImplicitUsings>
     </PropertyGroup>
 
+    <ItemGroup>
+        <!-- Единственная зависимость Domain — типизированные id из Flow.Shared/Ids (Shared не ссылается на Domain). -->
+        <ProjectReference Include="..\Flow.Shared\Flow.Shared.csproj" />
+    </ItemGroup>
+
 </Project>

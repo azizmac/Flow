@@ -4,6 +4,7 @@ using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
 using Flow.Application.Features.Boards.Queries.BoardListQuery;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
+using Flow.Shared.Ids;
 using Xunit;
 
 namespace Flow.Application.Tests.Features;
@@ -65,7 +66,7 @@ public class BoardFeatureTests
     {
         var (mediator, _, _) = TestMediatorFactory.Create();
 
-        var response = await mediator.Send(new BoardRenameCommand(Guid.NewGuid(), "New name"), CancellationToken.None);
+        var response = await mediator.Send(new BoardRenameCommand(BoardId.New(), "New name"), CancellationToken.None);
 
         Assert.Null(response);
     }
@@ -98,7 +99,7 @@ public class BoardFeatureTests
     {
         var (mediator, _, _) = TestMediatorFactory.Create();
 
-        var deleted = await mediator.Send(new BoardDeleteCommand(Guid.NewGuid()), CancellationToken.None);
+        var deleted = await mediator.Send(new BoardDeleteCommand(BoardId.New()), CancellationToken.None);
 
         Assert.False(deleted);
     }

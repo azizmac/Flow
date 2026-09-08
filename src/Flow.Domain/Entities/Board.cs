@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Flow.Shared.Ids;
 
 namespace Flow.Domain.Entities;
 
@@ -14,7 +15,7 @@ public sealed partial class Board
     private readonly List<Status> _statuses = [];
     private readonly List<TaskItem> _tasks = [];
 
-    public Guid Id { get; private set; }
+    public BoardId Id { get; private set; } = null!;
 
     /// <summary>Короткий код доски в верхнем регистре, используется как префикс кода задачи (например "FLW").</summary>
     public string Key { get; private set; } = string.Empty;
@@ -37,7 +38,7 @@ public sealed partial class Board
 
     private Board(string name, string key)
     {
-        Id = Guid.NewGuid();
+        Id = BoardId.New();
         Name = ValidateName(name);
         Key = ValidateKey(key);
         CreatedAt = DateTime.UtcNow;
@@ -73,7 +74,7 @@ public sealed partial class Board
     }
 
     /// <summary>Переносит флаг "начальный статус" на другой статус доски. Название статуса при этом не важно.</summary>
-    public void SetInitialStatus(Guid statusId)
+    public void SetInitialStatus(StatusId statusId)
     {
         var target = _statuses.SingleOrDefault(s => s.Id == statusId)
             ?? throw new InvalidOperationException($"Status {statusId} does not belong to board {Id}.");
@@ -88,9 +89,9 @@ public sealed partial class Board
     /// Создаёт задачу. Если <paramref name="statusId"/> не передан — задача уходит в статус доски
     /// с <see cref="Status.IsInitial"/> = true (по умолчанию "Не начата").
     /// </summary>
-    public TaskItem CreateTask(string title, string? description = null, Guid? statusId = null)
+    public TaskItem CreateTask(string title, string? description = null, StatusId? statusId = null)
     {
-        Guid resolvedStatusId;
+        StatusId resolvedStatusId;
         if (statusId is null)
         {
             var initial = _statuses.SingleOrDefault(s => s.IsInitial)
@@ -99,9 +100,9 @@ public sealed partial class Board
         }
         else
         {
-            if (_statuses.All(s => s.Id != statusId.Value))
-                throw new InvalidOperationException($"Status {statusId.Value} does not belong to board {Id}.");
-            resolvedStatusId = statusId.Value;
+            if (_statuses.All(s => s.Id != statusId))
+                throw new InvalidOperationException($"Status {statusId} does not belong to board {Id}.");
+            resolvedStatusId = statusId;
         }
 
         NextTaskNumber++;

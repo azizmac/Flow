@@ -1,4 +1,5 @@
 using Flow.Domain.Entities;
+using Flow.Shared.Ids;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -9,6 +10,10 @@ public sealed class BoardConfiguration : IEntityTypeConfiguration<Board>
     public void Configure(EntityTypeBuilder<Board> builder)
     {
         builder.HasKey(b => b.Id);
+
+        // Строго типизированный id в БД остаётся обычным uuid — конвертер не меняет схему/миграции.
+        builder.Property(b => b.Id)
+            .HasConversion(id => id.Value, value => BoardId.Create(value));
 
         builder.Property(b => b.Key)
             .IsRequired()

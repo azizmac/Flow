@@ -1,5 +1,6 @@
 using Flow.Application.Abstractions;
 using Flow.Domain.Entities;
+using Flow.Shared.Ids;
 
 namespace Flow.Application.Tests.Fakes;
 
@@ -11,7 +12,7 @@ public sealed class FakeBoardRepository : IBoardRepository
 {
     private readonly List<Board> _boards = [];
 
-    public Task<Board?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
+    public Task<Board?> GetByIdAsync(BoardId id, CancellationToken cancellationToken) =>
         Task.FromResult(_boards.SingleOrDefault(b => b.Id == id));
 
     public Task<IReadOnlyList<Board>> GetAllAsync(CancellationToken cancellationToken) =>
