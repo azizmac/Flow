@@ -1,0 +1,57 @@
+# Джоба: сборка Docker-образа Flow.Api; при push=true — публикация в registry.
+# Ожидает (через secrets: inherit) секреты REGISTRY_USERNAME / REGISTRY_PASSWORD
+# и переменные REGISTRY / IMAGE_NAME (передаются оркестратором через input image).
+name: Docker image
+
+on:
+  workflow_call:
+    inputs:
+      push:
+        description: Публиковать образ в registry
+        type: boolean
+        default: false
+      image:
+        description: Полное имя образа, например docker.io/user/flow-api
+        type: string
+        default: flow-api
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to registry
+        if: inputs.push
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ inputs.image }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=ref,event=branch
+
+      - name: Build${{ inputs.push && ' & push' || '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: ${{ inputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

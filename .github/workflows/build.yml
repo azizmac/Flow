@@ -1,0 +1,58 @@
+# Джоба: restore → build (Release) → юнит-тесты → интеграционные тесты.
+name: Build & test
+
+on:
+  workflow_call:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'global.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore Flow.slnx
+
+      - name: Build (Release)
+        run: dotnet build Flow.slnx -c Release --no-restore
+
+      - name: Unit tests (Domain, Application)
+        run: |
+          dotnet test tests/Flow.Domain.Tests -c Release --no-build \
+            --logger "trx;LogFileName=domain.trx" --results-directory TestResults
+          dotnet test tests/Flow.Application.Tests -c Release --no-build \
+            --logger "trx;LogFileName=application.trx" --results-directory TestResults
+
+      - name: Integration tests (Infrastructure, Testcontainers/Postgres)
+        run: |
+          dotnet test tests/Flow.Infrastructure.Tests -c Release --no-build \
+            --logger "trx;LogFileName=infrastructure.trx" --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/*.trx
+          if-no-files-found: ignore
