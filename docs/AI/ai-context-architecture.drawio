@@ -1,0 +1,154 @@
+<mxfile host="drawio" version="24.0.0">
+  <diagram id="ai-context" name="AI Context Architecture">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Flow — механика хранения контекста ИИ (по модели Hermes: Memory + Skills + Session + RAG)" style="text;html=1;fontSize=16;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="1500" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="user" value="Пользователь" style="shape=actor;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="80" y="120" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="client" value="Flow.Client&#xa;(Blazor WASM)&#xa;чат + рендер draw.io" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="40" y="280" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="api" value="Flow.Api" style="swimlane;startSize=28;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="280" y="80" width="260" height="340" as="geometry" />
+        </mxCell>
+        <mxCell id="apiChat" value="POST /ai/chat" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="api">
+          <mxGeometry x="30" y="45" width="200" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="apiMemory" value="POST /ai/memory&#xa;(батч add/replace/remove)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="api">
+          <mxGeometry x="30" y="105" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="apiSpecs" value="POST /ai/specs&#xa;/decompose /refine" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="api">
+          <mxGeometry x="30" y="170" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="apiDiag" value="POST /ai/diagrams" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="api">
+          <mxGeometry x="30" y="235" width="200" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="app" value="Flow.Application / Features/Ai" style="swimlane;startSize=28;html=1;fillColor=#d5e8d4;strokeColor=#82b366;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="620" y="80" width="380" height="500" as="geometry" />
+        </mxCell>
+        <mxCell id="assembler" value="ContextAssembler&#xa;сборка промпта из 5 частей" style="rounded=1;whiteSpace=wrap;html=1;fontStyle=1;fillColor=#b9e0a5;" vertex="1" parent="app">
+          <mxGeometry x="30" y="45" width="320" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="curator" value="MemoryCurator&#xa;факты из диалога → память&#xa;(фильтр + бюджет + консолидация)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="app">
+          <mxGeometry x="30" y="115" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="compactor" value="SessionCompactor&#xa;старые сообщения → AiSummary" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="app">
+          <mxGeometry x="30" y="195" width="320" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="spec" value="SpecComposer&#xa;ТЗ: draft → decompose → critique → apply" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="app">
+          <mxGeometry x="30" y="265" width="320" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="diagram" value="DiagramBuilder&#xa;процесс → mxGraph XML (draw.io)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="app">
+          <mxGeometry x="30" y="335" width="320" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="llmclient" value="ILlmClient / IEmbeddingService" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;" vertex="1" parent="app">
+          <mxGeometry x="30" y="410" width="320" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="domain" value="Flow.Domain / Entities/Ai" style="swimlane;startSize=28;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="80" width="240" height="340" as="geometry" />
+        </mxCell>
+        <mxCell id="memEnt" value="AiMemoryEntry&#xa;(Scope, бюджет символов)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="domain">
+          <mxGeometry x="20" y="40" width="200" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="skillEnt" value="AiSkill&#xa;(триггер + SKILL.md)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="domain">
+          <mxGeometry x="20" y="95" width="200" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="sessEnt" value="AiSession / AiMessage /&#xa;AiSummary" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="domain">
+          <mxGeometry x="20" y="150" width="200" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="knowEnt" value="KnowledgeItem&#xa;(Embedding vector)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="domain">
+          <mxGeometry x="20" y="205" width="200" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="artEnt" value="AiArtifact&#xa;(Spec | Diagram, версии)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="domain">
+          <mxGeometry x="20" y="260" width="200" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="infra" value="Flow.Infrastructure + Postgres 16 (pgvector)" style="swimlane;startSize=28;html=1;fillColor=#f8cecc;strokeColor=#b85450;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="280" y="640" width="720" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="dbAi" value="ai_memory, ai_skills,&#xa;ai_sessions, ai_messages,&#xa;ai_summaries, ai_artifacts" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;" vertex="1" parent="infra">
+          <mxGeometry x="40" y="50" width="190" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="dbKnow" value="knowledge_items&#xa;vector(1536) + HNSW&#xa;(семантический поиск)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;" vertex="1" parent="infra">
+          <mxGeometry x="270" y="50" width="190" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="dbFlow" value="Boards / Statuses /&#xa;TaskItems (существующие)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;dashed=1;" vertex="1" parent="infra">
+          <mxGeometry x="500" y="50" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="llm" value="LLM-провайдер&#xa;(OpenAI-совместимый API)&#xa;chat + embeddings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="660" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="drawio" value="draw.io&#xa;(viewer / embed)&#xa;рендер и экспорт диаграмм" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="780" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="board" value="Board (aggregate root)&#xa;CreateTask → декомпозиция ТЗ&#xa;в задачи Kanban" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="40" y="480" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" value="Уровни контекста (модель Hermes):&#xa;1. Memory — всегда в промпте, малый бюджет, декларативные факты&#xa;2. Skills — лениво, по триггеру задачи, процедурные знания&#xa;3. RAG (база знаний) — лениво, top-k по embedding-поиску&#xa;4. Session — скользящее окно + компрессия в AiSummary&#xa;Пунктир = внешние/существующие компоненты" style="text;html=1;align=left;verticalAlign=top;fillColor=#f5f5f5;strokeColor=#666666;rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="40" y="640" width="220" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="user" target="client" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="HTTP" edge="1" parent="1" source="client" target="apiChat" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="apiChat" target="assembler" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="apiMemory" target="curator" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="apiSpecs" target="spec" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="apiDiag" target="diagram" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="memory (всегда)" edge="1" parent="1" source="assembler" target="memEnt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#82b366;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="skills (по триггеру)" edge="1" parent="1" source="assembler" target="skillEnt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#82b366;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="RAG top-k" edge="1" parent="1" source="assembler" target="knowEnt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#82b366;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="session window" edge="1" parent="1" source="assembler" target="sessEnt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#82b366;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="curator" target="memEnt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="compactor" target="sessEnt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" value="версии ТЗ" edge="1" parent="1" source="spec" target="artEnt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" value="mxGraph XML" edge="1" parent="1" source="diagram" target="artEnt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="spec" target="board" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" value="chat / embeddings" edge="1" parent="1" source="llmclient" target="llm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#d79b00;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" value="EF Core / UnitOfWork" edge="1" parent="1" source="app" target="infra" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" value="XML → рендер" edge="1" parent="1" source="client" target="drawio" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#d79b00;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e19" value="процесс «как есть» из статусов" edge="1" parent="1" source="dbFlow" target="diagram" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
