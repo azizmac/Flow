@@ -3,6 +3,7 @@ using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
 using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
 using Flow.Application.Features.Boards.Queries.BoardListQuery;
+using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Xunit;
 
 namespace Flow.Application.Tests.Features;
@@ -14,8 +15,10 @@ public class BoardFeatureTests
     {
         var (mediator, _, _) = TestMediatorFactory.Create();
 
-        var response = await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None);
+        var result = await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None);
 
+        Assert.False(result.IsKeyTaken);
+        var response = result.Response!;
         Assert.Equal("FLW", response.Key);
         Assert.Equal("Flow Project", response.Name);
         Assert.Equal(4, response.Statuses.Count);
@@ -46,7 +49,7 @@ public class BoardFeatureTests
     public async Task RenameBoard_Should_UpdateName_When_BoardExists()
     {
         var (mediator, _, _) = TestMediatorFactory.Create();
-        var created = await mediator.Send(new BoardCreateCommand("Old name", "FLW"), CancellationToken.None);
+        var created = (await mediator.Send(new BoardCreateCommand("Old name", "FLW"), CancellationToken.None)).Response!;
 
         var response = await mediator.Send(new BoardRenameCommand(created.Id, "New name"), CancellationToken.None);
 
@@ -71,7 +74,7 @@ public class BoardFeatureTests
     public async Task RenameBoard_Should_Throw_When_NameIsEmpty()
     {
         var (mediator, _, _) = TestMediatorFactory.Create();
-        var created = await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None);
+        var created = (await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None)).Response!;
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             mediator.Send(new BoardRenameCommand(created.Id, ""), CancellationToken.None));
@@ -81,7 +84,7 @@ public class BoardFeatureTests
     public async Task DeleteBoard_Should_RemoveBoard_When_Exists()
     {
         var (mediator, _, _) = TestMediatorFactory.Create();
-        var created = await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None);
+        var created = (await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None)).Response!;
 
         var deleted = await mediator.Send(new BoardDeleteCommand(created.Id), CancellationToken.None);
 
@@ -98,5 +101,59 @@ public class BoardFeatureTests
         var deleted = await mediator.Send(new BoardDeleteCommand(Guid.NewGuid()), CancellationToken.None);
 
         Assert.False(deleted);
+    }
+
+    [Fact]
+    public async Task CreateBoard_Should_ReturnKeyTaken_When_KeyAlreadyExists()
+    {
+        var (mediator, boards, _) = TestMediatorFactory.Create();
+        await mediator.Send(new BoardCreateCommand("First", "FLW"), CancellationToken.None);
+
+        var result = await mediator.Send(new BoardCreateCommand("Second", "FLW"), CancellationToken.None);
+
+        Assert.True(result.IsKeyTaken);
+        Assert.Null(result.Response);
+        Assert.Contains("FLW", result.ValidationError);
+        Assert.Single(await boards.GetAllAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CreateBoard_Should_ReturnKeyTaken_When_KeyDiffersOnlyByCase()
+    {
+        // Board.Create нормализует ключ в верхний регистр, поэтому "flw" и "FLW" — одна доска.
+        var (mediator, _, _) = TestMediatorFactory.Create();
+        await mediator.Send(new BoardCreateCommand("First", "FLW"), CancellationToken.None);
+
+        var result = await mediator.Send(new BoardCreateCommand("Second", " flw "), CancellationToken.None);
+
+        Assert.True(result.IsKeyTaken);
+    }
+
+    [Fact]
+    public async Task CreateBoard_Should_Succeed_When_KeysDiffer()
+    {
+        var (mediator, _, _) = TestMediatorFactory.Create();
+        await mediator.Send(new BoardCreateCommand("First", "ONE"), CancellationToken.None);
+
+        var result = await mediator.Send(new BoardCreateCommand("Second", "TWO"), CancellationToken.None);
+
+        Assert.False(result.IsKeyTaken);
+        Assert.Equal("TWO", result.Response!.Key);
+    }
+
+    [Fact]
+    public async Task DeleteBoard_Should_RemoveBoard_When_BoardHasTasks()
+    {
+        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var created = (await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None)).Response!;
+        var domainBoard = await boards.GetByIdAsync(created.Id, CancellationToken.None);
+        tasks.RegisterBoardStatuses(domainBoard!);
+        await mediator.Send(new TaskCreateCommand(created.Id, "Task 1", null, null), CancellationToken.None);
+        await mediator.Send(new TaskCreateCommand(created.Id, "Task 2", null, null), CancellationToken.None);
+
+        var deleted = await mediator.Send(new BoardDeleteCommand(created.Id), CancellationToken.None);
+
+        Assert.True(deleted);
+        Assert.Null(await mediator.Send(new BoardGetQuery(created.Id), CancellationToken.None));
     }
 }

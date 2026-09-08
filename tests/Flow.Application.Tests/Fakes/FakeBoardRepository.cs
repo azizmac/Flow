@@ -17,7 +17,14 @@ public sealed class FakeBoardRepository : IBoardRepository
     public Task<IReadOnlyList<Board>> GetAllAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Board>>(_boards.ToList());
 
+    public Task<bool> ExistsByKeyAsync(string key, CancellationToken cancellationToken) =>
+        Task.FromResult(_boards.Any(b => b.Key == key));
+
     public void Add(Board board) => _boards.Add(board);
 
-    public void Remove(Board board) => _boards.Remove(board);
+    public Task RemoveAsync(Board board, CancellationToken cancellationToken)
+    {
+        _boards.Remove(board);
+        return Task.CompletedTask;
+    }
 }

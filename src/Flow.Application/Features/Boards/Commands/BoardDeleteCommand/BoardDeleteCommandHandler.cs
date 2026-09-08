@@ -12,7 +12,7 @@ internal sealed class BoardDeleteCommandHandler(IBoardRepository boards, IUnitOf
         if (board is null)
             return false;
 
-        boards.Remove(board);
+        await boards.RemoveAsync(board, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return true;

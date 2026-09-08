@@ -18,10 +18,14 @@ public class BoardsController(IMediator mediator) : ControllerBase
     {
         try
         {
-            var response = await mediator.Send(
+            var result = await mediator.Send(
                 new BoardCreateCommand(request.Name, request.Key),
                 cancellationToken);
 
+            if (result.IsKeyTaken)
+                return Conflict(new { Message = result.ValidationError });
+
+            var response = result.Response!;
             return CreatedAtAction(nameof(GetBoard), new { id = response.Id }, response);
         }
         catch (ArgumentException ex)

@@ -16,7 +16,7 @@ public class TaskFeatureTests
     private static async Task<BoardResponse> CreateBoardAsync(
         IMediator mediator, FakeBoardRepository boards, FakeTaskItemRepository tasks)
     {
-        var board = await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None);
+        var board = (await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None)).Response!;
 
         // FakeTaskItemRepository.StatusBelongsToBoardAsync нужно явно "заселить" статусами доски,
         // т.к. в отличие от реального EF Core у фейка нет общей таблицы Statuses.
@@ -74,7 +74,7 @@ public class TaskFeatureTests
     {
         var (mediator, boards, tasks) = TestMediatorFactory.Create();
         var boardA = await CreateBoardAsync(mediator, boards, tasks);
-        var boardB = await mediator.Send(new BoardCreateCommand("Other board", "OTH"), CancellationToken.None);
+        var boardB = (await mediator.Send(new BoardCreateCommand("Other board", "OTH"), CancellationToken.None)).Response!;
         await mediator.Send(new TaskCreateCommand(boardA.Id, "Task A", null, null), CancellationToken.None);
         await mediator.Send(new TaskCreateCommand(boardB.Id, "Task B", null, null), CancellationToken.None);
 
@@ -120,7 +120,7 @@ public class TaskFeatureTests
     {
         var (mediator, boards, tasks) = TestMediatorFactory.Create();
         var boardA = await CreateBoardAsync(mediator, boards, tasks);
-        var boardB = await mediator.Send(new BoardCreateCommand("Other board", "OTH"), CancellationToken.None);
+        var boardB = (await mediator.Send(new BoardCreateCommand("Other board", "OTH"), CancellationToken.None)).Response!;
         var domainBoardB = await boards.GetByIdAsync(boardB.Id, CancellationToken.None);
         tasks.RegisterBoardStatuses(domainBoardB!);
 
