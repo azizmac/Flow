@@ -1,0 +1,82 @@
+using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
+using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
+using Flow.Application.Features.Tasks.Queries.TaskListQuery;
+using Flow.Shared.Contracts.Tasks;
+using MediatR;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Flow.Api.Controllers;
+
+/// <summary>
+/// Маршруты у задач разбиты на два префикса ("boards/{boardId}/tasks" для создания/списка в рамках доски
+/// и "tasks/{id}" для операций над конкретной задачей), поэтому у контроллера нет общего [Route("[controller]")] —
+/// каждый action задаёт свой полный путь явно.
+/// </summary>
+[ApiController]
+public class TasksController(IMediator mediator) : ControllerBase
+{
+    [HttpPost("boards/{boardId:guid}/tasks")]
+    public async Task<IActionResult> CreateTask(Guid boardId, CreateTaskRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await mediator.Send(
+                new TaskCreateCommand(boardId, request.Title, request.Description, request.StatusId),
+                cancellationToken);
+
+            return response is null
+                ? NotFound()
+                : CreatedAtAction(nameof(GetTask), new { id = response.Id }, response);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
+    [HttpGet("boards/{boardId:guid}/tasks")]
+    public async Task<IActionResult> GetBoardTasks(Guid boardId, CancellationToken cancellationToken)
+    {
+        var tasks = await mediator.Send(new TaskListQuery(boardId), cancellationToken);
+        return Ok(tasks);
+    }
+
+    [HttpGet("tasks/{id:guid}")]
+    public async Task<IActionResult> GetTask(Guid id, CancellationToken cancellationToken)
+    {
+        var task = await mediator.Send(new TaskGetQuery(id), cancellationToken);
+        return task is null ? NotFound() : Ok(task);
+    }
+
+    [HttpPatch("tasks/{id:guid}")]
+    public async Task<IActionResult> UpdateTask(Guid id, UpdateTaskRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await mediator.Send(
+                new TaskUpdateCommand(id, request.Title, request.Description, request.StatusId),
+                cancellationToken);
+
+            if (result.IsNotFound)
+                return NotFound();
+
+            if (result.ValidationError is not null)
+                return BadRequest(new { Message = result.ValidationError });
+
+            return Ok(result.Response);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
+    [HttpDelete("tasks/{id:guid}")]
+    public async Task<IActionResult> DeleteTask(Guid id, CancellationToken cancellationToken)
+    {
+        var deleted = await mediator.Send(new TaskDeleteCommand(id), cancellationToken);
+        return deleted ? NoContent() : NotFound();
+    }
+}
