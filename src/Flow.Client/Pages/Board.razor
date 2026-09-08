@@ -1,0 +1,423 @@
+@* Экран 2 — «Задачи проекта» (GET /boards/{id} + GET /boards/{id}/tasks): плоский список задач,
+   фильтр по статусу (?status=), слайдер создания (N) и слайдер задачи (?task=). *@
+@page "/boards/{Id:guid}"
+@implements IDisposable
+@inject FlowApi Api
+@inject NavigationManager Nav
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+@inject HotkeyService Hotkeys
+@inject AppState State
+
+<PageTitle>@(_board?.Name ?? "Проект") — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        <a class="topbar-back" href="boards" title="К проектам"><Icon Name="arrow-left" Size="18" /></a>
+        @if (_board is not null)
+        {
+            <KeyChip Value="@_board.Key" />
+            @if (_renaming)
+            {
+                <input id="board-rename" class="title-input" style="font-size:20px;letter-spacing:-0.3px;max-width:420px;"
+                       value="@_renameValue" maxlength="200"
+                       @oninput="e => _renameValue = e.Value?.ToString() ?? string.Empty"
+                       @onkeydown="OnRenameKey" @onblur="CommitRename" />
+            }
+            else
+            {
+                <h2 title="@_board.Name" @ondblclick="StartRename">@_board.Name</h2>
+                <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
+            }
+        }
+        else
+        {
+            <h2>@(_notFound ? "Проект не найден" : "…")</h2>
+        }
+    </div>
+    <div class="topbar-right">
+        <label class="search">
+            <Icon Name="search" Size="16" />
+            <input placeholder="Найти задачу или код..." value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
+        </label>
+        <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate" Disabled="_board is null">Создать задачу</DsButton>
+    </div>
+</div>
+
+<div class="content no-scroll">
+    @if (_loading)
+    {
+        <div class="meta-line">Загрузка…</div>
+    }
+    else if (_notFound)
+    {
+        <div class="empty">
+            <div class="empty-title">Проект не найден</div>
+            <a href="boards">К проектам</a>
+        </div>
+    }
+    else if (_loadError is not null)
+    {
+        <div class="empty">
+            <div class="empty-title">Не удалось загрузить проект</div>
+            <div>@_loadError</div>
+            <DsButton Variant="secondary" Size="sm" OnClick="Load">Повторить</DsButton>
+        </div>
+    }
+    else if (_board is not null)
+    {
+        <div class="filter-row">
+            <StatusFilter Statuses="_board.Statuses" Counts="_counts" Total="_tasks.Count" Value="StatusId" ValueChanged="SetStatusFilter" />
+            <div class="meta-line">@Ru.Tasks(_tasks.Count) · создан @Ru.Date(_board.CreatedAt)</div>
+        </div>
+
+        <div class="panel">
+            <div class="list-cols list-head"><div>Код</div><div>Задача</div><div>Статус</div><div>Создана</div><div></div></div>
+            <div class="panel-rows">
+                @if (_tasks.Count == 0)
+                {
+                    <div class="empty">
+                        <div class="empty-title">Пока нет задач</div>
+                        <div>Создайте первую — код будет <span class="code accent">@_board.Key-@_board.NextTaskNumber</span></div>
+                        <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate">Создать первую</DsButton>
+                    </div>
+                }
+                else if (Visible.Count == 0)
+                {
+                    <div class="empty">
+                        @if (StatusId is not null)
+                        {
+                            <div class="empty-title">Нет задач в статусе «@StatusName(StatusId.Value)»</div>
+                            <button type="button" class="icon-lnk" @onclick="() => SetStatusFilter(null)">Показать все</button>
+                        }
+                        else
+                        {
+                            <div class="empty-title">Ничего не найдено</div>
+                            <button type="button" class="icon-lnk" @onclick="() => _search = string.Empty">Сбросить поиск</button>
+                        }
+                    </div>
+                }
+                else
+                {
+                    @foreach (var t in Visible)
+                    {
+                        <TaskRow @key="t.Id" Item="t" Statuses="_board.Statuses"
+                                 Selected="TaskId == t.Id" Flash="_flashId == t.Id"
+                                 OnOpen="OpenTask" OnStatusChange="ChangeStatus" OnRename="RenameTask"
+                                 OnCopy="CopyCode" OnDelete="AskDeleteTask" />
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<Drawer Open="DrawerOpen" OnClose="CloseDrawer">
+    @if (_board is not null && (_createOpen || SelectedTask is not null))
+    {
+        <TaskDrawer Board="_board" Item="@(_createOpen ? null : SelectedTask)"
+                    OnClose="CloseDrawer" OnCreated="OnTaskCreated" OnUpdated="OnTaskUpdated" OnDelete="AskDeleteTask" />
+    }
+</Drawer>
+
+@if (_deleting is not null)
+{
+    <ConfirmDialog Title="@($"Удалить задачу {_deleting.Code}?")"
+                   Text="@($"«{_deleting.Title}» будет удалена без возможности восстановления.")"
+                   OnConfirm="ConfirmDeleteTask" OnCancel="() => _deleting = null" />
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    /// <summary>Фильтр по статусу в query-string — переживает перезагрузку и шарится ссылкой.</summary>
+    [SupplyParameterFromQuery(Name = "status")] public Guid? StatusId { get; set; }
+
+    /// <summary>Открытая в слайдере задача.</summary>
+    [SupplyParameterFromQuery(Name = "task")] public Guid? TaskId { get; set; }
+
+    private BoardResponse? _board;
+    private List<TaskResponse> _tasks = [];
+    private Dictionary<Guid, int> _counts = new();
+    private Guid _loadedId;
+    private bool _loading = true;
+    private bool _notFound;
+    private string? _loadError;
+    private string _search = "";
+    private bool _createOpen;
+    private TaskResponse? _deleting;
+    private Guid? _flashId;
+    private bool _renaming;
+    private string _renameValue = "";
+    private bool _renameCancelled;
+    private IDisposable? _hotkeys;
+
+    private bool DrawerOpen => _createOpen || (TaskId is not null && SelectedTask is not null);
+
+    private TaskResponse? SelectedTask => TaskId is null ? null : _tasks.FirstOrDefault(t => t.Id == TaskId);
+
+    private List<TaskResponse> Visible
+    {
+        get
+        {
+            IEnumerable<TaskResponse> q = _tasks;
+            if (StatusId is { } sid)
+                q = q.Where(t => t.StatusId == sid);
+            var s = _search.Trim();
+            if (s.Length > 0)
+                q = q.Where(t => t.Title.Contains(s, StringComparison.OrdinalIgnoreCase)
+                                 || t.Code.Contains(s, StringComparison.OrdinalIgnoreCase)
+                                 || (t.Description?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false));
+            return q.ToList();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _hotkeys = Hotkeys.Subscribe(OnHotkey);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId != Id)
+        {
+            _loadedId = Id;
+            _createOpen = false;
+            await Load();
+        }
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        _notFound = false;
+        _loadError = null;
+
+        var boardTask = Api.GetBoard(Id);
+        var tasksTask = Api.GetTasks(Id);
+        await Task.WhenAll(boardTask, tasksTask);
+
+        var board = boardTask.Result;
+        var tasks = tasksTask.Result;
+        _loading = false;
+
+        if (board.NotFound)
+        {
+            _notFound = true;
+            _board = null;
+            return;
+        }
+
+        if (!board.Ok || !tasks.Ok)
+        {
+            _loadError = board.Error ?? tasks.Error;
+            return;
+        }
+
+        _board = board.Value!;
+        _tasks = tasks.Value!.OrderByDescending(t => t.CreatedAt).ToList();
+        Recount();
+        State.SetLastBoard(_board.Id);
+    }
+
+    private void Recount()
+    {
+        _counts = _tasks.GroupBy(t => t.StatusId).ToDictionary(g => g.Key, g => g.Count());
+        if (_board is not null)
+            _board = _board with { TaskCount = _tasks.Count };
+    }
+
+    private string StatusName(Guid id) => _board?.Statuses.FirstOrDefault(s => s.Id == id)?.Name ?? "?";
+
+    // ---- фильтр / навигация по query ----
+
+    private void SetStatusFilter(Guid? id) =>
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("status", id?.ToString()), replace: true);
+
+    private void OpenTask(TaskResponse t)
+    {
+        _createOpen = false;
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("task", t.Id.ToString()));
+    }
+
+    private void CloseDrawer()
+    {
+        _createOpen = false;
+        if (TaskId is not null)
+            Nav.NavigateTo(Nav.GetUriWithQueryParameter("task", (string?)null));
+    }
+
+    private void OpenCreate()
+    {
+        if (_board is null) return;
+        if (TaskId is not null)
+            Nav.NavigateTo(Nav.GetUriWithQueryParameter("task", (string?)null));
+        _createOpen = true;
+    }
+
+    // ---- хоткеи ----
+
+    private async Task OnHotkey(HotkeyEvent e)
+    {
+        if (_board is null || _deleting is not null)
+            return;
+
+        switch (e.Key)
+        {
+            case "Escape":
+                if (DrawerOpen) { e.Handled = true; CloseDrawer(); }
+                break;
+            case "n" or "N" or "т" or "Т" when !e.InEditable && !e.Ctrl && !DrawerOpen:
+                e.Handled = true;
+                OpenCreate();
+                break;
+            case "ArrowUp" or "ArrowDown" when !e.InEditable && TaskId is not null && !_createOpen:
+                e.Handled = true;
+                await StepTask(e.Key == "ArrowDown" ? 1 : -1);
+                break;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task StepTask(int delta)
+    {
+        var list = Visible;
+        var i = list.FindIndex(t => t.Id == TaskId);
+        var next = i < 0 ? 0 : Math.Clamp(i + delta, 0, list.Count - 1);
+        if (list.Count == 0 || next == i)
+            return;
+
+        OpenTask(list[next]);
+        await Browser.ScrollIntoViewAsync(TaskRow.ElementIdFor(list[next].Id));
+    }
+
+    // ---- задачи ----
+
+    private async Task OnTaskCreated(TaskResponse t)
+    {
+        _tasks.Insert(0, t);
+        Recount();
+        _createOpen = false;
+        if (_board is not null)
+            _board = _board with { NextTaskNumber = _board.NextTaskNumber + 1 };
+        Toasts.Ok($"Задача {t.Code} создана");
+        await FlashRow(t.Id);
+    }
+
+    private async Task FlashRow(Guid id)
+    {
+        _flashId = id;
+        StateHasChanged();
+        await Browser.ScrollIntoViewAsync(TaskRow.ElementIdFor(id));
+        await Task.Delay(1500);
+        if (_flashId == id)
+        {
+            _flashId = null;
+            StateHasChanged();
+        }
+    }
+
+    private void OnTaskUpdated(TaskResponse t)
+    {
+        ReplaceTask(t);
+        Recount();
+    }
+
+    private async Task ChangeStatus((TaskResponse Task, Guid StatusId) args)
+    {
+        var (task, statusId) = args;
+        var before = task;
+        // Оптимистично: строка меняется сразу, при ошибке — откат.
+        ReplaceTask(task with { StatusId = statusId });
+        Recount();
+
+        var result = await Api.UpdateTask(task.Id, new UpdateTaskRequest(null, null, statusId));
+        if (result.Ok)
+        {
+            ReplaceTask(result.Value!);
+        }
+        else
+        {
+            ReplaceTask(before);
+            Recount();
+            Toasts.Error(result.Error ?? "Не удалось сменить статус");
+        }
+    }
+
+    private async Task RenameTask((TaskResponse Task, string Title) args)
+    {
+        var result = await Api.UpdateTask(args.Task.Id, new UpdateTaskRequest(args.Title, null, null));
+        if (result.Ok)
+            ReplaceTask(result.Value!);
+        else
+            Toasts.Error(result.Error ?? "Не удалось переименовать задачу");
+    }
+
+    private async Task CopyCode(TaskResponse t)
+    {
+        if (await Browser.CopyAsync(t.Code)) Toasts.Ok($"Скопировано: {t.Code}");
+        else Toasts.Error("Не удалось скопировать");
+    }
+
+    private void AskDeleteTask(TaskResponse t) => _deleting = t;
+
+    private async Task ConfirmDeleteTask()
+    {
+        var t = _deleting!;
+        var result = await Api.DeleteTask(t.Id);
+        _deleting = null;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось удалить задачу");
+            return;
+        }
+
+        _tasks.RemoveAll(x => x.Id == t.Id);
+        Recount();
+        if (TaskId == t.Id)
+            CloseDrawer();
+        Toasts.Ok($"Задача {t.Code} удалена");
+    }
+
+    private void ReplaceTask(TaskResponse updated)
+    {
+        var i = _tasks.FindIndex(x => x.Id == updated.Id);
+        if (i >= 0) _tasks[i] = updated;
+    }
+
+    // ---- переименование проекта ----
+
+    private async Task StartRename()
+    {
+        if (_board is null) return;
+        _renameValue = _board.Name;
+        _renaming = true;
+        _renameCancelled = false;
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync("board-rename", select: true);
+    }
+
+    private async Task OnRenameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitRename();
+        else if (e.Key == "Escape") { _renameCancelled = true; _renaming = false; }
+    }
+
+    private async Task CommitRename()
+    {
+        if (!_renaming || _renameCancelled) return;
+        _renaming = false;
+        var name = _renameValue.Trim();
+        if (_board is null || name.Length == 0 || name == _board.Name) return;
+
+        var result = await Api.RenameBoard(_board.Id, new RenameBoardRequest(name));
+        if (result.Ok)
+            _board = result.Value! with { TaskCount = _tasks.Count };
+        else
+            Toasts.Error(result.Error ?? "Не удалось переименовать проект");
+    }
+
+    public void Dispose() => _hotkeys?.Dispose();
+}

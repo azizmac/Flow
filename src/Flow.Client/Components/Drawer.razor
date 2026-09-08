@@ -1,0 +1,53 @@
+@* Слайдер справа поверх main (сайдбар не затемняется). Всегда смонтирован — открытие/закрытие через класс,
+   чтобы CSS-переходы (translateX) можно было прервать. Контент остаётся на время выходной анимации (160ms). *@
+
+<div class="drawer-scrim @(Open ? "in" : "")" @onclick="RequestClose"></div>
+<div class="drawer @(Open ? "in" : "") @(_closing ? "closing" : "")" role="dialog" aria-modal="true" aria-hidden="@(!Open)">
+    @if (Open || _closing)
+    {
+        @ChildContent
+    }
+</div>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool _wasOpen;
+    private bool _closing;
+    private CancellationTokenSource? _closeCts;
+
+    protected override void OnParametersSet()
+    {
+        if (_wasOpen && !Open)
+        {
+            _closing = true;
+            _closeCts?.Cancel();
+            _closeCts = new CancellationTokenSource();
+            _ = EndClosing(_closeCts.Token);
+        }
+        else if (Open)
+        {
+            _closing = false;
+            _closeCts?.Cancel();
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task EndClosing(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(170, ct);
+            _closing = false;
+            StateHasChanged();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private Task RequestClose() => OnClose.InvokeAsync();
+}

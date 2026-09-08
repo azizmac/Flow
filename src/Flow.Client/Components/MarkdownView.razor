@@ -1,0 +1,31 @@
+@* Рендер Markdown описания задачи (Markdig). Сырой HTML внутри Markdown отключён — текст приходит от
+   пользователей и не должен превращаться в разметку. Пустое описание → плейсхолдер. *@
+@using Markdig
+
+<div class="desc-box @(IsEmpty ? "ph" : "") @Class" style="@Style" @onclick="OnClick">
+    @if (IsEmpty)
+    {
+        @Placeholder
+    }
+    else
+    {
+        @Html
+    }
+</div>
+
+@code {
+    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .DisableHtml()
+        .Build();
+
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Добавить описание…";
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private bool IsEmpty => string.IsNullOrWhiteSpace(Text);
+
+    private MarkupString Html => new(Markdown.ToHtml(Text ?? "", Pipeline));
+}

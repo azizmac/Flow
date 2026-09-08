@@ -1,0 +1,119 @@
+/* ════════════════════════════════════════════════════════════════════
+   Flow — design tokens.
+   База: DRESSY Design System (Inter 500/600/900, шаг отступов 5px,
+   pill-контролы 34/50px, радиусы 5/10/25). Палитра — Flow (тёмно-зелёная
+   с янтарным акцентом) поверх семантических алиасов DRESSY.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+    /* ── DRESSY · fonts ── */
+    --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-text: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    /* ── DRESSY · weights ── */
+    --fw-regular: 400;
+    --fw-medium: 500;
+    --fw-semibold: 600;
+    --fw-bold: 700;
+    --fw-extrabold: 800;
+    --fw-black: 900;
+
+    /* ── DRESSY · type scale ── */
+    --text-display: 40px;
+    --text-h1: 40px;
+    --text-h2: 25px;
+    --text-h3: 22px;
+    --text-title: 22px;
+    --text-lg: 20px;
+    --text-body: 15px;
+    --text-sm: 14px;
+    --text-xs: 12px;
+
+    --lh-tight: 1;
+    --lh-display: 0.925;
+    --lh-snug: 1.15;
+    --lh-normal: 1.33;
+
+    --tracking-tight: -0.4px;
+    --tracking-display: -0.02em;
+    --tracking-label: 0.37px;
+    --tracking-wide: 0.08em;
+
+    /* ── DRESSY · spacing (base 5px) ── */
+    --space-1: 5px;
+    --space-2: 10px;
+    --space-3: 15px;
+    --space-4: 20px;
+    --space-5: 25px;
+    --space-6: 30px;
+    --space-8: 40px;
+    --space-10: 50px;
+
+    /* ── DRESSY · radii ── */
+    --radius-pill: 999px;
+    --radius-card: 25px;
+    --radius-sheet: 30px;
+    --radius-md: 10px;
+    --radius-sm: 5px;
+    --radius-xs: 2px;
+
+    /* Flow-специфичные радиусы карточек/панелей из макета */
+    --r-sm: 6px;
+    --r-md: 10px;
+    --r-lg: 12px;
+    --r-xl: 16px;
+
+    /* ── DRESSY · control sizes ── */
+    --control-h-sm: 34px;
+    --control-h-md: 40px;   /* Flow: компактный md для topbar (hint-size из макета) */
+    --control-h: 50px;
+    --tap-min: 44px;
+
+    /* ── Flow · палитра ── */
+    --bg-page: #EFE9DD;
+    --bg-deep: #082019;
+    --bg-content: #153E32;
+    --surface: #1B4A3B;
+    --surface-raised: #245A48;
+    --surface-raised-hover: #2C6A56;
+
+    --accent: #FFBA00;
+    --accent-hover: #FFCB40;
+    --accent-pressed: #E8A900;
+    --accent-soft: rgba(255, 186, 0, 0.14);
+    --on-accent: #0C3B2E;
+
+    --sage: #6D9773;
+    --tan: #BB8A52;
+    --danger: #E2604F;
+    --danger-soft: rgba(226, 96, 79, 0.14);
+
+    --text-primary: #FFFFFF;
+    --text-secondary: rgba(255, 255, 255, 0.68);
+    --text-tertiary: rgba(255, 255, 255, 0.42);
+    --text-disabled: rgba(255, 255, 255, 0.3);
+    --text-on-accent: var(--on-accent);
+
+    --border: rgba(255, 255, 255, 0.10);
+    --border-strong: rgba(255, 255, 255, 0.22);
+    --border-subtle: rgba(255, 255, 255, 0.06);
+
+    /* ── DRESSY semantic aliases → Flow ── */
+    --bg: var(--bg-content);
+    --surface-panel: var(--surface);
+    --error: var(--danger);
+
+    /* ── elevation ── */
+    --shadow-card: 0 40px 80px -30px rgba(0, 0, 0, 0.35);
+    --shadow-popover: 0 20px 40px rgba(0, 0, 0, 0.4);
+    --shadow-modal: 0 30px 60px -20px rgba(0, 0, 0, 0.6);
+    --shadow-drawer: -30px 0 60px rgba(0, 0, 0, 0.4);
+    --shadow-sidebar: 2px 0 12px rgba(0, 0, 0, 0.25);
+    --ring-subtle: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
+
+    /* ── motion ── */
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}

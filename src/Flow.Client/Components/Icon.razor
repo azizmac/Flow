@@ -1,0 +1,19 @@
+@* Иконка DRESSY (icon pack by Petr Bilek): глиф в сетке 24×24, fill=currentColor — красится через CSS color.
+   Имена — alias'ы из DressyIcons.cs (search, plus, more, arrow-left, edit, chevrons, view, trash, close, copy, expand…). *@
+
+<span class="ds-icon @Class" style="@Style" aria-hidden="true">
+    <svg width="@Size" height="@Size" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        @Glyph
+    </svg>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+    [Parameter] public int Size { get; set; } = 16;
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private MarkupString Glyph => new(DressyIcons.Glyphs.TryGetValue(Name, out var body)
+        ? body
+        : "<circle cx=\"12\" cy=\"12\" r=\"9\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"/>");
+}

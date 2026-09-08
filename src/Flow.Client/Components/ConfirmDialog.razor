@@ -1,0 +1,67 @@
+@* Модалка подтверждения (удаление проекта/задачи). Enter — подтвердить, Esc — закрыть. *@
+@implements IDisposable
+@inject HotkeyService Hotkeys
+
+<div class="modal-scrim @(_in ? "in" : "")" @onclick="Cancel">
+    <div class="modal" role="dialog" aria-modal="true" @onclick:stopPropagation>
+        <div>
+            <h3>@Title</h3>
+            @if (!string.IsNullOrEmpty(Text))
+            {
+                <p>@Text</p>
+            }
+        </div>
+        <div class="modal-actions">
+            <DsButton Variant="secondary" Size="md" OnClick="Cancel" Disabled="_busy">Отмена</DsButton>
+            <DsButton Variant="danger" Size="md" OnClick="Confirm" Busy="_busy" Icon="trash">@ConfirmLabel</DsButton>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string ConfirmLabel { get; set; } = "Удалить";
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private bool _in;
+    private bool _busy;
+    private IDisposable? _hotkeys;
+
+    protected override void OnInitialized()
+    {
+        _hotkeys = Hotkeys.Subscribe(async e =>
+        {
+            if (e.Key == "Escape") { e.Handled = true; await Cancel(); }
+            else if (e.Key == "Enter" && !e.InEditable) { e.Handled = true; await Confirm(); }
+        });
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _in = true;
+            StateHasChanged();
+        }
+    }
+
+    private Task Cancel() => _busy ? Task.CompletedTask : OnCancel.InvokeAsync();
+
+    private async Task Confirm()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await OnConfirm.InvokeAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    public void Dispose() => _hotkeys?.Dispose();
+}

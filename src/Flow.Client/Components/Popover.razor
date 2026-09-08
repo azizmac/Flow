@@ -1,0 +1,68 @@
+@* Поповер в fixed-слое (не режется overflow панели/строк). Позиционируется по якорю AnchorId:
+   Align=left — под левым краем якоря (transform-origin top left), Align=right — под правым (top right).
+   Если снизу не хватает места — раскрывается вверх. Клик по скриму / Esc → OnClose. *@
+@implements IDisposable
+@inject BrowserInterop Browser
+@inject HotkeyService Hotkeys
+
+<div class="pop-scrim" @onclick="Close" @oncontextmenu:preventDefault></div>
+<div class="pop @(_in ? "in" : "")" style="@PositionStyle" @onclick:stopPropagation>
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string AnchorId { get; set; } = "";
+    [Parameter] public string Align { get; set; } = "left";
+    [Parameter] public int Width { get; set; } = 200;
+    [Parameter] public int Offset { get; set; } = 6;
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool _in;
+    private double _left;
+    private double _top;
+    private bool _up;
+    private IDisposable? _hotkeys;
+
+    private string PositionStyle =>
+        $"width:{Width}px;left:{Fmt(_left)}px;top:{Fmt(_top)}px;transform-origin:{(_up ? "bottom" : "top")} {Align};" +
+        (_in ? "" : "visibility:hidden;");
+
+    private static string Fmt(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    protected override void OnInitialized()
+    {
+        _hotkeys = Hotkeys.Subscribe(e =>
+        {
+            if (e.Key == "Escape")
+            {
+                e.Handled = true;
+                return Close();
+            }
+            return Task.CompletedTask;
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        var r = await Browser.RectAsync(AnchorId);
+        if (r is not null)
+        {
+            _left = Align == "right" ? Math.Max(8, r.Right - Width) : Math.Min(r.Left, r.Vw - Width - 8);
+            // высоту меню заранее не знаем — оцениваем по 40px на пункт, максимум 260
+            var estimated = 260;
+            _up = r.Bottom + Offset + estimated > r.Vh && r.Top > estimated;
+            _top = _up ? r.Top - Offset : r.Bottom + Offset;
+        }
+
+        _in = true;
+        StateHasChanged();
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    public void Dispose() => _hotkeys?.Dispose();
+}

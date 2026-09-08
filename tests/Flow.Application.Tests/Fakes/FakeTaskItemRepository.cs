@@ -16,6 +16,13 @@ public sealed class FakeTaskItemRepository : ITaskItemRepository
     public Task<IReadOnlyList<TaskItem>> GetByBoardIdAsync(Guid boardId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<TaskItem>>(_tasks.Where(t => t.BoardId == boardId).ToList());
 
+    public Task<IReadOnlyDictionary<Guid, int>> CountByBoardIdsAsync(
+        IReadOnlyCollection<Guid> boardIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, int>>(_tasks
+            .Where(t => boardIds.Contains(t.BoardId))
+            .GroupBy(t => t.BoardId)
+            .ToDictionary(g => g.Key, g => g.Count()));
+
     public Task<bool> StatusBelongsToBoardAsync(Guid statusId, Guid boardId, CancellationToken cancellationToken) =>
         Task.FromResult(_statusesByBoard.Contains((statusId, boardId)));
 
