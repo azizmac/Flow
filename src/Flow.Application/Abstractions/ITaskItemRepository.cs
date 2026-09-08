@@ -8,6 +8,12 @@ public interface ITaskItemRepository
 
     Task<IReadOnlyList<TaskItem>> GetByBoardIdAsync(Guid boardId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Количество задач по каждой доске одним запросом (GROUP BY BoardId) — для BoardResponse.TaskCount.
+    /// Доски без задач в словаре отсутствуют, вызывающая сторона трактует это как 0.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, int>> CountByBoardIdsAsync(IReadOnlyCollection<Guid> boardIds, CancellationToken cancellationToken);
+
     /// <summary>Нужно для валидации ChangeStatus — статус должен принадлежать той же доске, что и задача.</summary>
     Task<bool> StatusBelongsToBoardAsync(Guid statusId, Guid boardId, CancellationToken cancellationToken);
 

@@ -1,0 +1,307 @@
+@* Экран 5 — задача на всю страницу (GET /tasks/{id} → GET /boards/{boardId}). *@
+@page "/tasks/{Id:guid}"
+@implements IDisposable
+@inject FlowApi Api
+@inject NavigationManager Nav
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+@inject HotkeyService Hotkeys
+@inject AppState State
+
+<PageTitle>@(_task?.Code ?? "Задача") — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        <a class="topbar-back" href="@BackHref" title="К задачам проекта"><Icon Name="arrow-left" Size="18" /></a>
+        <div class="topbar-crumbs">
+            <a href="boards">Проекты</a><span>/</span>
+            @if (_board is not null)
+            {
+                <a href="@BackHref">@_board.Name</a><span>/</span>
+            }
+            <span class="code">@(_task?.Code ?? "…")</span>
+        </div>
+    </div>
+    <div class="topbar-right" style="gap:8px;">
+        @if (_task is not null)
+        {
+            <button type="button" class="icon-lnk" @onclick="CopyLink"><Icon Name="copy" Size="14" />Скопировать ссылку</button>
+            <RowMenu ShowOpen="false" Size="30" Style="color:rgba(255,255,255,0.5)"
+                     OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => _deleting = true" />
+        }
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="content"><div class="meta-line">Загрузка…</div></div>
+}
+else if (_notFound)
+{
+    <div class="content">
+        <div class="empty">
+            <div class="empty-title">Задача не найдена</div>
+            <a href="boards">К проектам</a>
+        </div>
+    </div>
+}
+else if (_loadError is not null)
+{
+    <div class="content">
+        <div class="empty">
+            <div class="empty-title">Не удалось загрузить задачу</div>
+            <div>@_loadError</div>
+            <DsButton Variant="secondary" Size="sm" OnClick="Load">Повторить</DsButton>
+        </div>
+    </div>
+}
+else if (_task is not null && _board is not null)
+{
+    <div class="content task-page" @onkeydown="OnBodyKey">
+        <div class="task-page-main">
+            <div>
+                <div class="code accent" style="margin-bottom:10px;">@_task.Code</div>
+                @if (_editingTitle)
+                {
+                    <div class="task-page-title">
+                        <input id="tp-title" value="@_title" maxlength="500"
+                               @oninput="e => _title = e.Value?.ToString() ?? string.Empty"
+                               @onkeydown="OnTitleKey" @onblur="CommitTitle" />
+                    </div>
+                }
+                else
+                {
+                    <div class="task-page-title" title="Нажмите, чтобы переименовать" @onclick="StartTitleEdit">@_task.Title</div>
+                }
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                <div class="desc-head">
+                    <div class="section-title">Описание</div>
+                    @if (_editingDesc)
+                    {
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <span class="hint">Markdown · <span class="kbd">Ctrl Enter</span> сохранить</span>
+                            <button type="button" class="icon-lnk" @onclick="() => _editingDesc = false">Отмена</button>
+                            <DsButton Variant="primary" Size="sm" OnClick="SaveDesc" Busy="_busy">Сохранить</DsButton>
+                        </div>
+                    }
+                    else
+                    {
+                        <button type="button" class="icon-lnk" @onclick="StartDescEdit"><Icon Name="edit" Size="13" />Редактировать</button>
+                    }
+                </div>
+                @if (_editingDesc)
+                {
+                    <textarea id="tp-desc" class="desc-edit" style="min-height:220px;" placeholder="Что нужно сделать, критерии готовности, ссылки…"
+                              value="@_description" @oninput="e => _description = e.Value?.ToString() ?? string.Empty"></textarea>
+                }
+                else
+                {
+                    <MarkdownView Text="@_task.Description" Class="big" OnClick="OnDescClick" />
+                }
+            </div>
+        </div>
+
+        <div class="task-page-side">
+            <div class="side-card">
+                <div class="meta-grid narrow">
+                    <div class="meta-k">Статус</div>
+                    <div><StatusSelect Statuses="_board.Statuses" Value="_task.StatusId" OnChange="ChangeStatus" /></div>
+                    <div class="meta-k">Проект</div>
+                    <div class="meta-v"><KeyChip Value="@_board.Key" /><a href="@BackHref" style="color:#fff;">@_board.Name</a></div>
+                    <div class="meta-k">Создана</div>
+                    <div class="meta-v">@Ru.DateTimeFull(_task.CreatedAt)</div>
+                    <div class="meta-k">ID</div>
+                    <div class="meta-v mono" title="Скопировать ID" @onclick="CopyId">@_task.Id</div>
+                </div>
+            </div>
+            <button type="button" class="icon-lnk danger" style="padding:0 4px;align-self:flex-start;" @onclick="() => _deleting = true">
+                <Icon Name="trash" Size="14" />Удалить задачу
+            </button>
+        </div>
+    </div>
+}
+
+@if (_deleting && _task is not null)
+{
+    <ConfirmDialog Title="@($"Удалить задачу {_task.Code}?")"
+                   Text="@($"«{_task.Title}» будет удалена без возможности восстановления.")"
+                   OnConfirm="ConfirmDelete" OnCancel="() => _deleting = false" />
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private TaskResponse? _task;
+    private BoardResponse? _board;
+    private Guid _loadedId;
+    private bool _loading = true;
+    private bool _notFound;
+    private string? _loadError;
+    private bool _busy;
+    private bool _deleting;
+    private bool _editingTitle;
+    private bool _titleCancelled;
+    private string _title = "";
+    private bool _editingDesc;
+    private string _description = "";
+    private IDisposable? _hotkeys;
+
+    private string BackHref => _task is null ? "boards" : $"boards/{_task.BoardId}";
+
+    protected override void OnInitialized()
+    {
+        _hotkeys = Hotkeys.Subscribe(async e =>
+        {
+            if (e.Key == "Enter" && e.Ctrl && _editingDesc) { e.Handled = true; await SaveDesc(); StateHasChanged(); }
+        });
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId != Id)
+        {
+            _loadedId = Id;
+            await Load();
+        }
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        _notFound = false;
+        _loadError = null;
+        _editingTitle = false;
+        _editingDesc = false;
+
+        var task = await Api.GetTask(Id);
+        if (task.NotFound)
+        {
+            _loading = false;
+            _notFound = true;
+            return;
+        }
+
+        if (!task.Ok)
+        {
+            _loading = false;
+            _loadError = task.Error;
+            return;
+        }
+
+        _task = task.Value!;
+        var board = await Api.GetBoard(_task.BoardId);
+        _loading = false;
+        if (!board.Ok)
+        {
+            _loadError = board.Error;
+            return;
+        }
+
+        _board = board.Value!;
+        State.SetLastBoard(_board.Id);
+    }
+
+    private async Task OnBodyKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && (e.CtrlKey || e.MetaKey) && _editingDesc)
+            await SaveDesc();
+    }
+
+    private async Task StartTitleEdit()
+    {
+        _title = _task!.Title;
+        _editingTitle = true;
+        _titleCancelled = false;
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync("tp-title", select: true);
+    }
+
+    private async Task OnTitleKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitTitle();
+        else if (e.Key == "Escape") { _titleCancelled = true; _editingTitle = false; }
+    }
+
+    private async Task CommitTitle()
+    {
+        if (!_editingTitle || _titleCancelled) return;
+        _editingTitle = false;
+        var title = _title.Trim();
+        if (title.Length == 0 || title == _task!.Title) return;
+        await Patch(new UpdateTaskRequest(title, null, null));
+    }
+
+    private Task ChangeStatus(Guid statusId) => Patch(new UpdateTaskRequest(null, null, statusId));
+
+    private async Task StartDescEdit()
+    {
+        _description = _task!.Description ?? "";
+        _editingDesc = true;
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync("tp-desc");
+    }
+
+    private Task OnDescClick() => string.IsNullOrWhiteSpace(_task?.Description) ? StartDescEdit() : Task.CompletedTask;
+
+    private async Task SaveDesc()
+    {
+        if (!_editingDesc || _busy) return;
+        var text = _description.TrimEnd();
+        if (text == (_task!.Description ?? "")) { _editingDesc = false; return; }
+        if (await Patch(new UpdateTaskRequest(null, text, null)))
+            _editingDesc = false;
+    }
+
+    private async Task<bool> Patch(UpdateTaskRequest request)
+    {
+        _busy = true;
+        var result = await Api.UpdateTask(_task!.Id, request);
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось сохранить задачу");
+            return false;
+        }
+
+        _task = result.Value!;
+        return true;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        var t = _task!;
+        var result = await Api.DeleteTask(t.Id);
+        _deleting = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось удалить задачу");
+            return;
+        }
+
+        Toasts.Ok($"Задача {t.Code} удалена");
+        Nav.NavigateTo($"boards/{t.BoardId}");
+    }
+
+    private async Task CopyCode()
+    {
+        if (await Browser.CopyAsync(_task!.Code)) Toasts.Ok($"Скопировано: {_task.Code}");
+        else Toasts.Error("Не удалось скопировать");
+    }
+
+    private async Task CopyLink()
+    {
+        if (await Browser.CopyAsync(Nav.Uri)) Toasts.Ok("Ссылка скопирована");
+        else Toasts.Error("Не удалось скопировать");
+    }
+
+    private async Task CopyId()
+    {
+        if (await Browser.CopyAsync(_task!.Id.ToString())) Toasts.Ok("ID скопирован");
+        else Toasts.Error("Не удалось скопировать");
+    }
+
+    public void Dispose() => _hotkeys?.Dispose();
+}

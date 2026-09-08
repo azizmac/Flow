@@ -1,0 +1,39 @@
+@* DRESSY Input — поле с подчёркиванием: label сверху, значение крупным semibold, линия 1px
+   (focus → белая, ошибка → danger), строка ошибки под полем. *@
+
+<label class="ds-field @(Error is null ? "" : "error") @Class" style="@Style">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <span class="ds-field-label">@Label</span>
+    }
+    <span class="ds-field-row">
+        @if (!string.IsNullOrEmpty(Icon))
+        {
+            <Icon Name="@Icon" Size="20" />
+        }
+        <input id="@Id" type="@Type" placeholder="@Placeholder" value="@Value" maxlength="@MaxLength"
+               autocomplete="off" spellcheck="false"
+               @oninput="OnInput" @onkeydown="OnKeyDown" />
+    </span>
+    @if (Error is not null)
+    {
+        <span class="ds-field-error">@Error</span>
+    }
+</label>
+
+@code {
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string Type { get; set; } = "text";
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public int? MaxLength { get; set; }
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
+
+    private Task OnInput(ChangeEventArgs e) => ValueChanged.InvokeAsync(e.Value?.ToString() ?? "");
+}

@@ -1,16 +1,18 @@
-﻿@inherits LayoutComponentBase
-<div class="page">
-    <div class="sidebar">
-        <NavMenu/>
+@inherits LayoutComponentBase
+@inject HotkeyService Hotkeys
+
+<div class="flow-app">
+    <Sidebar />
+    <div class="main">
+        @Body
     </div>
-
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
-
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
+    <Toast />
 </div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await Hotkeys.EnsureRegisteredAsync();
+    }
+}

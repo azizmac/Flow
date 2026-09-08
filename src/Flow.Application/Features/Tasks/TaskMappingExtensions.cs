@@ -7,6 +7,7 @@ public static class TaskMappingExtensions
 {
     public static TaskResponse ToResponse(this TaskItem task) => new(
         task.Id,
+        task.BoardId,
         task.Code.Value,
         task.Title,
         task.Description,

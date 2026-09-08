@@ -1,0 +1,33 @@
+@* DRESSY Button — pill. Variant: primary | secondary | tertiary | danger. Size: sm | md | lg. *@
+
+<button type="@Type" class="ds-btn @Variant @Size @(FullWidth ? "full" : "") @Class" style="@Style"
+        disabled="@(Disabled || Busy)" title="@Title" @onclick="OnClick" @onclick:stopPropagation="StopPropagation">
+    @if (Busy)
+    {
+        <span class="ds-spin"></span>
+    }
+    else if (!string.IsNullOrEmpty(Icon))
+    {
+        <Icon Name="@Icon" Size="@IconSize" />
+    }
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public string Variant { get; set; } = "primary";
+    [Parameter] public string Size { get; set; } = "md";
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public bool FullWidth { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    /// <summary>Запрос в полёте: спиннер вместо иконки, кнопка заблокирована, текст остаётся.</summary>
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string Type { get; set; } = "button";
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public bool StopPropagation { get; set; }
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private int IconSize => Size == "lg" ? 20 : Size == "sm" ? 16 : 18;
+}

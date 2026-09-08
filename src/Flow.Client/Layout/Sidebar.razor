@@ -1,0 +1,61 @@
+@* Drawer-nav 240px по Sidebar.dc.html. «Проекты» → /boards; «Задачи» → последний открытый проект
+   (или /boards); Команды/Дашборды/Настройки — в API ещё нет, показаны неактивными. *@
+@implements IDisposable
+@inject NavigationManager Nav
+@inject AppState State
+
+<nav class="sb">
+    <div class="sb-brand"><div class="sb-mark">F</div><div class="sb-word">FLOW</div></div>
+
+    <div class="sb-ws" title="Переключение рабочих пространств появится позже">
+        <div>
+            <div class="sb-ws-name">Flow</div>
+            <div class="sb-ws-sub">Workspace</div>
+        </div>
+        <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.4)" />
+    </div>
+
+    <div class="sb-section">Рабочее пространство</div>
+
+    <a class="sb-item @(IsBoards ? "active" : "")" href="boards"><Icon Name="grid" Size="18" />Проекты</a>
+    <a class="sb-item @(IsTasks ? "active" : "")" href="@TasksHref"><Icon Name="check" Size="18" />Задачи</a>
+    <span class="sb-item disabled" aria-disabled="true"><Icon Name="users" Size="18" />Команды</span>
+    <span class="sb-item disabled" aria-disabled="true"><Icon Name="chart" Size="18" />Дашборды</span>
+    <span class="sb-item disabled" aria-disabled="true"><Icon Name="settings" Size="18" />Настройки</span>
+
+    <div class="sb-foot">
+        <div class="sb-av">ИВ</div>
+        <div style="flex:1;min-width:0;">
+            <div class="sb-un">Ирина Волкова</div>
+            <div class="sb-ur">Product Designer</div>
+        </div>
+        <DsIconButton Icon="more" Size="26" Title="Меню профиля" Style="color:rgba(255,255,255,0.5)" />
+    </div>
+</nav>
+
+@code {
+    private string Path => Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimEnd('/');
+
+    private bool IsBoards => Path is "" or "boards";
+
+    private bool IsTasks => Path.StartsWith("boards/", StringComparison.OrdinalIgnoreCase)
+                            || Path.StartsWith("tasks/", StringComparison.OrdinalIgnoreCase);
+
+    private string TasksHref => State.LastBoardId is { } id ? $"boards/{id}" : "boards";
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        State.Changed += OnStateChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => StateHasChanged();
+
+    private void OnStateChanged() => StateHasChanged();
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        State.Changed -= OnStateChanged;
+    }
+}

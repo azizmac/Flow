@@ -1,4 +1,4 @@
-# Flow — Kanban-приложение (C#, .NET 10)
+# Flow — трекер задач по проектам (C#, .NET 10)
 
 ## Слойная архитектура
 ```
@@ -7,7 +7,7 @@ Flow.Shared        → DTO-контракты (Boards, Tasks) — общий
 Flow.Application   → Features/{Boards,Tasks}/{Commands,Queries}/*, Abstractions (IBoardRepository, ITaskItemRepository, IUnitOfWork)
 Flow.Domain        → сущности Board, Status, TaskItem, TaskCode, StatusType, DefaultStatuses
 Flow.Infrastructure→ EF Core (Postgres/Npgsql), репозитории, UnitOfWork, миграции
-Flow.Client        → Blazor WebAssembly (заглушки, не связан с API)
+Flow.Client        → Blazor WebAssembly: экраны «Проекты» (/boards) и «Задачи проекта» (/boards/{id}), страница задачи (/tasks/{id}); ходит в Flow.Api через Services/FlowApi
 ```
 Зависимости: Domain ← Application ← Infrastructure ← Api.
 Shared намеренно **не ссылается** на Domain (свой enum `StatusType`).
@@ -34,6 +34,7 @@ Shared намеренно **не ссылается** на Domain (свой enum
 
 Обработка ошибок: `catch (ArgumentException or InvalidOperationException)` → 400.
 `TaskUpdate` возвращает `TaskUpdateResult` (NotFound | InvalidStatus | Success+Response).
+`BoardResponse` несёт `TaskCount` и `NextTaskNumber` (счётчик задач — один `GROUP BY` через `ITaskItemRepository.CountByBoardIdsAsync`, не N+1); `TaskResponse` несёт `BoardId`.
 `BoardCreate` возвращает `BoardCreateResult` (KeyTaken → 409 | Success+Response); ключ проверяется через `IBoardRepository.ExistsByKeyAsync` по нормализованному `Board.Key`.
 `BoardDelete` → `IBoardRepository.RemoveAsync`: репозиторий сам догружает задачи и помечает их Deleted до доски, иначе EF упрётся в FK Restrict (`TaskItems.StatusId`) — либо в БД (23503), либо на клиенте (severed required relationship).
 
@@ -49,6 +50,7 @@ Shared намеренно **не ссылается** на Domain (свой enum
 - `Flow.Infrastructure.Tests` поднимает Postgres через Testcontainers — нужен запущенный Docker.
 - Migrations: `dotnet ef database update --project src/Flow.Infrastructure --startup-project src/Flow.Api`
 - Docker: `docker compose up -d postgres`
+- Клиент локально: `dotnet run --project src/Flow.Api` (:5000) + `dotnet run --project src/Flow.Client` (:5016); клиент читает `ApiBaseUrl` из `wwwroot/appsettings.json`.
 - CI: GitHub Actions `.github/workflows/ci.yml` — push в любую ветку / PR в `main`: `restore` → `build -c Release` → юнит-тесты (Domain, Application) → интеграционные (Infrastructure, Testcontainers) → сборка Docker-образа `Flow.Api` без push.
 
 ## Правила стиля (унаследованы)
@@ -58,7 +60,7 @@ Shared намеренно **не ссылается** на Domain (свой enum
 - Доменные ошибки → `ArgumentException` / `InvalidOperationException` (не `DomainException`, не `Result`).
 - `TaskCode` — value object, в БД хранится как string (EF value converter).
 - `Status.SortOrder`: автоинкремент при добавлении, не редактируется, только для `ORDER BY`.
-- Blazor Client — заглушки (Counter/Weather), не использовать как API-клиент.
+- Blazor Client: Board в UI называется «проект», задачи — плоский список со статусом в строке (не канбан). DTO только из Flow.Shared, ничего не дублировать. Стили — DRESSY-токены (`wwwroot/css/tokens.css`) + классы из макета (`app.css`); иконки — DRESSY-глифы в `Components/DressyIcons.cs`. Даты/склонения — `Services/Ru.cs` (InvariantGlobalization включён). Адрес API — `wwwroot/appsettings.json` → `ApiBaseUrl`; в `Flow.Api` CORS-origins клиента — `Cors:Origins`.
 
 ## Тесты (xUnit)
 - `Flow.Domain.Tests` — юнит-тесты сущностей (Board, TaskItem, TaskCode).

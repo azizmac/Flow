@@ -7,11 +7,17 @@ namespace Flow.Application.Features.Boards;
 
 public static class BoardMappingExtensions
 {
-    public static BoardResponse ToResponse(this Board board) => new(
+    /// <summary>
+    /// <paramref name="taskCount"/> передаётся снаружи: Board.Tasks в запросах не подгружается
+    /// (см. BoardRepository), а счётчик считается отдельным GROUP BY через ITaskItemRepository.CountByBoardIdsAsync.
+    /// </summary>
+    public static BoardResponse ToResponse(this Board board, int taskCount) => new(
         board.Id,
         board.Key,
         board.Name,
         board.CreatedAt,
+        taskCount,
+        board.NextTaskNumber + 1,
         board.Statuses
             .OrderBy(s => s.SortOrder)
             .Select(s => new StatusResponse(s.Id, s.Name, s.IsInitial, s.IsFinal, s.Type.ToResponseStatusType()))

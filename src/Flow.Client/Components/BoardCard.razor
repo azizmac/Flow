@@ -1,0 +1,91 @@
+@* Карточка проекта: ключ + меню, название (+ инлайн-переименование), дата, пилюли статусов,
+   футер «N задач · следующая KEY-n». Клик → OnOpen. *@
+@inject BrowserInterop Browser
+
+<div class="board-card" @onclick="Open" role="link" tabindex="0" @onkeydown="OnCardKey">
+    <div class="board-card-head">
+        <KeyChip Value="@Board.Key" />
+        <RowMenu ShowOpen="true" Size="26" Style="color:rgba(255,255,255,0.5)"
+                 OnOpen="Open" OnRename="StartRename" OnCopy="CopyKey" OnDelete="() => OnDelete.InvokeAsync(Board)" />
+    </div>
+    <div>
+        <div class="board-card-name">
+            @if (_renaming)
+            {
+                <input id="@_inputId" value="@_name" maxlength="200"
+                       @oninput="e => _name = e.Value?.ToString() ?? string.Empty"
+                       @onkeydown="OnRenameKey" @onblur="CommitRename"
+                       @onclick:stopPropagation />
+            }
+            else
+            {
+                @Board.Name
+            }
+        </div>
+        <div class="board-card-date">создана @Ru.Date(Board.CreatedAt)</div>
+    </div>
+    <div class="board-card-pills">
+        @foreach (var s in Board.Statuses)
+        {
+            <span class="status-pill"><span class="sd" style="background:@StatusColors.For(s)"></span>@s.Name</span>
+        }
+    </div>
+    <div class="board-card-foot">
+        <span>@(Board.TaskCount == 0 ? "Пока нет задач" : Ru.Tasks(Board.TaskCount))</span>
+        <span class="code">следующая @Board.Key-@Board.NextTaskNumber</span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter] public EventCallback<BoardResponse> OnOpen { get; set; }
+    [Parameter] public EventCallback<(BoardResponse Board, string Name)> OnRename { get; set; }
+    [Parameter] public EventCallback<BoardResponse> OnDelete { get; set; }
+    [Parameter] public EventCallback<string> OnCopy { get; set; }
+
+    private readonly string _inputId = "bc-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _renaming;
+    private string _name = "";
+    private bool _cancelled;
+
+    private Task Open() => _renaming ? Task.CompletedTask : OnOpen.InvokeAsync(Board);
+
+    private Task OnCardKey(KeyboardEventArgs e) => e.Key == "Enter" && !_renaming ? Open() : Task.CompletedTask;
+
+    private async Task StartRename()
+    {
+        _name = Board.Name;
+        _renaming = true;
+        _cancelled = false;
+        await Task.Yield();
+        await Browser.FocusAsync(_inputId, select: true);
+    }
+
+    private async Task OnRenameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CommitRename();
+        }
+        else if (e.Key == "Escape")
+        {
+            _cancelled = true;
+            _renaming = false;
+        }
+    }
+
+    private async Task CommitRename()
+    {
+        if (!_renaming || _cancelled)
+            return;
+
+        _renaming = false;
+        var name = _name.Trim();
+        if (name.Length == 0 || name == Board.Name)
+            return;
+
+        await OnRename.InvokeAsync((Board, name));
+    }
+
+    private Task CopyKey() => OnCopy.InvokeAsync(Board.Key);
+}
