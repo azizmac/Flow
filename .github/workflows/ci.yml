@@ -1,3 +1,4 @@
+# Оркестратор: триггеры + порядок джоб. Сами джобы лежат в отдельных файлах.
 name: CI
 
 on:
@@ -11,79 +12,18 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  DOTNET_NOLOGO: true
-  DOTNET_CLI_TELEMETRY_OPTOUT: true
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
-
 jobs:
   build:
     name: Build & test
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup .NET (version from global.json)
-        uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'global.json') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-      - name: Restore
-        run: dotnet restore Flow.slnx
-
-      - name: Build (Release)
-        run: dotnet build Flow.slnx -c Release --no-restore
-
-      - name: Unit tests (Domain, Application)
-        run: |
-          dotnet test tests/Flow.Domain.Tests -c Release --no-build \
-            --logger "trx;LogFileName=domain.trx" --results-directory TestResults
-          dotnet test tests/Flow.Application.Tests -c Release --no-build \
-            --logger "trx;LogFileName=application.trx" --results-directory TestResults
-
-      - name: Integration tests (Infrastructure, Testcontainers/Postgres)
-        run: |
-          dotnet test tests/Flow.Infrastructure.Tests -c Release --no-build \
-            --logger "trx;LogFileName=infrastructure.trx" --results-directory TestResults
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: TestResults/*.trx
-          if-no-files-found: ignore
+    uses: ./.github/workflows/build.yml
 
   docker:
-    name: Docker image (Flow.Api)
-    runs-on: ubuntu-latest
+    name: Docker image
     needs: build
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build image (no push)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: false
-          tags: flow-api:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+    uses: ./.github/workflows/docker.yml
+    with:
+      # Публикуем только с main; из веток и PR образ лишь собирается.
+      push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+      # Если переменные registry не заданы, образ собирается под локальным именем.
+      image: ${{ vars.REGISTRY && format('{0}/{1}', vars.REGISTRY, vars.IMAGE_NAME) || 'flow-api' }}
+    secrets: inherit

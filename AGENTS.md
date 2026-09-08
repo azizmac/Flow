@@ -51,7 +51,7 @@ Shared намеренно **не ссылается** на Domain (свой enum
 - Migrations: `dotnet ef database update --project src/Flow.Infrastructure --startup-project src/Flow.Api`
 - Docker: `docker compose up -d postgres`
 - Клиент локально: `dotnet run --project src/Flow.Api` (:5000) + `dotnet run --project src/Flow.Client` (:5016); клиент читает `ApiBaseUrl` из `wwwroot/appsettings.json`.
-- CI: GitHub Actions `.github/workflows/ci.yml` — push в любую ветку / PR в `main`: `restore` → `build -c Release` → юнит-тесты (Domain, Application) → интеграционные (Infrastructure, Testcontainers) → сборка Docker-образа `Flow.Api` без push.
+- CI: GitHub Actions — `ci.yml` (триггеры и порядок) вызывает `build.yml` (restore → build Release → юнит-тесты → интеграционные на Testcontainers) и `docker.yml` (образ `Flow.Api`; с `main` публикуется в registry по секретам `REGISTRY_USERNAME`/`REGISTRY_PASSWORD` и переменным `REGISTRY`/`IMAGE_NAME`).
 
 ## Правила стиля (унаследованы)
 - Конструктор сущностей — приватный; фабрики `Board.Create`, `TaskCode.Create`.
