@@ -1,0 +1,4 @@
+# Скрипты и SQL для контейнеров должны оставаться LF даже на Windows-чекауте
+*.sh text eol=lf
+*.sql text eol=lf
+Dockerfile* text eol=lf
