@@ -14,4 +14,7 @@ public sealed class JwtAuthOptions
     public string BaseUrl { get; set; } = string.Empty;
 
     public string? Issuer { get; set; }
+
+    /// <summary>Требовать https для discovery. null — только вне Development. В compose всё по http → false.</summary>
+    public bool? RequireHttpsMetadata { get; set; }
 }

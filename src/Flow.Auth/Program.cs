@@ -1,4 +1,3 @@
-using System.Security.Cryptography.X509Certificates;
 using System.Text.Encodings.Web;
 using System.Text.Unicode;
 using Flow.Auth.Data;
@@ -90,7 +89,7 @@ builder.Services.AddOpenIddict()
         options.SetAccessTokenLifetime(TimeSpan.FromMinutes(auth.AccessTokenLifetimeMinutes));
         options.SetRefreshTokenLifetime(TimeSpan.FromDays(auth.RefreshTokenLifetimeDays));
 
-        ConfigureKeys(options, auth, builder.Environment);
+        ConfigureKeys(options, auth, builder.Environment, builder.Logging);
 
         var aspnet = options.UseAspNetCore()
             .EnableAuthorizationEndpointPassthrough()
@@ -154,8 +153,11 @@ app.MapControllers();
 
 app.Run();
 
-static void ConfigureKeys(OpenIddictServerBuilder options, AuthOptions auth, IHostEnvironment environment)
+static void ConfigureKeys(OpenIddictServerBuilder options, AuthOptions auth, IHostEnvironment environment, ILoggingBuilder logging)
 {
+    using var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
+    var logger = loggerFactory.CreateLogger("Flow.Auth.Certificates");
+
     if (auth.UseEphemeralKeys)
     {
         options.AddEphemeralEncryptionKey().AddEphemeralSigningKey();
@@ -168,16 +170,9 @@ static void ConfigureKeys(OpenIddictServerBuilder options, AuthOptions auth, IHo
         return;
     }
 
-    options.AddSigningCertificate(LoadCertificate(auth.SigningCertificate, "Auth:SigningCertificate"));
-    options.AddEncryptionCertificate(LoadCertificate(auth.EncryptionCertificate, "Auth:EncryptionCertificate"));
-}
-
-static X509Certificate2 LoadCertificate(AuthOptions.CertificateOptions certificate, string section)
-{
-    if (string.IsNullOrWhiteSpace(certificate.Path))
-        throw new InvalidOperationException($"{section}:Path is required outside Development (PFX with the private key).");
-
-    return X509CertificateLoader.LoadPkcs12FromFile(certificate.Path, certificate.Password, X509KeyStorageFlags.EphemeralKeySet);
+    // Нет файла — создаётся самоподписанный (Docker: volume auth-certs). Настоящие сертификаты кладутся по тем же путям.
+    options.AddSigningCertificate(SelfSignedCertificates.LoadOrCreate(auth.SigningCertificate, "Auth:SigningCertificate", "Flow.Auth signing", logger));
+    options.AddEncryptionCertificate(SelfSignedCertificates.LoadOrCreate(auth.EncryptionCertificate, "Auth:EncryptionCertificate", "Flow.Auth encryption", logger));
 }
 
 /// <summary>Для WebApplicationFactory в Flow.Auth.Tests.</summary>

@@ -82,20 +82,21 @@ services:
         Host=postgres;Port=5432;Database=${AUTH_DB:-flow_auth};Username=${POSTGRES_USER:-flow};Password=${POSTGRES_PASSWORD:-flow}
       # Issuer — адрес, который видит браузер: он же попадает в iss токенов и в discovery.
       Auth__Issuer: ${AUTH_ISSUER:-http://localhost:5100}
-      Auth__Client__RedirectUris__0: ${CLIENT_ORIGIN:-http://localhost:5016}/authentication/login-callback
-      Auth__Client__PostLogoutRedirectUris__0: ${CLIENT_ORIGIN:-http://localhost:5016}/authentication/logout-callback
+      Auth__Client__RedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/login-callback
+      Auth__Client__PostLogoutRedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/logout-callback
       Auth__ApiClient__Secret: ${AUTH_API_CLIENT_SECRET:-dev-only-change-me}
       # Локальный compose ходит по http; за TLS-терминатором оставить false.
       Auth__AllowInsecureHttp: ${AUTH_ALLOW_INSECURE_HTTP:-true}
-      # PFX генерируются скриптом docker/auth/make-certs.sh (в git не попадают).
+      # PFX создаются сервисом сами при первом старте (Security/SelfSignedCertificates) в volume auth-certs;
+      # свои сертификаты можно положить туда же или примонтировать вместо volume.
       Auth__SigningCertificate__Path: /certs/signing.pfx
       Auth__SigningCertificate__Password: ${AUTH_CERT_PASSWORD:-flow-certs}
       Auth__EncryptionCertificate__Path: /certs/encryption.pfx
       Auth__EncryptionCertificate__Password: ${AUTH_CERT_PASSWORD:-flow-certs}
       DataProtection__KeysPath: /keys
-      Cors__Origins__0: ${CLIENT_ORIGIN:-http://localhost:5016}
+      Cors__Origins__0: http://localhost:${CLIENT_PORT:-5016}
     volumes:
-      - ./docker/auth/certs:/certs:ro
+      - auth-certs:/certs
       - auth-keys:/keys
     ports:
       - "${AUTH_PORT:-5100}:8080"
@@ -116,10 +117,13 @@ services:
         condition: service_started
     environment:
       <<: *bootstrap
-      # Flow.Api → Flow.Auth: discovery по внутреннему адресу, issuer в токенах — внешний (Auth__Issuer).
+      # Flow.Api → Flow.Auth: discovery/JWKS по внутреннему адресу (IssuerRewritingConfigurationRetriever),
+      # issuer в токенах — внешний (Auth__Issuer). Внутри compose всё по http.
       Auth__BaseUrl: http://auth:8080
       Auth__Issuer: ${AUTH_ISSUER:-http://localhost:5100}
+      Auth__RequireHttpsMetadata: "false"
       Auth__ApiClient__Secret: ${AUTH_API_CLIENT_SECRET:-dev-only-change-me}
+      Cors__Origins__0: http://localhost:${CLIENT_PORT:-5016}
       ConnectionStrings__Postgres: >-
         Host=postgres;Port=5432;Database=${POSTGRES_DB:-flow};Username=${POSTGRES_USER:-flow};Password=${POSTGRES_PASSWORD:-flow}
       S3__Endpoint: http://s3:9000
@@ -132,6 +136,25 @@ services:
     networks:
       - flow-network
 
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+      auth:
+        condition: service_started
+    environment:
+      # Адреса, которые видит браузер: порты наружу из этого же файла.
+      API_BASE_URL: http://localhost:${API_PORT:-8080}
+      AUTH_BASE_URL: ${AUTH_ISSUER:-http://localhost:5100}
+    ports:
+      - "${CLIENT_PORT:-5016}:80"
+    networks:
+      - flow-network
+
 networks:
   flow-network:
     name: flow-network
@@ -141,3 +164,4 @@ volumes:
   postgres-data:
   minio-data:
   auth-keys:
+  auth-certs:

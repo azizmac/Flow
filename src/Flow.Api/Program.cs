@@ -5,6 +5,8 @@ using Flow.Application.DependencyInjection;
 using Flow.Infrastructure.DependencyInjection;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,12 +24,20 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        var issuer = string.IsNullOrWhiteSpace(jwt.Issuer) ? jwt.BaseUrl : jwt.Issuer;
+        var requireHttps = jwt.RequireHttpsMetadata ?? !builder.Environment.IsDevelopment();
+
         options.Authority = jwt.BaseUrl;
         options.Audience = JwtAuthOptions.Audience;
-        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        options.RequireHttpsMetadata = requireHttps;
+        // Discovery и JWKS — по внутреннему адресу (Docker: http://auth:8080), даже если issuer внешний.
+        options.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+            jwt.BaseUrl.TrimEnd('/') + "/.well-known/openid-configuration",
+            new IssuerRewritingConfigurationRetriever(issuer, jwt.BaseUrl),
+            new HttpDocumentRetriever { RequireHttps = requireHttps });
         // Оставляем имена claims как в токене (sub, name, email), без переписывания в схемы XML.
         options.MapInboundClaims = false;
-        options.TokenValidationParameters.ValidIssuer = string.IsNullOrWhiteSpace(jwt.Issuer) ? jwt.BaseUrl : jwt.Issuer;
+        options.TokenValidationParameters.ValidIssuer = issuer;
         options.TokenValidationParameters.NameClaimType = "name";
     });
 
