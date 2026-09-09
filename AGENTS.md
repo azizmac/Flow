@@ -3,7 +3,8 @@
 ## Слойная архитектура
 ```
 Flow.Api           → контроллеры (только IMediator)
-Flow.Shared        → DTO-контракты (Boards, Tasks, Users) — общий
+Flow.Auth          → отдельный сервис аутентификации (:5100, база flow_auth): ASP.NET Core Identity + BCrypt, OpenIddict (code+PKCE, refresh, client_credentials), страница входа, admin-API /accounts. Ссылается только на Flow.Shared
+Flow.Shared        → DTO-контракты (Boards, Tasks, Users, Accounts) — общий
 Flow.Application   → Features/{Boards,Tasks,Users}/{Commands,Queries}/*, Abstractions (IBoardRepository, ITaskItemRepository, IUserRepository, IUnitOfWork)
 Flow.Domain        → сущности Board, Status, TaskItem, TaskCode, StatusType, DefaultStatuses, User, UserLink, UserLinkType
 Flow.Infrastructure→ EF Core (Postgres/Npgsql), репозитории, UnitOfWork, миграции
@@ -28,6 +29,16 @@ Shared намеренно **не ссылается** на Domain (свои enum
 - Назначение на задачу: `TaskItem.AssigneeId : Guid?`, `Assign`/`Unassign`; **назначать можно только активного пользователя** — проверяет `TaskAssignCommandHandler` (`TaskAssignResult`: NotFound | ValidationError | Success). `TaskListQuery(boardId, assigneeId?)` фильтрует по исполнителю.
 - `IUserRepository.SearchAsync` — автодополнение для `@` (ILIKE по Username/FirstName/LastName, только активные, `%`/`_` экранируются).
 - План по слоям: GitHub #8 (подзадачи #9–#13), ТЗ — `docs/TZ_user.md` (там же чек-лист перевода на `UserId` после мержа ветки `StronglyTypeId`).
+
+## Аутентификация (Flow.Auth) — docs/TZ_auth.md, GitHub #21
+- Учётные записи (username, email, пароль, блокировка) — в `Flow.Auth` (`AspNetUsers`, `ApplicationUser : IdentityUser<Guid>`); профиль, роль и статус — в `Flow.Api` (`Users`). Связь по одному Guid: `AspNetUsers.Id = Users.Id`.
+- Пароли — BCrypt (`Security/BCryptPasswordHasher`, `EnhancedHashPassword`, work factor `Auth:BCrypt:WorkFactor` = 12) вместо PBKDF2 Identity. Политика: ≥ 8 символов, без других требований; lockout 5 неудач → 5 минут; деактивация = `LockoutEnd = MaxValue` (`POST /accounts/{id}/disable`).
+- OpenIddict: `/connect/authorize|token|endsession|userinfo`, клиент `flow-client` (public, PKCE) и `flow-api` (confidential, `Auth:ApiClient:Secret`, scope `auth:admin`) сеются `Security/ClientSeeder` из конфига при старте. Access token — незашифрованный JWT, `aud = flow-api`; роли/статуса в токене нет — Flow.Api читает их из своей БД.
+- Admin-API `/accounts` (`[Authorize(Policy = AuthAdmin)]`: Bearer с `aud = flow-auth` и scope `auth:admin`): `POST /accounts` (Id задаёт вызывающий), `PATCH /accounts/{id}/username|email`, `POST /accounts/{id}/password|disable|enable`, `GET /accounts/{id}`. Контракты — `Flow.Shared/Contracts/Accounts`.
+- Bootstrap: `Security/BootstrapUserSeeder` создаёт пользователя из секции `Bootstrap` (`admin@flow.com` / `admin`, Id `11111111-…`), хеш пишет напрямую (валидаторы пароля не применяются), идемпотентно. Flow.Api сеет профиль Owner с тем же Id (#24).
+- Старт: `Security/AuthDatabaseInitializer` — миграции → клиенты → bootstrap. Ключи: Development — dev-сертификаты OpenIddict; `Auth:UseEphemeralKeys` — тесты; иначе PFX из `Auth:SigningCertificate`/`Auth:EncryptionCertificate` (Docker: `sh docker/auth/make-certs.sh`). `Auth:AllowInsecureHttp` — http вне Development (локальный compose). `DataProtection:KeysPath` — persist ключей cookie/antiforgery в контейнере.
+- Страница входа `Pages/Account/Login` (логин = username или email); Razor настроен на `UnicodeRanges.All`, иначе кириллица уходит как `&#x...;`.
+- Миграции: `cd src/Flow.Auth && dotnet ef migrations add <Name> --output-dir Migrations` (design-time фабрика `Data/AuthDbContextFactory`, хост не поднимается).
 
 ## MediatR и DI
 - `AddFlowApplication()` регистрирует MediatR с reflection-сканированием сущности `Flow.Application` — хендлеры `internal`, commands/queries `public sealed record`.
@@ -65,9 +76,9 @@ Shared намеренно **не ссылается** на Domain (свои enum
 - Build/test: `dotnet build Flow.slnx`, `dotnet test Flow.slnx`
 - `Flow.Infrastructure.Tests` поднимает Postgres через Testcontainers — нужен запущенный Docker.
 - Migrations: `dotnet ef database update --project src/Flow.Infrastructure --startup-project src/Flow.Api`
-- Docker: `docker compose up -d postgres`
+- Docker: `docker compose up -d postgres` (init-скрипт `docker/postgres/init.sql` создаёт вторую базу `flow_auth`); `sh docker/auth/make-certs.sh` → `docker compose up -d auth` (:5100). Базовый пользователь — якорь `x-bootstrap` в compose (`BOOTSTRAP_*`).
 - Клиент локально: `dotnet run --project src/Flow.Api` (:5000) + `dotnet run --project src/Flow.Client` (:5016); клиент читает `ApiBaseUrl` из `wwwroot/appsettings.json`.
-- CI: GitHub Actions — `ci.yml` (триггеры и порядок) вызывает `build.yml` (restore → build Release → юнит-тесты → интеграционные на Testcontainers) и `docker.yml` (образ `Flow.Api`; с `main` публикуется в registry по секретам `REGISTRY_USERNAME`/`REGISTRY_PASSWORD` и переменным `REGISTRY`/`IMAGE_NAME`).
+- CI: GitHub Actions — `ci.yml` (триггеры и порядок) вызывает `build.yml` (restore → build Release → юнит-тесты → интеграционные на Testcontainers) и `docker.yml` дважды (образы `Flow.Api` по `Dockerfile` и `Flow.Auth` по `Dockerfile.auth`; с `main` публикуются в registry по секретам `REGISTRY_USERNAME`/`REGISTRY_PASSWORD` и переменным `REGISTRY`/`IMAGE_NAME`/`AUTH_IMAGE_NAME`).
 
 ## Правила стиля (унаследованы)
 - Конструктор сущностей — приватный; фабрики `Board.Create`, `TaskCode.Create`.
@@ -82,8 +93,9 @@ Shared намеренно **не ссылается** на Domain (свои enum
 - `Flow.Domain.Tests` — юнит-тесты сущностей (Board, TaskItem, TaskCode, User).
 - `Flow.Application.Tests` — фичи с `Fakes/` (FakeBoardRepository, FakeTaskItemRepository, FakeUserRepository, FakeUnitOfWork) + `TestMediatorFactory`.
 - `Flow.Infrastructure.Tests` — интеграционные на реальном Postgres (Testcontainers, образ `postgres:16-alpine`): миграции, удаление доски с задачами, дубликат ключа, пользователи (ссылки, unique-индексы, поиск).
+- `Flow.Auth.Tests` — `WebApplicationFactory<Program>` + Testcontainers (`AuthFixture`, один хост на коллекцию, эфемерные ключи): discovery/JWKS, admin-API (401/409/400), BCrypt-хеш `$2a$12$`, lockout, disable, bootstrap-пользователь, полный code+PKCE → JWT → refresh. Страница входа проходится как браузером (`LoginPage`: antiforgery из HTML).
 
 ## Навигация
 - Структура проекта: `docs/Struktura_board_task_status.md`
 - Сравнение подходов DbContext: `docs/Sravnenie_DbContext_podhodov.md`
-- ТЗ: `docs/TZ_board_task_status.md`, `docs/TZ_user.md`
+- ТЗ: `docs/TZ_board_task_status.md`, `docs/TZ_user.md`, `docs/TZ_auth.md` (аутентификация, #21)

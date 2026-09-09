@@ -4,6 +4,7 @@
     <Project Path="src/Flow.Application/Flow.Application.csproj" />
     <Project Path="src/Flow.Infrastructure/Flow.Infrastructure.csproj" />
     <Project Path="src/Flow.Api/Flow.Api.csproj" />
+    <Project Path="src/Flow.Auth/Flow.Auth.csproj" />
     <Project Path="src/Flow.Client/Flow.Client.csproj" />
     <Project Path="src/Flow.Shared/Flow.Shared.csproj" />
   </Folder>
@@ -11,5 +12,6 @@
     <Project Path="tests/Flow.Domain.Tests/Flow.Domain.Tests.csproj" />
     <Project Path="tests/Flow.Application.Tests/Flow.Application.Tests.csproj" />
     <Project Path="tests/Flow.Infrastructure.Tests/Flow.Infrastructure.Tests.csproj" />
+    <Project Path="tests/Flow.Auth.Tests/Flow.Auth.Tests.csproj" />
   </Folder>
 </Solution>

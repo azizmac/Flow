@@ -1,3 +1,14 @@
+# Базовый пользователь (Owner) при первом запуске — один и тот же в auth (учётная запись) и api (профиль).
+# См. docs/TZ_auth.md, секция Bootstrap. Пароль после первого входа лучше сменить в профиле.
+x-bootstrap: &bootstrap
+  Bootstrap__Enabled: ${BOOTSTRAP_ENABLED:-true}
+  Bootstrap__Id: ${BOOTSTRAP_ID:-11111111-1111-1111-1111-111111111111}
+  Bootstrap__Username: ${BOOTSTRAP_USERNAME:-admin}
+  Bootstrap__Email: ${BOOTSTRAP_EMAIL:-admin@flow.com}
+  Bootstrap__Password: ${BOOTSTRAP_PASSWORD:-admin}
+  Bootstrap__FirstName: ${BOOTSTRAP_FIRST_NAME:-Admin}
+  Bootstrap__LastName: ${BOOTSTRAP_LAST_NAME:-Flow}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,6 +21,8 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # Создаёт вторую базу flow_auth при инициализации тома (только при первом старте).
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flow} -d ${POSTGRES_DB:-flow}"]
       interval: 5s
@@ -55,6 +68,40 @@ services:
     networks:
       - flow-network
 
+  auth:
+    build:
+      context: .
+      dockerfile: Dockerfile.auth
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *bootstrap
+      ConnectionStrings__Postgres: >-
+        Host=postgres;Port=5432;Database=${AUTH_DB:-flow_auth};Username=${POSTGRES_USER:-flow};Password=${POSTGRES_PASSWORD:-flow}
+      # Issuer — адрес, который видит браузер: он же попадает в iss токенов и в discovery.
+      Auth__Issuer: ${AUTH_ISSUER:-http://localhost:5100}
+      Auth__Client__RedirectUris__0: ${CLIENT_ORIGIN:-http://localhost:5016}/authentication/login-callback
+      Auth__Client__PostLogoutRedirectUris__0: ${CLIENT_ORIGIN:-http://localhost:5016}/authentication/logout-callback
+      Auth__ApiClient__Secret: ${AUTH_API_CLIENT_SECRET:-dev-only-change-me}
+      # Локальный compose ходит по http; за TLS-терминатором оставить false.
+      Auth__AllowInsecureHttp: ${AUTH_ALLOW_INSECURE_HTTP:-true}
+      # PFX генерируются скриптом docker/auth/make-certs.sh (в git не попадают).
+      Auth__SigningCertificate__Path: /certs/signing.pfx
+      Auth__SigningCertificate__Password: ${AUTH_CERT_PASSWORD:-flow-certs}
+      Auth__EncryptionCertificate__Path: /certs/encryption.pfx
+      Auth__EncryptionCertificate__Password: ${AUTH_CERT_PASSWORD:-flow-certs}
+      DataProtection__KeysPath: /keys
+      Cors__Origins__0: ${CLIENT_ORIGIN:-http://localhost:5016}
+    volumes:
+      - ./docker/auth/certs:/certs:ro
+      - auth-keys:/keys
+    ports:
+      - "${AUTH_PORT:-5100}:8080"
+    networks:
+      - flow-network
+
   api:
     build:
       context: .
@@ -65,7 +112,14 @@ services:
         condition: service_healthy
       s3:
         condition: service_healthy
+      auth:
+        condition: service_started
     environment:
+      <<: *bootstrap
+      # Flow.Api → Flow.Auth: discovery по внутреннему адресу, issuer в токенах — внешний (Auth__Issuer).
+      Auth__BaseUrl: http://auth:8080
+      Auth__Issuer: ${AUTH_ISSUER:-http://localhost:5100}
+      Auth__ApiClient__Secret: ${AUTH_API_CLIENT_SECRET:-dev-only-change-me}
       ConnectionStrings__Postgres: >-
         Host=postgres;Port=5432;Database=${POSTGRES_DB:-flow};Username=${POSTGRES_USER:-flow};Password=${POSTGRES_PASSWORD:-flow}
       S3__Endpoint: http://s3:9000
@@ -86,3 +140,4 @@ networks:
 volumes:
   postgres-data:
   minio-data:
+  auth-keys:
