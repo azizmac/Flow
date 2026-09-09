@@ -160,7 +160,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task GetBoards_Should_ReturnTaskCountAndNextTaskNumber()
     {
-        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var withTasks = (await mediator.Send(new BoardCreateCommand("With tasks", "WT"), CancellationToken.None)).Response!;
         var empty = (await mediator.Send(new BoardCreateCommand("Empty", "EMP"), CancellationToken.None)).Response!;
         tasks.RegisterBoardStatuses((await boards.GetByIdAsync(withTasks.Id, CancellationToken.None))!);
