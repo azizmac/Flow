@@ -39,11 +39,31 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
+      # docker.io требует namespace (user/flow-auth). Если AUTH_IMAGE_NAME / CLIENT_IMAGE_NAME не заданы,
+      # оркестратор передаёт голое имя (docker.io/flow-auth) — namespace берём из IMAGE_NAME (user/flow-api → user).
+      - name: Resolve image name
+        id: image
+        env:
+          IMAGE: ${{ inputs.image }}
+          REGISTRY: ${{ vars.REGISTRY }}
+          IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+        run: |
+          name="$IMAGE"
+          if [ -n "$REGISTRY" ] && [ "${IMAGE_NAME#*/}" != "$IMAGE_NAME" ]; then
+            path="${name#"$REGISTRY"/}"
+            case "$path" in
+              */*) ;;
+              *) name="$REGISTRY/${IMAGE_NAME%/*}/$path" ;;
+            esac
+          fi
+          echo "Image: $name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
       - name: Image tags
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ inputs.image }}
+          images: ${{ steps.image.outputs.name }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-
