@@ -5,6 +5,9 @@ using Flow.Application.Features.Users.Commands.UserSetLinkCommand;
 using Flow.Application.Features.Users.Queries.UserGetQuery;
 using Flow.Application.Features.Users.Queries.UserSearchQuery;
 using Flow.Shared.Contracts.Users;
+using Flow.Infrastructure.Persistence.Repositories;
+using UserRole = Flow.Domain.Entities.UserRole;
+using UserStatus = Flow.Domain.Entities.UserStatus;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -116,5 +119,34 @@ public class UserPersistenceTests(PostgresFixture db)
         var result = await db.SendAsync(new UserSearchQuery("%"));
 
         Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task Role_And_Status_Should_Persist_And_CountByRole()
+    {
+        var owner = await CreateAsync("role.owner");
+        var admin = await CreateAsync("role.admin");
+        await CreateAsync("role.member");
+
+        await db.QueryAsync(async ctx =>
+        {
+            ctx.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.TrackAll;
+            var users = await ctx.Users.Where(u => u.Username.StartsWith("role.")).ToListAsync();
+            users.Single(u => u.Id == owner.Id).ChangeRole(UserRole.Owner);
+            users.Single(u => u.Id == admin.Id).ChangeRole(UserRole.Admin);
+            users.Single(u => u.Id == admin.Id).MarkActive();
+            return await ctx.SaveChangesAsync();
+        });
+
+        var reloaded = await db.QueryAsync(ctx => ctx.Users.Where(u => u.Username.StartsWith("role.")).ToDictionaryAsync(u => u.Username));
+        Assert.Equal(UserRole.Owner, reloaded["role.owner"].Role);
+        Assert.Equal(UserStatus.Invited, reloaded["role.owner"].Status);
+        Assert.Equal(UserStatus.Active, reloaded["role.admin"].Status);
+        Assert.NotNull(reloaded["role.admin"].StatusChangedAt);
+        Assert.Equal(UserRole.Member, reloaded["role.member"].Role);
+
+        var admins = await db.QueryAsync(ctx => new UserRepository(ctx).CountByRoleAsync(UserRole.Admin, CancellationToken.None));
+        Assert.Equal(1, admins);
+        Assert.True(await db.QueryAsync(ctx => new UserRepository(ctx).CountByRoleAsync(UserRole.Owner, CancellationToken.None)) >= 1);
     }
 }

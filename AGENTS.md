@@ -6,7 +6,7 @@ Flow.Api           → контроллеры (только IMediator + IActorAc
 Flow.Auth          → отдельный сервис аутентификации (:5100, база flow_auth): ASP.NET Core Identity + BCrypt, OpenIddict (code+PKCE, refresh, client_credentials), страница входа, admin-API /accounts. Ссылается только на Flow.Shared
 Flow.Shared        → DTO-контракты (Boards, Tasks, Users, Accounts) — общий
 Flow.Application   → Features/{Boards,Tasks,Users,Bootstrap}/{Commands,Queries}/*, Abstractions (IBoardRepository, ITaskItemRepository, IUserRepository, IUnitOfWork, IAccountService), Exceptions (AuthUnavailableException)
-Flow.Domain        → сущности Board, Status, TaskItem, TaskCode, StatusType, DefaultStatuses, User, UserLink, UserLinkType
+Flow.Domain        → сущности Board, Status, TaskItem, TaskCode, StatusType, DefaultStatuses, User, UserLink, UserLinkType, UserRole, UserStatus
 Flow.Infrastructure→ EF Core (Postgres/Npgsql), репозитории, UnitOfWork, миграции
 Flow.Client        → Blazor WebAssembly: экраны «Проекты» (/boards), «Задачи проекта» (/boards/{id}), задача (/tasks/{id}), «Люди» (/users), профиль (/users/{id}); ходит в Flow.Api через Services/FlowApi
 ```
@@ -23,7 +23,8 @@ Shared намеренно **не ссылается** на Domain (свои enum
 ## User (профиль, не учётная запись)
 - `User.Create(username, email, firstName, lastName)` — единственная точка создания; username/email нормализуются в lower, username `^[a-z0-9][a-z0-9._-]{0,30}[a-z0-9]$`.
 - Внешние ссылки — коллекция `UserLink` (`SetLink`/`RemoveLink`), не более одной на `UserLinkType`; телефон хранится в E.164 (`+79991234567`).
-- Удаления нет: `Deactivate()`/`Activate()` (`IsActive`, `DeactivatedAt`). Пароли в домене отсутствуют намеренно (живут в Flow.Auth); роли и статусы запланированы в `docs/TZ_user_roles.md` (#15) — из UI деактивация убрана до их появления.
+- Роль и статус (`docs/TZ_user_roles.md`, #15): `User.Role : UserRole` (Reader 0 … Owner 4, порядок = сила, сравнивать `>=`; по умолчанию Member) и `User.Status : UserStatus` (Invited при создании → Active после первого `GET /users/me` через `MarkActive()` → Deactivated). `IsActive`/`CanBeAssigned` вычисляются из `Status` (`builder.Ignore`), в БД их нет — в запросах фильтровать по `Status != Deactivated`. `ChangeRole` только меняет роль; «последний Owner» и права — Application (#18). `Deactivate()` бросает для Owner (сначала понизить) и повторно; `Activate()` — только из Deactivated; `MarkActive()` для Deactivated — ошибка. Пароли в домене отсутствуют намеренно (живут в Flow.Auth). Из UI деактивация убрана до #20.
+- `TaskItem.CreatedById : Guid?` (FK → Users, Restrict, индекс) — кто создал, для «своей задачи» у Member; `Board.CreateTask(..., createdById)`. Пишется в #18 из actor.
 - Учётная запись живёт в Flow.Auth (см. «Аутентификация»), профиль — здесь; связь по одному Guid. `UserCreate(…, Password)` сначала создаёт учётную запись через `IAccountService.CreateAsync(user.Id, …)`, и только при успехе — профиль; `UserChangeUsername`/`UserChangeEmail` — сначала Flow.Auth, потом копия в `Users` (нормализуют через домен, откатывают, проверяют, применяют — иначе Fake-репозиторий «находит» самого пользователя); `UserDeactivate`/`UserActivate` — `DisableAsync`/`EnableAsync` до смены статуса; `UserChangePassword(UserId, CurrentPassword?, NewPassword)` — только Flow.Auth. Отказ Flow.Auth по вводу → `ArgumentException` → 400, недоступность → `AuthUnavailableException` (502 — #24).
 - Уникальность username/email: локальная копия — быстрый 409 без похода в Flow.Auth (`UserCreateResult.IsUsernameTaken`/`IsEmailTaken`, `UserUpdateResult.ConflictError`); источник истины — Identity в Flow.Auth (`AccountResult.UsernameTaken/EmailTaken`); плюс unique-индексы в БД.
 - `Features/Bootstrap/SeedBootstrapUserCommand` — профиль базового пользователя с заданным Id (`User.CreateWithId`), Flow.Auth не вызывает (учётную запись с тем же Id сеет он сам); повтор — no-op. Запускается hosted service Flow.Api (#24). `UserGetMeQuery(ActorId)` — профиль текущего actor (null → 401).
@@ -74,8 +75,8 @@ Shared намеренно **не ссылается** на Domain (свои enum
 ## СБД (Postgres 16, `flow/flow/flow`, :5432)
 - `Boards`: PK Id, unique Key
 - `Statuses`: PK Id, FK BoardId (cascade), unique (BoardId, SortOrder) и (BoardId, Name)
-- `TaskItems`: PK Id, FK BoardId (cascade), FK StatusId (restrict), FK AssigneeId → Users (restrict, nullable, индекс), unique Code
-- `Users`: PK Id, unique Username, unique Email (значения уже lower — индексы регистронезависимы по факту)
+- `TaskItems`: PK Id, FK BoardId (cascade), FK StatusId (restrict), FK AssigneeId и FK CreatedById → Users (restrict, nullable, индексы), unique Code
+- `Users`: PK Id, unique Username, unique Email (значения уже lower — индексы регистронезависимы по факту), `Role int`, `Status int`, `StatusChangedAt timestamptz null`. Миграция `AddUserRoleAndStatus` переносит данные вручную (Up переписан: сначала новые колонки и UPDATE, потом DropColumn IsActive / Rename DeactivatedAt): Status из IsActive, самый ранний по CreatedAt — Owner.
 - `UserLinks`: owned-коллекция `User.Links`, PK (UserId, Type), FK UserId (cascade)
 - Стр-подк: `ConnectionStrings:Postgres` (appsettings для локалки, env `ConnectionStrings__Postgres` в docker).
 
@@ -101,9 +102,9 @@ Shared намеренно **не ссылается** на Domain (свои enum
 - Motion (по emilkowalski/skills, `emil-design-eng`): анимируем только transform/opacity, кривые из `tokens.css` (`--ease-out`, `--ease-drawer`), UI ≤ 300ms, press-feedback `scale(.97)`, поповеры от якоря (`transform-origin`), hover только под `(hover: hover) and (pointer: fine)`, `prefers-reduced-motion` снимает transform-движение. Хоткеи (N, Esc, ↑/↓) — без анимаций.
 
 ## Тесты (xUnit)
-- `Flow.Domain.Tests` — юнит-тесты сущностей (Board, TaskItem, TaskCode, User).
+- `Flow.Domain.Tests` — юнит-тесты сущностей (Board, TaskItem, TaskCode, User — включая роли/статусы).
 - `Flow.Application.Tests` — фичи с `Fakes/` (FakeBoardRepository, FakeTaskItemRepository, FakeUserRepository, FakeAccountService, FakeUnitOfWork) + `TestMediatorFactory` (`Create()` — 4 фейка, `CreateWithAccounts()` — плюс FakeAccountService для ассертов на вызовы в Flow.Auth). `AccountFeatureTests` — связка Users ↔ Flow.Auth и bootstrap.
-- `Flow.Infrastructure.Tests` — интеграционные на реальном Postgres (Testcontainers, образ `postgres:16-alpine`): миграции, удаление доски с задачами, дубликат ключа, пользователи (ссылки, unique-индексы, поиск). `PostgresFixture` подменяет `IAccountService` на `AlwaysSucceedingAccountService` — в Flow.Auth не ходит. `AuthAccountServiceTests` — юнит-тесты HTTP-клиента admin-API на `HttpMessageHandler`-заглушке (маппинг 409/400/5xx, кэш токена, повтор после 401).
+- `Flow.Infrastructure.Tests` — интеграционные на реальном Postgres (Testcontainers, образ `postgres:16-alpine`): миграции, удаление доски с задачами, дубликат ключа, пользователи (ссылки, unique-индексы, поиск). `PostgresFixture` подменяет `IAccountService` на `AlwaysSucceedingAccountService` — в Flow.Auth не ходит. `AuthAccountServiceTests` — юнит-тесты HTTP-клиента admin-API на `HttpMessageHandler`-заглушке (маппинг 409/400/5xx, кэш токена, повтор после 401). `RoleMigrationTests` — свой контейнер: миграция до `AddTaskAssignee`, SQL-вставка со старыми колонками, миграция до конца, проверка переноса IsActive → Status и Owner у самого раннего.
 - `Flow.Api.Tests` — `WebApplicationFactory<Program>` + Testcontainers (`ApiFixture`): JwtBearer переключён на локальный симметричный ключ (`PostConfigure<JwtBearerOptions>`: Authority/ConfigurationManager = null), токены выпускает `ApiFixture.CreateToken(sub)`, `IAccountService` → `FakeAccountService` из Flow.Application.Tests. Кейсы: 401 без токена / чужой aud / чужой iss, `/users/me`, обязательный пароль при `POST /users`, 502 при недоступном Flow.Auth, bootstrap-профиль после старта и идемпотентность сидера.
 - `Flow.Auth.Tests` — `WebApplicationFactory<Program>` + Testcontainers (`AuthFixture`, один хост на коллекцию, эфемерные ключи): discovery/JWKS, admin-API (401/409/400), BCrypt-хеш `$2a$12$`, lockout, disable, bootstrap-пользователь, полный code+PKCE → JWT → refresh. Страница входа проходится как браузером (`LoginPage`: antiforgery из HTML).
 

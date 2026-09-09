@@ -35,5 +35,8 @@ public sealed class FakeUserRepository : IUserRepository
             .Take(limit)
             .ToList());
 
+    public Task<int> CountByRoleAsync(UserRole role, CancellationToken cancellationToken) =>
+        Task.FromResult(_users.Count(u => u.Role == role));
+
     public void Add(User user) => _users.Add(user);
 }

@@ -38,5 +38,13 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(t => t.AssigneeId);
+
+        // Кто создал — для «своей задачи» у Member (docs/TZ_user_roles.md). null у задач, созданных до ролей.
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(t => t.CreatedById)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(t => t.CreatedById);
     }
 }
