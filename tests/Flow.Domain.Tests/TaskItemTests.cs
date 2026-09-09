@@ -9,6 +9,7 @@ public class TaskItemTests
     {
         var board = Board.Create("Flow Project", "FLW");
         var task = board.CreateTask("Test task", "Initial description");
+        Assert.Null(task.CreatedById);
         return (board, task);
     }
 

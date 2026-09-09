@@ -9,6 +9,7 @@ using Flow.Application.Features.Users.Commands.UserCreateCommand;
 using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
 using Flow.Application.Features.Users.Queries.UserGetMeQuery;
 using Flow.Application.Tests.Fakes;
+using Flow.Domain.Entities;
 using MediatR;
 using Xunit;
 
@@ -41,7 +42,8 @@ public class AccountFeatureTests
         Assert.NotNull(user);
         Assert.Equal("admin", user!.Username);
         Assert.Equal("admin@flow.com", user.Email);
-        Assert.True(user.IsActive);
+        Assert.Equal(UserRole.Owner, user.Role);
+        Assert.Equal(UserStatus.Active, user.Status);
         Assert.Empty(accounts.Calls);
     }
 
@@ -270,6 +272,20 @@ public class AccountFeatureTests
         Assert.Empty(accounts.Calls);
     }
 
+    [Fact]
+    public async Task Deactivate_Owner_Should_Throw_And_NotCallAuth()
+    {
+        var (mediator, _, _, users, accounts) = TestMediatorFactory.CreateWithAccounts();
+        var id = await CreateUserAsync(mediator);
+        (await users.GetByIdAsync(id, CancellationToken.None))!.ChangeRole(UserRole.Owner);
+        accounts.Calls.Clear();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new UserDeactivateCommand(id), CancellationToken.None));
+
+        Assert.Empty(accounts.Calls);
+        Assert.True((await users.GetByIdAsync(id, CancellationToken.None))!.IsActive);
+    }
+
     // ---- me ----
 
     [Fact]
@@ -283,5 +299,21 @@ public class AccountFeatureTests
 
         Assert.Equal(id, me!.Id);
         Assert.Null(nobody);
+    }
+
+    [Fact]
+    public async Task GetMe_First_Call_Should_Move_Invited_To_Active_Once()
+    {
+        var (mediator, _, _, users, _) = TestMediatorFactory.CreateWithAccounts();
+        var id = await CreateUserAsync(mediator);
+        Assert.Equal(UserStatus.Invited, (await users.GetByIdAsync(id, CancellationToken.None))!.Status);
+
+        await mediator.Send(new UserGetMeQuery(id), CancellationToken.None);
+        var user = (await users.GetByIdAsync(id, CancellationToken.None))!;
+        Assert.Equal(UserStatus.Active, user.Status);
+        var changedAt = user.StatusChangedAt;
+
+        await mediator.Send(new UserGetMeQuery(id), CancellationToken.None);
+        Assert.Equal(changedAt, (await users.GetByIdAsync(id, CancellationToken.None))!.StatusChangedAt);
     }
 }

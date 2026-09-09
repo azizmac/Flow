@@ -1,4 +1,5 @@
 using Flow.Application.Abstractions;
+using Flow.Domain.Entities;
 using MediatR;
 
 namespace Flow.Application.Features.Users.Commands.UserDeactivateCommand;
@@ -15,6 +16,10 @@ internal sealed class UserDeactivateCommandHandler(IUserRepository users, IAccou
         var user = await users.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
             return UserUpdateResult.NotFound();
+
+        // Инварианты домена проверяем до похода в Flow.Auth, иначе учётная запись окажется заблокирована при неизменном статусе.
+        if (user.Role == UserRole.Owner)
+            throw new InvalidOperationException($"User {user.Id} is an Owner; transfer ownership before deactivating.");
 
         if (!user.IsActive)
             throw new InvalidOperationException($"User {user.Id} is already deactivated.");

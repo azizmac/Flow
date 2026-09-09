@@ -86,9 +86,10 @@ public sealed partial class Board
 
     /// <summary>
     /// Создаёт задачу. Если <paramref name="statusId"/> не передан — задача уходит в статус доски
-    /// с <see cref="Status.IsInitial"/> = true (по умолчанию "Не начата").
+    /// с <see cref="Status.IsInitial"/> = true (по умолчанию "Не начата"). <paramref name="createdById"/> — actor
+    /// (User.Id), пишется в <see cref="TaskItem.CreatedById"/>.
     /// </summary>
-    public TaskItem CreateTask(string title, string? description = null, Guid? statusId = null)
+    public TaskItem CreateTask(string title, string? description = null, Guid? statusId = null, Guid? createdById = null)
     {
         Guid resolvedStatusId;
         if (statusId is null)
@@ -106,7 +107,7 @@ public sealed partial class Board
 
         NextTaskNumber++;
         var code = TaskCode.Create(Key, NextTaskNumber);
-        var task = new TaskItem(Id, code, title, description, resolvedStatusId);
+        var task = new TaskItem(Id, code, title, description, resolvedStatusId, createdById);
         _tasks.Add(task);
         return task;
     }

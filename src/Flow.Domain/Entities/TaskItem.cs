@@ -21,6 +21,9 @@ public sealed class TaskItem
     /// <summary>Исполнитель (User.Id); null — не назначен. Активность пользователя проверяет вызывающая сторона, как и в ChangeStatus.</summary>
     public Guid? AssigneeId { get; private set; }
 
+    /// <summary>Кто создал (User.Id). null — задачи, созданные до появления ролей. Нужен для «своей задачи» у Member.</summary>
+    public Guid? CreatedById { get; private set; }
+
     public DateTime CreatedAt { get; private set; }
 
     private TaskItem()
@@ -28,7 +31,7 @@ public sealed class TaskItem
         // EF Core
     }
 
-    internal TaskItem(Guid boardId, TaskCode code, string title, string? description, Guid statusId)
+    internal TaskItem(Guid boardId, TaskCode code, string title, string? description, Guid statusId, Guid? createdById)
     {
         Id = Guid.NewGuid();
         BoardId = boardId;
@@ -36,6 +39,7 @@ public sealed class TaskItem
         Title = ValidateTitle(title);
         Description = description;
         StatusId = statusId;
+        CreatedById = createdById;
         CreatedAt = DateTime.UtcNow;
     }
 

@@ -136,4 +136,15 @@ public class BoardTests
         var task = board.CreateTask("Test task");
         Assert.Equal(newInitial.Id, task.StatusId);
     }
+
+    [Fact]
+    public void CreateTask_Should_Store_CreatedById()
+    {
+        var board = Board.Create("Flow", "FLW");
+        var actor = Guid.NewGuid();
+
+        var task = board.CreateTask("Test task", createdById: actor);
+
+        Assert.Equal(actor, task.CreatedById);
+    }
 }

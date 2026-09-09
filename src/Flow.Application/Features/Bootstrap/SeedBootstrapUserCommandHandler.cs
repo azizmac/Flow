@@ -13,6 +13,8 @@ internal sealed class SeedBootstrapUserCommandHandler(IUserRepository users, IUn
             return false;
 
         var user = User.CreateWithId(request.Id, request.Username, request.Email, request.FirstName, request.LastName);
+        user.ChangeRole(UserRole.Owner);
+        user.MarkActive();
 
         users.Add(user);
         await unitOfWork.SaveChangesAsync(cancellationToken);
