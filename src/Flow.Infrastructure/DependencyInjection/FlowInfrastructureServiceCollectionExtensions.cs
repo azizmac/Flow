@@ -27,6 +27,7 @@ public static class FlowInfrastructureServiceCollectionExtensions
 
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ITaskItemRepository, TaskItemRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         return services;

@@ -29,5 +29,14 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
             .WithMany()
             .HasForeignKey(t => t.StatusId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Restrict, а не SetNull: пользователей не удаляют, а деактивируют (см. docs/TZ_user.md);
+        // FK страхует это на уровне БД — удалить пользователя с назначенными задачами нельзя.
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(t => t.AssigneeId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(t => t.AssigneeId);
     }
 }

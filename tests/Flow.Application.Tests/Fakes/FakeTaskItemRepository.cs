@@ -13,8 +13,11 @@ public sealed class FakeTaskItemRepository : ITaskItemRepository
     public Task<TaskItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(_tasks.SingleOrDefault(t => t.Id == id));
 
-    public Task<IReadOnlyList<TaskItem>> GetByBoardIdAsync(Guid boardId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<TaskItem>>(_tasks.Where(t => t.BoardId == boardId).ToList());
+    public Task<IReadOnlyList<TaskItem>> GetByBoardIdAsync(Guid boardId, Guid? assigneeId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TaskItem>>(_tasks
+            .Where(t => t.BoardId == boardId)
+            .Where(t => assigneeId is null || t.AssigneeId == assigneeId)
+            .ToList());
 
     public Task<IReadOnlyDictionary<Guid, int>> CountByBoardIdsAsync(
         IReadOnlyCollection<Guid> boardIds, CancellationToken cancellationToken) =>

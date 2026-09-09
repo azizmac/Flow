@@ -8,4 +8,5 @@ public sealed record TaskResponse(
     string Title,
     string? Description,
     Guid StatusId,
+    Guid? AssigneeId,
     DateTime CreatedAt);

@@ -52,4 +52,27 @@ public class TaskItemTests
 
         Assert.Equal(doneStatus.Id, task.StatusId);
     }
+
+    [Fact]
+    public void Assign_Then_Unassign_Should_ToggleAssigneeId()
+    {
+        var (_, task) = CreateBoardWithTask();
+        var userId = Guid.NewGuid();
+
+        Assert.Null(task.AssigneeId);
+
+        task.Assign(userId);
+        Assert.Equal(userId, task.AssigneeId);
+
+        task.Unassign();
+        Assert.Null(task.AssigneeId);
+    }
+
+    [Fact]
+    public void Assign_Should_Throw_When_UserIdIsEmpty()
+    {
+        var (_, task) = CreateBoardWithTask();
+
+        Assert.Throws<ArgumentException>(() => task.Assign(Guid.Empty));
+    }
 }

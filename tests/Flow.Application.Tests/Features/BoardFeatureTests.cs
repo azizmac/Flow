@@ -13,7 +13,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task CreateBoard_Should_ReturnBoardWithDefaultStatuses()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
 
         var result = await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None);
 
@@ -27,7 +27,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task CreateBoard_Should_Throw_When_KeyIsInvalid()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             mediator.Send(new BoardCreateCommand("Bad board", "bad-key!"), CancellationToken.None));
@@ -36,7 +36,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task GetBoards_Should_ReturnAllCreatedBoards()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
         await mediator.Send(new BoardCreateCommand("Board One", "ONE"), CancellationToken.None);
         await mediator.Send(new BoardCreateCommand("Board Two", "TWO"), CancellationToken.None);
 
@@ -48,7 +48,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task RenameBoard_Should_UpdateName_When_BoardExists()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
         var created = (await mediator.Send(new BoardCreateCommand("Old name", "FLW"), CancellationToken.None)).Response!;
 
         var response = await mediator.Send(new BoardRenameCommand(created.Id, "New name"), CancellationToken.None);
@@ -63,7 +63,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task RenameBoard_Should_ReturnNull_When_BoardNotFound()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
 
         var response = await mediator.Send(new BoardRenameCommand(Guid.NewGuid(), "New name"), CancellationToken.None);
 
@@ -73,7 +73,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task RenameBoard_Should_Throw_When_NameIsEmpty()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
         var created = (await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None)).Response!;
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -83,7 +83,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task DeleteBoard_Should_RemoveBoard_When_Exists()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
         var created = (await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None)).Response!;
 
         var deleted = await mediator.Send(new BoardDeleteCommand(created.Id), CancellationToken.None);
@@ -96,7 +96,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task DeleteBoard_Should_ReturnFalse_When_NotFound()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
 
         var deleted = await mediator.Send(new BoardDeleteCommand(Guid.NewGuid()), CancellationToken.None);
 
@@ -106,7 +106,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task CreateBoard_Should_ReturnKeyTaken_When_KeyAlreadyExists()
     {
-        var (mediator, boards, _) = TestMediatorFactory.Create();
+        var (mediator, boards, _, _) = TestMediatorFactory.Create();
         await mediator.Send(new BoardCreateCommand("First", "FLW"), CancellationToken.None);
 
         var result = await mediator.Send(new BoardCreateCommand("Second", "FLW"), CancellationToken.None);
@@ -121,7 +121,7 @@ public class BoardFeatureTests
     public async Task CreateBoard_Should_ReturnKeyTaken_When_KeyDiffersOnlyByCase()
     {
         // Board.Create нормализует ключ в верхний регистр, поэтому "flw" и "FLW" — одна доска.
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
         await mediator.Send(new BoardCreateCommand("First", "FLW"), CancellationToken.None);
 
         var result = await mediator.Send(new BoardCreateCommand("Second", " flw "), CancellationToken.None);
@@ -132,7 +132,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task CreateBoard_Should_Succeed_When_KeysDiffer()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
         await mediator.Send(new BoardCreateCommand("First", "ONE"), CancellationToken.None);
 
         var result = await mediator.Send(new BoardCreateCommand("Second", "TWO"), CancellationToken.None);
@@ -144,7 +144,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task DeleteBoard_Should_RemoveBoard_When_BoardHasTasks()
     {
-        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var created = (await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None)).Response!;
         var domainBoard = await boards.GetByIdAsync(created.Id, CancellationToken.None);
         tasks.RegisterBoardStatuses(domainBoard!);
@@ -160,7 +160,7 @@ public class BoardFeatureTests
     [Fact]
     public async Task GetBoards_Should_ReturnTaskCountAndNextTaskNumber()
     {
-        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var withTasks = (await mediator.Send(new BoardCreateCommand("With tasks", "WT"), CancellationToken.None)).Response!;
         var empty = (await mediator.Send(new BoardCreateCommand("Empty", "EMP"), CancellationToken.None)).Response!;
         tasks.RegisterBoardStatuses((await boards.GetByIdAsync(withTasks.Id, CancellationToken.None))!);

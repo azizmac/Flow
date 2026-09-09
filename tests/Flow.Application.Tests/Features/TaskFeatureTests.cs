@@ -29,7 +29,7 @@ public class TaskFeatureTests
     [Fact]
     public async Task CreateTask_Should_ReturnTaskWithGeneratedCode_And_DefaultStatus()
     {
-        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var board = await CreateBoardAsync(mediator, boards, tasks);
         var initialStatusId = board.Statuses.Single(s => s.IsInitial).Id;
 
@@ -47,7 +47,7 @@ public class TaskFeatureTests
     [Fact]
     public async Task CreateTask_Should_ReturnNull_When_BoardNotFound()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
 
         var response = await mediator.Send(
             new TaskCreateCommand(Guid.NewGuid(), "Test task", null, null),
@@ -59,7 +59,7 @@ public class TaskFeatureTests
     [Fact]
     public async Task CreateTask_Should_GenerateSequentialCodes()
     {
-        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var board = await CreateBoardAsync(mediator, boards, tasks);
 
         var first = await mediator.Send(new TaskCreateCommand(board.Id, "First", null, null), CancellationToken.None);
@@ -72,7 +72,7 @@ public class TaskFeatureTests
     [Fact]
     public async Task GetBoardTasks_Should_ReturnOnlyTasksOfThatBoard()
     {
-        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var boardA = await CreateBoardAsync(mediator, boards, tasks);
         var boardB = (await mediator.Send(new BoardCreateCommand("Other board", "OTH"), CancellationToken.None)).Response!;
         await mediator.Send(new TaskCreateCommand(boardA.Id, "Task A", null, null), CancellationToken.None);
@@ -87,7 +87,7 @@ public class TaskFeatureTests
     [Fact]
     public async Task UpdateTask_Should_RenameTitle()
     {
-        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var board = await CreateBoardAsync(mediator, boards, tasks);
         var created = await mediator.Send(new TaskCreateCommand(board.Id, "Old title", null, null), CancellationToken.None);
 
@@ -106,7 +106,7 @@ public class TaskFeatureTests
     [Fact]
     public async Task UpdateTask_Should_ReturnNotFound_When_TaskMissing()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
 
         var result = await mediator.Send(
             new TaskUpdateCommand(Guid.NewGuid(), "New title", null, null),
@@ -118,7 +118,7 @@ public class TaskFeatureTests
     [Fact]
     public async Task UpdateTask_Should_ReturnValidationError_When_StatusBelongsToAnotherBoard()
     {
-        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var boardA = await CreateBoardAsync(mediator, boards, tasks);
         var boardB = (await mediator.Send(new BoardCreateCommand("Other board", "OTH"), CancellationToken.None)).Response!;
         var domainBoardB = await boards.GetByIdAsync(boardB.Id, CancellationToken.None);
@@ -139,7 +139,7 @@ public class TaskFeatureTests
     [Fact]
     public async Task UpdateTask_Should_ChangeStatus_When_StatusBelongsToSameBoard()
     {
-        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var board = await CreateBoardAsync(mediator, boards, tasks);
         var created = await mediator.Send(new TaskCreateCommand(board.Id, "Task", null, null), CancellationToken.None);
         var doneStatusId = board.Statuses.Single(s => s.IsFinal).Id;
@@ -154,7 +154,7 @@ public class TaskFeatureTests
     [Fact]
     public async Task DeleteTask_Should_RemoveTask_When_Exists()
     {
-        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var board = await CreateBoardAsync(mediator, boards, tasks);
         var created = await mediator.Send(new TaskCreateCommand(board.Id, "Task", null, null), CancellationToken.None);
 
@@ -168,7 +168,7 @@ public class TaskFeatureTests
     [Fact]
     public async Task DeleteTask_Should_ReturnFalse_When_NotFound()
     {
-        var (mediator, _, _) = TestMediatorFactory.Create();
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
 
         var deleted = await mediator.Send(new TaskDeleteCommand(Guid.NewGuid()), CancellationToken.None);
 

@@ -18,6 +18,9 @@ public sealed class TaskItem
 
     public Guid StatusId { get; private set; }
 
+    /// <summary>Исполнитель (User.Id); null — не назначен. Активность пользователя проверяет вызывающая сторона, как и в ChangeStatus.</summary>
+    public Guid? AssigneeId { get; private set; }
+
     public DateTime CreatedAt { get; private set; }
 
     private TaskItem()
@@ -46,6 +49,20 @@ public sealed class TaskItem
     /// (см. Board.Statuses / соответствующий эндпоинт).
     /// </summary>
     public void ChangeStatus(Guid statusId) => StatusId = statusId;
+
+    /// <summary>
+    /// Назначает исполнителя. Не проверяет, что пользователь существует и активен — у сущности нет доступа
+    /// к пользователям; проверку делает Application (TaskAssignCommandHandler).
+    /// </summary>
+    public void Assign(Guid userId)
+    {
+        if (userId == Guid.Empty)
+            throw new ArgumentException("Assignee id must not be empty.", nameof(userId));
+
+        AssigneeId = userId;
+    }
+
+    public void Unassign() => AssigneeId = null;
 
     private static string ValidateTitle(string title)
     {
