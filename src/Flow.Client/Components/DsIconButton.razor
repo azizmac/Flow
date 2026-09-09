@@ -1,0 +1,22 @@
+@* DRESSY IconButton — круглая кнопка с иконкой. Variant: ghost | accent | solid | glass. Иконка = size × 0.5. *@
+
+<button type="button" id="@Id" class="ds-iconbtn @Variant @Class" title="@Title" aria-label="@Title"
+        style="@($"width:{Size}px;height:{Size}px;{Style}")" disabled="@Disabled"
+        @onclick="OnClick" @onclick:stopPropagation="StopPropagation">
+    <Icon Name="@Icon" Size="@IconSize" />
+</button>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+    [Parameter] public string Variant { get; set; } = "ghost";
+    [Parameter] public int Size { get; set; } = 30;
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool StopPropagation { get; set; } = true;
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+
+    private int IconSize => (int)Math.Round(Size * 0.5);
+}

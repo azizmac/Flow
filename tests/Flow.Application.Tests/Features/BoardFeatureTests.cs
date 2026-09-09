@@ -156,4 +156,25 @@ public class BoardFeatureTests
         Assert.True(deleted);
         Assert.Null(await mediator.Send(new BoardGetQuery(created.Id), CancellationToken.None));
     }
+
+    [Fact]
+    public async Task GetBoards_Should_ReturnTaskCountAndNextTaskNumber()
+    {
+        var (mediator, boards, tasks) = TestMediatorFactory.Create();
+        var withTasks = (await mediator.Send(new BoardCreateCommand("With tasks", "WT"), CancellationToken.None)).Response!;
+        var empty = (await mediator.Send(new BoardCreateCommand("Empty", "EMP"), CancellationToken.None)).Response!;
+        tasks.RegisterBoardStatuses((await boards.GetByIdAsync(withTasks.Id, CancellationToken.None))!);
+        await mediator.Send(new TaskCreateCommand(withTasks.Id, "Task 1", null, null), CancellationToken.None);
+        await mediator.Send(new TaskCreateCommand(withTasks.Id, "Task 2", null, null), CancellationToken.None);
+
+        var list = await mediator.Send(new BoardListQuery(), CancellationToken.None);
+        var single = await mediator.Send(new BoardGetQuery(withTasks.Id), CancellationToken.None);
+
+        Assert.Equal(2, list.Single(b => b.Id == withTasks.Id).TaskCount);
+        Assert.Equal(3, list.Single(b => b.Id == withTasks.Id).NextTaskNumber);
+        Assert.Equal(0, list.Single(b => b.Id == empty.Id).TaskCount);
+        Assert.Equal(1, list.Single(b => b.Id == empty.Id).NextTaskNumber);
+        Assert.Equal(2, single!.TaskCount);
+        Assert.Equal(3, single.NextTaskNumber);
+    }
 }

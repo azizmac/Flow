@@ -1,0 +1,132 @@
+@* Модалка «Новый проект»: название + ключ (авто-uppercase, валидация ^[A-Z][A-Z0-9]{1,9}$),
+   живая подсказка «KEY-1, KEY-2…», 409 → «Ключ уже занят». Enter — создать, Esc — закрыть. *@
+@implements IDisposable
+@inject FlowApi Api
+@inject HotkeyService Hotkeys
+@inject BrowserInterop Browser
+
+<div class="modal-scrim @(_in ? "in" : "")" @onclick="Cancel">
+    <div class="modal" role="dialog" aria-modal="true" @onclick:stopPropagation>
+        <div>
+            <h3>Новый проект</h3>
+            <div class="hint">Проект получит 4 стандартных статуса задач: Не начата · В работе · На проверке · Сделана</div>
+        </div>
+
+        <DsInput Id="cb-name" Label="Название" Placeholder="Мобильное приложение" MaxLength="200"
+                 Value="@_name" ValueChanged="OnNameChanged" Error="@_nameError" OnKeyDown="OnFieldKey" />
+
+        <div>
+            <DsInput Id="cb-key" Label="Ключ" Placeholder="MOB" MaxLength="10"
+                     Value="@_key" ValueChanged="OnKeyChanged" Error="@_keyError" OnKeyDown="OnFieldKey" />
+            <div class="hint" style="margin-top:8px;">
+                @Ru.BoardKeyRule. Задачи будут нумероваться <code>@KeyPreview-1</code>, <code>@KeyPreview-2</code>…
+            </div>
+        </div>
+
+        @if (_serverError is not null)
+        {
+            <div class="ds-field-error">@_serverError</div>
+        }
+
+        <div class="modal-actions">
+            <DsButton Variant="secondary" Size="md" OnClick="Cancel" Disabled="_busy">Отмена</DsButton>
+            <DsButton Variant="primary" Size="md" OnClick="Submit" Disabled="!IsValid" Busy="_busy">Создать</DsButton>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<BoardResponse> OnCreated { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private bool _in;
+    private bool _busy;
+    private string _name = "";
+    private string _key = "";
+    private string? _nameError;
+    private string? _keyError;
+    private string? _serverError;
+    private bool _keyTouched;
+    private IDisposable? _hotkeys;
+
+    private string KeyPreview => _key.Length == 0 ? "KEY" : _key;
+
+    private bool IsValid => _name.Trim().Length > 0 && Ru.BoardKeyPattern().IsMatch(_key) && !_busy;
+
+    protected override void OnInitialized()
+    {
+        _hotkeys = Hotkeys.Subscribe(async e =>
+        {
+            if (e.Key == "Escape") { e.Handled = true; await Cancel(); }
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _in = true;
+            StateHasChanged();
+            await Browser.FocusAsync("cb-name");
+        }
+    }
+
+    private void OnNameChanged(string value)
+    {
+        _name = value;
+        _nameError = null;
+        _serverError = null;
+    }
+
+    private void OnKeyChanged(string value)
+    {
+        _key = value.Trim().ToUpperInvariant();
+        _keyTouched = true;
+        _serverError = null;
+        _keyError = _key.Length > 0 && !Ru.BoardKeyPattern().IsMatch(_key) ? Ru.BoardKeyRule : null;
+    }
+
+    private async Task OnFieldKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Submit();
+    }
+
+    private Task Cancel() => _busy ? Task.CompletedTask : OnCancel.InvokeAsync();
+
+    private async Task Submit()
+    {
+        if (_name.Trim().Length == 0)
+        {
+            _nameError = "Введите название проекта";
+            return;
+        }
+
+        if (!Ru.BoardKeyPattern().IsMatch(_key))
+        {
+            _keyError = Ru.BoardKeyRule;
+            return;
+        }
+
+        if (!IsValid)
+            return;
+
+        _busy = true;
+        _serverError = null;
+        var result = await Api.CreateBoard(new CreateBoardRequest(_name.Trim(), _key));
+        _busy = false;
+
+        if (result.Ok)
+        {
+            await OnCreated.InvokeAsync(result.Value!);
+            return;
+        }
+
+        if (result.Conflict)
+            _keyError = "Ключ уже занят";
+        else
+            _serverError = result.Error;
+    }
+
+    public void Dispose() => _hotkeys?.Dispose();
+}

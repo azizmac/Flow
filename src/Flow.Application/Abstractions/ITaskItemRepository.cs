@@ -9,6 +9,12 @@ public interface ITaskItemRepository
     /// <summary>assigneeId = null — все задачи доски; иначе только назначенные на этого пользователя.</summary>
     Task<IReadOnlyList<TaskItem>> GetByBoardIdAsync(Guid boardId, Guid? assigneeId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Количество задач по каждой доске одним запросом (GROUP BY BoardId) — для BoardResponse.TaskCount.
+    /// Доски без задач в словаре отсутствуют, вызывающая сторона трактует это как 0.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, int>> CountByBoardIdsAsync(IReadOnlyCollection<Guid> boardIds, CancellationToken cancellationToken);
+
     /// <summary>Нужно для валидации ChangeStatus — статус должен принадлежать той же доске, что и задача.</summary>
     Task<bool> StatusBelongsToBoardAsync(Guid statusId, Guid boardId, CancellationToken cancellationToken);
 

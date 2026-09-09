@@ -1,0 +1,94 @@
+@* Строка задачи в списке проекта: код · название (+описание) · селект статуса · дата · меню «…».
+   Клик по строке (вне селекта/меню) → OnOpen. Переименование — инлайн, Enter/blur сохраняет, Esc отменяет. *@
+@inject BrowserInterop Browser
+
+<div class="task-row list-cols @(IsDone ? "done" : "") @(Selected ? "sel" : "") @(Flash ? "flash" : "")"
+     id="@ElementId" @onclick="Open" @key="Item.Id">
+    <div class="code">@Item.Code</div>
+    <div class="task-cell-title">
+        <div class="task-title">
+            @if (_renaming)
+            {
+                <input id="@_inputId" value="@_title" maxlength="500"
+                       @oninput="e => _title = e.Value?.ToString() ?? string.Empty"
+                       @onkeydown="OnRenameKey" @onblur="CommitRename"
+                       @onclick:stopPropagation />
+            }
+            else
+            {
+                @Item.Title
+            }
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Item.Description))
+        {
+            <div class="task-desc">@Ru.PlainFirstLine(Item.Description)</div>
+        }
+    </div>
+    <div>
+        <StatusSelect Statuses="Statuses" Value="Item.StatusId" OnChange="id => OnStatusChange.InvokeAsync((Item, id))" />
+    </div>
+    <div class="task-date" title="@Ru.DateTimeFull(Item.CreatedAt)">@Ru.DateShort(Item.CreatedAt)</div>
+    <div>
+        <RowMenu OnOpen="Open" OnRename="StartRename" OnCopy="() => OnCopy.InvokeAsync(Item)" OnDelete="() => OnDelete.InvokeAsync(Item)" />
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TaskResponse Item { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<StatusResponse> Statuses { get; set; } = [];
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public bool Flash { get; set; }
+    [Parameter] public EventCallback<TaskResponse> OnOpen { get; set; }
+    [Parameter] public EventCallback<(TaskResponse Task, Guid StatusId)> OnStatusChange { get; set; }
+    [Parameter] public EventCallback<(TaskResponse Task, string Title)> OnRename { get; set; }
+    [Parameter] public EventCallback<TaskResponse> OnCopy { get; set; }
+    [Parameter] public EventCallback<TaskResponse> OnDelete { get; set; }
+
+    public static string ElementIdFor(Guid id) => "task-" + id.ToString("N");
+
+    private string ElementId => ElementIdFor(Item.Id);
+    private readonly string _inputId = "tr-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _renaming;
+    private string _title = "";
+    private bool _cancelled;
+
+    private bool IsDone => Statuses.FirstOrDefault(s => s.Id == Item.StatusId)?.IsFinal == true;
+
+    private Task Open() => _renaming ? Task.CompletedTask : OnOpen.InvokeAsync(Item);
+
+    public async Task StartRename()
+    {
+        _title = Item.Title;
+        _renaming = true;
+        _cancelled = false;
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync(_inputId, select: true);
+    }
+
+    private async Task OnRenameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CommitRename();
+        }
+        else if (e.Key == "Escape")
+        {
+            _cancelled = true;
+            _renaming = false;
+        }
+    }
+
+    private async Task CommitRename()
+    {
+        if (!_renaming || _cancelled)
+            return;
+
+        _renaming = false;
+        var title = _title.Trim();
+        if (title.Length == 0 || title == Item.Title)
+            return;
+
+        await OnRename.InvokeAsync((Item, title));
+    }
+}

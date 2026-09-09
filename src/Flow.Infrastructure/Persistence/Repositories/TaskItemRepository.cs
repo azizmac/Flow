@@ -16,6 +16,19 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyDictionary<Guid, int>> CountByBoardIdsAsync(
+        IReadOnlyCollection<Guid> boardIds, CancellationToken cancellationToken)
+    {
+        if (boardIds.Count == 0)
+            return new Dictionary<Guid, int>();
+
+        return await db.TaskItems
+            .Where(t => boardIds.Contains(t.BoardId))
+            .GroupBy(t => t.BoardId)
+            .Select(g => new { BoardId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.BoardId, x => x.Count, cancellationToken);
+    }
+
     public Task<bool> StatusBelongsToBoardAsync(Guid statusId, Guid boardId, CancellationToken cancellationToken) =>
         db.Statuses.AnyAsync(s => s.Id == statusId && s.BoardId == boardId, cancellationToken);
 

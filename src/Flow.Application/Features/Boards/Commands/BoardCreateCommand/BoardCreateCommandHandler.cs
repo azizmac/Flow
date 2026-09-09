@@ -21,6 +21,7 @@ internal sealed class BoardCreateCommandHandler(IBoardRepository boards, IUnitOf
         boards.Add(board);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return BoardCreateResult.Success(board.ToResponse());
+        // Только что созданная доска задач не имеет — счётчик известен без запроса.
+        return BoardCreateResult.Success(board.ToResponse(taskCount: 0));
     }
 }

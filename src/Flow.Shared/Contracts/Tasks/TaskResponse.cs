@@ -1,8 +1,9 @@
 namespace Flow.Shared.Contracts.Tasks;
 
-/// <summary>AssigneeId — только id исполнителя; карточка пользователя запрашивается отдельно (GET /users/{id}).</summary>
+/// <summary>BoardId нужен странице /tasks/{id}: по нему клиент подгружает ключ и статусы проекта.</summary>
 public sealed record TaskResponse(
     Guid Id,
+    Guid BoardId,
     string Code,
     string Title,
     string? Description,

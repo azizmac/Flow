@@ -1,0 +1,196 @@
+@* Экран 1 — «Проекты» (GET /boards): сетка карточек + «Создать проект» + модалка нового проекта. *@
+@page "/"
+@page "/boards"
+@implements IDisposable
+@inject FlowApi Api
+@inject NavigationManager Nav
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+@inject HotkeyService Hotkeys
+@inject AppState State
+
+<PageTitle>Проекты — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left"><h2>Проекты</h2></div>
+    <div class="topbar-right">
+        <label class="search">
+            <Icon Name="search" Size="16" />
+            <input placeholder="Поиск по проектам..." value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
+        </label>
+        <DsButton Variant="primary" Size="md" Icon="plus" OnClick="OpenCreate">Новый проект</DsButton>
+    </div>
+</div>
+
+<div class="content">
+    @if (_loading)
+    {
+        <div class="meta-line">Загрузка…</div>
+    }
+    else if (_loadError is not null)
+    {
+        <div class="empty">
+            <div class="empty-title">Не удалось загрузить проекты</div>
+            <div>@_loadError</div>
+            <DsButton Variant="secondary" Size="sm" OnClick="Load">Повторить</DsButton>
+        </div>
+    }
+    else
+    {
+        <div class="meta-line">
+            @Ru.Projects(_boards.Count)@(HasSearch ? $" · найдено {Filtered.Count}" : "")
+        </div>
+        <div class="board-grid stagger">
+            @foreach (var b in Filtered)
+            {
+                <BoardCard @key="b.Id" Board="b" OnOpen="Open" OnRename="Rename" OnDelete="AskDelete" OnCopy="CopyKey" />
+            }
+            @if (!HasSearch)
+            {
+                <div class="board-card new" @onclick="OpenCreate" role="button" tabindex="0" @onkeydown="OnNewCardKey">
+                    <Icon Name="plus" Size="22" />
+                    <div style="font:var(--fw-bold) 13.5px var(--font-display);">Создать проект</div>
+                    <div class="hint" style="text-align:center;">Имя и короткий ключ, например <code>FRONT</code></div>
+                </div>
+            }
+            else if (Filtered.Count == 0)
+            {
+                <div class="empty" style="grid-column:1/-1;">
+                    <div class="empty-title">Ничего не найдено</div>
+                    <button type="button" class="icon-lnk" @onclick="() => _search = string.Empty">Сбросить поиск</button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (_createOpen)
+{
+    <CreateBoardDialog OnCreated="OnCreated" OnCancel="() => _createOpen = false" />
+}
+
+@if (_deleting is not null)
+{
+    <ConfirmDialog Title="@($"Удалить проект {_deleting.Key}?")"
+                   Text="@($"«{_deleting.Name}» и все его задачи ({_deleting.TaskCount}) будут удалены без возможности восстановления.")"
+                   ConfirmLabel="Удалить проект"
+                   OnConfirm="ConfirmDelete" OnCancel="() => _deleting = null" />
+}
+
+@code {
+    private List<BoardResponse> _boards = [];
+    private bool _loading = true;
+    private string? _loadError;
+    private string _search = "";
+    private bool _createOpen;
+    private BoardResponse? _deleting;
+    private IDisposable? _hotkeys;
+
+    private bool HasSearch => _search.Trim().Length > 0;
+
+    private List<BoardResponse> Filtered
+    {
+        get
+        {
+            var q = _search.Trim();
+            if (q.Length == 0)
+                return _boards;
+            return _boards
+                .Where(b => b.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || b.Key.Contains(q, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hotkeys = Hotkeys.Subscribe(e =>
+        {
+            if (!e.InEditable && !e.Ctrl && e.Key is "n" or "N" or "т" or "Т" && !_createOpen && _deleting is null)
+            {
+                e.Handled = true;
+                _createOpen = true;
+                StateHasChanged();
+            }
+            return Task.CompletedTask;
+        });
+
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        _loadError = null;
+        var result = await Api.GetBoards();
+        _loading = false;
+        if (result.Ok)
+            _boards = result.Value!.ToList();
+        else
+            _loadError = result.Error;
+    }
+
+    private void OpenCreate() => _createOpen = true;
+
+    private void OnNewCardKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") _createOpen = true;
+    }
+
+    private void Open(BoardResponse b)
+    {
+        State.SetLastBoard(b.Id);
+        Nav.NavigateTo($"boards/{b.Id}");
+    }
+
+    private void OnCreated(BoardResponse b)
+    {
+        _createOpen = false;
+        _boards.Add(b);
+        Toasts.Ok($"Проект {b.Key} создан");
+        Open(b);
+    }
+
+    private async Task Rename((BoardResponse Board, string Name) args)
+    {
+        var result = await Api.RenameBoard(args.Board.Id, new RenameBoardRequest(args.Name));
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось переименовать проект");
+            return;
+        }
+
+        Replace(result.Value!);
+    }
+
+    private void AskDelete(BoardResponse b) => _deleting = b;
+
+    private async Task ConfirmDelete()
+    {
+        var b = _deleting!;
+        var result = await Api.DeleteBoard(b.Id);
+        _deleting = null;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось удалить проект");
+            return;
+        }
+
+        _boards.RemoveAll(x => x.Id == b.Id);
+        State.ForgetBoard(b.Id);
+        Toasts.Ok($"Проект {b.Key} удалён");
+    }
+
+    private async Task CopyKey(string key)
+    {
+        if (await Browser.CopyAsync(key)) Toasts.Ok($"Скопировано: {key}");
+        else Toasts.Error("Не удалось скопировать");
+    }
+
+    private void Replace(BoardResponse updated)
+    {
+        var i = _boards.FindIndex(x => x.Id == updated.Id);
+        if (i >= 0) _boards[i] = updated;
+    }
+
+    public void Dispose() => _hotkeys?.Dispose();
+}

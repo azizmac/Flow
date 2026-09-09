@@ -1,0 +1,41 @@
+@* Селект статуса «в строке»: триггер-пилюля с точкой + поповер со статусами проекта.
+   Выбор → OnChange(statusId). Открытие/закрытие — локальное состояние. *@
+
+<div class="status-sel" id="@_id" @onclick="Toggle" @onclick:stopPropagation title="Сменить статус">
+    <span class="sd" style="background:@StatusColors.For(Current)"></span>
+    <span class="lbl">@(Current?.Name ?? "—")</span>
+    <Icon Name="chevrons" Size="12" />
+</div>
+@if (_open)
+{
+    <Popover AnchorId="@_id" Align="left" Width="200" OnClose="Close">
+        @foreach (var s in Statuses)
+        {
+            <button type="button" class="pop-item @(s.Id == Value ? "cur" : "")" @onclick="() => Select(s)">
+                <span class="sd" style="background:@StatusColors.For(s)"></span>@s.Name
+            </button>
+        }
+    </Popover>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<StatusResponse> Statuses { get; set; } = [];
+    [Parameter] public Guid Value { get; set; }
+    [Parameter] public EventCallback<Guid> OnChange { get; set; }
+
+    private readonly string _id = "ss-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _open;
+
+    private StatusResponse? Current => Statuses.FirstOrDefault(s => s.Id == Value);
+
+    private void Toggle() => _open = !_open;
+
+    private void Close() => _open = false;
+
+    private async Task Select(StatusResponse s)
+    {
+        _open = false;
+        if (s.Id != Value)
+            await OnChange.InvokeAsync(s.Id);
+    }
+}
