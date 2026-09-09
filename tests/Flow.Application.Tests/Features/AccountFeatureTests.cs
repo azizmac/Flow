@@ -22,7 +22,7 @@ public class AccountFeatureTests
 
     private static async Task<Guid> CreateUserAsync(IMediator mediator, string username = "ilya")
     {
-        var result = await mediator.Send(new UserCreateCommand(username, $"{username}@example.com", "Илья", "Моторин", Password), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, username, $"{username}@example.com", "Илья", "Моторин", Password), CancellationToken.None);
         Assert.False(result.IsConflict);
         return result.Response!.Id;
     }
@@ -67,7 +67,7 @@ public class AccountFeatureTests
     {
         var (mediator, _, _, _, accounts) = TestMediatorFactory.CreateWithAccounts();
 
-        var result = await mediator.Send(new UserCreateCommand(" Ilya ", " Ilya@Example.COM ", "Илья", "Моторин", Password), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, " Ilya ", " Ilya@Example.COM ", "Илья", "Моторин", Password), CancellationToken.None);
 
         var call = Assert.Single(accounts.CallsTo("Create"));
         Assert.Equal(result.Response!.Id, call.Id);
@@ -82,7 +82,7 @@ public class AccountFeatureTests
         var (mediator, _, _, users, accounts) = TestMediatorFactory.CreateWithAccounts();
         accounts.NextResult = AccountResult.UsernameTaken("Username 'ilya' is already taken.");
 
-        var result = await mediator.Send(new UserCreateCommand("ilya", "ilya@example.com", "Илья", "Моторин", Password), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, "ilya", "ilya@example.com", "Илья", "Моторин", Password), CancellationToken.None);
 
         Assert.True(result.IsUsernameTaken);
         Assert.Null(await users.GetByUsernameAsync("ilya", CancellationToken.None));
@@ -94,7 +94,7 @@ public class AccountFeatureTests
         var (mediator, _, _, _, accounts) = TestMediatorFactory.CreateWithAccounts();
         accounts.NextResult = AccountResult.EmailTaken("Email 'ilya@example.com' is already taken.");
 
-        var result = await mediator.Send(new UserCreateCommand("ilya", "ilya@example.com", "Илья", "Моторин", Password), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, "ilya", "ilya@example.com", "Илья", "Моторин", Password), CancellationToken.None);
 
         Assert.True(result.IsEmailTaken);
     }
@@ -106,7 +106,7 @@ public class AccountFeatureTests
         accounts.NextResult = AccountResult.Invalid("Passwords must be at least 8 characters.");
 
         var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
-            mediator.Send(new UserCreateCommand("ilya", "ilya@example.com", "Илья", "Моторин", "short"), CancellationToken.None));
+            mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, "ilya", "ilya@example.com", "Илья", "Моторин", "short"), CancellationToken.None));
 
         Assert.Contains("at least 8", ex.Message);
         Assert.Null(await users.GetByUsernameAsync("ilya", CancellationToken.None));
@@ -119,7 +119,7 @@ public class AccountFeatureTests
         await CreateUserAsync(mediator);
         accounts.Calls.Clear();
 
-        var result = await mediator.Send(new UserCreateCommand("ILYA", "other@example.com", "A", "B", Password), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, "ILYA", "other@example.com", "A", "B", Password), CancellationToken.None);
 
         Assert.True(result.IsUsernameTaken);
         Assert.Empty(accounts.Calls);
@@ -133,7 +133,7 @@ public class AccountFeatureTests
         var (mediator, _, _, users, accounts) = TestMediatorFactory.CreateWithAccounts();
         var id = await CreateUserAsync(mediator);
 
-        var result = await mediator.Send(new UserChangeUsernameCommand(id, "Ilya.M"), CancellationToken.None);
+        var result = await mediator.Send(new UserChangeUsernameCommand(TestMediatorFactory.OwnerId, id, "Ilya.M"), CancellationToken.None);
 
         Assert.Equal("ilya.m", result.Response!.Username);
         var call = Assert.Single(accounts.CallsTo("ChangeUsername"));
@@ -148,7 +148,7 @@ public class AccountFeatureTests
         var id = await CreateUserAsync(mediator);
         accounts.NextResult = AccountResult.UsernameTaken("Username 'taken' is already taken.");
 
-        var result = await mediator.Send(new UserChangeUsernameCommand(id, "taken"), CancellationToken.None);
+        var result = await mediator.Send(new UserChangeUsernameCommand(TestMediatorFactory.OwnerId, id, "taken"), CancellationToken.None);
 
         Assert.NotNull(result.ConflictError);
         Assert.Equal("ilya", (await users.GetByIdAsync(id, CancellationToken.None))!.Username);
@@ -161,7 +161,7 @@ public class AccountFeatureTests
         var id = await CreateUserAsync(mediator);
         accounts.Calls.Clear();
 
-        var result = await mediator.Send(new UserChangeUsernameCommand(id, "ILYA"), CancellationToken.None);
+        var result = await mediator.Send(new UserChangeUsernameCommand(TestMediatorFactory.OwnerId, id, "ILYA"), CancellationToken.None);
 
         Assert.Null(result.ConflictError);
         Assert.Empty(accounts.Calls);
@@ -174,7 +174,7 @@ public class AccountFeatureTests
         var id = await CreateUserAsync(mediator);
         accounts.NextResult = AccountResult.EmailTaken("Email 'taken@example.com' is already taken.");
 
-        var result = await mediator.Send(new UserChangeEmailCommand(id, "taken@example.com"), CancellationToken.None);
+        var result = await mediator.Send(new UserChangeEmailCommand(TestMediatorFactory.OwnerId, id, "taken@example.com"), CancellationToken.None);
 
         Assert.NotNull(result.ConflictError);
         Assert.Equal("ilya@example.com", (await users.GetByIdAsync(id, CancellationToken.None))!.Email);
@@ -188,12 +188,18 @@ public class AccountFeatureTests
         var (mediator, _, _, _, accounts) = TestMediatorFactory.CreateWithAccounts();
         var id = await CreateUserAsync(mediator);
 
-        var result = await mediator.Send(new UserChangePasswordCommand(id, Password, "new strong password"), CancellationToken.None);
+        // Свой пароль — с текущим; чужой (Owner) — сброс, текущий в Flow.Auth не уходит.
+        var own = await mediator.Send(new UserChangePasswordCommand(id, id, Password, "new strong password"), CancellationToken.None);
+        var reset = await mediator.Send(new UserChangePasswordCommand(TestMediatorFactory.OwnerId, id, "ignored", "another strong password"), CancellationToken.None);
 
-        Assert.NotNull(result.Response);
-        var call = Assert.Single(accounts.CallsTo("ChangePassword"));
-        Assert.Equal(Password, call.CurrentPassword);
-        Assert.Equal("new strong password", call.Password);
+        Assert.NotNull(own.Response);
+        Assert.NotNull(reset.Response);
+        var calls = accounts.CallsTo("ChangePassword").ToList();
+        Assert.Equal(2, calls.Count);
+        Assert.Equal(Password, calls[0].CurrentPassword);
+        Assert.Equal("new strong password", calls[0].Password);
+        Assert.Null(calls[1].CurrentPassword);
+        Assert.Equal("another strong password", calls[1].Password);
     }
 
     [Fact]
@@ -204,7 +210,7 @@ public class AccountFeatureTests
         accounts.NextResult = AccountResult.Invalid("Incorrect password.");
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            mediator.Send(new UserChangePasswordCommand(id, "wrong", "new strong password"), CancellationToken.None));
+            mediator.Send(new UserChangePasswordCommand(TestMediatorFactory.OwnerId, id, "wrong", "new strong password"), CancellationToken.None));
     }
 
     [Fact]
@@ -212,7 +218,7 @@ public class AccountFeatureTests
     {
         var (mediator, _, _, _, accounts) = TestMediatorFactory.CreateWithAccounts();
 
-        var result = await mediator.Send(new UserChangePasswordCommand(Guid.NewGuid(), null, "new strong password"), CancellationToken.None);
+        var result = await mediator.Send(new UserChangePasswordCommand(TestMediatorFactory.OwnerId, Guid.NewGuid(), null, "new strong password"), CancellationToken.None);
 
         Assert.True(result.IsNotFound);
         Assert.Empty(accounts.Calls);
@@ -226,7 +232,7 @@ public class AccountFeatureTests
         var (mediator, _, _, users, accounts) = TestMediatorFactory.CreateWithAccounts();
         var id = await CreateUserAsync(mediator);
 
-        var result = await mediator.Send(new UserDeactivateCommand(id), CancellationToken.None);
+        var result = await mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, id), CancellationToken.None);
 
         Assert.False(result.Response!.IsActive);
         Assert.Equal(id, Assert.Single(accounts.CallsTo("Disable")).Id);
@@ -240,7 +246,7 @@ public class AccountFeatureTests
         var id = await CreateUserAsync(mediator);
         accounts.DisableEnableException = new AuthUnavailableException("down");
 
-        await Assert.ThrowsAsync<AuthUnavailableException>(() => mediator.Send(new UserDeactivateCommand(id), CancellationToken.None));
+        await Assert.ThrowsAsync<AuthUnavailableException>(() => mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, id), CancellationToken.None));
 
         Assert.True((await users.GetByIdAsync(id, CancellationToken.None))!.IsActive);
     }
@@ -250,9 +256,9 @@ public class AccountFeatureTests
     {
         var (mediator, _, _, users, accounts) = TestMediatorFactory.CreateWithAccounts();
         var id = await CreateUserAsync(mediator);
-        await mediator.Send(new UserDeactivateCommand(id), CancellationToken.None);
+        await mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, id), CancellationToken.None);
 
-        var result = await mediator.Send(new UserActivateCommand(id), CancellationToken.None);
+        var result = await mediator.Send(new UserActivateCommand(TestMediatorFactory.OwnerId, id), CancellationToken.None);
 
         Assert.True(result.Response!.IsActive);
         Assert.Single(accounts.CallsTo("Enable"));
@@ -264,10 +270,10 @@ public class AccountFeatureTests
     {
         var (mediator, _, _, _, accounts) = TestMediatorFactory.CreateWithAccounts();
         var id = await CreateUserAsync(mediator);
-        await mediator.Send(new UserDeactivateCommand(id), CancellationToken.None);
+        await mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, id), CancellationToken.None);
         accounts.Calls.Clear();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new UserDeactivateCommand(id), CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, id), CancellationToken.None));
 
         Assert.Empty(accounts.Calls);
     }
@@ -280,7 +286,7 @@ public class AccountFeatureTests
         (await users.GetByIdAsync(id, CancellationToken.None))!.ChangeRole(UserRole.Owner);
         accounts.Calls.Clear();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new UserDeactivateCommand(id), CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, id), CancellationToken.None));
 
         Assert.Empty(accounts.Calls);
         Assert.True((await users.GetByIdAsync(id, CancellationToken.None))!.IsActive);

@@ -19,7 +19,7 @@ public class UserPersistenceTests(PostgresFixture db)
 {
     private async Task<UserResponse> CreateAsync(string username, string firstName = "Илья", string lastName = "Моторин")
     {
-        var result = await db.SendAsync(new UserCreateCommand(username, $"{username}@example.com", firstName, lastName, "correct horse battery"));
+        var result = await db.SendAsync(new UserCreateCommand(PostgresFixture.OwnerId, username, $"{username}@example.com", firstName, lastName, "correct horse battery"));
         Assert.False(result.IsConflict);
         return result.Response!;
     }
@@ -28,8 +28,8 @@ public class UserPersistenceTests(PostgresFixture db)
     public async Task CreateUser_Should_PersistLinks_And_LoadThemBack()
     {
         var user = await CreateAsync("links");
-        await db.SendAsync(new UserSetLinkCommand(user.Id, UserLinkType.GitHub, "https://github.com/links"));
-        await db.SendAsync(new UserSetLinkCommand(user.Id, UserLinkType.Telegram, "https://t.me/links"));
+        await db.SendAsync(new UserSetLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.GitHub, "https://github.com/links"));
+        await db.SendAsync(new UserSetLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.Telegram, "https://t.me/links"));
 
         var loaded = await db.SendAsync(new UserGetQuery(user.Id));
 
@@ -43,9 +43,9 @@ public class UserPersistenceTests(PostgresFixture db)
     public async Task SetLink_SameType_Should_UpdateRow_NotInsertSecond()
     {
         var user = await CreateAsync("relink");
-        await db.SendAsync(new UserSetLinkCommand(user.Id, UserLinkType.GitHub, "https://github.com/old"));
+        await db.SendAsync(new UserSetLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.GitHub, "https://github.com/old"));
 
-        await db.SendAsync(new UserSetLinkCommand(user.Id, UserLinkType.GitHub, "https://github.com/new"));
+        await db.SendAsync(new UserSetLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.GitHub, "https://github.com/new"));
 
         var links = await db.QueryAsync(ctx => ctx.Users.Where(u => u.Id == user.Id).SelectMany(u => u.Links).ToListAsync());
         var link = Assert.Single(links);
@@ -56,9 +56,9 @@ public class UserPersistenceTests(PostgresFixture db)
     public async Task RemoveLink_Should_DeleteRow()
     {
         var user = await CreateAsync("unlink");
-        await db.SendAsync(new UserSetLinkCommand(user.Id, UserLinkType.Website, "https://example.com"));
+        await db.SendAsync(new UserSetLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.Website, "https://example.com"));
 
-        await db.SendAsync(new UserRemoveLinkCommand(user.Id, UserLinkType.Website));
+        await db.SendAsync(new UserRemoveLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.Website));
 
         Assert.Equal(0, await db.QueryAsync(ctx => ctx.Users.Where(u => u.Id == user.Id).SelectMany(u => u.Links).CountAsync()));
     }
@@ -69,7 +69,7 @@ public class UserPersistenceTests(PostgresFixture db)
         // Регрессия на будущее: дубликат не должен долетать до IX_Users_Username и превращаться в 500.
         await CreateAsync("dupuser");
 
-        var second = await db.SendAsync(new UserCreateCommand("DupUser", "another@example.com", "A", "B", "correct horse battery"));
+        var second = await db.SendAsync(new UserCreateCommand(PostgresFixture.OwnerId, "DupUser", "another@example.com", "A", "B", "correct horse battery"));
 
         Assert.True(second.IsUsernameTaken);
         Assert.Equal(1, await db.QueryAsync(ctx => ctx.Users.CountAsync(u => u.Username == "dupuser")));
@@ -80,7 +80,7 @@ public class UserPersistenceTests(PostgresFixture db)
     {
         await CreateAsync("dupmail");
 
-        var second = await db.SendAsync(new UserCreateCommand("dupmail2", "DupMail@Example.com", "A", "B", "correct horse battery"));
+        var second = await db.SendAsync(new UserCreateCommand(PostgresFixture.OwnerId, "dupmail2", "DupMail@Example.com", "A", "B", "correct horse battery"));
 
         Assert.True(second.IsEmailTaken);
     }
@@ -102,7 +102,7 @@ public class UserPersistenceTests(PostgresFixture db)
     {
         await CreateAsync("search.active", "Пётр", "Поисков");
         var inactive = await CreateAsync("search.inactive", "Пётр", "Поисков");
-        await db.SendAsync(new UserDeactivateCommand(inactive.Id));
+        await db.SendAsync(new UserDeactivateCommand(PostgresFixture.OwnerId, inactive.Id));
 
         var byUsername = await db.SendAsync(new UserSearchQuery("SEARCH."));
         var byLastName = await db.SendAsync(new UserSearchQuery("поисков"));

@@ -38,7 +38,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         try
         {
             var result = await mediator.Send(
-                new UserCreateCommand(request.Username, request.Email, request.FirstName, request.LastName, request.Password),
+                new UserCreateCommand(actor.Require(), request.Username, request.Email, request.FirstName, request.LastName, request.Password),
                 cancellationToken);
 
             if (result.IsConflict)
@@ -103,6 +103,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         {
             var result = await mediator.Send(
                 new UserUpdateProfileCommand(
+                    actor.Require(),
                     id,
                     request.FirstName,
                     request.LastName,
@@ -125,7 +126,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
     {
         try
         {
-            var result = await mediator.Send(new UserChangeUsernameCommand(id, request.Username), cancellationToken);
+            var result = await mediator.Send(new UserChangeUsernameCommand(actor.Require(), id, request.Username), cancellationToken);
             return ToActionResult(result);
         }
         catch (ArgumentException ex)
@@ -139,7 +140,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
     {
         try
         {
-            var result = await mediator.Send(new UserChangeEmailCommand(id, request.Email), cancellationToken);
+            var result = await mediator.Send(new UserChangeEmailCommand(actor.Require(), id, request.Email), cancellationToken);
             return ToActionResult(result);
         }
         catch (ArgumentException ex)
@@ -158,7 +159,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         try
         {
             var result = await mediator.Send(
-                new UserChangePasswordCommand(id, request.CurrentPassword, request.NewPassword),
+                new UserChangePasswordCommand(actor.Require(), id, request.CurrentPassword, request.NewPassword),
                 cancellationToken);
 
             return result.IsNotFound ? NotFound() : NoContent();
@@ -175,7 +176,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
     {
         try
         {
-            var result = await mediator.Send(new UserSetLinkCommand(id, type, request.Url), cancellationToken);
+            var result = await mediator.Send(new UserSetLinkCommand(actor.Require(), id, type, request.Url), cancellationToken);
             return ToActionResult(result);
         }
         catch (ArgumentException ex)
@@ -187,7 +188,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
     [HttpDelete("{id:guid}/links/{type}")]
     public async Task<IActionResult> RemoveLink(Guid id, UserLinkType type, CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new UserRemoveLinkCommand(id, type), cancellationToken);
+        var result = await mediator.Send(new UserRemoveLinkCommand(actor.Require(), id, type), cancellationToken);
         return result.IsNotFound ? NotFound() : NoContent();
     }
 
@@ -196,7 +197,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
     {
         try
         {
-            var result = await mediator.Send(new UserDeactivateCommand(id), cancellationToken);
+            var result = await mediator.Send(new UserDeactivateCommand(actor.Require(), id), cancellationToken);
             return result.IsNotFound ? NotFound() : NoContent();
         }
         catch (InvalidOperationException ex)
@@ -210,7 +211,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
     {
         try
         {
-            var result = await mediator.Send(new UserActivateCommand(id), cancellationToken);
+            var result = await mediator.Send(new UserActivateCommand(actor.Require(), id), cancellationToken);
             return result.IsNotFound ? NotFound() : NoContent();
         }
         catch (InvalidOperationException ex)

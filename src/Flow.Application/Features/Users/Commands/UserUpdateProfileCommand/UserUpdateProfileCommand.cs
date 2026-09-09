@@ -8,6 +8,7 @@ namespace Flow.Application.Features.Users.Commands.UserUpdateProfileCommand;
 /// Username и Email меняются отдельными командами, потому что у них есть исход «занято» (409).
 /// </summary>
 public sealed record UserUpdateProfileCommand(
+    Guid ActorId,
     Guid UserId,
     string? FirstName,
     string? LastName,

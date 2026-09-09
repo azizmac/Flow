@@ -4,6 +4,7 @@ using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskListQuery;
+using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Tasks;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -16,7 +17,7 @@ namespace Flow.Api.Controllers;
 /// каждый action задаёт свой полный путь явно.
 /// </summary>
 [ApiController]
-public class TasksController(IMediator mediator) : ControllerBase
+public class TasksController(IMediator mediator, IActorAccessor actor) : ControllerBase
 {
     [HttpPost("boards/{boardId:guid}/tasks")]
     public async Task<IActionResult> CreateTask(Guid boardId, CreateTaskRequest request, CancellationToken cancellationToken)
@@ -24,7 +25,7 @@ public class TasksController(IMediator mediator) : ControllerBase
         try
         {
             var response = await mediator.Send(
-                new TaskCreateCommand(boardId, request.Title, request.Description, request.StatusId),
+                new TaskCreateCommand(actor.Require(), boardId, request.Title, request.Description, request.StatusId),
                 cancellationToken);
 
             return response is null
@@ -57,7 +58,7 @@ public class TasksController(IMediator mediator) : ControllerBase
         try
         {
             var result = await mediator.Send(
-                new TaskUpdateCommand(id, request.Title, request.Description, request.StatusId),
+                new TaskUpdateCommand(actor.Require(), id, request.Title, request.Description, request.StatusId),
                 cancellationToken);
 
             if (result.IsNotFound)
@@ -78,7 +79,7 @@ public class TasksController(IMediator mediator) : ControllerBase
     [HttpPatch("tasks/{id:guid}/assignee")]
     public async Task<IActionResult> AssignTask(Guid id, AssignTaskRequest request, CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new TaskAssignCommand(id, request.UserId), cancellationToken);
+        var result = await mediator.Send(new TaskAssignCommand(actor.Require(), id, request.UserId), cancellationToken);
 
         if (result.IsNotFound)
             return NotFound();
@@ -92,7 +93,7 @@ public class TasksController(IMediator mediator) : ControllerBase
     [HttpDelete("tasks/{id:guid}")]
     public async Task<IActionResult> DeleteTask(Guid id, CancellationToken cancellationToken)
     {
-        var deleted = await mediator.Send(new TaskDeleteCommand(id), cancellationToken);
+        var deleted = await mediator.Send(new TaskDeleteCommand(actor.Require(), id), cancellationToken);
         return deleted ? NoContent() : NotFound();
     }
 }

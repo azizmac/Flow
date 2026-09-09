@@ -1,16 +1,21 @@
 using Flow.Application.Abstractions;
+using Flow.Application.Security;
 using MediatR;
 
 namespace Flow.Application.Features.Users.Commands.UserChangeUsernameCommand;
 
-internal sealed class UserChangeUsernameCommandHandler(IUserRepository users, IAccountService accounts, IUnitOfWork unitOfWork)
+internal sealed class UserChangeUsernameCommandHandler(IUserRepository users, ActorResolver actors, IPermissionService permissions, IAccountService accounts, IUnitOfWork unitOfWork)
     : IRequestHandler<UserChangeUsernameCommand, UserUpdateResult>
 {
     public async Task<UserUpdateResult> Handle(UserChangeUsernameCommand request, CancellationToken cancellationToken)
     {
-        var user = await users.GetByIdAsync(request.UserId, cancellationToken);
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
+
+        var user = actor.Id == request.UserId ? actor : await users.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
             return UserUpdateResult.NotFound();
+
+        permissions.EnsureCanEditCredentials(actor, user);
 
         // Нормализация (trim + lower) живёт в домене: применяем, чтобы узнать итоговое значение, и сразу откатываем —
         // проверять занятость и ходить в Flow.Auth надо до того, как копия в Users изменится.

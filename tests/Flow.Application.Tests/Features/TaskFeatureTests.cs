@@ -16,7 +16,7 @@ public class TaskFeatureTests
     private static async Task<BoardResponse> CreateBoardAsync(
         IMediator mediator, FakeBoardRepository boards, FakeTaskItemRepository tasks)
     {
-        var board = (await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None)).Response!;
+        var board = (await mediator.Send(new BoardCreateCommand(TestMediatorFactory.OwnerId, "Flow Project", "FLW"), CancellationToken.None)).Response!;
 
         // FakeTaskItemRepository.StatusBelongsToBoardAsync нужно явно "заселить" статусами доски,
         // т.к. в отличие от реального EF Core у фейка нет общей таблицы Statuses.
@@ -34,7 +34,7 @@ public class TaskFeatureTests
         var initialStatusId = board.Statuses.Single(s => s.IsInitial).Id;
 
         var response = await mediator.Send(
-            new TaskCreateCommand(board.Id, "Test task", "desc", null),
+            new TaskCreateCommand(TestMediatorFactory.OwnerId, board.Id, "Test task", "desc", null),
             CancellationToken.None);
 
         Assert.NotNull(response);
@@ -50,7 +50,7 @@ public class TaskFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
 
         var response = await mediator.Send(
-            new TaskCreateCommand(Guid.NewGuid(), "Test task", null, null),
+            new TaskCreateCommand(TestMediatorFactory.OwnerId, Guid.NewGuid(), "Test task", null, null),
             CancellationToken.None);
 
         Assert.Null(response);
@@ -62,8 +62,8 @@ public class TaskFeatureTests
         var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var board = await CreateBoardAsync(mediator, boards, tasks);
 
-        var first = await mediator.Send(new TaskCreateCommand(board.Id, "First", null, null), CancellationToken.None);
-        var second = await mediator.Send(new TaskCreateCommand(board.Id, "Second", null, null), CancellationToken.None);
+        var first = await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, board.Id, "First", null, null), CancellationToken.None);
+        var second = await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, board.Id, "Second", null, null), CancellationToken.None);
 
         Assert.Equal("FLW-1", first!.Code);
         Assert.Equal("FLW-2", second!.Code);
@@ -74,9 +74,9 @@ public class TaskFeatureTests
     {
         var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var boardA = await CreateBoardAsync(mediator, boards, tasks);
-        var boardB = (await mediator.Send(new BoardCreateCommand("Other board", "OTH"), CancellationToken.None)).Response!;
-        await mediator.Send(new TaskCreateCommand(boardA.Id, "Task A", null, null), CancellationToken.None);
-        await mediator.Send(new TaskCreateCommand(boardB.Id, "Task B", null, null), CancellationToken.None);
+        var boardB = (await mediator.Send(new BoardCreateCommand(TestMediatorFactory.OwnerId, "Other board", "OTH"), CancellationToken.None)).Response!;
+        await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, boardA.Id, "Task A", null, null), CancellationToken.None);
+        await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, boardB.Id, "Task B", null, null), CancellationToken.None);
 
         var boardATasks = await mediator.Send(new TaskListQuery(boardA.Id), CancellationToken.None);
 
@@ -89,10 +89,10 @@ public class TaskFeatureTests
     {
         var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var board = await CreateBoardAsync(mediator, boards, tasks);
-        var created = await mediator.Send(new TaskCreateCommand(board.Id, "Old title", null, null), CancellationToken.None);
+        var created = await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, board.Id, "Old title", null, null), CancellationToken.None);
 
         var result = await mediator.Send(
-            new TaskUpdateCommand(created!.Id, "New title", null, null),
+            new TaskUpdateCommand(TestMediatorFactory.OwnerId, created!.Id, "New title", null, null),
             CancellationToken.None);
 
         Assert.False(result.IsNotFound);
@@ -109,7 +109,7 @@ public class TaskFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
 
         var result = await mediator.Send(
-            new TaskUpdateCommand(Guid.NewGuid(), "New title", null, null),
+            new TaskUpdateCommand(TestMediatorFactory.OwnerId, Guid.NewGuid(), "New title", null, null),
             CancellationToken.None);
 
         Assert.True(result.IsNotFound);
@@ -120,15 +120,15 @@ public class TaskFeatureTests
     {
         var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var boardA = await CreateBoardAsync(mediator, boards, tasks);
-        var boardB = (await mediator.Send(new BoardCreateCommand("Other board", "OTH"), CancellationToken.None)).Response!;
+        var boardB = (await mediator.Send(new BoardCreateCommand(TestMediatorFactory.OwnerId, "Other board", "OTH"), CancellationToken.None)).Response!;
         var domainBoardB = await boards.GetByIdAsync(boardB.Id, CancellationToken.None);
         tasks.RegisterBoardStatuses(domainBoardB!);
 
-        var created = await mediator.Send(new TaskCreateCommand(boardA.Id, "Task A", null, null), CancellationToken.None);
+        var created = await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, boardA.Id, "Task A", null, null), CancellationToken.None);
         var foreignStatusId = boardB.Statuses[0].Id;
 
         var result = await mediator.Send(
-            new TaskUpdateCommand(created!.Id, null, null, foreignStatusId),
+            new TaskUpdateCommand(TestMediatorFactory.OwnerId, created!.Id, null, null, foreignStatusId),
             CancellationToken.None);
 
         Assert.False(result.IsNotFound);
@@ -141,11 +141,11 @@ public class TaskFeatureTests
     {
         var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var board = await CreateBoardAsync(mediator, boards, tasks);
-        var created = await mediator.Send(new TaskCreateCommand(board.Id, "Task", null, null), CancellationToken.None);
+        var created = await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, board.Id, "Task", null, null), CancellationToken.None);
         var doneStatusId = board.Statuses.Single(s => s.IsFinal).Id;
 
         var result = await mediator.Send(
-            new TaskUpdateCommand(created!.Id, null, null, doneStatusId),
+            new TaskUpdateCommand(TestMediatorFactory.OwnerId, created!.Id, null, null, doneStatusId),
             CancellationToken.None);
 
         Assert.Equal(doneStatusId, result.Response!.StatusId);
@@ -156,9 +156,9 @@ public class TaskFeatureTests
     {
         var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
         var board = await CreateBoardAsync(mediator, boards, tasks);
-        var created = await mediator.Send(new TaskCreateCommand(board.Id, "Task", null, null), CancellationToken.None);
+        var created = await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, board.Id, "Task", null, null), CancellationToken.None);
 
-        var deleted = await mediator.Send(new TaskDeleteCommand(created!.Id), CancellationToken.None);
+        var deleted = await mediator.Send(new TaskDeleteCommand(TestMediatorFactory.OwnerId, created!.Id), CancellationToken.None);
 
         Assert.True(deleted);
         var afterDelete = await mediator.Send(new TaskGetQuery(created.Id), CancellationToken.None);
@@ -170,7 +170,7 @@ public class TaskFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
 
-        var deleted = await mediator.Send(new TaskDeleteCommand(Guid.NewGuid()), CancellationToken.None);
+        var deleted = await mediator.Send(new TaskDeleteCommand(TestMediatorFactory.OwnerId, Guid.NewGuid()), CancellationToken.None);
 
         Assert.False(deleted);
     }
