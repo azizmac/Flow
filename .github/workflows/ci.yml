@@ -36,7 +36,7 @@ jobs:
       push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
       # Имя образа Auth — переменная AUTH_IMAGE_NAME (по умолчанию flow-auth рядом с IMAGE_NAME).
       image: ${{ vars.REGISTRY && format('{0}/{1}', vars.REGISTRY, vars.AUTH_IMAGE_NAME || 'flow-auth') || 'flow-auth' }}
-      dockerfile: Dockerfile.auth
+      dockerfile: src/Flow.Auth/Dockerfile
     secrets: inherit
 
   docker-client:
@@ -46,5 +46,5 @@ jobs:
     with:
       push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
       image: ${{ vars.REGISTRY && format('{0}/{1}', vars.REGISTRY, vars.CLIENT_IMAGE_NAME || 'flow-client') || 'flow-client' }}
-      dockerfile: Dockerfile.client
+      dockerfile: src/Flow.Client/Dockerfile
     secrets: inherit

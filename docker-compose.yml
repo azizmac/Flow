@@ -71,7 +71,7 @@ services:
   auth:
     build:
       context: .
-      dockerfile: Dockerfile.auth
+      dockerfile: src/Flow.Auth/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
@@ -106,7 +106,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: src/Flow.Api/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
@@ -139,7 +139,7 @@ services:
   client:
     build:
       context: .
-      dockerfile: Dockerfile.client
+      dockerfile: src/Flow.Client/Dockerfile
     restart: unless-stopped
     depends_on:
       api:

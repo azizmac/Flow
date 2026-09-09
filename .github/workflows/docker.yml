@@ -15,9 +15,9 @@ on:
         type: string
         default: flow-api
       dockerfile:
-        description: Dockerfile для сборки (Dockerfile — Flow.Api, Dockerfile.auth — Flow.Auth)
+        description: Dockerfile для сборки (src/Flow.Api|Flow.Auth|Flow.Client/Dockerfile)
         type: string
-        default: Dockerfile
+        default: src/Flow.Api/Dockerfile
 
 jobs:
   docker:
