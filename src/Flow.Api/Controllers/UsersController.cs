@@ -31,7 +31,7 @@ public class UsersController(IMediator mediator) : ControllerBase
         try
         {
             var result = await mediator.Send(
-                new UserCreateCommand(request.Username, request.Email, request.FirstName, request.LastName),
+                new UserCreateCommand(request.Username, request.Email, request.FirstName, request.LastName, request.Password ?? string.Empty),
                 cancellationToken);
 
             if (result.IsConflict)

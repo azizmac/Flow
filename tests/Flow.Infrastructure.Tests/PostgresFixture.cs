@@ -1,3 +1,4 @@
+using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
 using Flow.Infrastructure.DependencyInjection;
 using Flow.Infrastructure.Persistence;
@@ -36,6 +37,8 @@ public sealed class PostgresFixture : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddFlowInfrastructure(configuration);
         services.AddFlowApplication();
+        // В Flow.Auth эти тесты не ходят: учётные записи всегда «создаются» успешно.
+        services.AddSingleton<IAccountService, AlwaysSucceedingAccountService>();
         _services = services.BuildServiceProvider();
 
         await using var scope = _services.CreateAsyncScope();

@@ -79,9 +79,21 @@ public sealed partial class User
         CreatedAt = DateTime.UtcNow;
     }
 
-    /// <summary>Единственная публичная точка создания. Уникальность Username/Email между пользователями проверяет Application.</summary>
+    /// <summary>Основная точка создания. Уникальность Username/Email между пользователями проверяет Application.</summary>
     public static User Create(string username, string email, string firstName, string lastName)
         => new(username, email, firstName, lastName);
+
+    /// <summary>
+    /// Профиль с заранее известным Id — для базового пользователя, чью учётную запись с тем же Id создаёт Flow.Auth
+    /// (см. docs/TZ_auth.md). В остальных случаях Id генерирует <see cref="Create"/>.
+    /// </summary>
+    public static User CreateWithId(Guid id, string username, string email, string firstName, string lastName)
+    {
+        if (id == Guid.Empty)
+            throw new ArgumentException("User id must not be empty.", nameof(id));
+
+        return new User(username, email, firstName, lastName) { Id = id };
+    }
 
     public void ChangeUsername(string username) => Username = ValidateUsername(username);
 

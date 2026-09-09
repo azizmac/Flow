@@ -13,6 +13,9 @@
 
     <ItemGroup>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+        <!-- IAccountService → Flow.Auth по HTTP (IHttpClientFactory) и биндинг секции Auth. -->
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

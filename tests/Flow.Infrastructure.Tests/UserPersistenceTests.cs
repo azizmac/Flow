@@ -16,7 +16,7 @@ public class UserPersistenceTests(PostgresFixture db)
 {
     private async Task<UserResponse> CreateAsync(string username, string firstName = "Илья", string lastName = "Моторин")
     {
-        var result = await db.SendAsync(new UserCreateCommand(username, $"{username}@example.com", firstName, lastName));
+        var result = await db.SendAsync(new UserCreateCommand(username, $"{username}@example.com", firstName, lastName, "correct horse battery"));
         Assert.False(result.IsConflict);
         return result.Response!;
     }
@@ -66,7 +66,7 @@ public class UserPersistenceTests(PostgresFixture db)
         // Регрессия на будущее: дубликат не должен долетать до IX_Users_Username и превращаться в 500.
         await CreateAsync("dupuser");
 
-        var second = await db.SendAsync(new UserCreateCommand("DupUser", "another@example.com", "A", "B"));
+        var second = await db.SendAsync(new UserCreateCommand("DupUser", "another@example.com", "A", "B", "correct horse battery"));
 
         Assert.True(second.IsUsernameTaken);
         Assert.Equal(1, await db.QueryAsync(ctx => ctx.Users.CountAsync(u => u.Username == "dupuser")));
@@ -77,7 +77,7 @@ public class UserPersistenceTests(PostgresFixture db)
     {
         await CreateAsync("dupmail");
 
-        var second = await db.SendAsync(new UserCreateCommand("dupmail2", "DupMail@Example.com", "A", "B"));
+        var second = await db.SendAsync(new UserCreateCommand("dupmail2", "DupMail@Example.com", "A", "B", "correct horse battery"));
 
         Assert.True(second.IsEmailTaken);
     }

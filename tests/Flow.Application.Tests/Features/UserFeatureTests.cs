@@ -20,7 +20,7 @@ public class UserFeatureTests
 {
     private static async Task<UserResponse> CreateUserAsync(IMediator mediator, string username = "ilya", string email = "ilya@example.com")
     {
-        var result = await mediator.Send(new UserCreateCommand(username, email, "Илья", "Моторин"), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand(username, email, "Илья", "Моторин", "correct horse battery"), CancellationToken.None);
         Assert.False(result.IsConflict);
         return result.Response!;
     }
@@ -30,7 +30,7 @@ public class UserFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
 
-        var result = await mediator.Send(new UserCreateCommand(" Ilya ", " Ilya@Example.COM ", "Илья", "Моторин"), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand(" Ilya ", " Ilya@Example.COM ", "Илья", "Моторин", "correct horse battery"), CancellationToken.None);
 
         Assert.False(result.IsConflict);
         Assert.Equal("ilya", result.Response!.Username);
@@ -45,7 +45,7 @@ public class UserFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         await CreateUserAsync(mediator);
 
-        var result = await mediator.Send(new UserCreateCommand("ILYA", "other@example.com", "A", "B"), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand("ILYA", "other@example.com", "A", "B", "correct horse battery"), CancellationToken.None);
 
         Assert.True(result.IsUsernameTaken);
         Assert.False(result.IsEmailTaken);
@@ -58,7 +58,7 @@ public class UserFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         await CreateUserAsync(mediator);
 
-        var result = await mediator.Send(new UserCreateCommand("other", "ILYA@example.com", "A", "B"), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand("other", "ILYA@example.com", "A", "B", "correct horse battery"), CancellationToken.None);
 
         Assert.True(result.IsEmailTaken);
         Assert.Null(result.Response);
@@ -70,7 +70,7 @@ public class UserFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            mediator.Send(new UserCreateCommand("bad user!", "a@b.c", "A", "B"), CancellationToken.None));
+            mediator.Send(new UserCreateCommand("bad user!", "a@b.c", "A", "B", "correct horse battery"), CancellationToken.None));
     }
 
     [Fact]
@@ -231,7 +231,7 @@ public class UserFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         await CreateUserAsync(mediator, "ilya", "ilya@example.com");
-        await mediator.Send(new UserCreateCommand("aziz", "aziz@example.com", "Азиз", "Мамедов"), CancellationToken.None);
+        await mediator.Send(new UserCreateCommand("aziz", "aziz@example.com", "Азиз", "Мамедов", "correct horse battery"), CancellationToken.None);
 
         var byUsername = await mediator.Send(new UserSearchQuery("il"), CancellationToken.None);
         var byName = await mediator.Send(new UserSearchQuery("Мамед"), CancellationToken.None);

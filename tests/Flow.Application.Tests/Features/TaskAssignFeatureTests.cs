@@ -17,7 +17,7 @@ public class TaskAssignFeatureTests
     {
         var board = (await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None)).Response!;
         var task = (await mediator.Send(new TaskCreateCommand(board.Id, "Task", null, null), CancellationToken.None))!;
-        var user = (await mediator.Send(new UserCreateCommand("ilya", "ilya@example.com", "Илья", "Моторин"), CancellationToken.None)).Response!;
+        var user = (await mediator.Send(new UserCreateCommand("ilya", "ilya@example.com", "Илья", "Моторин", "correct horse battery"), CancellationToken.None)).Response!;
         return (board.Id, task, user);
     }
 

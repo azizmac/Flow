@@ -23,6 +23,21 @@ public class UserTests
         Assert.Empty(user.Links);
     }
 
+    [Fact]
+    public void CreateWithId_Should_UseGivenId_And_ValidateLikeCreate()
+    {
+        var id = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+        var user = User.CreateWithId(id, " Admin ", "Admin@Flow.com", "Admin", "Flow");
+
+        Assert.Equal(id, user.Id);
+        Assert.Equal("admin", user.Username);
+        Assert.Equal("admin@flow.com", user.Email);
+        Assert.True(user.IsActive);
+        Assert.Throws<ArgumentException>(() => User.CreateWithId(Guid.Empty, "admin", "admin@flow.com", "Admin", "Flow"));
+        Assert.Throws<ArgumentException>(() => User.CreateWithId(id, "bad user!", "admin@flow.com", "Admin", "Flow"));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

@@ -18,7 +18,7 @@ public class TaskAssigneePersistenceTests(PostgresFixture db)
         var board = (await db.SendAsync(new BoardCreateCommand("Assign", "ASG"))).Response!;
         var task = (await db.SendAsync(new TaskCreateCommand(board.Id, "Mine", null, null)))!;
         await db.SendAsync(new TaskCreateCommand(board.Id, "Nobody's", null, null));
-        var user = (await db.SendAsync(new UserCreateCommand("assignee", "assignee@example.com", "A", "B"))).Response!;
+        var user = (await db.SendAsync(new UserCreateCommand("assignee", "assignee@example.com", "A", "B", "correct horse battery"))).Response!;
 
         var result = await db.SendAsync(new TaskAssignCommand(task.Id, user.Id));
 
@@ -35,7 +35,7 @@ public class TaskAssigneePersistenceTests(PostgresFixture db)
         // FK TaskItems.AssigneeId → Users с Restrict: ещё одно подтверждение, что пользователей деактивируем, а не удаляем.
         var board = (await db.SendAsync(new BoardCreateCommand("Restrict", "RST"))).Response!;
         var task = (await db.SendAsync(new TaskCreateCommand(board.Id, "Held", null, null)))!;
-        var user = (await db.SendAsync(new UserCreateCommand("held.user", "held@example.com", "A", "B"))).Response!;
+        var user = (await db.SendAsync(new UserCreateCommand("held.user", "held@example.com", "A", "B", "correct horse battery"))).Response!;
         await db.SendAsync(new TaskAssignCommand(task.Id, user.Id));
 
         var ex = await Assert.ThrowsAsync<PostgresException>(() =>

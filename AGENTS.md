@@ -5,7 +5,7 @@
 Flow.Api           → контроллеры (только IMediator)
 Flow.Auth          → отдельный сервис аутентификации (:5100, база flow_auth): ASP.NET Core Identity + BCrypt, OpenIddict (code+PKCE, refresh, client_credentials), страница входа, admin-API /accounts. Ссылается только на Flow.Shared
 Flow.Shared        → DTO-контракты (Boards, Tasks, Users, Accounts) — общий
-Flow.Application   → Features/{Boards,Tasks,Users}/{Commands,Queries}/*, Abstractions (IBoardRepository, ITaskItemRepository, IUserRepository, IUnitOfWork)
+Flow.Application   → Features/{Boards,Tasks,Users,Bootstrap}/{Commands,Queries}/*, Abstractions (IBoardRepository, ITaskItemRepository, IUserRepository, IUnitOfWork, IAccountService), Exceptions (AuthUnavailableException)
 Flow.Domain        → сущности Board, Status, TaskItem, TaskCode, StatusType, DefaultStatuses, User, UserLink, UserLinkType
 Flow.Infrastructure→ EF Core (Postgres/Npgsql), репозитории, UnitOfWork, миграции
 Flow.Client        → Blazor WebAssembly: экраны «Проекты» (/boards) и «Задачи проекта» (/boards/{id}), страница задачи (/tasks/{id}); ходит в Flow.Api через Services/FlowApi
@@ -24,7 +24,9 @@ Shared намеренно **не ссылается** на Domain (свои enum
 - `User.Create(username, email, firstName, lastName)` — единственная точка создания; username/email нормализуются в lower, username `^[a-z0-9][a-z0-9._-]{0,30}[a-z0-9]$`.
 - Внешние ссылки — коллекция `UserLink` (`SetLink`/`RemoveLink`), не более одной на `UserLinkType`; телефон хранится в E.164 (`+79991234567`).
 - Удаления нет: `Deactivate()`/`Activate()` (`IsActive`, `DeactivatedAt`). Пароли/роли в домене отсутствуют намеренно.
-- Уникальность username/email: `UserCreate` → `UserCreateResult` (`IsUsernameTaken`/`IsEmailTaken` → 409); `UserChangeUsername`/`UserChangeEmail` → `UserUpdateResult.ConflictError` → 409; плюс unique-индексы в БД.
+- Учётная запись живёт в Flow.Auth (см. «Аутентификация»), профиль — здесь; связь по одному Guid. `UserCreate(…, Password)` сначала создаёт учётную запись через `IAccountService.CreateAsync(user.Id, …)`, и только при успехе — профиль; `UserChangeUsername`/`UserChangeEmail` — сначала Flow.Auth, потом копия в `Users` (нормализуют через домен, откатывают, проверяют, применяют — иначе Fake-репозиторий «находит» самого пользователя); `UserDeactivate`/`UserActivate` — `DisableAsync`/`EnableAsync` до смены статуса; `UserChangePassword(UserId, CurrentPassword?, NewPassword)` — только Flow.Auth. Отказ Flow.Auth по вводу → `ArgumentException` → 400, недоступность → `AuthUnavailableException` (502 — #24).
+- Уникальность username/email: локальная копия — быстрый 409 без похода в Flow.Auth (`UserCreateResult.IsUsernameTaken`/`IsEmailTaken`, `UserUpdateResult.ConflictError`); источник истины — Identity в Flow.Auth (`AccountResult.UsernameTaken/EmailTaken`); плюс unique-индексы в БД.
+- `Features/Bootstrap/SeedBootstrapUserCommand` — профиль базового пользователя с заданным Id (`User.CreateWithId`), Flow.Auth не вызывает (учётную запись с тем же Id сеет он сам); повтор — no-op. Запускается hosted service Flow.Api (#24). `UserGetMeQuery(ActorId)` — профиль текущего actor (null → 401).
 - Все изменяющие команды пользователя возвращают общий `Features/Users/UserUpdateResult` (NotFound | ConflictError | Success). `UserUpdateProfile` — PATCH-семантика: null не трогать, пустая строка очищает.
 - Назначение на задачу: `TaskItem.AssigneeId : Guid?`, `Assign`/`Unassign`; **назначать можно только активного пользователя** — проверяет `TaskAssignCommandHandler` (`TaskAssignResult`: NotFound | ValidationError | Success). `TaskListQuery(boardId, assigneeId?)` фильтрует по исполнителю.
 - `IUserRepository.SearchAsync` — автодополнение для `@` (ILIKE по Username/FirstName/LastName, только активные, `%`/`_` экранируются).
@@ -39,6 +41,7 @@ Shared намеренно **не ссылается** на Domain (свои enum
 - Старт: `Security/AuthDatabaseInitializer` — миграции → клиенты → bootstrap. Ключи: Development — dev-сертификаты OpenIddict; `Auth:UseEphemeralKeys` — тесты; иначе PFX из `Auth:SigningCertificate`/`Auth:EncryptionCertificate` (Docker: `sh docker/auth/make-certs.sh`). `Auth:AllowInsecureHttp` — http вне Development (локальный compose). `DataProtection:KeysPath` — persist ключей cookie/antiforgery в контейнере.
 - Страница входа `Pages/Account/Login` (логин = username или email); Razor настроен на `UnicodeRanges.All`, иначе кириллица уходит как `&#x...;`.
 - Миграции: `cd src/Flow.Auth && dotnet ef migrations add <Name> --output-dir Migrations` (design-time фабрика `Data/AuthDbContextFactory`, хост не поднимается).
+- Flow.Api → Flow.Auth: `Flow.Infrastructure/Auth/AuthAccountService : IAccountService` (typed HttpClient) + `ClientCredentialsTokenProvider` (singleton, кэш токена flow-api до exp−30с, повтор один раз после 401). Секция `Auth` в Flow.Api: `BaseUrl`, `ApiClient:ClientId/Secret`. Без настроек — `AuthUnavailableException` при первом вызове, не на старте.
 
 ## MediatR и DI
 - `AddFlowApplication()` регистрирует MediatR с reflection-сканированием сущности `Flow.Application` — хендлеры `internal`, commands/queries `public sealed record`.
@@ -91,8 +94,8 @@ Shared намеренно **не ссылается** на Domain (свои enum
 
 ## Тесты (xUnit)
 - `Flow.Domain.Tests` — юнит-тесты сущностей (Board, TaskItem, TaskCode, User).
-- `Flow.Application.Tests` — фичи с `Fakes/` (FakeBoardRepository, FakeTaskItemRepository, FakeUserRepository, FakeUnitOfWork) + `TestMediatorFactory`.
-- `Flow.Infrastructure.Tests` — интеграционные на реальном Postgres (Testcontainers, образ `postgres:16-alpine`): миграции, удаление доски с задачами, дубликат ключа, пользователи (ссылки, unique-индексы, поиск).
+- `Flow.Application.Tests` — фичи с `Fakes/` (FakeBoardRepository, FakeTaskItemRepository, FakeUserRepository, FakeAccountService, FakeUnitOfWork) + `TestMediatorFactory` (`Create()` — 4 фейка, `CreateWithAccounts()` — плюс FakeAccountService для ассертов на вызовы в Flow.Auth). `AccountFeatureTests` — связка Users ↔ Flow.Auth и bootstrap.
+- `Flow.Infrastructure.Tests` — интеграционные на реальном Postgres (Testcontainers, образ `postgres:16-alpine`): миграции, удаление доски с задачами, дубликат ключа, пользователи (ссылки, unique-индексы, поиск). `PostgresFixture` подменяет `IAccountService` на `AlwaysSucceedingAccountService` — в Flow.Auth не ходит. `AuthAccountServiceTests` — юнит-тесты HTTP-клиента admin-API на `HttpMessageHandler`-заглушке (маппинг 409/400/5xx, кэш токена, повтор после 401).
 - `Flow.Auth.Tests` — `WebApplicationFactory<Program>` + Testcontainers (`AuthFixture`, один хост на коллекцию, эфемерные ключи): discovery/JWKS, admin-API (401/409/400), BCrypt-хеш `$2a$12$`, lockout, disable, bootstrap-пользователь, полный code+PKCE → JWT → refresh. Страница входа проходится как браузером (`LoginPage`: antiforgery из HTML).
 
 ## Навигация
