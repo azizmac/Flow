@@ -1,0 +1,603 @@
+@* Экран «Профиль» (GET /users/{id}; адрес — по Id, а не по username: точка в username («ilya.motorin») выглядит
+   для хостинга как расширение файла и SPA-fallback на index.html не срабатывает) — по макету Profile.dc.html: шапка (аватар 64, имя,
+   статус-чип, должность · почта · телефон), вкладки «Профиль» / «Задачи».
+   Профиль: карточка «Личные данные» (PATCH /users/{id}, PATCH-семантика: пустая строка очищает поле),
+   «Аккаунт» (username и email — отдельные PATCH, 409 → ошибка под полем), справа — «Ссылки» (PUT/DELETE links/{type})
+   и «Это я» (профиль в футере сайдбара; auth в API нет). Задачи: назначенные на человека по всем проектам. *@
+@page "/users/{Id:guid}"
+@implements IDisposable
+@inject FlowApi Api
+@inject UserDirectory Users
+@inject NavigationManager Nav
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+@inject HotkeyService Hotkeys
+@inject AppState State
+
+<PageTitle>@(_user?.FullName ?? "Профиль") — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        <a class="topbar-back" href="users" title="К людям"><Icon Name="arrow-left" Size="18" /></a>
+        <div class="topbar-crumbs">
+            <a href="users">Люди</a><span>/</span>
+            <span class="code">@(_user is null ? "…" : "@" + _user.Username)</span>
+        </div>
+    </div>
+    <div class="topbar-right" style="gap:8px;">
+        @if (_user is not null)
+        {
+            <button type="button" class="icon-lnk" @onclick="CopyLink"><Icon Name="copy" Size="14" />Скопировать ссылку</button>
+            <UserMenu User="_user" Size="30" Style="color:rgba(255,255,255,0.5)" OnOpen="() => { }" OnCopy="CopyUsername" OnToggleActive="ToggleActive" />
+        }
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="content"><div class="meta-line">Загрузка…</div></div>
+}
+else if (_notFound)
+{
+    <div class="content">
+        <div class="empty">
+            <div class="empty-title">Такого человека нет</div>
+            <div>Профиль не найден.</div>
+            <a href="users">К людям</a>
+        </div>
+    </div>
+}
+else if (_loadError is not null)
+{
+    <div class="content">
+        <div class="empty">
+            <div class="empty-title">Не удалось загрузить профиль</div>
+            <div>@_loadError</div>
+            <DsButton Variant="secondary" Size="sm" OnClick="Load">Повторить</DsButton>
+        </div>
+    </div>
+}
+else if (_user is not null)
+{
+    <div class="content profile">
+        <div class="profile-head">
+            <Avatar User="_user" Size="64" />
+            <div class="profile-head-text">
+                <div class="profile-name-row">
+                    <h1 class="profile-name">@_user.FullName</h1>
+                    @if (_user.IsActive)
+                    {
+                        <span class="status-pill"><span class="sd" style="background:var(--sage)"></span>Активен</span>
+                    }
+                    else
+                    {
+                        <span class="status-pill"><span class="sd" style="background:rgba(255,255,255,0.35)"></span>Деактивирован</span>
+                    }
+                    @if (IsMe)
+                    {
+                        <span class="me-chip">это я</span>
+                    }
+                </div>
+                <div class="profile-sub">
+                    <span class="code accent">@@@_user.Username</span>
+                    @if (!string.IsNullOrEmpty(_user.JobTitle)) { <span class="dot">·</span><span>@_user.JobTitle</span> }
+                    <span class="dot">·</span><span>@_user.Email</span>
+                    @if (!string.IsNullOrEmpty(_user.PhoneNumber)) { <span class="dot">·</span><span>@_user.PhoneNumber</span> }
+                    <span class="dot">·</span><span>с @Ru.Date(_user.CreatedAt)</span>
+                </div>
+            </div>
+            <div class="profile-actions">
+                @if (_user.IsActive)
+                {
+                    <DsButton Variant="secondary" Size="sm" Icon="user-off" OnClick="ToggleActive" Busy="_toggling">Деактивировать</DsButton>
+                }
+                else
+                {
+                    <DsButton Variant="primary" Size="sm" Icon="check-circle" OnClick="ToggleActive" Busy="_toggling">Активировать</DsButton>
+                }
+            </div>
+        </div>
+
+        <div class="tabs" role="tablist">
+            <button type="button" class="tab @(Tab == "profile" ? "on" : "")" role="tab" @onclick="@(() => SetTab("profile"))">Профиль</button>
+            <button type="button" class="tab @(Tab == "tasks" ? "on" : "")" role="tab" @onclick="@(() => SetTab("tasks"))">
+                Задачи @if (_tasks is not null) { <span class="n">@_tasks.Count</span> }
+            </button>
+        </div>
+
+        @if (Tab == "tasks")
+        {
+            <div class="panel">
+                <div class="list-cols no-who list-head"><div>Код</div><div>Задача</div><div>Статус</div><div>Создана</div><div></div></div>
+                <div class="panel-rows">
+                    @if (_tasksLoading)
+                    {
+                        <div class="empty">Загрузка…</div>
+                    }
+                    else if (_tasks is null || _tasks.Count == 0)
+                    {
+                        <div class="empty">
+                            <div class="empty-title">Нет назначенных задач</div>
+                            <div>Назначить можно из списка задач проекта или со страницы задачи.</div>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var (board, task) in _tasks)
+                        {
+                            var st = board.Statuses.FirstOrDefault(s => s.Id == task.StatusId);
+                            <a class="task-row list-cols no-who @(st?.IsFinal == true ? "done" : "")" href="@($"tasks/{task.Id}")" @key="task.Id">
+                                <div class="code">@task.Code</div>
+                                <div class="task-cell-title">
+                                    <div class="task-title">@task.Title</div>
+                                    <div class="task-desc"><KeyChip Value="@board.Key" Style="font-size:9.5px;padding:2px 5px;margin-right:6px;" />@board.Name</div>
+                                </div>
+                                <div><span class="status-pill"><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span></div>
+                                <div class="task-date" title="@Ru.DateTimeFull(task.CreatedAt)">@Ru.DateShort(task.CreatedAt)</div>
+                                <div></div>
+                            </a>
+                        }
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="profile-grid">
+                <div class="profile-main">
+                    <div class="side-card">
+                        <div class="card-head">
+                            <div class="section-title">Личные данные</div>
+                            @if (IsDirty)
+                            {
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <span class="hint"><span class="kbd">Ctrl Enter</span> сохранить</span>
+                                    <button type="button" class="icon-lnk" @onclick="ResetForm">Отменить</button>
+                                    <DsButton Variant="primary" Size="sm" OnClick="SaveProfile" Busy="_saving">Сохранить</DsButton>
+                                </div>
+                            }
+                        </div>
+                        <div class="form-2col" @onkeydown="OnFormKey">
+                            <DsInput Label="Имя" Value="@_first" ValueChanged="v => _first = v" MaxLength="100" Error="@_firstError" />
+                            <DsInput Label="Фамилия" Value="@_last" ValueChanged="v => _last = v" MaxLength="100" Error="@_lastError" />
+                            <DsInput Label="Должность" Icon="briefcase" Placeholder="Backend-разработчик" Value="@_job" ValueChanged="v => _job = v" MaxLength="100" />
+                            <DsInput Label="Телефон" Icon="phone" Placeholder="+7 999 123-45-67" Value="@_phone" ValueChanged="v => _phone = v" MaxLength="30" Error="@_phoneError" />
+                        </div>
+                        <div @onkeydown="OnFormKey">
+                            <DsInput Label="Аватар (URL)" Icon="link" Placeholder="https://…/avatar.png" Value="@_avatar" ValueChanged="v => _avatar = v" MaxLength="500" Error="@_avatarError" />
+                        </div>
+                        <div class="ds-field" @onkeydown="OnFormKey">
+                            <span class="ds-field-label">О себе</span>
+                            <textarea class="desc-edit soft" rows="3" maxlength="1000" placeholder="Зона ответственности, чем можно помочь, как лучше писать…"
+                                      value="@_bio" @oninput="e => _bio = e.Value?.ToString() ?? string.Empty"></textarea>
+                        </div>
+                        @if (_formError is not null)
+                        {
+                            <div class="ds-field-error">@_formError</div>
+                        }
+                    </div>
+
+                    <div class="side-card">
+                        <div class="section-title">Аккаунт</div>
+                        <div class="hint">Username и почта уникальны — меняются отдельно и могут быть заняты другим человеком.</div>
+                        <div class="form-2col">
+                            <div class="account-field" @onkeydown="OnUsernameKey">
+                                <DsInput Label="Username" Icon="at" Value="@_username" ValueChanged="OnUsernameInput" MaxLength="32" Error="@_usernameError" />
+                                @if (_username != _user.Username)
+                                {
+                                    <DsButton Variant="secondary" Size="sm" OnClick="SaveUsername" Busy="_savingUsername" Disabled="!Ru.UsernamePattern().IsMatch(_username)">Сменить</DsButton>
+                                }
+                            </div>
+                            <div class="account-field" @onkeydown="OnEmailKey">
+                                <DsInput Label="Почта" Icon="mail" Type="email" Value="@_email" ValueChanged="v => { _email = v; _emailError = null; }" MaxLength="254" Error="@_emailError" />
+                                @if (_email.Trim() != _user.Email)
+                                {
+                                    <DsButton Variant="secondary" Size="sm" OnClick="SaveEmail" Busy="_savingEmail" Disabled="_email.Trim().Length == 0">Сменить</DsButton>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="profile-side">
+                    <div class="side-card">
+                        <div class="card-head">
+                            <div class="section-title">Ссылки</div>
+                            @if (FreeLinkTypes.Count > 0 && _linkType is null)
+                            {
+                                <button type="button" class="icon-lnk" @onclick="() => StartLink(FreeLinkTypes[0])"><Icon Name="plus" Size="13" />Добавить</button>
+                            }
+                        </div>
+                        @if (_user.Links.Count == 0 && _linkType is null)
+                        {
+                            <div class="hint">GitHub, Telegram, LinkedIn, сайт — не больше одной ссылки каждого типа.</div>
+                        }
+                        <div class="link-list">
+                            @foreach (var l in _user.Links.OrderBy(x => Array.IndexOf(UserLinks.Order, x.Type)))
+                            {
+                                <div class="link-row" @key="l.Type">
+                                    <span class="link-type">@UserLinks.Label(l.Type)</span>
+                                    <a class="link-url" href="@l.Url" target="_blank" rel="noopener noreferrer" title="@l.Url">@UserLinks.Short(l.Url)</a>
+                                    <DsIconButton Icon="edit" Size="24" Title="Изменить" Style="color:rgba(255,255,255,0.4)" OnClick="() => StartLink(l.Type, l.Url)" />
+                                    <DsIconButton Icon="close-simple" Size="24" Title="Удалить" Style="color:rgba(255,255,255,0.4)" OnClick="() => RemoveLink(l.Type)" />
+                                </div>
+                            }
+                        </div>
+                        @if (_linkType is { } lt)
+                        {
+                            <div class="link-edit" @onkeydown="OnLinkKey">
+                                <div class="seg" style="align-self:flex-start;">
+                                    @foreach (var t in UserLinks.Order)
+                                    {
+                                        var taken = t != _linkEditingType && _user.Links.Any(x => x.Type == t);
+                                        <button type="button" class="seg-btn @(t == lt ? "on" : "")" disabled="@taken" @onclick="() => _linkType = t">@UserLinks.Label(t)</button>
+                                    }
+                                </div>
+                                <DsInput Id="link-url" Icon="link" Placeholder="https://github.com/username" Value="@_linkUrl" ValueChanged="v => { _linkUrl = v; _linkError = null; }" MaxLength="500" Error="@_linkError" />
+                                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                                    <DsButton Variant="secondary" Size="sm" OnClick="CancelLink" Disabled="_savingLink">Отмена</DsButton>
+                                    <DsButton Variant="primary" Size="sm" OnClick="SaveLink" Busy="_savingLink" Disabled="!LinkLooksValid">Сохранить</DsButton>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="side-card">
+                        <div class="section-title">Это я</div>
+                        @if (IsMe)
+                        {
+                            <div class="hint">Профиль показывается в футере сайдбара на этом устройстве.</div>
+                            <DsButton Variant="secondary" Size="sm" OnClick="() => SetMe(false)">Это не я</DsButton>
+                        }
+                        else
+                        {
+                            <div class="hint">Входа в API пока нет: отметьте свой профиль — он появится в сайдбаре.</div>
+                            <DsButton Variant="secondary" Size="sm" Icon="user" OnClick="() => SetMe(true)" Disabled="!_user.IsActive">Это я</DsButton>
+                        }
+                    </div>
+
+                    <div class="side-card">
+                        <div class="meta-grid narrow">
+                            <div class="meta-k">Создан</div>
+                            <div class="meta-v">@Ru.DateTimeFull(_user.CreatedAt)</div>
+                            <div class="meta-k">ID</div>
+                            <div class="meta-v mono" title="Скопировать ID" @onclick="CopyId">@_user.Id</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tab")] public string? TabParam { get; set; }
+
+    private UserResponse? _user;
+    private Guid _loadedId;
+    private bool _loading = true;
+    private bool _notFound;
+    private string? _loadError;
+    private bool _toggling;
+    private IDisposable? _hotkeys;
+
+    // личные данные
+    private string _first = "", _last = "", _job = "", _phone = "", _avatar = "", _bio = "";
+    private string? _firstError, _lastError, _phoneError, _avatarError, _formError;
+    private bool _saving;
+
+    // аккаунт
+    private string _username = "", _email = "";
+    private string? _usernameError, _emailError;
+    private bool _savingUsername, _savingEmail;
+
+    // ссылки
+    private UserLinkType? _linkType;
+    private UserLinkType? _linkEditingType;
+    private string _linkUrl = "";
+    private string? _linkError;
+    private bool _savingLink;
+
+    // задачи
+    private List<(BoardResponse Board, TaskResponse Task)>? _tasks;
+    private bool _tasksLoading;
+
+    private string Tab => TabParam == "tasks" ? "tasks" : "profile";
+
+    private bool IsMe => _user is not null && State.CurrentUserId == _user.Id;
+
+    private bool IsDirty => _user is not null && (
+        _first.Trim() != _user.FirstName || _last.Trim() != _user.LastName
+        || _job.Trim() != (_user.JobTitle ?? "") || _phone.Trim() != (_user.PhoneNumber ?? "")
+        || _avatar.Trim() != (_user.AvatarUrl ?? "") || _bio.TrimEnd() != (_user.Bio ?? ""));
+
+    private List<UserLinkType> FreeLinkTypes => _user is null
+        ? []
+        : UserLinks.Order.Where(t => _user.Links.All(l => l.Type != t)).ToList();
+
+    private bool LinkLooksValid => Uri.TryCreate(_linkUrl.Trim(), UriKind.Absolute, out var u) && u.Scheme is "http" or "https";
+
+    protected override void OnInitialized()
+    {
+        Users.Changed += OnUsersChanged;
+        _hotkeys = Hotkeys.Subscribe(async e =>
+        {
+            if (e.Key == "Enter" && e.Ctrl && IsDirty && Tab == "profile") { e.Handled = true; await SaveProfile(); StateHasChanged(); }
+        });
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId != Id)
+        {
+            _loadedId = Id;
+            await Load();
+        }
+
+        if (Tab == "tasks" && _tasks is null && _user is not null && !_tasksLoading)
+            await LoadTasks();
+    }
+
+    private void OnUsersChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task Load()
+    {
+        _loading = true;
+        _notFound = false;
+        _loadError = null;
+        _tasks = null;
+
+        var result = await Api.GetUser(Id);
+        _loading = false;
+
+        if (result.NotFound) { _notFound = true; _user = null; return; }
+        if (!result.Ok) { _loadError = result.Error; return; }
+
+        Apply(result.Value!);
+        // Справочник нужен футеру сайдбара и селектам исполнителя — подгружаем фоном, если ещё не загружен.
+        if (!Users.IsLoaded) _ = Users.EnsureLoadedAsync();
+    }
+
+    /// <summary>Обновлённый профиль → форма и справочник; username в URL мог измениться.</summary>
+    private void Apply(UserResponse u)
+    {
+        _user = u;
+        Users.Put(u);
+        ResetForm();
+        _username = u.Username;
+        _email = u.Email;
+        _usernameError = null;
+        _emailError = null;
+    }
+
+    private void ResetForm()
+    {
+        if (_user is null) return;
+        _first = _user.FirstName;
+        _last = _user.LastName;
+        _job = _user.JobTitle ?? "";
+        _phone = _user.PhoneNumber ?? "";
+        _avatar = _user.AvatarUrl ?? "";
+        _bio = _user.Bio ?? "";
+        _firstError = _lastError = _phoneError = _avatarError = _formError = null;
+    }
+
+    private void SetTab(string tab) =>
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("tab", tab == "profile" ? null : tab), replace: true);
+
+    private async Task LoadTasks()
+    {
+        if (_user is null) return;
+        _tasksLoading = true;
+        var boards = await Api.GetBoards();
+        var list = new List<(BoardResponse, TaskResponse)>();
+        if (boards.Ok)
+        {
+            // GET /boards/{id}/tasks?assigneeId= по каждому проекту — проектов немного, зато без нового эндпоинта.
+            var calls = boards.Value!.Select(b => (b, Api.GetTasks(b.Id, _user.Id))).ToList();
+            await Task.WhenAll(calls.Select(c => c.Item2));
+            foreach (var (b, t) in calls)
+                if (t.Result.Ok)
+                    list.AddRange(t.Result.Value!.Select(x => (b, x)));
+        }
+        else
+        {
+            Toasts.Error(boards.Error ?? "Не удалось загрузить задачи");
+        }
+
+        _tasks = list.OrderByDescending(x => x.Item2.CreatedAt).ToList();
+        _tasksLoading = false;
+    }
+
+    // ---- личные данные ----
+
+    private async Task OnFormKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && (e.CtrlKey || e.MetaKey) && IsDirty) await SaveProfile();
+    }
+
+    private async Task SaveProfile()
+    {
+        if (_user is null || _saving || !IsDirty) return;
+        _firstError = _first.Trim().Length == 0 ? "Имя обязательно" : null;
+        _lastError = _last.Trim().Length == 0 ? "Фамилия обязательна" : null;
+        var phone = _phone.Trim();
+        _phoneError = phone.Length > 0 && !Ru.PhonePattern().IsMatch(NormalizePhone(phone)) ? "Формат: +7 999 123-45-67" : null;
+        var avatar = _avatar.Trim();
+        _avatarError = avatar.Length > 0 && !(Uri.TryCreate(avatar, UriKind.Absolute, out var au) && au.Scheme is "http" or "https") ? "Нужен абсолютный http(s)-адрес" : null;
+        if (_firstError is not null || _lastError is not null || _phoneError is not null || _avatarError is not null) return;
+
+        _saving = true;
+        _formError = null;
+        // PATCH: null — не трогать, "" — очистить. Отправляем только изменённое.
+        var req = new UpdateUserProfileRequest(
+            _first.Trim() != _user.FirstName ? _first.Trim() : null,
+            _last.Trim() != _user.LastName ? _last.Trim() : null,
+            _job.Trim() != (_user.JobTitle ?? "") ? _job.Trim() : null,
+            _bio.TrimEnd() != (_user.Bio ?? "") ? _bio.TrimEnd() : null,
+            phone != (_user.PhoneNumber ?? "") ? phone : null,
+            avatar != (_user.AvatarUrl ?? "") ? avatar : null);
+        var result = await Api.UpdateUserProfile(_user.Id, req);
+        _saving = false;
+
+        if (!result.Ok) { _formError = result.Error; return; }
+        Apply(result.Value!);
+        Toasts.Ok("Профиль сохранён");
+    }
+
+    private static string NormalizePhone(string s) => new(s.Where(c => c is not (' ' or '-' or '(' or ')')).ToArray());
+
+    // ---- аккаунт ----
+
+    private void OnUsernameInput(string v)
+    {
+        _username = v.Trim().ToLowerInvariant();
+        _usernameError = _username.Length > 0 && !Ru.UsernamePattern().IsMatch(_username) ? Ru.UsernameRule : null;
+    }
+
+    private async Task OnUsernameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveUsername();
+        else if (e.Key == "Escape") { _username = _user!.Username; _usernameError = null; }
+    }
+
+    private async Task SaveUsername()
+    {
+        if (_user is null || _savingUsername || _username == _user.Username || !Ru.UsernamePattern().IsMatch(_username)) return;
+        _savingUsername = true;
+        var result = await Api.ChangeUsername(_user.Id, new ChangeUsernameRequest(_username));
+        _savingUsername = false;
+        if (!result.Ok)
+        {
+            _usernameError = result.Conflict ? "Username уже занят" : result.Error;
+            return;
+        }
+
+        Apply(result.Value!);
+        Toasts.Ok($"Теперь @{_user!.Username}");
+    }
+
+    private async Task OnEmailKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveEmail();
+        else if (e.Key == "Escape") { _email = _user!.Email; _emailError = null; }
+    }
+
+    private async Task SaveEmail()
+    {
+        if (_user is null || _savingEmail || _email.Trim() == _user.Email || _email.Trim().Length == 0) return;
+        _savingEmail = true;
+        var result = await Api.ChangeEmail(_user.Id, new ChangeEmailRequest(_email.Trim()));
+        _savingEmail = false;
+        if (!result.Ok)
+        {
+            _emailError = result.Conflict ? "Почта уже занята" : result.Error;
+            return;
+        }
+
+        Apply(result.Value!);
+        Toasts.Ok("Почта изменена");
+    }
+
+    // ---- ссылки ----
+
+    private async Task StartLink(UserLinkType type, string url = "")
+    {
+        _linkType = type;
+        _linkEditingType = url.Length > 0 ? type : null;
+        _linkUrl = url;
+        _linkError = null;
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync("link-url");
+    }
+
+    private void CancelLink() { _linkType = null; _linkEditingType = null; _linkUrl = ""; _linkError = null; }
+
+    private async Task OnLinkKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveLink();
+        else if (e.Key == "Escape") CancelLink();
+    }
+
+    private async Task SaveLink()
+    {
+        if (_user is null || _linkType is not { } type || _savingLink || !LinkLooksValid) return;
+        _savingLink = true;
+        var result = await Api.SetUserLink(_user.Id, type, new SetUserLinkRequest(_linkUrl.Trim()));
+        _savingLink = false;
+        if (!result.Ok) { _linkError = result.Error; return; }
+
+        // Смена типа при редактировании = новая ссылка; старую убираем, чтобы не осталось двух.
+        if (_linkEditingType is { } old && old != type)
+            await Api.RemoveUserLink(_user.Id, old);
+        var fresh = _linkEditingType is { } o && o != type ? await Api.GetUser(_user.Id) : result;
+        Apply(fresh.Ok ? fresh.Value! : result.Value!);
+        CancelLink();
+        Toasts.Ok("Ссылка сохранена");
+    }
+
+    private async Task RemoveLink(UserLinkType type)
+    {
+        if (_user is null) return;
+        var result = await Api.RemoveUserLink(_user.Id, type);
+        if (!result.Ok) { Toasts.Error(result.Error ?? "Не удалось удалить ссылку"); return; }
+        var fresh = await Api.GetUser(_user.Id);
+        if (fresh.Ok) Apply(fresh.Value!);
+        Toasts.Ok($"{UserLinks.Label(type)}: ссылка удалена");
+    }
+
+    // ---- статус / это я / копирование ----
+
+    private async Task ToggleActive()
+    {
+        if (_user is null || _toggling) return;
+        _toggling = true;
+        var result = _user.IsActive ? await Api.DeactivateUser(_user.Id) : await Api.ActivateUser(_user.Id);
+        if (!result.Ok)
+        {
+            _toggling = false;
+            Toasts.Error(result.Error ?? "Не удалось изменить статус");
+            return;
+        }
+
+        var fresh = await Api.GetUser(_user.Id);
+        _toggling = false;
+        if (fresh.Ok) Apply(fresh.Value!);
+        if (_user is { IsActive: false } && IsMe) await SetMe(false);
+        Toasts.Ok(_user!.IsActive ? $"{_user.FullName} снова активен" : $"{_user.FullName} деактивирован");
+    }
+
+    private async Task SetMe(bool me)
+    {
+        if (_user is null) return;
+        State.SetCurrentUser(me ? _user.Id : null);
+        await Browser.StorageSetAsync("flow.me", me ? _user.Id.ToString() : null);
+    }
+
+    private async Task CopyUsername()
+    {
+        if (await Browser.CopyAsync("@" + _user!.Username)) Toasts.Ok($"Скопировано: @{_user.Username}");
+        else Toasts.Error("Не удалось скопировать");
+    }
+
+    private async Task CopyLink()
+    {
+        if (await Browser.CopyAsync(Nav.Uri)) Toasts.Ok("Ссылка скопирована");
+        else Toasts.Error("Не удалось скопировать");
+    }
+
+    private async Task CopyId()
+    {
+        if (await Browser.CopyAsync(_user!.Id.ToString())) Toasts.Ok("ID скопирован");
+        else Toasts.Error("Не удалось скопировать");
+    }
+
+    public void Dispose()
+    {
+        Users.Changed -= OnUsersChanged;
+        _hotkeys?.Dispose();
+    }
+}

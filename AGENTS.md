@@ -7,7 +7,7 @@ Flow.Shared        → DTO-контракты (Boards, Tasks, Users) — общ�
 Flow.Application   → Features/{Boards,Tasks,Users}/{Commands,Queries}/*, Abstractions (IBoardRepository, ITaskItemRepository, IUserRepository, IUnitOfWork)
 Flow.Domain        → сущности Board, Status, TaskItem, TaskCode, StatusType, DefaultStatuses, User, UserLink, UserLinkType
 Flow.Infrastructure→ EF Core (Postgres/Npgsql), репозитории, UnitOfWork, миграции
-Flow.Client        → Blazor WebAssembly: экраны «Проекты» (/boards) и «Задачи проекта» (/boards/{id}), страница задачи (/tasks/{id}); ходит в Flow.Api через Services/FlowApi
+Flow.Client        → Blazor WebAssembly: экраны «Проекты» (/boards), «Задачи проекта» (/boards/{id}), задача (/tasks/{id}), «Люди» (/users), профиль (/users/{id}); ходит в Flow.Api через Services/FlowApi
 ```
 Зависимости: Domain ← Application ← Infrastructure ← Api.
 Shared намеренно **не ссылается** на Domain (свои enum `StatusType`, `UserLinkType`).
@@ -76,7 +76,9 @@ Shared намеренно **не ссылается** на Domain (свои enum
 - Доменные ошибки → `ArgumentException` / `InvalidOperationException` (не `DomainException`, не `Result`).
 - `TaskCode` — value object, в БД хранится как string (EF value converter).
 - `Status.SortOrder`: автоинкремент при добавлении, не редактируется, только для `ORDER BY`.
-- Blazor Client: Board в UI называется «проект», задачи — плоский список со статусом в строке (не канбан). DTO только из Flow.Shared, ничего не дублировать. Стили — DRESSY-токены (`wwwroot/css/tokens.css`) + классы из макета (`app.css`); иконки — DRESSY-глифы в `Components/DressyIcons.cs`. Даты/склонения — `Services/Ru.cs` (InvariantGlobalization включён). Адрес API — `wwwroot/appsettings.json` → `ApiBaseUrl`; в `Flow.Api` CORS-origins клиента — `Cors:Origins`.
+- Blazor Client: Board в UI называется «проект», задачи — плоский список со статусом и исполнителем в строке (не канбан). DTO только из Flow.Shared, ничего не дублировать. Стили — DRESSY-токены (`wwwroot/css/tokens.css`) + классы из макета (`app.css`); иконки — DRESSY-глифы в `Components/DressyIcons.cs` (плюс контурные `user`, `user-plus`, `user-off`, `at`, `mail`, `phone`, `link`, `briefcase`, `check-circle`, `external` для раздела «Люди»). Даты/склонения/username-транслит — `Services/Ru.cs` (InvariantGlobalization включён). Адрес API — `wwwroot/appsettings.json` → `ApiBaseUrl`; в `Flow.Api` CORS-origins клиента — `Cors:Origins`.
+- Blazor Client, пользователи: справочник `Services/UserDirectory` (один `GET /users?includeInactive=true` на сессию, `Find(id)`, `Put(user)` после изменений, событие `Changed`) — строки задач берут аватар исполнителя из него, а не через `GET /users/{id}`. Аватар — `Components/Avatar` (картинка или инициалы на тинте по Id, `Services/Avatars`). Выбор исполнителя — `AssigneeSelect` (поповер с локальным фильтром по активным), фильтр списка — `AssigneeFilter` (`?who=<guid>|none`), карточка по клику — `UserCard`. «Это я» (профиль в футере сайдбара) — `AppState.CurrentUserId` ↔ localStorage `flow.me`, аутентификации в API нет. Макеты: артефакт Claude Design «Flow CRM» (Profile.dc.html → страница профиля), перенесены в тёмную тему Flow.
+- Motion (по emilkowalski/skills, `emil-design-eng`): анимируем только transform/opacity, кривые из `tokens.css` (`--ease-out`, `--ease-drawer`), UI ≤ 300ms, press-feedback `scale(.97)`, поповеры от якоря (`transform-origin`), hover только под `(hover: hover) and (pointer: fine)`, `prefers-reduced-motion` снимает transform-движение. Хоткеи (N, Esc, ↑/↓) — без анимаций.
 
 ## Тесты (xUnit)
 - `Flow.Domain.Tests` — юнит-тесты сущностей (Board, TaskItem, TaskCode, User).

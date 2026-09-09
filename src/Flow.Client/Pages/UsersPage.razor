@@ -1,0 +1,209 @@
+@* Экран «Люди» (GET /users?includeInactive=): список профилей — аватар, имя + @username, должность, почта,
+   статус, меню «…». Клик → /users/{id}. «Добавить» — модалка нового человека (хоткей N).
+   Деактивированные скрыты за переключателем (их нельзя назначать, но история за ними остаётся). *@
+@page "/users"
+@implements IDisposable
+@inject FlowApi Api
+@inject UserDirectory Directory
+@inject NavigationManager Nav
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+@inject HotkeyService Hotkeys
+@inject AppState State
+
+<PageTitle>Люди — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left"><h2>Люди</h2></div>
+    <div class="topbar-right">
+        <label class="search">
+            <Icon Name="search" Size="16" />
+            <input placeholder="Имя, @@username или почта..." value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
+        </label>
+        <DsButton Variant="primary" Size="md" Icon="user-plus" OnClick="OpenCreate">Добавить</DsButton>
+    </div>
+</div>
+
+<div class="content no-scroll">
+    @if (_loading)
+    {
+        <div class="meta-line">Загрузка…</div>
+    }
+    else if (_loadError is not null)
+    {
+        <div class="empty">
+            <div class="empty-title">Не удалось загрузить людей</div>
+            <div>@_loadError</div>
+            <DsButton Variant="secondary" Size="sm" OnClick="Load">Повторить</DsButton>
+        </div>
+    }
+    else
+    {
+        <div class="filter-row">
+            <div class="seg" role="tablist">
+                <button type="button" class="seg-btn @(!_showInactive ? "on" : "")" role="tab" @onclick="() => _showInactive = false">
+                    Активные <span class="n">@ActiveCount</span>
+                </button>
+                <button type="button" class="seg-btn @(_showInactive ? "on" : "")" role="tab" @onclick="() => _showInactive = true">
+                    Все <span class="n">@Directory.All.Count</span>
+                </button>
+            </div>
+            <div class="meta-line">@Ru.People(Visible.Count)@(HasSearch ? " найдено" : "")</div>
+        </div>
+
+        <div class="panel">
+            <div class="user-cols list-head"><div></div><div>Человек</div><div>Должность</div><div>Почта</div><div>Статус</div><div></div></div>
+            <div class="panel-rows">
+                @if (Directory.All.Count == 0)
+                {
+                    <div class="empty">
+                        <div class="empty-title">Пока никого нет</div>
+                        <div>Добавьте первого человека — его можно будет назначать на задачи и упоминать через <span class="code accent">@@username</span></div>
+                        <DsButton Variant="primary" Size="sm" Icon="user-plus" OnClick="OpenCreate">Добавить человека</DsButton>
+                    </div>
+                }
+                else if (Visible.Count == 0)
+                {
+                    <div class="empty">
+                        <div class="empty-title">Никого не найдено</div>
+                        <button type="button" class="icon-lnk" @onclick="() => _search = string.Empty">Сбросить поиск</button>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var u in Visible)
+                    {
+                        <div class="user-row user-cols @(u.IsActive ? "" : "off") @(_flashId == u.Id ? "flash" : "")" @key="u.Id" id="@("user-" + u.Id.ToString("N"))" @onclick="() => Open(u)">
+                            <div><Avatar User="u" Size="30" /></div>
+                            <div class="user-cell-name">
+                                <div class="user-name">@u.FullName @if (State.CurrentUserId == u.Id) { <span class="me-chip">это я</span> }</div>
+                                <div class="user-un">@@@u.Username</div>
+                            </div>
+                            <div class="user-job">@(string.IsNullOrEmpty(u.JobTitle) ? "—" : u.JobTitle)</div>
+                            <div class="user-mail" title="@u.Email">@u.Email</div>
+                            <div>
+                                @if (u.IsActive)
+                                {
+                                    <span class="status-pill"><span class="sd" style="background:var(--sage)"></span>Активен</span>
+                                }
+                                else
+                                {
+                                    <span class="status-pill"><span class="sd" style="background:rgba(255,255,255,0.35)"></span>Деактивирован</span>
+                                }
+                            </div>
+                            <div>
+                                <UserMenu User="u" OnOpen="() => Open(u)" OnCopy="() => CopyUsername(u)" OnToggleActive="() => ToggleActive(u)" />
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@if (_createOpen)
+{
+    <CreateUserDialog OnCreated="OnCreated" OnCancel="() => _createOpen = false" />
+}
+
+@code {
+    private bool _loading = true;
+    private string? _loadError;
+    private string _search = "";
+    private bool _showInactive;
+    private bool _createOpen;
+    private Guid? _flashId;
+    private IDisposable? _hotkeys;
+
+    private bool HasSearch => _search.Trim().Length > 0;
+
+    private int ActiveCount => Directory.All.Count(u => u.IsActive);
+
+    private List<UserResponse> Visible
+    {
+        get
+        {
+            IEnumerable<UserResponse> q = _showInactive ? Directory.All : Directory.All.Where(u => u.IsActive);
+            var s = _search.Trim().TrimStart('@');
+            if (s.Length > 0)
+                q = q.Where(u => u.FullName.Contains(s, StringComparison.OrdinalIgnoreCase)
+                                 || u.Username.Contains(s, StringComparison.OrdinalIgnoreCase)
+                                 || u.Email.Contains(s, StringComparison.OrdinalIgnoreCase)
+                                 || (u.JobTitle?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false));
+            return q.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Directory.Changed += OnUsersChanged;
+        _hotkeys = Hotkeys.Subscribe(e =>
+        {
+            if (!e.InEditable && !e.Ctrl && e.Key is "n" or "N" or "т" or "Т" && !_createOpen)
+            {
+                e.Handled = true;
+                _createOpen = true;
+                StateHasChanged();
+            }
+            return Task.CompletedTask;
+        });
+
+        await Load();
+    }
+
+    private void OnUsersChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task Load()
+    {
+        _loading = true;
+        _loadError = null;
+        var result = await Directory.EnsureLoadedAsync(force: true);
+        _loading = false;
+        if (!result.Ok)
+            _loadError = result.Error;
+    }
+
+    private void OpenCreate() => _createOpen = true;
+
+    private void Open(UserResponse u) => Nav.NavigateTo($"users/{u.Id}");
+
+    private async Task OnCreated(UserResponse u)
+    {
+        _createOpen = false;
+        Directory.Put(u);
+        Toasts.Ok($"{u.FullName} добавлен — @{u.Username}");
+        _flashId = u.Id;
+        StateHasChanged();
+        await Browser.ScrollIntoViewAsync("user-" + u.Id.ToString("N"));
+        await Task.Delay(1500);
+        if (_flashId == u.Id) _flashId = null;
+    }
+
+    private async Task CopyUsername(UserResponse u)
+    {
+        if (await Browser.CopyAsync("@" + u.Username)) Toasts.Ok($"Скопировано: @{u.Username}");
+        else Toasts.Error("Не удалось скопировать");
+    }
+
+    private async Task ToggleActive(UserResponse u)
+    {
+        var result = u.IsActive ? await Api.DeactivateUser(u.Id) : await Api.ActivateUser(u.Id);
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось изменить статус");
+            return;
+        }
+
+        // 204 без тела — перечитываем профиль, чтобы справочник и строка были свежими.
+        var fresh = await Api.GetUser(u.Id);
+        if (fresh.Ok) Directory.Put(fresh.Value!);
+        Toasts.Ok(u.IsActive ? $"{u.FullName} деактивирован" : $"{u.FullName} снова активен");
+    }
+
+    public void Dispose()
+    {
+        Directory.Changed -= OnUsersChanged;
+        _hotkeys?.Dispose();
+    }
+}

@@ -1,0 +1,80 @@
+@* Фильтр списка задач по исполнителю: триггер-пилюля («Все исполнители» / аватар + имя / «Без исполнителя»)
+   + поповер с людьми, у которых есть задачи в этом проекте (счётчики), и «Без исполнителя». Value: null | Guid | "none". *@
+@implements IDisposable
+@inject UserDirectory Users
+
+<div class="status-sel @(Value is null ? "" : "on")" id="@_id" @onclick="() => _open = !_open" @onclick:stopPropagation title="Фильтр по исполнителю">
+    @if (Value == "none")
+    {
+        <Avatar Size="18" /><span class="lbl">Без исполнителя</span>
+    }
+    else if (Current is { } u)
+    {
+        <Avatar User="u" Size="18" /><span class="lbl">@u.FullName</span>
+    }
+    else
+    {
+        <Icon Name="users" Size="14" Style="color:rgba(255,255,255,0.6);margin:0;" /><span class="lbl">Все исполнители</span>
+    }
+    <span class="n">@(Value is null ? Tasks.Count : Count(Value))</span>
+    <Icon Name="chevrons" Size="12" />
+</div>
+@if (_open)
+{
+    <Popover AnchorId="@_id" Align="left" Width="260" OnClose="() => _open = false">
+        <button type="button" class="pop-item @(Value is null ? "cur" : "")" @onclick="() => Select(null)">
+            <Icon Name="users" Size="15" />Все исполнители <span class="pop-n">@Tasks.Count</span>
+        </button>
+        @foreach (var (id, n) in Counts)
+        {
+            var u = Users.Find(id);
+            <button type="button" class="pop-item user @(Value == id.ToString() ? "cur" : "")" @onclick="() => Select(id.ToString())">
+                <Avatar User="u" Size="22" />
+                <span class="pop-user"><span class="pop-user-name">@(u?.FullName ?? "…")</span></span>
+                <span class="pop-n">@n</span>
+            </button>
+        }
+        @if (Unassigned > 0)
+        {
+            <div class="pop-sep"></div>
+            <button type="button" class="pop-item @(Value == "none" ? "cur" : "")" @onclick="@(() => Select("none"))">
+                <Icon Name="user-off" Size="15" />Без исполнителя <span class="pop-n">@Unassigned</span>
+            </button>
+        }
+    </Popover>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TaskResponse> Tasks { get; set; } = [];
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    private readonly string _id = "af-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _open;
+
+    private UserResponse? Current => Guid.TryParse(Value, out var id) ? Users.Find(id) : null;
+
+    private IEnumerable<(Guid Id, int N)> Counts => Tasks
+        .Where(t => t.AssigneeId is not null)
+        .GroupBy(t => t.AssigneeId!.Value)
+        .Select(g => (g.Key, g.Count()))
+        .OrderByDescending(x => x.Item2)
+        .ThenBy(x => Users.Find(x.Key)?.FullName, StringComparer.OrdinalIgnoreCase);
+
+    private int Unassigned => Tasks.Count(t => t.AssigneeId is null);
+
+    private int Count(string value) => value == "none" ? Unassigned : Guid.TryParse(value, out var id) ? Tasks.Count(t => t.AssigneeId == id) : 0;
+
+    protected override void OnInitialized() => Users.Changed += OnUsersChanged;
+
+    private void OnUsersChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task Select(string? value)
+    {
+        _open = false;
+        if (value != Value)
+            await ValueChanged.InvokeAsync(value);
+    }
+
+    public void Dispose() => Users.Changed -= OnUsersChanged;
+}

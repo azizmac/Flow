@@ -7,6 +7,7 @@
 @inject BrowserInterop Browser
 @inject HotkeyService Hotkeys
 @inject AppState State
+@inject UserDirectory Users
 
 <PageTitle>@(_task?.Code ?? "Задача") — Flow</PageTitle>
 
@@ -107,6 +108,8 @@ else if (_task is not null && _board is not null)
                 <div class="meta-grid narrow">
                     <div class="meta-k">Статус</div>
                     <div><StatusSelect Statuses="_board.Statuses" Value="_task.StatusId" OnChange="ChangeStatus" /></div>
+                    <div class="meta-k">Исполнитель</div>
+                    <div><AssigneeSelect Value="_task.AssigneeId" OnChange="Assign" /></div>
                     <div class="meta-k">Проект</div>
                     <div class="meta-v"><KeyChip Value="@_board.Key" /><a href="@BackHref" style="color:#fff;">@_board.Name</a></div>
                     <div class="meta-k">Создана</div>
@@ -115,6 +118,21 @@ else if (_task is not null && _board is not null)
                     <div class="meta-v mono" title="Скопировать ID" @onclick="CopyId">@_task.Id</div>
                 </div>
             </div>
+            @if (_task.AssigneeId is { } aid && Users.Find(aid) is { } who)
+            {
+                <div class="side-card who-card" id="tp-who" @onclick="() => _whoOpen = true" role="button" tabindex="0">
+                    <Avatar User="who" Size="36" />
+                    <div style="min-width:0;">
+                        <div class="who-name">@who.FullName</div>
+                        <div class="who-sub">@@@who.Username@(string.IsNullOrEmpty(who.JobTitle) ? "" : $" · {who.JobTitle}")</div>
+                    </div>
+                    <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.35);margin-left:auto;" />
+                </div>
+                @if (_whoOpen)
+                {
+                    <UserCard User="who" AnchorId="tp-who" OnClose="() => _whoOpen = false" />
+                }
+            }
             <button type="button" class="icon-lnk danger" style="padding:0 4px;align-self:flex-start;" @onclick="() => _deleting = true">
                 <Icon Name="trash" Size="14" />Удалить задачу
             </button>
@@ -145,17 +163,21 @@ else if (_task is not null && _board is not null)
     private string _title = "";
     private bool _editingDesc;
     private string _description = "";
+    private bool _whoOpen;
     private IDisposable? _hotkeys;
 
     private string BackHref => _task is null ? "boards" : $"boards/{_task.BoardId}";
 
     protected override void OnInitialized()
     {
+        Users.Changed += OnUsersChanged;
         _hotkeys = Hotkeys.Subscribe(async e =>
         {
             if (e.Key == "Enter" && e.Ctrl && _editingDesc) { e.Handled = true; await SaveDesc(); StateHasChanged(); }
         });
     }
+
+    private void OnUsersChanged() => InvokeAsync(StateHasChanged);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -200,6 +222,8 @@ else if (_task is not null && _board is not null)
 
         _board = board.Value!;
         State.SetLastBoard(_board.Id);
+        if (!Users.IsLoaded)
+            _ = Users.EnsureLoadedAsync();
     }
 
     private async Task OnBodyKey(KeyboardEventArgs e)
@@ -234,6 +258,21 @@ else if (_task is not null && _board is not null)
     }
 
     private Task ChangeStatus(Guid statusId) => Patch(new UpdateTaskRequest(null, null, statusId));
+
+    private async Task Assign(Guid? userId)
+    {
+        _busy = true;
+        var result = await Api.AssignTask(_task!.Id, new AssignTaskRequest(userId));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось назначить исполнителя");
+            return;
+        }
+
+        _task = result.Value!;
+        _whoOpen = false;
+    }
 
     private async Task StartDescEdit()
     {
@@ -303,5 +342,9 @@ else if (_task is not null && _board is not null)
         else Toasts.Error("Не удалось скопировать");
     }
 
-    public void Dispose() => _hotkeys?.Dispose();
+    public void Dispose()
+    {
+        Users.Changed -= OnUsersChanged;
+        _hotkeys?.Dispose();
+    }
 }

@@ -1,11 +1,13 @@
-@* Слайдер задачи. Mode=Create — форма новой задачи (POST); Mode=View — просмотр/редактирование существующей
-   (PATCH Title/Description/StatusId, DELETE). Содержимое рендерится внутри общего Drawer. *@
+@* Слайдер задачи. Mode=Create — форма новой задачи (POST; исполнитель — отдельным PATCH /assignee после создания,
+   в CreateTaskRequest его нет); Mode=View — просмотр/редактирование существующей
+   (PATCH Title/Description/StatusId, PATCH /assignee, DELETE). Содержимое рендерится внутри общего Drawer. *@
 @implements IDisposable
 @inject FlowApi Api
 @inject ToastService Toasts
 @inject BrowserInterop Browser
 @inject HotkeyService Hotkeys
 @inject NavigationManager Nav
+@inject UserDirectory Users
 
 @if (IsCreate)
 {
@@ -22,6 +24,8 @@
         <div class="meta-grid">
             <div class="meta-k">Статус</div>
             <div><StatusSelect Statuses="Board.Statuses" Value="_statusId" OnChange="id => _statusId = id" /></div>
+            <div class="meta-k">Исполнитель</div>
+            <div><AssigneeSelect Value="_assigneeId" OnChange="id => _assigneeId = id" /></div>
             <div class="meta-k">Проект</div>
             <div class="meta-v"><KeyChip Value="@Board.Key" />@Board.Name</div>
         </div>
@@ -71,6 +75,18 @@ else if (Item is not null)
         <div class="meta-grid">
             <div class="meta-k">Статус</div>
             <div><StatusSelect Statuses="Board.Statuses" Value="Item.StatusId" OnChange="ChangeStatus" /></div>
+            <div class="meta-k">Исполнитель</div>
+            <div class="meta-v">
+                <AssigneeSelect Value="Item.AssigneeId" OnChange="Assign" />
+                @if (Item.AssigneeId is { } aid && Users.Find(aid) is { } who)
+                {
+                    <button type="button" id="@_whoId" class="icon-lnk" @onclick="() => _whoOpen = true" title="Карточка"><Icon Name="view" Size="13" />@@@who.Username</button>
+                    @if (_whoOpen)
+                    {
+                        <UserCard User="who" AnchorId="@_whoId" OnClose="() => _whoOpen = false" />
+                    }
+                }
+            </div>
             <div class="meta-k">Проект</div>
             <div class="meta-v"><KeyChip Value="@Board.Key" />@Board.Name</div>
             <div class="meta-k">Создана</div>
@@ -127,7 +143,10 @@ else if (Item is not null)
     private string _title = "";
     private string _description = "";
     private Guid _statusId;
+    private Guid? _assigneeId;
     private bool _busy;
+    private bool _whoOpen;
+    private readonly string _whoId = "who-" + Guid.NewGuid().ToString("N")[..8];
     private string? _error;
     private bool _editingTitle;
     private bool _editingDesc;
@@ -137,6 +156,7 @@ else if (Item is not null)
 
     protected override void OnInitialized()
     {
+        Users.Changed += OnUsersChanged;
         _hotkeys = Hotkeys.Subscribe(async e =>
         {
             if (e.Key == "Enter" && e.Ctrl)
@@ -158,6 +178,7 @@ else if (Item is not null)
                 _title = "";
                 _description = "";
                 _error = null;
+                _assigneeId = null;
                 _statusId = Board.Statuses.FirstOrDefault(s => s.IsInitial)?.Id ?? Board.Statuses.FirstOrDefault()?.Id ?? Guid.Empty;
                 _focusTitle = true;
             }
@@ -169,6 +190,7 @@ else if (Item is not null)
             _itemId = Item.Id;
             _editingTitle = false;
             _editingDesc = false;
+            _whoOpen = false;
             _error = null;
         }
 
@@ -214,7 +236,16 @@ else if (Item is not null)
             return;
         }
 
-        await OnCreated.InvokeAsync(result.Value!);
+        var created = result.Value!;
+        if (_assigneeId is { } assignee)
+        {
+            // Исполнитель — отдельный эндпоинт; задача уже создана, поэтому ошибка назначения не откатывает создание.
+            var assigned = await Api.AssignTask(created.Id, new AssignTaskRequest(assignee));
+            if (assigned.Ok) created = assigned.Value!;
+            else Toasts.Error(assigned.Error ?? "Задача создана, но исполнителя назначить не удалось");
+        }
+
+        await OnCreated.InvokeAsync(created);
     }
 
     private async Task StartTitleEdit()
@@ -247,6 +278,20 @@ else if (Item is not null)
     }
 
     private Task ChangeStatus(Guid statusId) => Patch(new UpdateTaskRequest(null, null, statusId));
+
+    private async Task Assign(Guid? userId)
+    {
+        _busy = true;
+        var result = await Api.AssignTask(Item!.Id, new AssignTaskRequest(userId));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось назначить исполнителя");
+            return;
+        }
+
+        await OnUpdated.InvokeAsync(result.Value!);
+    }
 
     private async Task StartDescEdit()
     {
@@ -305,5 +350,11 @@ else if (Item is not null)
 
     private static string? NullIfEmpty(string s) => string.IsNullOrWhiteSpace(s) ? null : s.TrimEnd();
 
-    public void Dispose() => _hotkeys?.Dispose();
+    private void OnUsersChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Users.Changed -= OnUsersChanged;
+        _hotkeys?.Dispose();
+    }
 }

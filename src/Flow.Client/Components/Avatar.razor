@@ -1,0 +1,39 @@
+@* Аватар пользователя: картинка по AvatarUrl или инициалы на детерминированном по Id тинте (Services/Avatars).
+   Деактивированный — приглушён. Size — диаметр в px (22 в строках, 32 в сайдбаре, 64 в шапке профиля). *@
+
+@if (User is null)
+{
+    <span class="avatar none @Class" style="@Dim" title="@(Title ?? "Не назначена")" aria-hidden="true"><Icon Name="user" Size="@IconSize" /></span>
+}
+else if (!string.IsNullOrEmpty(User.AvatarUrl) && !_imgFailed)
+{
+    <img class="avatar img @(User.IsActive ? "" : "off") @Class" style="@Dim" src="@User.AvatarUrl" alt="@User.FullName" title="@(Title ?? User.FullName)" @onerror="() => _imgFailed = true" />
+}
+else
+{
+    var (bg, fg) = Avatars.Colors(User.Id);
+    <span class="avatar @(User.IsActive ? "" : "off") @Class" style="@Dim;background:@bg;color:@fg;font-size:@(FontSize)px;" title="@(Title ?? User.FullName)" aria-label="@User.FullName">@Avatars.Initials(User)</span>
+}
+
+@code {
+    [Parameter] public UserResponse? User { get; set; }
+    [Parameter] public int Size { get; set; } = 22;
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Title { get; set; }
+
+    private bool _imgFailed;
+    private Guid? _lastId;
+
+    private string Dim => $"width:{Size}px;height:{Size}px";
+    private int FontSize => Math.Max(9, (int)Math.Round(Size * 0.4));
+    private int IconSize => Math.Max(10, (int)Math.Round(Size * 0.55));
+
+    protected override void OnParametersSet()
+    {
+        if (_lastId != User?.Id)
+        {
+            _lastId = User?.Id;
+            _imgFailed = false;
+        }
+    }
+}

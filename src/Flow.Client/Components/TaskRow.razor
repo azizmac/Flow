@@ -1,4 +1,4 @@
-@* Строка задачи в списке проекта: код · название (+описание) · селект статуса · дата · меню «…».
+@* Строка задачи в списке проекта: код · название (+описание) · исполнитель (аватар) · селект статуса · дата · меню «…».
    Клик по строке (вне селекта/меню) → OnOpen. Переименование — инлайн, Enter/blur сохраняет, Esc отменяет. *@
 @inject BrowserInterop Browser
 
@@ -25,6 +25,9 @@
         }
     </div>
     <div>
+        <AssigneeSelect Compact="true" Value="Item.AssigneeId" OnChange="id => OnAssign.InvokeAsync((Item, id))" />
+    </div>
+    <div>
         <StatusSelect Statuses="Statuses" Value="Item.StatusId" OnChange="id => OnStatusChange.InvokeAsync((Item, id))" />
     </div>
     <div class="task-date" title="@Ru.DateTimeFull(Item.CreatedAt)">@Ru.DateShort(Item.CreatedAt)</div>
@@ -40,6 +43,7 @@
     [Parameter] public bool Flash { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnOpen { get; set; }
     [Parameter] public EventCallback<(TaskResponse Task, Guid StatusId)> OnStatusChange { get; set; }
+    [Parameter] public EventCallback<(TaskResponse Task, Guid? UserId)> OnAssign { get; set; }
     [Parameter] public EventCallback<(TaskResponse Task, string Title)> OnRename { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnCopy { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnDelete { get; set; }

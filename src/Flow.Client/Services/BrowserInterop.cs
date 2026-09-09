@@ -5,7 +5,7 @@ namespace Flow.Client.Services;
 /// <summary>Геометрия якоря поповера (см. wwwroot/js/flow.js → flow.rect).</summary>
 public sealed record AnchorRect(double Left, double Top, double Right, double Bottom, double Width, double Height, double Vw, double Vh);
 
-/// <summary>Обёртка над wwwroot/js/flow.js: буфер обмена, фокус, геометрия элементов.</summary>
+/// <summary>Обёртка над wwwroot/js/flow.js: буфер обмена, фокус, геометрия элементов, localStorage.</summary>
 public sealed class BrowserInterop(IJSRuntime js)
 {
     public async Task<bool> CopyAsync(string text)
@@ -41,6 +41,29 @@ public sealed class BrowserInterop(IJSRuntime js)
         catch (JSException)
         {
             return null;
+        }
+    }
+
+    public async Task<string?> StorageGetAsync(string key)
+    {
+        try
+        {
+            return await js.InvokeAsync<string?>("flow.storageGet", key);
+        }
+        catch (JSException)
+        {
+            return null;
+        }
+    }
+
+    public async Task StorageSetAsync(string key, string? value)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flow.storageSet", key, value);
+        }
+        catch (JSException)
+        {
         }
     }
 
