@@ -11,7 +11,7 @@ Flow.Infrastructure→ EF Core (Postgres/Npgsql), репозитории, UnitOf
 Flow.Client        → Blazor WebAssembly: экраны «Проекты» (/boards), «Задачи проекта» (/boards/{id}), задача (/tasks/{id}), «Люди» (/users), профиль (/users/{id}); ходит в Flow.Api через Services/FlowApi
 ```
 Зависимости: Domain ← Application ← Infrastructure ← Api.
-Shared намеренно **не ссылается** на Domain (свои enum `StatusType`, `UserLinkType`).
+Shared намеренно **не ссылается** на Domain (свои enum `StatusType`, `UserLinkType`, `UserRole`, `UserStatus`; маппинг — `UserMappingExtensions.ToResponseRole/ToDomainRole/ToResponseStatus`).
 
 ## Ключевые инварианты Board (aggregate root)
 - `Key`: `^[A-Z][A-Z0-9]{1,9}$`, префикс для TaskCode.
@@ -65,14 +65,15 @@ Shared намеренно **не ссылается** на Domain (свои enum
 | GET/PATCH/DELETE | `/boards/{id}`, `/boards/{id}/name` |
 | POST/GET | `/boards/{boardId}/tasks` (`?assigneeId=`) |
 | GET/PATCH/DELETE | `/tasks/{id}`, PATCH `/tasks/{id}/assignee` |
-| POST/GET | `/users` (POST требует `Password` → учётная запись в Flow.Auth), `/users/search?q=&limit=` |
+| POST/GET | `/users` (POST: `Password` обязателен → учётная запись в Flow.Auth; `Role?` по умолчанию Member), `/users/search?q=&limit=` |
 | GET | `/users/me` — профиль текущего actor (claim sub); 401, если профиля нет |
-| POST | `/users/{id}/password` — `{ currentPassword?, newPassword }`; null = сброс (право Owner — #18) |
+| POST | `/users/{id}/password` — `{ currentPassword?, newPassword }`; свой — с текущим, чужой — сброс (Owner) |
+| PATCH | `/users/{id}/role` — `{ role }` (Shared `UserRole`); 403 по матрице, 400 — последний Owner |
 | GET/PATCH | `/users/{id}`, `/users/by-username/{username}`, `/users/{id}/username`, `/users/{id}/email` |
 | PUT/DELETE | `/users/{id}/links/{type}` |
 | POST | `/users/{id}/deactivate`, `/users/{id}/activate` |
 
-Обработка ошибок: `catch (ArgumentException or InvalidOperationException)` → 400.
+Обработка ошибок: `catch (ArgumentException or InvalidOperationException)` → 400 в экшенах; `Auth/ApiExceptionFilter`: нет токена/профиля/деактивирован → 401, нет прав → 403, Flow.Auth недоступен → 502 — все `{ message }`. `UserResponse` несёт `Role`, `Status`, `StatusChangedAt` (Shared-зеркала `UserRole`/`UserStatus`), `TaskResponse` — `CreatedById`.
 `TaskUpdate` возвращает `TaskUpdateResult` (NotFound | InvalidStatus | Success+Response).
 `BoardResponse` несёт `TaskCount` и `NextTaskNumber` (счётчик задач — один `GROUP BY` через `ITaskItemRepository.CountByBoardIdsAsync`, не N+1); `TaskResponse` несёт `BoardId`.
 `BoardCreate` возвращает `BoardCreateResult` (KeyTaken → 409 | Success+Response); ключ проверяется через `IBoardRepository.ExistsByKeyAsync` по нормализованному `Board.Key`.

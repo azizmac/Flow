@@ -1,5 +1,5 @@
 using Flow.Application.Abstractions;
-using Flow.Domain.Entities;
+using UserStatus = Flow.Domain.Entities.UserStatus;
 using Flow.Shared.Contracts.Users;
 using MediatR;
 

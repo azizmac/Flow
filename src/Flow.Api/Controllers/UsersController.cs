@@ -2,6 +2,7 @@ using Flow.Application.Features.Users;
 using Flow.Application.Features.Users.Commands.UserActivateCommand;
 using Flow.Application.Features.Users.Commands.UserChangeEmailCommand;
 using Flow.Application.Features.Users.Commands.UserChangePasswordCommand;
+using Flow.Application.Features.Users.Commands.UserChangeRoleCommand;
 using Flow.Application.Features.Users.Commands.UserChangeUsernameCommand;
 using Flow.Application.Features.Users.Commands.UserCreateCommand;
 using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
@@ -38,7 +39,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         try
         {
             var result = await mediator.Send(
-                new UserCreateCommand(actor.Require(), request.Username, request.Email, request.FirstName, request.LastName, request.Password),
+                new UserCreateCommand(actor.Require(), request.Username, request.Email, request.FirstName, request.LastName, request.Password, request.Role?.ToDomainRole()),
                 cancellationToken);
 
             if (result.IsConflict)
@@ -149,9 +150,24 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         }
     }
 
+    /// <summary>Роль workspace. 403 — не позволяет роль actor'а (IPermissionService); 400 — последний Owner.</summary>
+    [HttpPatch("{id:guid}/role")]
+    public async Task<IActionResult> ChangeRole(Guid id, ChangeUserRoleRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await mediator.Send(new UserChangeRoleCommand(actor.Require(), id, request.Role.ToDomainRole()), cancellationToken);
+            return ToActionResult(result);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
     /// <summary>
-    /// CurrentPassword задан — смена своего пароля; null — сброс. Кто вправе сбрасывать чужой (Owner) — IPermissionService (#18).
-    /// Неверный текущий или слабый новый пароль → 400 с текстом Flow.Auth.
+    /// CurrentPassword задан — смена своего пароля; null — сброс чужого (только Owner, IPermissionService).
+    /// Свой без текущего, неверный текущий или слабый новый пароль → 400.
     /// </summary>
     [HttpPost("{id:guid}/password")]
     public async Task<IActionResult> ChangePassword(Guid id, ChangePasswordRequest request, CancellationToken cancellationToken)
