@@ -89,9 +89,10 @@ var response = await sender.SendAsync(new BoardCreateCommand(request.Name, reque
 | `Title` | `string` | Название задачи |
 | `Description` | `string?` | Описание задачи |
 | `StatusId` | `Guid` | FK на `Status` |
+| `AssigneeId` | `Guid?` | FK на `User`, исполнитель; null — не назначен |
 | `CreatedAt` | `DateTime` | Дата создания задачи |
 
-Создаётся только через `Board.CreateTask(...)`. Методы: `Rename(title)`, `UpdateDescription(description)`, `ChangeStatus(statusId)`.
+Создаётся только через `Board.CreateTask(...)`. Методы: `Rename(title)`, `UpdateDescription(description)`, `ChangeStatus(statusId)`, `Assign(userId)`, `Unassign()`.
 
 ### `TaskCode` — value object
 Оборачивает строку `{Key доски}-{NextTaskNumber}`. Создаётся через `TaskCode.Create(boardKey, number)` (генерация) или `TaskCode.FromValue(value)` (восстановление из БД, используется в EF Core value converter).
@@ -102,7 +103,9 @@ var response = await sender.SendAsync(new BoardCreateCommand(request.Name, reque
 |---|---|
 | `Boards` | PK `Id`; уникальный индекс на `Key` |
 | `Statuses` | PK `Id`; FK `BoardId` → `Boards` (cascade delete); уникальные индексы на `(BoardId, SortOrder)` и `(BoardId, Name)` |
-| `TaskItems` | PK `Id`; FK `BoardId` → `Boards` (cascade delete); FK `StatusId` → `Statuses` (restrict delete); уникальный индекс на `Code` |
+| `TaskItems` | PK `Id`; FK `BoardId` → `Boards` (cascade delete); FK `StatusId` → `Statuses` (restrict delete); FK `AssigneeId` → `Users` (restrict delete, nullable, индекс); уникальный индекс на `Code` |
+| `Users` | PK `Id`; уникальные индексы на `Username` и `Email` |
+| `UserLinks` | owned-коллекция `User.Links`; PK `(UserId, Type)`; FK `UserId` → `Users` (cascade delete) |
 
 ## Конфигурация PostgreSQL
 
@@ -131,8 +134,19 @@ dotnet ef database update --project src/Flow.Infrastructure --startup-project sr
 | `GET` | `/boards/{id}` | Доска по id (со статусами) |
 | `PATCH` | `/boards/{id}/name` | Переименовать доску |
 | `POST` | `/boards/{boardId}/tasks` | Создать задачу на доске |
-| `GET` | `/boards/{boardId}/tasks` | Список задач доски |
+| `GET` | `/boards/{boardId}/tasks?assigneeId=` | Список задач доски, опционально по исполнителю |
 | `GET` | `/tasks/{id}` | Задача по id |
 | `PATCH` | `/tasks/{id}` | Обновить задачу (название/описание/статус — только переданные поля) |
+| `PATCH` | `/tasks/{id}/assignee` | Назначить исполнителя (`userId: null` — снять; неактивный/неизвестный → 400) |
+| `POST` | `/users` | Создать пользователя (409 — username/email занят) |
+| `GET` | `/users?includeInactive=false` | Список пользователей |
+| `GET` | `/users/search?q=&limit=10` | Автодополнение для `@` (только активные) |
+| `GET` | `/users/{id}`, `/users/by-username/{username}` | Пользователь по id / username |
+| `PATCH` | `/users/{id}` | Профиль (только переданные поля; пустая строка очищает) |
+| `PATCH` | `/users/{id}/username`, `/users/{id}/email` | Сменить username / email (409 — занят) |
+| `PUT` / `DELETE` | `/users/{id}/links/{type}` | Добавить-или-заменить / удалить внешнюю ссылку |
+| `POST` | `/users/{id}/deactivate`, `/users/{id}/activate` | Деактивация вместо удаления (400 — повторно) |
 
-DTO-контракты — в `src/Flow.Shared/Contracts/Boards` и `src/Flow.Shared/Contracts/Tasks`.
+DTO-контракты — в `src/Flow.Shared/Contracts/Boards`, `src/Flow.Shared/Contracts/Tasks` и `src/Flow.Shared/Contracts/Users`.
+
+Сущность `User` (поля, методы, инварианты) описана в [`TZ_user.md`](TZ_user.md).

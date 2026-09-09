@@ -3,14 +3,14 @@
 ## Слойная архитектура
 ```
 Flow.Api           → контроллеры (только IMediator)
-Flow.Shared        → DTO-контракты (Boards, Tasks) — общий
-Flow.Application   → Features/{Boards,Tasks}/{Commands,Queries}/*, Abstractions (IBoardRepository, ITaskItemRepository, IUnitOfWork)
-Flow.Domain        → сущности Board, Status, TaskItem, TaskCode, StatusType, DefaultStatuses
+Flow.Shared        → DTO-контракты (Boards, Tasks, Users) — общий
+Flow.Application   → Features/{Boards,Tasks,Users}/{Commands,Queries}/*, Abstractions (IBoardRepository, ITaskItemRepository, IUserRepository, IUnitOfWork)
+Flow.Domain        → сущности Board, Status, TaskItem, TaskCode, StatusType, DefaultStatuses, User, UserLink, UserLinkType
 Flow.Infrastructure→ EF Core (Postgres/Npgsql), репозитории, UnitOfWork, миграции
 Flow.Client        → Blazor WebAssembly (заглушки, не связан с API)
 ```
 Зависимости: Domain ← Application ← Infrastructure ← Api.
-Shared намеренно **не ссылается** на Domain (свой enum `StatusType`).
+Shared намеренно **не ссылается** на Domain (свои enum `StatusType`, `UserLinkType`).
 
 ## Ключевые инварианты Board (aggregate root)
 - `Key`: `^[A-Z][A-Z0-9]{1,9}$`, префикс для TaskCode.
@@ -18,6 +18,16 @@ Shared намеренно **не ссылается** на Domain (свой enum
 - Максимум 1 начальный и 1 финальный статус на доску (проверяется в `AddStatus`/`SetInitialStatus`).
 - `CreateTask`: без `statusId` → в начальный; `NextTaskNumber++` → TaskCode; **новые задачи регистрируются через `ITaskItemRepository.Add`**, не через коллекцию `Board.Tasks`.
 - Все поля `{ get; private set; }`, мутации только через методы.
+
+## User (профиль, не учётная запись)
+- `User.Create(username, email, firstName, lastName)` — единственная точка создания; username/email нормализуются в lower, username `^[a-z0-9][a-z0-9._-]{0,30}[a-z0-9]$`.
+- Внешние ссылки — коллекция `UserLink` (`SetLink`/`RemoveLink`), не более одной на `UserLinkType`; телефон хранится в E.164 (`+79991234567`).
+- Удаления нет: `Deactivate()`/`Activate()` (`IsActive`, `DeactivatedAt`). Пароли/роли в домене отсутствуют намеренно.
+- Уникальность username/email: `UserCreate` → `UserCreateResult` (`IsUsernameTaken`/`IsEmailTaken` → 409); `UserChangeUsername`/`UserChangeEmail` → `UserUpdateResult.ConflictError` → 409; плюс unique-индексы в БД.
+- Все изменяющие команды пользователя возвращают общий `Features/Users/UserUpdateResult` (NotFound | ConflictError | Success). `UserUpdateProfile` — PATCH-семантика: null не трогать, пустая строка очищает.
+- Назначение на задачу: `TaskItem.AssigneeId : Guid?`, `Assign`/`Unassign`; **назначать можно только активного пользователя** — проверяет `TaskAssignCommandHandler` (`TaskAssignResult`: NotFound | ValidationError | Success). `TaskListQuery(boardId, assigneeId?)` фильтрует по исполнителю.
+- `IUserRepository.SearchAsync` — автодополнение для `@` (ILIKE по Username/FirstName/LastName, только активные, `%`/`_` экранируются).
+- План по слоям: GitHub #8 (подзадачи #9–#13), ТЗ — `docs/TZ_user.md` (там же чек-лист перевода на `UserId` после мержа ветки `StronglyTypeId`).
 
 ## MediatR и DI
 - `AddFlowApplication()` регистрирует MediatR с reflection-сканированием сущности `Flow.Application` — хендлеры `internal`, commands/queries `public sealed record`.
@@ -29,8 +39,12 @@ Shared намеренно **не ссылается** на Domain (свой enum
 |---|---|
 | POST/GET | `/boards` |
 | GET/PATCH/DELETE | `/boards/{id}`, `/boards/{id}/name` |
-| POST/GET | `/boards/{boardId}/tasks` |
-| GET/PATCH/DELETE | `/tasks/{id}` |
+| POST/GET | `/boards/{boardId}/tasks` (`?assigneeId=`) |
+| GET/PATCH/DELETE | `/tasks/{id}`, PATCH `/tasks/{id}/assignee` |
+| POST/GET | `/users`, `/users/search?q=&limit=` |
+| GET/PATCH | `/users/{id}`, `/users/by-username/{username}`, `/users/{id}/username`, `/users/{id}/email` |
+| PUT/DELETE | `/users/{id}/links/{type}` |
+| POST | `/users/{id}/deactivate`, `/users/{id}/activate` |
 
 Обработка ошибок: `catch (ArgumentException or InvalidOperationException)` → 400.
 `TaskUpdate` возвращает `TaskUpdateResult` (NotFound | InvalidStatus | Success+Response).
@@ -40,7 +54,9 @@ Shared намеренно **не ссылается** на Domain (свой enum
 ## СБД (Postgres 16, `flow/flow/flow`, :5432)
 - `Boards`: PK Id, unique Key
 - `Statuses`: PK Id, FK BoardId (cascade), unique (BoardId, SortOrder) и (BoardId, Name)
-- `TaskItems`: PK Id, FK BoardId (cascade), FK StatusId (restrict), unique Code
+- `TaskItems`: PK Id, FK BoardId (cascade), FK StatusId (restrict), FK AssigneeId → Users (restrict, nullable, индекс), unique Code
+- `Users`: PK Id, unique Username, unique Email (значения уже lower — индексы регистронезависимы по факту)
+- `UserLinks`: owned-коллекция `User.Links`, PK (UserId, Type), FK UserId (cascade)
 - Стр-подк: `ConnectionStrings:Postgres` (appsettings для локалки, env `ConnectionStrings__Postgres` в docker).
 
 ## Команды
@@ -61,11 +77,11 @@ Shared намеренно **не ссылается** на Domain (свой enum
 - Blazor Client — заглушки (Counter/Weather), не использовать как API-клиент.
 
 ## Тесты (xUnit)
-- `Flow.Domain.Tests` — юнит-тесты сущностей (Board, TaskItem, TaskCode).
-- `Flow.Application.Tests` — фичи с `Fakes/` (FakeBoardRepository, FakeTaskItemRepository, FakeUnitOfWork) + `TestMediatorFactory`.
-- `Flow.Infrastructure.Tests` — интеграционные на реальном Postgres (Testcontainers, образ `postgres:16-alpine`): миграции, удаление доски с задачами, дубликат ключа.
+- `Flow.Domain.Tests` — юнит-тесты сущностей (Board, TaskItem, TaskCode, User).
+- `Flow.Application.Tests` — фичи с `Fakes/` (FakeBoardRepository, FakeTaskItemRepository, FakeUserRepository, FakeUnitOfWork) + `TestMediatorFactory`.
+- `Flow.Infrastructure.Tests` — интеграционные на реальном Postgres (Testcontainers, образ `postgres:16-alpine`): миграции, удаление доски с задачами, дубликат ключа, пользователи (ссылки, unique-индексы, поиск).
 
 ## Навигация
 - Структура проекта: `docs/Struktura_board_task_status.md`
 - Сравнение подходов DbContext: `docs/Sravnenie_DbContext_podhodov.md`
-- ТЗ: `docs/TZ_board_task_status.md`
+- ТЗ: `docs/TZ_board_task_status.md`, `docs/TZ_user.md`

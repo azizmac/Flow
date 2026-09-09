@@ -12,18 +12,20 @@ namespace Flow.Application.Tests;
 /// </summary>
 public static class TestMediatorFactory
 {
-    public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks) Create()
+    public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users) Create()
     {
         var boards = new FakeBoardRepository();
         var tasks = new FakeTaskItemRepository();
+        var users = new FakeUserRepository();
 
         var services = new ServiceCollection();
         services.AddSingleton<IBoardRepository>(boards);
         services.AddSingleton<ITaskItemRepository>(tasks);
+        services.AddSingleton<IUserRepository>(users);
         services.AddSingleton<IUnitOfWork>(new FakeUnitOfWork());
         services.AddFlowApplication();
 
         var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
-        return (mediator, boards, tasks);
+        return (mediator, boards, tasks, users);
     }
 }

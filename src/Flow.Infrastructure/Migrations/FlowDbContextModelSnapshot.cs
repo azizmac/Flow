@@ -95,6 +95,9 @@ namespace Flow.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AssigneeId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("BoardId")
                         .HasColumnType("uuid");
 
@@ -120,6 +123,8 @@ namespace Flow.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AssigneeId");
+
                     b.HasIndex("BoardId");
 
                     b.HasIndex("Code")
@@ -128,6 +133,68 @@ namespace Flow.Infrastructure.Migrations
                     b.HasIndex("StatusId");
 
                     b.ToTable("TaskItems");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.User", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Bio")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeactivatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("JobTitle")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("Username")
+                        .IsUnique();
+
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("Flow.Domain.Entities.Status", b =>
@@ -141,6 +208,11 @@ namespace Flow.Infrastructure.Migrations
 
             modelBuilder.Entity("Flow.Domain.Entities.TaskItem", b =>
                 {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("AssigneeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Flow.Domain.Entities.Board", null)
                         .WithMany("Tasks")
                         .HasForeignKey("BoardId")
@@ -152,6 +224,32 @@ namespace Flow.Infrastructure.Migrations
                         .HasForeignKey("StatusId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.User", b =>
+                {
+                    b.OwnsMany("Flow.Domain.Entities.UserLink", "Links", b1 =>
+                        {
+                            b1.Property<Guid>("UserId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<int>("Type")
+                                .HasColumnType("integer");
+
+                            b1.Property<string>("Url")
+                                .IsRequired()
+                                .HasMaxLength(500)
+                                .HasColumnType("character varying(500)");
+
+                            b1.HasKey("UserId", "Type");
+
+                            b1.ToTable("UserLinks", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("UserId");
+                        });
+
+                    b.Navigation("Links");
                 });
 
             modelBuilder.Entity("Flow.Domain.Entities.Board", b =>

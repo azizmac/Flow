@@ -11,6 +11,8 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
 
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
 
+    public DbSet<User> Users => Set<User>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlowDbContext).Assembly);

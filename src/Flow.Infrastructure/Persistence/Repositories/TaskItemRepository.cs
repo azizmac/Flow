@@ -9,8 +9,12 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
     public Task<TaskItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         db.TaskItems.FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<TaskItem>> GetByBoardIdAsync(Guid boardId, CancellationToken cancellationToken) =>
-        await db.TaskItems.Where(t => t.BoardId == boardId).AsNoTracking().ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<TaskItem>> GetByBoardIdAsync(Guid boardId, Guid? assigneeId, CancellationToken cancellationToken) =>
+        await db.TaskItems
+            .Where(t => t.BoardId == boardId)
+            .Where(t => assigneeId == null || t.AssigneeId == assigneeId)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
     public Task<bool> StatusBelongsToBoardAsync(Guid statusId, Guid boardId, CancellationToken cancellationToken) =>
         db.Statuses.AnyAsync(s => s.Id == statusId && s.BoardId == boardId, cancellationToken);

@@ -1,3 +1,4 @@
+using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
@@ -37,9 +38,9 @@ public class TasksController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet("boards/{boardId:guid}/tasks")]
-    public async Task<IActionResult> GetBoardTasks(Guid boardId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetBoardTasks(Guid boardId, [FromQuery] Guid? assigneeId, CancellationToken cancellationToken)
     {
-        var tasks = await mediator.Send(new TaskListQuery(boardId), cancellationToken);
+        var tasks = await mediator.Send(new TaskListQuery(boardId, assigneeId), cancellationToken);
         return Ok(tasks);
     }
 
@@ -71,6 +72,21 @@ public class TasksController(IMediator mediator) : ControllerBase
         {
             return BadRequest(new { ex.Message });
         }
+    }
+
+    /// <summary>UserId = null в теле — снять исполнителя. Неизвестный или деактивированный пользователь → 400.</summary>
+    [HttpPatch("tasks/{id:guid}/assignee")]
+    public async Task<IActionResult> AssignTask(Guid id, AssignTaskRequest request, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new TaskAssignCommand(id, request.UserId), cancellationToken);
+
+        if (result.IsNotFound)
+            return NotFound();
+
+        if (result.ValidationError is not null)
+            return BadRequest(new { Message = result.ValidationError });
+
+        return Ok(result.Response);
     }
 
     [HttpDelete("tasks/{id:guid}")]

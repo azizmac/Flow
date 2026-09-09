@@ -10,7 +10,7 @@ internal sealed class TaskListQueryHandler(ITaskItemRepository tasks)
 {
     public async Task<IReadOnlyList<TaskResponse>> Handle(TaskListQuery request, CancellationToken cancellationToken)
     {
-        var items = await tasks.GetByBoardIdAsync(request.BoardId, cancellationToken);
+        var items = await tasks.GetByBoardIdAsync(request.BoardId, request.AssigneeId, cancellationToken);
         return items.Select(t => t.ToResponse()).ToList();
     }
 }
