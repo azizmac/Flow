@@ -8,6 +8,14 @@
     <Project Path="src/Flow.Client/Flow.Client.csproj" />
     <Project Path="src/Flow.Shared/Flow.Shared.csproj" />
   </Folder>
+  <Folder Name="/docker/">
+    <File Path="docker-compose.yml" />
+    <File Path=".env.example" />
+    <File Path=".dockerignore" />
+    <File Path="docker/client/nginx.conf" />
+    <File Path="docker/client/entrypoint.sh" />
+    <File Path="docker/postgres/init.sql" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Flow.Domain.Tests/Flow.Domain.Tests.csproj" />
     <Project Path="tests/Flow.Application.Tests/Flow.Application.Tests.csproj" />
