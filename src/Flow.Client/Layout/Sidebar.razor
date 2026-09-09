@@ -1,12 +1,13 @@
 @* Drawer-nav 240px по Sidebar.dc.html. «Проекты» → /boards; «Задачи» → последний открытый проект (или /boards);
    «Люди» → /users. Дашборды/Настройки — в API ещё нет, показаны неактивными.
-   Футер — «это я» (AppState.CurrentUserId из localStorage flow.me, выбирается на странице профиля);
-   пока не выбран — приглашение выбрать себя. *@
+   Футер — текущий пользователь: claim sub из токена Flow.Auth → AppState.CurrentUserId, профиль — GET /users/me;
+   кнопка «Выйти» → authentication/logout (endsession в Flow.Auth). *@
 @implements IDisposable
 @inject NavigationManager Nav
 @inject AppState State
 @inject UserDirectory Users
-@inject BrowserInterop Browser
+@inject FlowApi Api
+@inject AuthenticationStateProvider AuthState
 
 <nav class="sb">
     <div class="sb-brand"><div class="sb-mark">F</div><div class="sb-word">FLOW</div></div>
@@ -27,30 +28,35 @@
     <span class="sb-item disabled" aria-disabled="true"><Icon Name="chart" Size="18" />Дашборды</span>
     <span class="sb-item disabled" aria-disabled="true"><Icon Name="settings" Size="18" />Настройки</span>
 
-    @if (Me is { } me)
-    {
-        <a class="sb-foot" href="@($"users/{me.Id}")" title="Мой профиль">
-            <Avatar User="me" Size="32" />
-            <div style="flex:1;min-width:0;">
-                <div class="sb-un">@me.FullName</div>
-                <div class="sb-ur">@(string.IsNullOrEmpty(me.JobTitle) ? "@" + me.Username : me.JobTitle)</div>
+    <div class="sb-foot">
+        @if (Me is { } me)
+        {
+            <a class="sb-me" href="@($"users/{me.Id}")" title="Мой профиль">
+                <Avatar User="me" Size="32" />
+                <div style="flex:1;min-width:0;">
+                    <div class="sb-un">@me.FullName</div>
+                    <div class="sb-ur">@(string.IsNullOrEmpty(me.JobTitle) ? "@" + me.Username : me.JobTitle)</div>
+                </div>
+            </a>
+        }
+        else
+        {
+            <div class="sb-me">
+                <span class="sb-av ghost"><Icon Name="user" Size="16" /></span>
+                <div style="flex:1;min-width:0;">
+                    <div class="sb-un">@(_meError ?? "Загрузка…")</div>
+                    <div class="sb-ur">@_name</div>
+                </div>
             </div>
-            <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.35)" />
-        </a>
-    }
-    else
-    {
-        <a class="sb-foot" href="users" title="Выберите свой профиль на странице «Люди»">
-            <span class="sb-av ghost"><Icon Name="user" Size="16" /></span>
-            <div style="flex:1;min-width:0;">
-                <div class="sb-un">Кто вы?</div>
-                <div class="sb-ur">Выберите профиль</div>
-            </div>
-        </a>
-    }
+        }
+        <DsIconButton Icon="logout" Size="30" Title="Выйти" Style="color:rgba(255,255,255,0.45)" OnClick="Logout" />
+    </div>
 </nav>
 
 @code {
+    private string _name = "";
+    private string? _meError;
+
     private string Path => Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimEnd('/');
 
     private bool IsBoards => Path is "" or "boards";
@@ -64,26 +70,38 @@
 
     private UserResponse? Me => Users.Find(State.CurrentUserId);
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         Nav.LocationChanged += OnLocationChanged;
         State.Changed += OnStateChanged;
         Users.Changed += OnStateChanged;
-    }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!firstRender)
-            return;
-
-        var stored = await Browser.StorageGetAsync("flow.me");
-        if (Guid.TryParse(stored, out var id))
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        if (auth.User.Identity?.IsAuthenticated != true)
         {
-            State.SetCurrentUser(id);
-            if (!Users.IsLoaded)
-                await Users.EnsureLoadedAsync();
+            // Страховка: MainLayout прячет Sidebar за AuthorizeView, но без сессии в API ходить нельзя —
+            // AccessTokenNotAvailableException начал бы вход даже с анонимных страниц.
+            _meError = "Нет сессии";
+            return;
         }
+
+        _name = auth.User.Identity?.Name ?? "";
+        if (Guid.TryParse(auth.User.FindFirst("sub")?.Value, out var id))
+            State.SetCurrentUser(id);
+
+        // Профиль текущего пользователя — сразу в справочник; остальных подгружаем следом (аватары исполнителей).
+        var me = await Api.GetMe();
+        if (me.Ok)
+            Users.Put(me.Value!);
+        else
+            _meError = me.Unauthorized ? "Профиля нет" : "Нет связи с API";
+
+        if (!Users.IsLoaded)
+            _ = Users.EnsureLoadedAsync();
     }
+
+    // Явный returnUrl: без него библиотека вернёт на текущую (закрытую) страницу и тут же начнёт новый вход.
+    private void Logout() => Nav.NavigateToLogout("authentication/logout", "authentication/logged-out");
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => StateHasChanged();
 

@@ -3,7 +3,7 @@
    статус-чип, должность · почта · телефон), вкладки «Профиль» / «Задачи».
    Профиль: карточка «Личные данные» (PATCH /users/{id}, PATCH-семантика: пустая строка очищает поле),
    «Аккаунт» (username и email — отдельные PATCH, 409 → ошибка под полем), справа — «Ссылки» (PUT/DELETE links/{type})
-   и «Это я» (профиль в футере сайдбара; auth в API нет). Задачи: назначенные на человека по всем проектам.
+   и «Пароль» (POST /users/{id}/password: свой — с текущим, чужой — сброс; ограничение до Owner — #20). Задачи: назначенные на человека по всем проектам.
    Деактивация/активация из UI убрана до появления ролей (docs/TZ_user_roles.md): это право только Owner. *@
 @page "/users/{Id:guid}"
 @implements IDisposable
@@ -234,16 +234,37 @@ else if (_user is not null)
                     </div>
 
                     <div class="side-card">
-                        <div class="section-title">Это я</div>
+                        <div class="section-title">Пароль</div>
                         @if (IsMe)
                         {
-                            <div class="hint">Профиль показывается в футере сайдбара на этом устройстве.</div>
-                            <DsButton Variant="secondary" Size="sm" OnClick="() => SetMe(false)">Это не я</DsButton>
+                            <div class="hint">Смена своего пароля: нужен текущий. Не короче @Passwords.MinLength символов.</div>
+                            <div class="pw-form" @onkeydown="OnPasswordKey">
+                                <DsInput Label="Текущий пароль" Type="password" Value="@_pwCurrent" ValueChanged="v => { _pwCurrent = v; _pwError = null; }" MaxLength="128" />
+                                <DsInput Label="Новый пароль" Type="password" Value="@_pwNew" ValueChanged="v => { _pwNew = v; _pwError = null; }" MaxLength="128" Error="@_pwError" />
+                                <DsButton Variant="secondary" Size="sm" OnClick="ChangePassword" Busy="_savingPassword" Disabled="!PasswordFormValid">Сменить пароль</DsButton>
+                            </div>
                         }
                         else
                         {
-                            <div class="hint">Входа в API пока нет: отметьте свой профиль — он появится в сайдбаре.</div>
-                            <DsButton Variant="secondary" Size="sm" Icon="user" OnClick="() => SetMe(true)" Disabled="!_user.IsActive">Это я</DsButton>
+                            <div class="hint">Сброс без текущего пароля — для основателя workspace. Сообщите новый пароль человеку лично.</div>
+                            @if (_pwResetOpen)
+                            {
+                                <div class="pw-form" @onkeydown="OnPasswordKey">
+                                    <DsInput Label="Новый пароль" Value="@_pwNew" ValueChanged="v => { _pwNew = v; _pwError = null; }" MaxLength="128" Error="@_pwError" />
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <button type="button" class="icon-lnk" @onclick="GeneratePassword"><Icon Name="plus" Size="13" />Сгенерировать</button>
+                                        <button type="button" class="icon-lnk" @onclick="CopyPassword" disabled="@(_pwNew.Length == 0)"><Icon Name="copy" Size="13" />Скопировать</button>
+                                    </div>
+                                    <div style="display:flex;gap:8px;">
+                                        <DsButton Variant="secondary" Size="sm" OnClick="() => { _pwResetOpen = false; _pwNew = string.Empty; _pwError = null; }" Disabled="_savingPassword">Отмена</DsButton>
+                                        <DsButton Variant="primary" Size="sm" OnClick="ChangePassword" Busy="_savingPassword" Disabled="!PasswordFormValid">Сбросить</DsButton>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <DsButton Variant="secondary" Size="sm" OnClick="() => _pwResetOpen = true" Disabled="!_user.IsActive">Сбросить пароль</DsButton>
+                            }
                         }
                     </div>
 
@@ -283,6 +304,11 @@ else if (_user is not null)
     private string? _usernameError, _emailError;
     private bool _savingUsername, _savingEmail;
 
+    // пароль
+    private string _pwCurrent = "", _pwNew = "";
+    private string? _pwError;
+    private bool _savingPassword, _pwResetOpen;
+
     // ссылки
     private UserLinkType? _linkType;
     private UserLinkType? _linkEditingType;
@@ -306,6 +332,8 @@ else if (_user is not null)
     private List<UserLinkType> FreeLinkTypes => _user is null
         ? []
         : UserLinks.Order.Where(t => _user.Links.All(l => l.Type != t)).ToList();
+
+    private bool PasswordFormValid => _pwNew.Length >= Passwords.MinLength && (!IsMe || _pwCurrent.Length > 0) && !_savingPassword;
 
     private bool LinkLooksValid => Uri.TryCreate(_linkUrl.Trim(), UriKind.Absolute, out var u) && u.Scheme is "http" or "https";
 
@@ -539,14 +567,35 @@ else if (_user is not null)
         Toasts.Ok($"{UserLinks.Label(type)}: ссылка удалена");
     }
 
-    // ---- статус / это я / копирование ----
+    // ---- пароль ----
 
-    private async Task SetMe(bool me)
+    private async Task OnPasswordKey(KeyboardEventArgs e)
     {
-        if (_user is null) return;
-        State.SetCurrentUser(me ? _user.Id : null);
-        await Browser.StorageSetAsync("flow.me", me ? _user.Id.ToString() : null);
+        if (e.Key == "Enter" && PasswordFormValid) await ChangePassword();
     }
+
+    private void GeneratePassword() { _pwNew = Passwords.Generate(); _pwError = null; }
+
+    private async Task CopyPassword()
+    {
+        if (await Browser.CopyAsync(_pwNew)) Toasts.Ok("Пароль скопирован");
+        else Toasts.Error("Не удалось скопировать");
+    }
+
+    private async Task ChangePassword()
+    {
+        if (_user is null || !PasswordFormValid) return;
+        _savingPassword = true;
+        var result = await Api.ChangePassword(_user.Id, new ChangePasswordRequest(IsMe ? _pwCurrent : null, _pwNew));
+        _savingPassword = false;
+        if (!result.Ok) { _pwError = result.Error; return; }
+
+        _pwCurrent = _pwNew = string.Empty;
+        _pwResetOpen = false;
+        Toasts.Ok(IsMe ? "Пароль изменён" : $"Пароль @{_user.Username} сброшен");
+    }
+
+    // ---- копирование ----
 
     private async Task CopyUsername()
     {

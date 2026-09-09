@@ -1,4 +1,5 @@
-@* Модалка «Новый человек»: имя, фамилия, username (подсказка транслитом, ^[a-z0-9][a-z0-9._-]{0,30}[a-z0-9]$), email.
+@* Модалка «Новый человек»: имя, фамилия, username (подсказка транслитом, ^[a-z0-9][a-z0-9._-]{0,30}[a-z0-9]$), email,
+   начальный пароль (генерируется, показывается один раз — сообщить человеку лично; учётная запись создаётся в Flow.Auth).
    409 → ошибка под занятым полем (сервер говорит, что именно занято). Enter — создать, Esc — закрыть. *@
 @implements IDisposable
 @inject FlowApi Api
@@ -9,7 +10,7 @@
     <div class="modal" role="dialog" aria-modal="true" @onclick:stopPropagation>
         <div>
             <h3>Новый человек</h3>
-            <div class="hint">Профиль, а не учётная запись: пароля и входа пока нет. Должность, телефон и ссылки — потом, в профиле.</div>
+            <div class="hint">Учётная запись для входа и профиль. Должность, телефон и ссылки — потом, в профиле.</div>
         </div>
 
         <div class="form-2col">
@@ -27,6 +28,16 @@
 
         <DsInput Id="cu-email" Label="Почта" Icon="mail" Type="email" Placeholder="ilya@company.ru" MaxLength="254"
                  Value="@_email" ValueChanged="OnEmailChanged" Error="@_emailError" OnKeyDown="OnFieldKey" />
+
+        <div>
+            <DsInput Id="cu-password" Label="Начальный пароль" Placeholder="не короче 8 символов" MaxLength="128"
+                     Value="@_password" ValueChanged="OnPasswordChanged" Error="@_passwordError" OnKeyDown="OnFieldKey" />
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                <button type="button" class="icon-lnk" @onclick="GeneratePassword"><Icon Name="plus" Size="13" />Сгенерировать</button>
+                <button type="button" class="icon-lnk" @onclick="CopyPassword" disabled="@(_password.Length == 0)"><Icon Name="copy" Size="13" />Скопировать</button>
+            </div>
+            <div class="hint" style="margin-top:8px;">Сообщите пароль человеку лично — после входа он сменит его в профиле.</div>
+        </div>
 
         @if (_serverError is not null)
         {
@@ -50,18 +61,21 @@
     private string _last = "";
     private string _username = "";
     private string _email = "";
+    private string _password = Passwords.Generate();
     private bool _usernameTouched;
     private string? _firstError;
     private string? _lastError;
     private string? _usernameError;
     private string? _emailError;
+    private string? _passwordError;
     private string? _serverError;
     private IDisposable? _hotkeys;
 
     private string UsernamePreview => _username.Length == 0 ? "username" : _username;
 
     private bool IsValid => _first.Trim().Length > 0 && _last.Trim().Length > 0
-                            && Ru.UsernamePattern().IsMatch(_username) && EmailLooksValid(_email) && !_busy;
+                            && Ru.UsernamePattern().IsMatch(_username) && EmailLooksValid(_email)
+                            && _password.Length >= Passwords.MinLength && !_busy;
 
     private static bool EmailLooksValid(string email)
     {
@@ -113,6 +127,20 @@
         _emailError = _email.Trim().Length > 0 && !EmailLooksValid(_email) ? "Похоже на неверный адрес" : null;
     }
 
+    private void OnPasswordChanged(string v)
+    {
+        _password = v;
+        _serverError = null;
+        _passwordError = _password.Length > 0 && _password.Length < Passwords.MinLength ? $"Не короче {Passwords.MinLength} символов" : null;
+    }
+
+    private void GeneratePassword() { _password = Passwords.Generate(); _passwordError = null; }
+
+    private async Task CopyPassword()
+    {
+        if (await Browser.CopyAsync(_password)) _serverError = null;
+    }
+
     private async Task OnFieldKey(KeyboardEventArgs e)
     {
         if (e.Key == "Enter") await Submit();
@@ -126,11 +154,12 @@
         if (_last.Trim().Length == 0) { _lastError = "Введите фамилию"; return; }
         if (!Ru.UsernamePattern().IsMatch(_username)) { _usernameError = Ru.UsernameRule; return; }
         if (!EmailLooksValid(_email)) { _emailError = "Введите почту"; return; }
+        if (_password.Length < Passwords.MinLength) { _passwordError = $"Не короче {Passwords.MinLength} символов"; return; }
         if (!IsValid) return;
 
         _busy = true;
         _serverError = null;
-        var result = await Api.CreateUser(new CreateUserRequest(_username, _email.Trim(), _first.Trim(), _last.Trim()));
+        var result = await Api.CreateUser(new CreateUserRequest(_username, _email.Trim(), _first.Trim(), _last.Trim(), _password));
         _busy = false;
 
         if (result.Ok)
@@ -147,6 +176,10 @@
                 _emailError = "Почта уже занята";
             else
                 _usernameError = "Username уже занят";
+        }
+        else if (result.Status == System.Net.HttpStatusCode.BadRequest && (result.Error?.Contains("assword", StringComparison.OrdinalIgnoreCase) ?? false))
+        {
+            _passwordError = result.Error;
         }
         else
         {
