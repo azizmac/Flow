@@ -1,5 +1,5 @@
 // Минимальный JS-мост для Flow.Client: глобальные хоткеи, буфер обмена,
-// фокус и геометрия якорей для поповеров. Всё остальное — в Razor/CSS.
+// фокус, геометрия якорей для поповеров и localStorage. Всё остальное — в Razor/CSS.
 window.flow = (function () {
     let hotkeyRef = null;
 
@@ -62,6 +62,17 @@ window.flow = (function () {
             if (!el) return null;
             const r = el.getBoundingClientRect();
             return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height, vw: window.innerWidth, vh: window.innerHeight };
+        },
+
+        // localStorage может быть недоступен (приватный режим, запрет site data) — тогда null / no-op.
+        storageGet: function (key) {
+            try { return window.localStorage.getItem(key); } catch (_) { return null; }
+        },
+        storageSet: function (key, value) {
+            try {
+                if (value === null || value === undefined) window.localStorage.removeItem(key);
+                else window.localStorage.setItem(key, value);
+            } catch (_) { }
         },
 
         scrollIntoView: function (id) {

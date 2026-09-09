@@ -14,6 +14,7 @@ if (!apiBaseUrl.EndsWith('/'))
 
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 builder.Services.AddScoped<FlowApi>();
+builder.Services.AddScoped<UserDirectory>();
 builder.Services.AddScoped<BrowserInterop>();
 builder.Services.AddScoped<HotkeyService>();
 builder.Services.AddSingleton<ToastService>();

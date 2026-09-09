@@ -8,7 +8,7 @@ Flow.Shared        → DTO-контракты (Boards, Tasks, Users, Accounts) �
 Flow.Application   → Features/{Boards,Tasks,Users,Bootstrap}/{Commands,Queries}/*, Abstractions (IBoardRepository, ITaskItemRepository, IUserRepository, IUnitOfWork, IAccountService), Exceptions (AuthUnavailableException)
 Flow.Domain        → сущности Board, Status, TaskItem, TaskCode, StatusType, DefaultStatuses, User, UserLink, UserLinkType
 Flow.Infrastructure→ EF Core (Postgres/Npgsql), репозитории, UnitOfWork, миграции
-Flow.Client        → Blazor WebAssembly: экраны «Проекты» (/boards) и «Задачи проекта» (/boards/{id}), страница задачи (/tasks/{id}); ходит в Flow.Api через Services/FlowApi
+Flow.Client        → Blazor WebAssembly: экраны «Проекты» (/boards), «Задачи проекта» (/boards/{id}), задача (/tasks/{id}), «Люди» (/users), профиль (/users/{id}); ходит в Flow.Api через Services/FlowApi
 ```
 Зависимости: Domain ← Application ← Infrastructure ← Api.
 Shared намеренно **не ссылается** на Domain (свои enum `StatusType`, `UserLinkType`).
@@ -23,7 +23,7 @@ Shared намеренно **не ссылается** на Domain (свои enum
 ## User (профиль, не учётная запись)
 - `User.Create(username, email, firstName, lastName)` — единственная точка создания; username/email нормализуются в lower, username `^[a-z0-9][a-z0-9._-]{0,30}[a-z0-9]$`.
 - Внешние ссылки — коллекция `UserLink` (`SetLink`/`RemoveLink`), не более одной на `UserLinkType`; телефон хранится в E.164 (`+79991234567`).
-- Удаления нет: `Deactivate()`/`Activate()` (`IsActive`, `DeactivatedAt`). Пароли/роли в домене отсутствуют намеренно.
+- Удаления нет: `Deactivate()`/`Activate()` (`IsActive`, `DeactivatedAt`). Пароли в домене отсутствуют намеренно (живут в Flow.Auth); роли и статусы запланированы в `docs/TZ_user_roles.md` (#15) — из UI деактивация убрана до их появления.
 - Учётная запись живёт в Flow.Auth (см. «Аутентификация»), профиль — здесь; связь по одному Guid. `UserCreate(…, Password)` сначала создаёт учётную запись через `IAccountService.CreateAsync(user.Id, …)`, и только при успехе — профиль; `UserChangeUsername`/`UserChangeEmail` — сначала Flow.Auth, потом копия в `Users` (нормализуют через домен, откатывают, проверяют, применяют — иначе Fake-репозиторий «находит» самого пользователя); `UserDeactivate`/`UserActivate` — `DisableAsync`/`EnableAsync` до смены статуса; `UserChangePassword(UserId, CurrentPassword?, NewPassword)` — только Flow.Auth. Отказ Flow.Auth по вводу → `ArgumentException` → 400, недоступность → `AuthUnavailableException` (502 — #24).
 - Уникальность username/email: локальная копия — быстрый 409 без похода в Flow.Auth (`UserCreateResult.IsUsernameTaken`/`IsEmailTaken`, `UserUpdateResult.ConflictError`); источник истины — Identity в Flow.Auth (`AccountResult.UsernameTaken/EmailTaken`); плюс unique-индексы в БД.
 - `Features/Bootstrap/SeedBootstrapUserCommand` — профиль базового пользователя с заданным Id (`User.CreateWithId`), Flow.Auth не вызывает (учётную запись с тем же Id сеет он сам); повтор — no-op. Запускается hosted service Flow.Api (#24). `UserGetMeQuery(ActorId)` — профиль текущего actor (null → 401).
@@ -95,7 +95,9 @@ Shared намеренно **не ссылается** на Domain (свои enum
 - Доменные ошибки → `ArgumentException` / `InvalidOperationException` (не `DomainException`, не `Result`).
 - `TaskCode` — value object, в БД хранится как string (EF value converter).
 - `Status.SortOrder`: автоинкремент при добавлении, не редактируется, только для `ORDER BY`.
-- Blazor Client: Board в UI называется «проект», задачи — плоский список со статусом в строке (не канбан). DTO только из Flow.Shared, ничего не дублировать. Стили — DRESSY-токены (`wwwroot/css/tokens.css`) + классы из макета (`app.css`); иконки — DRESSY-глифы в `Components/DressyIcons.cs`. Даты/склонения — `Services/Ru.cs` (InvariantGlobalization включён). Адрес API — `wwwroot/appsettings.json` → `ApiBaseUrl`; в `Flow.Api` CORS-origins клиента — `Cors:Origins`.
+- Blazor Client: Board в UI называется «проект», задачи — плоский список со статусом и исполнителем в строке (не канбан). DTO только из Flow.Shared, ничего не дублировать. Стили — DRESSY-токены (`wwwroot/css/tokens.css`) + классы из макета (`app.css`); иконки — DRESSY-глифы в `Components/DressyIcons.cs` (плюс контурные `user`, `user-plus`, `user-off`, `at`, `mail`, `phone`, `link`, `briefcase`, `check-circle`, `external` для раздела «Люди»). Даты/склонения/username-транслит — `Services/Ru.cs` (InvariantGlobalization включён). Адрес API — `wwwroot/appsettings.json` → `ApiBaseUrl`; в `Flow.Api` CORS-origins клиента — `Cors:Origins`.
+- Blazor Client, пользователи: справочник `Services/UserDirectory` (один `GET /users?includeInactive=true` на сессию, `Find(id)`, `Put(user)` после изменений, событие `Changed`) — строки задач берут аватар исполнителя из него, а не через `GET /users/{id}`. Аватар — `Components/Avatar` (картинка или инициалы на тинте по Id, `Services/Avatars`). Выбор исполнителя — `AssigneeSelect` (поповер с локальным фильтром по активным), фильтр списка — `AssigneeFilter` (`?who=<guid>|none`), карточка по клику — `UserCard`. «Это я» (профиль в футере сайдбара) — `AppState.CurrentUserId` ↔ localStorage `flow.me`, аутентификации в API нет. Макеты: артефакт Claude Design «Flow CRM» (Profile.dc.html → страница профиля), перенесены в тёмную тему Flow.
+- Motion (по emilkowalski/skills, `emil-design-eng`): анимируем только transform/opacity, кривые из `tokens.css` (`--ease-out`, `--ease-drawer`), UI ≤ 300ms, press-feedback `scale(.97)`, поповеры от якоря (`transform-origin`), hover только под `(hover: hover) and (pointer: fine)`, `prefers-reduced-motion` снимает transform-движение. Хоткеи (N, Esc, ↑/↓) — без анимаций.
 
 ## Тесты (xUnit)
 - `Flow.Domain.Tests` — юнит-тесты сущностей (Board, TaskItem, TaskCode, User).
@@ -107,4 +109,4 @@ Shared намеренно **не ссылается** на Domain (свои enum
 ## Навигация
 - Структура проекта: `docs/Struktura_board_task_status.md`
 - Сравнение подходов DbContext: `docs/Sravnenie_DbContext_podhodov.md`
-- ТЗ: `docs/TZ_board_task_status.md`, `docs/TZ_user.md`, `docs/TZ_auth.md` (аутентификация, #21)
+- ТЗ: `docs/TZ_board_task_status.md`, `docs/TZ_user.md`, `docs/TZ_user_roles.md` (роли/статусы — план, #15), `docs/TZ_auth.md` (аутентификация, #21)

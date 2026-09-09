@@ -1,0 +1,114 @@
+@* Выбор исполнителя «в строке»: триггер (аватар + имя или «Не назначена») + поповер с поиском по @username/имени
+   и пунктом «Снять исполнителя». Список — из UserDirectory (только активные: деактивированных назначать нельзя).
+   Выбор → OnChange(userId | null). Печать в поле фильтрует локально; Enter — первый результат, Esc — закрыть. *@
+@implements IDisposable
+@inject UserDirectory Users
+@inject BrowserInterop Browser
+
+<div class="assignee-sel @(Compact ? "compact" : "") @(Current is null ? "none" : "")" id="@_id" @onclick="Toggle" @onclick:stopPropagation title="@(Disabled ? "" : "Назначить исполнителя")">
+    <Avatar User="Current" Size="@(Compact ? 20 : 22)" />
+    @if (!Compact)
+    {
+        <span class="lbl">@(Current?.FullName ?? "Не назначена")</span>
+        <Icon Name="chevrons" Size="12" />
+    }
+</div>
+@if (_open)
+{
+    <Popover AnchorId="@_id" Align="@Align" Width="260" OnClose="Close">
+        <label class="pop-search">
+            <Icon Name="search" Size="14" />
+            <input id="@_inputId" placeholder="Имя или @@username" value="@_query" autocomplete="off" spellcheck="false"
+                   @oninput="e => _query = e.Value?.ToString() ?? string.Empty" @onkeydown="OnKey" />
+        </label>
+        @if (!Users.IsLoaded)
+        {
+            <div class="pop-empty">Загрузка…</div>
+        }
+        else
+        {
+            var list = Users.Filter(_query);
+            if (list.Count == 0)
+            {
+                <div class="pop-empty">@(Users.Active.Count == 0 ? "Пока нет людей — добавьте на странице «Люди»" : "Никого не найдено")</div>
+            }
+            @foreach (var u in list)
+            {
+                <button type="button" class="pop-item user @(u.Id == Value ? "cur" : "")" @onclick="() => Select(u.Id)">
+                    <Avatar User="u" Size="22" />
+                    <span class="pop-user">
+                        <span class="pop-user-name">@u.FullName</span>
+                        <span class="pop-user-un">@@@u.Username@(string.IsNullOrEmpty(u.JobTitle) ? "" : $" · {u.JobTitle}")</span>
+                    </span>
+                </button>
+            }
+        }
+        @if (Value is not null)
+        {
+            <div class="pop-sep"></div>
+            <button type="button" class="pop-item" @onclick="() => Select(null)"><Icon Name="user-off" Size="15" />Снять исполнителя</button>
+        }
+    </Popover>
+}
+
+@code {
+    [Parameter] public Guid? Value { get; set; }
+    [Parameter] public EventCallback<Guid?> OnChange { get; set; }
+    /// <summary>Только аватар — для строки списка.</summary>
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public string Align { get; set; } = "left";
+    [Parameter] public bool Disabled { get; set; }
+
+    private readonly string _id = "as-" + Guid.NewGuid().ToString("N")[..8];
+    private readonly string _inputId = "asq-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _open;
+    private string _query = "";
+
+    private UserResponse? Current => Users.Find(Value);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Users.Changed += OnUsersChanged;
+        if (!Users.IsLoaded)
+            await Users.EnsureLoadedAsync();
+    }
+
+    private void OnUsersChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task Toggle()
+    {
+        if (Disabled) return;
+        _open = !_open;
+        if (_open)
+        {
+            _query = "";
+            StateHasChanged();
+            await Task.Yield();
+            await Browser.FocusAsync(_inputId);
+        }
+    }
+
+    private void Close() => _open = false;
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var first = Users.Filter(_query, 1).FirstOrDefault();
+            if (first is not null) await Select(first.Id);
+        }
+        else if (e.Key == "Escape")
+        {
+            _open = false;
+        }
+    }
+
+    private async Task Select(Guid? id)
+    {
+        _open = false;
+        if (id != Value)
+            await OnChange.InvokeAsync(id);
+    }
+
+    public void Dispose() => Users.Changed -= OnUsersChanged;
+}

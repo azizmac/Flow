@@ -1,0 +1,58 @@
+@* Карточка пользователя в поповере (макет: «показать карточку с полной информацией по клику»):
+   аватар, имя, @username, должность, контакты, внешние ссылки, ссылка на профиль. Открывается по клику на якорь. *@
+@inject BrowserInterop Browser
+@inject ToastService Toasts
+
+<Popover AnchorId="@AnchorId" Align="@Align" Width="300" Offset="8" OnClose="OnClose">
+    <div class="ucard">
+        <div class="ucard-head">
+            <Avatar User="User" Size="44" />
+            <div style="min-width:0;">
+                <div class="ucard-name">@User.FullName</div>
+                <div class="ucard-un">@@@User.Username @(User.IsActive ? "" : "· деактивирован")</div>
+            </div>
+        </div>
+        @if (!string.IsNullOrEmpty(User.JobTitle))
+        {
+            <div class="ucard-row"><Icon Name="briefcase" Size="14" /><span>@User.JobTitle</span></div>
+        }
+        <button type="button" class="ucard-row lnk" @onclick="() => Copy(User.Email)" title="Скопировать почту">
+            <Icon Name="mail" Size="14" /><span>@User.Email</span>
+        </button>
+        @if (!string.IsNullOrEmpty(User.PhoneNumber))
+        {
+            <button type="button" class="ucard-row lnk" @onclick="() => Copy(User.PhoneNumber!)" title="Скопировать телефон">
+                <Icon Name="phone" Size="14" /><span>@User.PhoneNumber</span>
+            </button>
+        }
+        @if (User.Links.Count > 0)
+        {
+            <div class="ucard-links">
+                @foreach (var l in User.Links.OrderBy(x => Array.IndexOf(UserLinks.Order, x.Type)))
+                {
+                    <a class="ucard-link" href="@l.Url" target="_blank" rel="noopener noreferrer" title="@l.Url">
+                        <Icon Name="external" Size="12" />@UserLinks.Label(l.Type)
+                    </a>
+                }
+            </div>
+        }
+        @if (!string.IsNullOrWhiteSpace(User.Bio))
+        {
+            <div class="ucard-bio">@User.Bio</div>
+        }
+        <a class="ucard-open" href="@($"users/{User.Id}")"><Icon Name="user" Size="14" />Открыть профиль</a>
+    </div>
+</Popover>
+
+@code {
+    [Parameter, EditorRequired] public UserResponse User { get; set; } = default!;
+    [Parameter, EditorRequired] public string AnchorId { get; set; } = "";
+    [Parameter] public string Align { get; set; } = "left";
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private async Task Copy(string text)
+    {
+        if (await Browser.CopyAsync(text)) Toasts.Ok($"Скопировано: {text}");
+        else Toasts.Error("Не удалось скопировать");
+    }
+}

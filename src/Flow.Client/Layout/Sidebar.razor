@@ -1,8 +1,12 @@
-@* Drawer-nav 240px по Sidebar.dc.html. «Проекты» → /boards; «Задачи» → последний открытый проект
-   (или /boards); Команды/Дашборды/Настройки — в API ещё нет, показаны неактивными. *@
+@* Drawer-nav 240px по Sidebar.dc.html. «Проекты» → /boards; «Задачи» → последний открытый проект (или /boards);
+   «Люди» → /users. Дашборды/Настройки — в API ещё нет, показаны неактивными.
+   Футер — «это я» (AppState.CurrentUserId из localStorage flow.me, выбирается на странице профиля);
+   пока не выбран — приглашение выбрать себя. *@
 @implements IDisposable
 @inject NavigationManager Nav
 @inject AppState State
+@inject UserDirectory Users
+@inject BrowserInterop Browser
 
 <nav class="sb">
     <div class="sb-brand"><div class="sb-mark">F</div><div class="sb-word">FLOW</div></div>
@@ -19,18 +23,31 @@
 
     <a class="sb-item @(IsBoards ? "active" : "")" href="boards"><Icon Name="grid" Size="18" />Проекты</a>
     <a class="sb-item @(IsTasks ? "active" : "")" href="@TasksHref"><Icon Name="check" Size="18" />Задачи</a>
-    <span class="sb-item disabled" aria-disabled="true"><Icon Name="users" Size="18" />Команды</span>
+    <a class="sb-item @(IsUsers ? "active" : "")" href="users"><Icon Name="users" Size="18" />Люди</a>
     <span class="sb-item disabled" aria-disabled="true"><Icon Name="chart" Size="18" />Дашборды</span>
     <span class="sb-item disabled" aria-disabled="true"><Icon Name="settings" Size="18" />Настройки</span>
 
-    <div class="sb-foot">
-        <div class="sb-av">ИВ</div>
-        <div style="flex:1;min-width:0;">
-            <div class="sb-un">Ирина Волкова</div>
-            <div class="sb-ur">Product Designer</div>
-        </div>
-        <DsIconButton Icon="more" Size="26" Title="Меню профиля" Style="color:rgba(255,255,255,0.5)" />
-    </div>
+    @if (Me is { } me)
+    {
+        <a class="sb-foot" href="@($"users/{me.Id}")" title="Мой профиль">
+            <Avatar User="me" Size="32" />
+            <div style="flex:1;min-width:0;">
+                <div class="sb-un">@me.FullName</div>
+                <div class="sb-ur">@(string.IsNullOrEmpty(me.JobTitle) ? "@" + me.Username : me.JobTitle)</div>
+            </div>
+            <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.35)" />
+        </a>
+    }
+    else
+    {
+        <a class="sb-foot" href="users" title="Выберите свой профиль на странице «Люди»">
+            <span class="sb-av ghost"><Icon Name="user" Size="16" /></span>
+            <div style="flex:1;min-width:0;">
+                <div class="sb-un">Кто вы?</div>
+                <div class="sb-ur">Выберите профиль</div>
+            </div>
+        </a>
+    }
 </nav>
 
 @code {
@@ -41,21 +58,41 @@
     private bool IsTasks => Path.StartsWith("boards/", StringComparison.OrdinalIgnoreCase)
                             || Path.StartsWith("tasks/", StringComparison.OrdinalIgnoreCase);
 
+    private bool IsUsers => Path is "users" || Path.StartsWith("users/", StringComparison.OrdinalIgnoreCase);
+
     private string TasksHref => State.LastBoardId is { } id ? $"boards/{id}" : "boards";
+
+    private UserResponse? Me => Users.Find(State.CurrentUserId);
 
     protected override void OnInitialized()
     {
         Nav.LocationChanged += OnLocationChanged;
         State.Changed += OnStateChanged;
+        Users.Changed += OnStateChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        var stored = await Browser.StorageGetAsync("flow.me");
+        if (Guid.TryParse(stored, out var id))
+        {
+            State.SetCurrentUser(id);
+            if (!Users.IsLoaded)
+                await Users.EnsureLoadedAsync();
+        }
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => StateHasChanged();
 
-    private void OnStateChanged() => StateHasChanged();
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {
         Nav.LocationChanged -= OnLocationChanged;
         State.Changed -= OnStateChanged;
+        Users.Changed -= OnStateChanged;
     }
 }

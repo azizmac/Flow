@@ -16,6 +16,48 @@ public static partial class Ru
 
     public const string BoardKeyRule = "Заглавные латинские буквы и цифры, 2–10 символов, с буквы";
 
+    [GeneratedRegex("^[a-z0-9][a-z0-9._-]{0,30}[a-z0-9]$")]
+    public static partial Regex UsernamePattern();
+
+    public const string UsernameRule = "Строчные латинские буквы, цифры и . _ -, 2–32 символа, не начинается и не заканчивается разделителем";
+
+    [GeneratedRegex(@"^\+[1-9]\d{6,14}$")]
+    public static partial Regex PhonePattern();
+
+    private static readonly Dictionary<char, string> Translit = new()
+    {
+        ['а'] = "a", ['б'] = "b", ['в'] = "v", ['г'] = "g", ['д'] = "d", ['е'] = "e", ['ё'] = "e", ['ж'] = "zh",
+        ['з'] = "z", ['и'] = "i", ['й'] = "y", ['к'] = "k", ['л'] = "l", ['м'] = "m", ['н'] = "n", ['о'] = "o",
+        ['п'] = "p", ['р'] = "r", ['с'] = "s", ['т'] = "t", ['у'] = "u", ['ф'] = "f", ['х'] = "h", ['ц'] = "ts",
+        ['ч'] = "ch", ['ш'] = "sh", ['щ'] = "sch", ['ъ'] = "", ['ы'] = "y", ['ь'] = "", ['э'] = "e", ['ю'] = "yu", ['я'] = "ya"
+    };
+
+    /// <summary>Подсказка username из имени и фамилии: «Илья Моторин» → «ilya.motorin». Пустая строка, если нечего предложить.</summary>
+    public static string SuggestUsername(string firstName, string lastName)
+    {
+        var parts = new[] { firstName, lastName }
+            .Select(Slug)
+            .Where(p => p.Length > 0)
+            .ToArray();
+        var s = string.Join('.', parts);
+        if (s.Length > 32) s = s[..32].TrimEnd('.', '_', '-');
+        return UsernamePattern().IsMatch(s) ? s : "";
+    }
+
+    private static string Slug(string value)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var ch in value.Trim().ToLowerInvariant())
+        {
+            if (Translit.TryGetValue(ch, out var t)) sb.Append(t);
+            else if (ch is >= 'a' and <= 'z' or >= '0' and <= '9') sb.Append(ch);
+            else if (ch is ' ' or '-' or '_' or '.') sb.Append('-');
+        }
+        return sb.ToString().Trim('-', '.', '_');
+    }
+
+    public static string People(int n) => $"{n} {Plural(n, "человек", "человека", "человек")}";
+
     /// <summary>Склонение: Plural(n, "задача", "задачи", "задач").</summary>
     public static string Plural(int n, string one, string few, string many)
     {
