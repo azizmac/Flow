@@ -3,7 +3,8 @@
    статус-чип, должность · почта · телефон), вкладки «Профиль» / «Задачи».
    Профиль: карточка «Личные данные» (PATCH /users/{id}, PATCH-семантика: пустая строка очищает поле),
    «Аккаунт» (username и email — отдельные PATCH, 409 → ошибка под полем), справа — «Ссылки» (PUT/DELETE links/{type})
-   и «Это я» (профиль в футере сайдбара; auth в API нет). Задачи: назначенные на человека по всем проектам. *@
+   и «Это я» (профиль в футере сайдбара; auth в API нет). Задачи: назначенные на человека по всем проектам.
+   Деактивация/активация из UI убрана до появления ролей (docs/TZ_user_roles.md): это право только Owner. *@
 @page "/users/{Id:guid}"
 @implements IDisposable
 @inject FlowApi Api
@@ -28,7 +29,7 @@
         @if (_user is not null)
         {
             <button type="button" class="icon-lnk" @onclick="CopyLink"><Icon Name="copy" Size="14" />Скопировать ссылку</button>
-            <UserMenu User="_user" Size="30" Style="color:rgba(255,255,255,0.5)" OnOpen="() => { }" OnCopy="CopyUsername" OnToggleActive="ToggleActive" />
+            <UserMenu User="_user" Size="30" Style="color:rgba(255,255,255,0.5)" OnOpen="() => { }" OnCopy="CopyUsername" />
         }
     </div>
 </div>
@@ -85,16 +86,6 @@ else if (_user is not null)
                     @if (!string.IsNullOrEmpty(_user.PhoneNumber)) { <span class="dot">·</span><span>@_user.PhoneNumber</span> }
                     <span class="dot">·</span><span>с @Ru.Date(_user.CreatedAt)</span>
                 </div>
-            </div>
-            <div class="profile-actions">
-                @if (_user.IsActive)
-                {
-                    <DsButton Variant="secondary" Size="sm" Icon="user-off" OnClick="ToggleActive" Busy="_toggling">Деактивировать</DsButton>
-                }
-                else
-                {
-                    <DsButton Variant="primary" Size="sm" Icon="check-circle" OnClick="ToggleActive" Busy="_toggling">Активировать</DsButton>
-                }
             </div>
         </div>
 
@@ -280,7 +271,6 @@ else if (_user is not null)
     private bool _loading = true;
     private bool _notFound;
     private string? _loadError;
-    private bool _toggling;
     private IDisposable? _hotkeys;
 
     // личные данные
@@ -550,25 +540,6 @@ else if (_user is not null)
     }
 
     // ---- статус / это я / копирование ----
-
-    private async Task ToggleActive()
-    {
-        if (_user is null || _toggling) return;
-        _toggling = true;
-        var result = _user.IsActive ? await Api.DeactivateUser(_user.Id) : await Api.ActivateUser(_user.Id);
-        if (!result.Ok)
-        {
-            _toggling = false;
-            Toasts.Error(result.Error ?? "Не удалось изменить статус");
-            return;
-        }
-
-        var fresh = await Api.GetUser(_user.Id);
-        _toggling = false;
-        if (fresh.Ok) Apply(fresh.Value!);
-        if (_user is { IsActive: false } && IsMe) await SetMe(false);
-        Toasts.Ok(_user!.IsActive ? $"{_user.FullName} снова активен" : $"{_user.FullName} деактивирован");
-    }
 
     private async Task SetMe(bool me)
     {

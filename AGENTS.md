@@ -22,7 +22,7 @@ Shared намеренно **не ссылается** на Domain (свои enum
 ## User (профиль, не учётная запись)
 - `User.Create(username, email, firstName, lastName)` — единственная точка создания; username/email нормализуются в lower, username `^[a-z0-9][a-z0-9._-]{0,30}[a-z0-9]$`.
 - Внешние ссылки — коллекция `UserLink` (`SetLink`/`RemoveLink`), не более одной на `UserLinkType`; телефон хранится в E.164 (`+79991234567`).
-- Удаления нет: `Deactivate()`/`Activate()` (`IsActive`, `DeactivatedAt`). Пароли/роли в домене отсутствуют намеренно.
+- Удаления нет: `Deactivate()`/`Activate()` (`IsActive`, `DeactivatedAt`). Пароли/роли в домене пока отсутствуют; роли и статусы запланированы в `docs/TZ_user_roles.md` — из UI деактивация убрана до их появления.
 - Уникальность username/email: `UserCreate` → `UserCreateResult` (`IsUsernameTaken`/`IsEmailTaken` → 409); `UserChangeUsername`/`UserChangeEmail` → `UserUpdateResult.ConflictError` → 409; плюс unique-индексы в БД.
 - Все изменяющие команды пользователя возвращают общий `Features/Users/UserUpdateResult` (NotFound | ConflictError | Success). `UserUpdateProfile` — PATCH-семантика: null не трогать, пустая строка очищает.
 - Назначение на задачу: `TaskItem.AssigneeId : Guid?`, `Assign`/`Unassign`; **назначать можно только активного пользователя** — проверяет `TaskAssignCommandHandler` (`TaskAssignResult`: NotFound | ValidationError | Success). `TaskListQuery(boardId, assigneeId?)` фильтрует по исполнителю.
@@ -88,4 +88,4 @@ Shared намеренно **не ссылается** на Domain (свои enum
 ## Навигация
 - Структура проекта: `docs/Struktura_board_task_status.md`
 - Сравнение подходов DbContext: `docs/Sravnenie_DbContext_podhodov.md`
-- ТЗ: `docs/TZ_board_task_status.md`, `docs/TZ_user.md`
+- ТЗ: `docs/TZ_board_task_status.md`, `docs/TZ_user.md`, `docs/TZ_user_roles.md` (роли/статусы — план, не реализовано)

@@ -1,4 +1,4 @@
-@* Меню «…» человека: Открыть профиль · Скопировать @username · — · Деактивировать / Активировать. *@
+@* Меню «…» человека: Открыть профиль · Скопировать @username. Деактивация — после ролей (docs/TZ_user_roles.md). *@
 
 <DsIconButton Id="@_id" Icon="more" Size="@Size" Title="Действия" OnClick="Toggle" Style="@Style" />
 @if (_open)
@@ -6,15 +6,6 @@
     <Popover AnchorId="@_id" Align="right" Width="210" Offset="4" OnClose="Close">
         <button type="button" class="pop-item" @onclick="() => Fire(OnOpen)"><Icon Name="view" Size="15" />Открыть профиль</button>
         <button type="button" class="pop-item" @onclick="() => Fire(OnCopy)"><Icon Name="at" Size="15" />Скопировать @@username</button>
-        <div class="pop-sep"></div>
-        @if (User.IsActive)
-        {
-            <button type="button" class="pop-item danger" @onclick="() => Fire(OnToggleActive)"><Icon Name="user-off" Size="15" />Деактивировать</button>
-        }
-        else
-        {
-            <button type="button" class="pop-item" @onclick="() => Fire(OnToggleActive)"><Icon Name="check-circle" Size="15" />Активировать</button>
-        }
     </Popover>
 }
 
@@ -24,7 +15,6 @@
     [Parameter] public string? Style { get; set; } = "color:rgba(255,255,255,0.4)";
     [Parameter] public EventCallback OnOpen { get; set; }
     [Parameter] public EventCallback OnCopy { get; set; }
-    [Parameter] public EventCallback OnToggleActive { get; set; }
 
     private readonly string _id = "um-" + Guid.NewGuid().ToString("N")[..8];
     private bool _open;

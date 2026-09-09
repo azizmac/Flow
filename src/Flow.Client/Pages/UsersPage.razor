@@ -1,9 +1,9 @@
 @* Экран «Люди» (GET /users?includeInactive=): список профилей — аватар, имя + @username, должность, почта,
    статус, меню «…». Клик → /users/{id}. «Добавить» — модалка нового человека (хоткей N).
-   Деактивированные скрыты за переключателем (их нельзя назначать, но история за ними остаётся). *@
+   Деактивированные скрыты за переключателем (их нельзя назначать, но история за ними остаётся).
+   Деактивация/активация из UI убрана до появления ролей — см. docs/TZ_user_roles.md (только Owner). *@
 @page "/users"
 @implements IDisposable
-@inject FlowApi Api
 @inject UserDirectory Directory
 @inject NavigationManager Nav
 @inject ToastService Toasts
@@ -92,7 +92,7 @@
                                 }
                             </div>
                             <div>
-                                <UserMenu User="u" OnOpen="() => Open(u)" OnCopy="() => CopyUsername(u)" OnToggleActive="() => ToggleActive(u)" />
+                                <UserMenu User="u" OnOpen="() => Open(u)" OnCopy="() => CopyUsername(u)" />
                             </div>
                         </div>
                     }
@@ -184,21 +184,6 @@
     {
         if (await Browser.CopyAsync("@" + u.Username)) Toasts.Ok($"Скопировано: @{u.Username}");
         else Toasts.Error("Не удалось скопировать");
-    }
-
-    private async Task ToggleActive(UserResponse u)
-    {
-        var result = u.IsActive ? await Api.DeactivateUser(u.Id) : await Api.ActivateUser(u.Id);
-        if (!result.Ok)
-        {
-            Toasts.Error(result.Error ?? "Не удалось изменить статус");
-            return;
-        }
-
-        // 204 без тела — перечитываем профиль, чтобы справочник и строка были свежими.
-        var fresh = await Api.GetUser(u.Id);
-        if (fresh.Ok) Directory.Put(fresh.Value!);
-        Toasts.Ok(u.IsActive ? $"{u.FullName} деактивирован" : $"{u.FullName} снова активен");
     }
 
     public void Dispose()
