@@ -27,5 +27,8 @@ public interface IUserRepository
     /// </summary>
     Task<IReadOnlyList<User>> SearchAsync(string query, int limit, CancellationToken cancellationToken);
 
+    /// <summary>Сколько пользователей с ролью — для инварианта «последний Owner нельзя понизить/деактивировать».</summary>
+    Task<int> CountByRoleAsync(UserRole role, CancellationToken cancellationToken);
+
     void Add(User user);
 }

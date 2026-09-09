@@ -21,7 +21,7 @@ public sealed class UserRepository(FlowDbContext db) : IUserRepository
 
     public async Task<IReadOnlyList<User>> ListAsync(bool includeInactive, CancellationToken cancellationToken) =>
         await db.Users
-            .Where(u => includeInactive || u.IsActive)
+            .Where(u => includeInactive || u.Status != UserStatus.Deactivated)
             .OrderBy(u => u.Username)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -32,7 +32,7 @@ public sealed class UserRepository(FlowDbContext db) : IUserRepository
         var pattern = $"%{EscapeLike(query)}%";
 
         return await db.Users
-            .Where(u => u.IsActive)
+            .Where(u => u.Status != UserStatus.Deactivated)
             .Where(u => EF.Functions.ILike(u.Username, pattern, "\\")
                         || EF.Functions.ILike(u.FirstName, pattern, "\\")
                         || EF.Functions.ILike(u.LastName, pattern, "\\"))
@@ -41,6 +41,9 @@ public sealed class UserRepository(FlowDbContext db) : IUserRepository
             .AsNoTracking()
             .ToListAsync(cancellationToken);
     }
+
+    public Task<int> CountByRoleAsync(UserRole role, CancellationToken cancellationToken) =>
+        db.Users.CountAsync(u => u.Role == role, cancellationToken);
 
     public void Add(User user) => db.Users.Add(user);
 

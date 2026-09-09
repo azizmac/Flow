@@ -20,7 +20,7 @@ public class UserFeatureTests
 {
     private static async Task<UserResponse> CreateUserAsync(IMediator mediator, string username = "ilya", string email = "ilya@example.com")
     {
-        var result = await mediator.Send(new UserCreateCommand(username, email, "Илья", "Моторин"), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, username, email, "Илья", "Моторин", "correct horse battery"), CancellationToken.None);
         Assert.False(result.IsConflict);
         return result.Response!;
     }
@@ -30,7 +30,7 @@ public class UserFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
 
-        var result = await mediator.Send(new UserCreateCommand(" Ilya ", " Ilya@Example.COM ", "Илья", "Моторин"), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, " Ilya ", " Ilya@Example.COM ", "Илья", "Моторин", "correct horse battery"), CancellationToken.None);
 
         Assert.False(result.IsConflict);
         Assert.Equal("ilya", result.Response!.Username);
@@ -45,7 +45,7 @@ public class UserFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         await CreateUserAsync(mediator);
 
-        var result = await mediator.Send(new UserCreateCommand("ILYA", "other@example.com", "A", "B"), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, "ILYA", "other@example.com", "A", "B", "correct horse battery"), CancellationToken.None);
 
         Assert.True(result.IsUsernameTaken);
         Assert.False(result.IsEmailTaken);
@@ -58,7 +58,7 @@ public class UserFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         await CreateUserAsync(mediator);
 
-        var result = await mediator.Send(new UserCreateCommand("other", "ILYA@example.com", "A", "B"), CancellationToken.None);
+        var result = await mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, "other", "ILYA@example.com", "A", "B", "correct horse battery"), CancellationToken.None);
 
         Assert.True(result.IsEmailTaken);
         Assert.Null(result.Response);
@@ -70,7 +70,7 @@ public class UserFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            mediator.Send(new UserCreateCommand("bad user!", "a@b.c", "A", "B"), CancellationToken.None));
+            mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, "bad user!", "a@b.c", "A", "B", "correct horse battery"), CancellationToken.None));
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class UserFeatureTests
         var created = await CreateUserAsync(mediator);
 
         var result = await mediator.Send(
-            new UserUpdateProfileCommand(created.Id, null, "Иванов", "Backend", null, "+7 (999) 123-45-67", null),
+            new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, created.Id, null, "Иванов", "Backend", null, "+7 (999) 123-45-67", null),
             CancellationToken.None);
 
         var response = result.Response!;
@@ -96,9 +96,9 @@ public class UserFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var created = await CreateUserAsync(mediator);
-        await mediator.Send(new UserUpdateProfileCommand(created.Id, null, null, "Backend", null, null, null), CancellationToken.None);
+        await mediator.Send(new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, created.Id, null, null, "Backend", null, null, null), CancellationToken.None);
 
-        var result = await mediator.Send(new UserUpdateProfileCommand(created.Id, null, null, "", null, null, null), CancellationToken.None);
+        var result = await mediator.Send(new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, created.Id, null, null, "", null, null, null), CancellationToken.None);
 
         Assert.Null(result.Response!.JobTitle);
     }
@@ -108,7 +108,7 @@ public class UserFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
 
-        var result = await mediator.Send(new UserUpdateProfileCommand(Guid.NewGuid(), "A", null, null, null, null, null), CancellationToken.None);
+        var result = await mediator.Send(new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, Guid.NewGuid(), "A", null, null, null, null, null), CancellationToken.None);
 
         Assert.True(result.IsNotFound);
     }
@@ -120,7 +120,7 @@ public class UserFeatureTests
         var first = await CreateUserAsync(mediator, "first", "first@example.com");
         await CreateUserAsync(mediator, "second", "second@example.com");
 
-        var result = await mediator.Send(new UserChangeUsernameCommand(first.Id, "SECOND"), CancellationToken.None);
+        var result = await mediator.Send(new UserChangeUsernameCommand(TestMediatorFactory.OwnerId, first.Id, "SECOND"), CancellationToken.None);
 
         Assert.NotNull(result.ConflictError);
         var unchanged = await mediator.Send(new UserGetQuery(first.Id), CancellationToken.None);
@@ -133,7 +133,7 @@ public class UserFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var created = await CreateUserAsync(mediator);
 
-        var result = await mediator.Send(new UserChangeUsernameCommand(created.Id, "ILYA"), CancellationToken.None);
+        var result = await mediator.Send(new UserChangeUsernameCommand(TestMediatorFactory.OwnerId, created.Id, "ILYA"), CancellationToken.None);
 
         Assert.Null(result.ConflictError);
         Assert.Equal("ilya", result.Response!.Username);
@@ -146,7 +146,7 @@ public class UserFeatureTests
         var first = await CreateUserAsync(mediator, "first", "first@example.com");
         await CreateUserAsync(mediator, "second", "second@example.com");
 
-        var result = await mediator.Send(new UserChangeEmailCommand(first.Id, "Second@Example.com"), CancellationToken.None);
+        var result = await mediator.Send(new UserChangeEmailCommand(TestMediatorFactory.OwnerId, first.Id, "Second@Example.com"), CancellationToken.None);
 
         Assert.NotNull(result.ConflictError);
     }
@@ -157,8 +157,8 @@ public class UserFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var created = await CreateUserAsync(mediator);
 
-        await mediator.Send(new UserSetLinkCommand(created.Id, UserLinkType.GitHub, "https://github.com/old"), CancellationToken.None);
-        var result = await mediator.Send(new UserSetLinkCommand(created.Id, UserLinkType.GitHub, "https://github.com/new"), CancellationToken.None);
+        await mediator.Send(new UserSetLinkCommand(TestMediatorFactory.OwnerId, created.Id, UserLinkType.GitHub, "https://github.com/old"), CancellationToken.None);
+        var result = await mediator.Send(new UserSetLinkCommand(TestMediatorFactory.OwnerId, created.Id, UserLinkType.GitHub, "https://github.com/new"), CancellationToken.None);
 
         var link = Assert.Single(result.Response!.Links);
         Assert.Equal(UserLinkType.GitHub, link.Type);
@@ -171,7 +171,7 @@ public class UserFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var created = await CreateUserAsync(mediator);
 
-        var result = await mediator.Send(new UserRemoveLinkCommand(created.Id, UserLinkType.Telegram), CancellationToken.None);
+        var result = await mediator.Send(new UserRemoveLinkCommand(TestMediatorFactory.OwnerId, created.Id, UserLinkType.Telegram), CancellationToken.None);
 
         Assert.False(result.IsNotFound);
         Assert.Empty(result.Response!.Links);
@@ -183,11 +183,12 @@ public class UserFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var created = await CreateUserAsync(mediator);
 
-        var result = await mediator.Send(new UserDeactivateCommand(created.Id), CancellationToken.None);
+        var result = await mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None);
 
+        // В репозитории ещё сидит Owner из TestMediatorFactory — смотрим только на созданного.
         Assert.False(result.Response!.IsActive);
-        Assert.Empty(await mediator.Send(new UserListQuery(), CancellationToken.None));
-        Assert.Single(await mediator.Send(new UserListQuery(IncludeInactive: true), CancellationToken.None));
+        Assert.DoesNotContain(await mediator.Send(new UserListQuery(), CancellationToken.None), u => u.Id == created.Id);
+        Assert.Contains(await mediator.Send(new UserListQuery(IncludeInactive: true), CancellationToken.None), u => u.Id == created.Id);
         Assert.Empty(await mediator.Send(new UserSearchQuery("il"), CancellationToken.None));
     }
 
@@ -196,10 +197,10 @@ public class UserFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var created = await CreateUserAsync(mediator);
-        await mediator.Send(new UserDeactivateCommand(created.Id), CancellationToken.None);
+        await mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            mediator.Send(new UserDeactivateCommand(created.Id), CancellationToken.None));
+            mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None));
     }
 
     [Fact]
@@ -207,12 +208,12 @@ public class UserFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var created = await CreateUserAsync(mediator);
-        await mediator.Send(new UserDeactivateCommand(created.Id), CancellationToken.None);
+        await mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None);
 
-        var result = await mediator.Send(new UserActivateCommand(created.Id), CancellationToken.None);
+        var result = await mediator.Send(new UserActivateCommand(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None);
 
         Assert.True(result.Response!.IsActive);
-        Assert.Single(await mediator.Send(new UserListQuery(), CancellationToken.None));
+        Assert.Contains(await mediator.Send(new UserListQuery(), CancellationToken.None), u => u.Id == created.Id);
     }
 
     [Fact]
@@ -231,7 +232,7 @@ public class UserFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         await CreateUserAsync(mediator, "ilya", "ilya@example.com");
-        await mediator.Send(new UserCreateCommand("aziz", "aziz@example.com", "Азиз", "Мамедов"), CancellationToken.None);
+        await mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, "aziz", "aziz@example.com", "Азиз", "Мамедов", "correct horse battery"), CancellationToken.None);
 
         var byUsername = await mediator.Send(new UserSearchQuery("il"), CancellationToken.None);
         var byName = await mediator.Send(new UserSearchQuery("Мамед"), CancellationToken.None);

@@ -4,12 +4,23 @@
     <Project Path="src/Flow.Application/Flow.Application.csproj" />
     <Project Path="src/Flow.Infrastructure/Flow.Infrastructure.csproj" />
     <Project Path="src/Flow.Api/Flow.Api.csproj" />
+    <Project Path="src/Flow.Auth/Flow.Auth.csproj" />
     <Project Path="src/Flow.Client/Flow.Client.csproj" />
     <Project Path="src/Flow.Shared/Flow.Shared.csproj" />
+  </Folder>
+  <Folder Name="/docker/">
+    <File Path="docker-compose.yml" />
+    <File Path=".env.example" />
+    <File Path=".dockerignore" />
+    <File Path="docker/client/nginx.conf" />
+    <File Path="docker/client/entrypoint.sh" />
+    <File Path="docker/postgres/init.sql" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Flow.Domain.Tests/Flow.Domain.Tests.csproj" />
     <Project Path="tests/Flow.Application.Tests/Flow.Application.Tests.csproj" />
     <Project Path="tests/Flow.Infrastructure.Tests/Flow.Infrastructure.Tests.csproj" />
+    <Project Path="tests/Flow.Auth.Tests/Flow.Auth.Tests.csproj" />
+    <Project Path="tests/Flow.Api.Tests/Flow.Api.Tests.csproj" />
   </Folder>
 </Solution>

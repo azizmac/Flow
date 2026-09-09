@@ -1,4 +1,6 @@
+using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
+using Flow.Application.Features.Bootstrap;
 using Flow.Infrastructure.DependencyInjection;
 using Flow.Infrastructure.Persistence;
 using MediatR;
@@ -17,6 +19,9 @@ namespace Flow.Infrastructure.Tests;
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
+    /// <summary>Owner, который сеется после миграций: actor для команд в интеграционных тестах.</summary>
+    public static readonly Guid OwnerId = Guid.Parse("00000000-0000-0000-0000-00000000aaaa");
+
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
 
     private ServiceProvider _services = null!;
@@ -36,10 +41,14 @@ public sealed class PostgresFixture : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddFlowInfrastructure(configuration);
         services.AddFlowApplication();
+        // В Flow.Auth эти тесты не ходят: учётные записи всегда «создаются» успешно.
+        services.AddSingleton<IAccountService, AlwaysSucceedingAccountService>();
         _services = services.BuildServiceProvider();
 
         await using var scope = _services.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<FlowDbContext>().Database.MigrateAsync();
+
+        await SendAsync(new SeedBootstrapUserCommand(OwnerId, "owner", "owner@example.com", "Owner", "Flow"));
     }
 
     public async Task DisposeAsync()

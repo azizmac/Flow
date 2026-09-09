@@ -5,9 +5,10 @@ namespace Flow.Domain.Entities;
 /// <summary>
 /// Пользователь таск-трекера — профиль, который назначают на задачи, упоминают через <c>@Username</c>
 /// и показывают в карточке (имя, должность, контакты, внешние ссылки).
-/// Учётных данных (пароль, токены, роли) здесь нет намеренно: аутентификация — отдельный контекст,
-/// который ссылается на <see cref="Id"/>.
-/// Пользователь не удаляется, а деактивируется (<see cref="Deactivate"/>), чтобы не терять историю назначений.
+/// Учётных данных (пароль, токены) здесь нет намеренно: они в Flow.Auth, который ссылается на <see cref="Id"/>.
+/// Роль (<see cref="Role"/>) и статус (<see cref="Status"/>) — здесь: роль одна и глобальная для workspace,
+/// статус отделён от роли. Пользователь не удаляется, а деактивируется (<see cref="Deactivate"/>),
+/// чтобы не терять историю назначений. Кто вправе менять роль и статус — решает Application (IPermissionService).
 /// </summary>
 public sealed partial class User
 {
@@ -54,12 +55,22 @@ public sealed partial class User
     /// <summary>Телефон в формате E.164 (<c>+79991234567</c>).</summary>
     public string? PhoneNumber { get; private set; }
 
-    /// <summary>Можно ли назначать пользователя на новые задачи.</summary>
-    public bool IsActive { get; private set; }
+    /// <summary>Роль в workspace. По умолчанию Member; проверку «последний Owner» делает Application — домен не видит других пользователей.</summary>
+    public UserRole Role { get; private set; }
+
+    /// <summary>Invited при создании; Active — после первого входа (<see cref="MarkActive"/>); Deactivated — ушёл.</summary>
+    public UserStatus Status { get; private set; }
+
+    /// <summary>Когда статус менялся последний раз (null — ни разу с создания).</summary>
+    public DateTime? StatusChangedAt { get; private set; }
+
+    /// <summary>Не деактивирован. Вычисляется из <see cref="Status"/>, в БД не хранится.</summary>
+    public bool IsActive => Status != UserStatus.Deactivated;
+
+    /// <summary>Можно ли назначать на новые задачи: Invited и Active — да, Deactivated — нет.</summary>
+    public bool CanBeAssigned => IsActive;
 
     public DateTime CreatedAt { get; private set; }
-
-    public DateTime? DeactivatedAt { get; private set; }
 
     public IReadOnlyCollection<UserLink> Links => _links;
 
@@ -75,13 +86,26 @@ public sealed partial class User
         Email = ValidateEmail(email);
         FirstName = ValidateName(firstName, nameof(firstName));
         LastName = ValidateName(lastName, nameof(lastName));
-        IsActive = true;
+        Role = UserRole.Member;
+        Status = UserStatus.Invited;
         CreatedAt = DateTime.UtcNow;
     }
 
-    /// <summary>Единственная публичная точка создания. Уникальность Username/Email между пользователями проверяет Application.</summary>
+    /// <summary>Основная точка создания. Уникальность Username/Email между пользователями проверяет Application.</summary>
     public static User Create(string username, string email, string firstName, string lastName)
         => new(username, email, firstName, lastName);
+
+    /// <summary>
+    /// Профиль с заранее известным Id — для базового пользователя, чью учётную запись с тем же Id создаёт Flow.Auth
+    /// (см. docs/TZ_auth.md). В остальных случаях Id генерирует <see cref="Create"/>.
+    /// </summary>
+    public static User CreateWithId(Guid id, string username, string email, string firstName, string lastName)
+    {
+        if (id == Guid.Empty)
+            throw new ArgumentException("User id must not be empty.", nameof(id));
+
+        return new User(username, email, firstName, lastName) { Id = id };
+    }
 
     public void ChangeUsername(string username) => Username = ValidateUsername(username);
 
@@ -137,22 +161,54 @@ public sealed partial class User
     /// <summary>Удаляет ссылку указанного типа. Если её нет — ничего не делает.</summary>
     public void RemoveLink(UserLinkType type) => _links.RemoveAll(l => l.Type == type);
 
-    public void Deactivate()
+    /// <summary>Только меняет роль. Ограничения (кто кому что может выдать, последний Owner) — в Application.</summary>
+    public void ChangeRole(UserRole role)
     {
-        if (!IsActive)
-            throw new InvalidOperationException($"User {Id} is already deactivated.");
+        if (!Enum.IsDefined(role))
+            throw new ArgumentException($"Unknown user role {role}.", nameof(role));
 
-        IsActive = false;
-        DeactivatedAt = DateTime.UtcNow;
+        Role = role;
     }
 
+    /// <summary>
+    /// Первый вход: Invited → Active. Для уже активного — no-op (вызывается на каждом GET /users/me),
+    /// деактивированного не оживляет — для этого есть <see cref="Activate"/>.
+    /// </summary>
+    public void MarkActive()
+    {
+        switch (Status)
+        {
+            case UserStatus.Active:
+                return;
+            case UserStatus.Deactivated:
+                throw new InvalidOperationException($"User {Id} is deactivated; use Activate().");
+        }
+
+        Status = UserStatus.Active;
+        StatusChangedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Owner деактивировать нельзя — сначала передать владение (понизить). Повторный вызов — ошибка состояния.</summary>
+    public void Deactivate()
+    {
+        if (Role == UserRole.Owner)
+            throw new InvalidOperationException($"User {Id} is an Owner; transfer ownership before deactivating.");
+
+        if (Status == UserStatus.Deactivated)
+            throw new InvalidOperationException($"User {Id} is already deactivated.");
+
+        Status = UserStatus.Deactivated;
+        StatusChangedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Возвращает деактивированного в Active (не в Invited: он уже работал). Для Invited/Active — ошибка состояния.</summary>
     public void Activate()
     {
-        if (IsActive)
-            throw new InvalidOperationException($"User {Id} is already active.");
+        if (Status != UserStatus.Deactivated)
+            throw new InvalidOperationException($"User {Id} is not deactivated.");
 
-        IsActive = true;
-        DeactivatedAt = null;
+        Status = UserStatus.Active;
+        StatusChangedAt = DateTime.UtcNow;
     }
 
     private static string ValidateUsername(string username)

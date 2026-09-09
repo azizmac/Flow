@@ -42,7 +42,17 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(u => u.PhoneNumber).HasMaxLength(User.PhoneNumberMaxLength);
 
-        builder.Property(u => u.IsActive).IsRequired();
+        // Роль и статус — int (как StatusType у задач). IsActive/CanBeAssigned вычисляются из Status и в БД не хранятся:
+        // запросы фильтруют по Status (см. UserRepository), иначе EF не сможет транслировать вычисляемое свойство.
+        builder.Property(u => u.Role).IsRequired();
+
+        builder.Property(u => u.Status).IsRequired();
+
+        builder.Property(u => u.StatusChangedAt);
+
+        builder.Ignore(u => u.IsActive);
+
+        builder.Ignore(u => u.CanBeAssigned);
 
         builder.Property(u => u.CreatedAt).IsRequired();
 

@@ -15,9 +15,9 @@ public class TaskAssignFeatureTests
 {
     private static async Task<(Guid BoardId, TaskResponse Task, UserResponse User)> SetupAsync(IMediator mediator)
     {
-        var board = (await mediator.Send(new BoardCreateCommand("Flow Project", "FLW"), CancellationToken.None)).Response!;
-        var task = (await mediator.Send(new TaskCreateCommand(board.Id, "Task", null, null), CancellationToken.None))!;
-        var user = (await mediator.Send(new UserCreateCommand("ilya", "ilya@example.com", "Илья", "Моторин"), CancellationToken.None)).Response!;
+        var board = (await mediator.Send(new BoardCreateCommand(TestMediatorFactory.OwnerId, "Flow Project", "FLW"), CancellationToken.None)).Response!;
+        var task = (await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, board.Id, "Task", null, null), CancellationToken.None))!;
+        var user = (await mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, "ilya", "ilya@example.com", "Илья", "Моторин", "correct horse battery"), CancellationToken.None)).Response!;
         return (board.Id, task, user);
     }
 
@@ -27,7 +27,7 @@ public class TaskAssignFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var (_, task, user) = await SetupAsync(mediator);
 
-        var result = await mediator.Send(new TaskAssignCommand(task.Id, user.Id), CancellationToken.None);
+        var result = await mediator.Send(new TaskAssignCommand(TestMediatorFactory.OwnerId, task.Id, user.Id), CancellationToken.None);
 
         Assert.False(result.IsNotFound);
         Assert.Null(result.ValidationError);
@@ -39,9 +39,9 @@ public class TaskAssignFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var (_, task, user) = await SetupAsync(mediator);
-        await mediator.Send(new UserDeactivateCommand(user.Id), CancellationToken.None);
+        await mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, user.Id), CancellationToken.None);
 
-        var result = await mediator.Send(new TaskAssignCommand(task.Id, user.Id), CancellationToken.None);
+        var result = await mediator.Send(new TaskAssignCommand(TestMediatorFactory.OwnerId, task.Id, user.Id), CancellationToken.None);
 
         Assert.NotNull(result.ValidationError);
         Assert.Null(result.Response);
@@ -53,7 +53,7 @@ public class TaskAssignFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var (_, task, _) = await SetupAsync(mediator);
 
-        var result = await mediator.Send(new TaskAssignCommand(task.Id, Guid.NewGuid()), CancellationToken.None);
+        var result = await mediator.Send(new TaskAssignCommand(TestMediatorFactory.OwnerId, task.Id, Guid.NewGuid()), CancellationToken.None);
 
         Assert.NotNull(result.ValidationError);
     }
@@ -64,7 +64,7 @@ public class TaskAssignFeatureTests
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var (_, _, user) = await SetupAsync(mediator);
 
-        var result = await mediator.Send(new TaskAssignCommand(Guid.NewGuid(), user.Id), CancellationToken.None);
+        var result = await mediator.Send(new TaskAssignCommand(TestMediatorFactory.OwnerId, Guid.NewGuid(), user.Id), CancellationToken.None);
 
         Assert.True(result.IsNotFound);
     }
@@ -74,9 +74,9 @@ public class TaskAssignFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var (_, task, user) = await SetupAsync(mediator);
-        await mediator.Send(new TaskAssignCommand(task.Id, user.Id), CancellationToken.None);
+        await mediator.Send(new TaskAssignCommand(TestMediatorFactory.OwnerId, task.Id, user.Id), CancellationToken.None);
 
-        var result = await mediator.Send(new TaskAssignCommand(task.Id, null), CancellationToken.None);
+        var result = await mediator.Send(new TaskAssignCommand(TestMediatorFactory.OwnerId, task.Id, null), CancellationToken.None);
 
         Assert.Null(result.Response!.AssigneeId);
     }
@@ -86,8 +86,8 @@ public class TaskAssignFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var (boardId, task, user) = await SetupAsync(mediator);
-        await mediator.Send(new TaskCreateCommand(boardId, "Unassigned", null, null), CancellationToken.None);
-        await mediator.Send(new TaskAssignCommand(task.Id, user.Id), CancellationToken.None);
+        await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, boardId, "Unassigned", null, null), CancellationToken.None);
+        await mediator.Send(new TaskAssignCommand(TestMediatorFactory.OwnerId, task.Id, user.Id), CancellationToken.None);
 
         var all = await mediator.Send(new TaskListQuery(boardId), CancellationToken.None);
         var mine = await mediator.Send(new TaskListQuery(boardId, user.Id), CancellationToken.None);

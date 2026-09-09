@@ -1,5 +1,6 @@
 @* Экран 2 — «Задачи проекта» (GET /boards/{id} + GET /boards/{id}/tasks): плоский список задач,
-   фильтр по статусу (?status=), слайдер создания (N) и слайдер задачи (?task=). *@
+   фильтры по статусу (?status=) и исполнителю (?who= — id, "none" — без исполнителя; фильтруется на клиенте,
+   список уже загружен целиком), слайдер создания (N) и слайдер задачи (?task=). *@
 @page "/boards/{Id:guid}"
 @implements IDisposable
 @inject FlowApi Api
@@ -8,6 +9,7 @@
 @inject BrowserInterop Browser
 @inject HotkeyService Hotkeys
 @inject AppState State
+@inject UserDirectory Users
 
 <PageTitle>@(_board?.Name ?? "Проект") — Flow</PageTitle>
 
@@ -27,7 +29,10 @@
             else
             {
                 <h2 title="@_board.Name" @ondblclick="StartRename">@_board.Name</h2>
-                <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
+                @if (CanManageBoard)
+                {
+                    <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
+                }
             }
         }
         else
@@ -40,7 +45,10 @@
             <Icon Name="search" Size="16" />
             <input placeholder="Найти задачу или код..." value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
         </label>
-        <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate" Disabled="_board is null">Создать задачу</DsButton>
+        @if (CanCreateTask)
+        {
+            <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate" Disabled="_board is null">Создать задачу</DsButton>
+        }
     </div>
 </div>
 
@@ -67,28 +75,34 @@
     else if (_board is not null)
     {
         <div class="filter-row">
-            <StatusFilter Statuses="_board.Statuses" Counts="_counts" Total="_tasks.Count" Value="StatusId" ValueChanged="SetStatusFilter" />
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <StatusFilter Statuses="_board.Statuses" Counts="_counts" Total="_tasks.Count" Value="StatusId" ValueChanged="SetStatusFilter" />
+                <AssigneeFilter Tasks="_tasks" Value="@Who" ValueChanged="SetWhoFilter" />
+            </div>
             <div class="meta-line">@Ru.Tasks(_tasks.Count) · создан @Ru.Date(_board.CreatedAt)</div>
         </div>
 
         <div class="panel">
-            <div class="list-cols list-head"><div>Код</div><div>Задача</div><div>Статус</div><div>Создана</div><div></div></div>
+            <div class="list-cols list-head"><div>Код</div><div>Задача</div><div>Кто</div><div>Статус</div><div>Создана</div><div></div></div>
             <div class="panel-rows">
                 @if (_tasks.Count == 0)
                 {
                     <div class="empty">
                         <div class="empty-title">Пока нет задач</div>
                         <div>Создайте первую — код будет <span class="code accent">@_board.Key-@_board.NextTaskNumber</span></div>
-                        <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate">Создать первую</DsButton>
+                        @if (CanCreateTask)
+                        {
+                            <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate">Создать первую</DsButton>
+                        }
                     </div>
                 }
                 else if (Visible.Count == 0)
                 {
                     <div class="empty">
-                        @if (StatusId is not null)
+                        @if (StatusId is not null || Who is not null)
                         {
-                            <div class="empty-title">Нет задач в статусе «@StatusName(StatusId.Value)»</div>
-                            <button type="button" class="icon-lnk" @onclick="() => SetStatusFilter(null)">Показать все</button>
+                            <div class="empty-title">@(StatusId is { } sid ? $"Нет задач в статусе «{StatusName(sid)}»" : "Нет задач у этого исполнителя")</div>
+                            <button type="button" class="icon-lnk" @onclick="ResetFilters">Показать все</button>
                         }
                         else
                         {
@@ -102,8 +116,9 @@
                     @foreach (var t in Visible)
                     {
                         <TaskRow @key="t.Id" Item="t" Statuses="_board.Statuses"
+                                 CanEdit="Permissions.CanEditTask(Me, t)" CanAssign="Permissions.CanAssign(Me, t)" OnlyAssigneeId="OnlyAssigneeId"
                                  Selected="TaskId == t.Id" Flash="_flashId == t.Id"
-                                 OnOpen="OpenTask" OnStatusChange="ChangeStatus" OnRename="RenameTask"
+                                 OnOpen="OpenTask" OnStatusChange="ChangeStatus" OnAssign="AssignTask" OnRename="RenameTask"
                                  OnCopy="CopyCode" OnDelete="AskDeleteTask" />
                     }
                 }
@@ -116,6 +131,7 @@
     @if (_board is not null && (_createOpen || SelectedTask is not null))
     {
         <TaskDrawer Board="_board" Item="@(_createOpen ? null : SelectedTask)"
+                    CanEdit="@(SelectedTask is { } sel && Permissions.CanEditTask(Me, sel))" CanAssign="@(SelectedTask is { } sel2 && Permissions.CanAssign(Me, sel2))" OnlyAssigneeId="OnlyAssigneeId"
                     OnClose="CloseDrawer" OnCreated="OnTaskCreated" OnUpdated="OnTaskUpdated" OnDelete="AskDeleteTask" />
     }
 </Drawer>
@@ -135,6 +151,9 @@
 
     /// <summary>Открытая в слайдере задача.</summary>
     [SupplyParameterFromQuery(Name = "task")] public Guid? TaskId { get; set; }
+
+    /// <summary>Фильтр по исполнителю: Guid пользователя или "none" — без исполнителя.</summary>
+    [SupplyParameterFromQuery(Name = "who")] public string? Who { get; set; }
 
     private BoardResponse? _board;
     private List<TaskResponse> _tasks = [];
@@ -156,6 +175,12 @@
 
     private TaskResponse? SelectedTask => TaskId is null ? null : _tasks.FirstOrDefault(t => t.Id == TaskId);
 
+    // Права по матрице docs/TZ_user_roles.md; Flow.Api — источник истины, здесь только показ кнопок.
+    private UserResponse? Me => Users.Find(State.CurrentUserId);
+    private bool CanManageBoard => Permissions.CanManageBoards(Me);
+    private bool CanCreateTask => Permissions.CanCreateTask(Me);
+    private Guid? OnlyAssigneeId => Permissions.CanAssignAnyone(Me) ? null : Me?.Id;
+
     private List<TaskResponse> Visible
     {
         get
@@ -163,6 +188,10 @@
             IEnumerable<TaskResponse> q = _tasks;
             if (StatusId is { } sid)
                 q = q.Where(t => t.StatusId == sid);
+            if (Who == "none")
+                q = q.Where(t => t.AssigneeId is null);
+            else if (Guid.TryParse(Who, out var who))
+                q = q.Where(t => t.AssigneeId == who);
             var s = _search.Trim();
             if (s.Length > 0)
                 q = q.Where(t => t.Title.Contains(s, StringComparison.OrdinalIgnoreCase)
@@ -218,6 +247,9 @@
         _tasks = tasks.Value!.OrderByDescending(t => t.CreatedAt).ToList();
         Recount();
         State.SetLastBoard(_board.Id);
+        // Аватары исполнителей в строках — из справочника; грузим фоном, AssigneeSelect/AssigneeFilter перерисуются по Users.Changed.
+        if (!Users.IsLoaded)
+            _ = Users.EnsureLoadedAsync();
     }
 
     private void Recount()
@@ -234,6 +266,12 @@
     private void SetStatusFilter(Guid? id) =>
         Nav.NavigateTo(Nav.GetUriWithQueryParameter("status", id?.ToString()), replace: true);
 
+    private void SetWhoFilter(string? who) =>
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("who", who), replace: true);
+
+    private void ResetFilters() =>
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["status"] = null, ["who"] = null }), replace: true);
+
     private void OpenTask(TaskResponse t)
     {
         _createOpen = false;
@@ -249,6 +287,7 @@
 
     private void OpenCreate()
     {
+        if (!CanCreateTask) return;
         if (_board is null) return;
         if (TaskId is not null)
             Nav.NavigateTo(Nav.GetUriWithQueryParameter("task", (string?)null));
@@ -267,7 +306,7 @@
             case "Escape":
                 if (DrawerOpen) { e.Handled = true; CloseDrawer(); }
                 break;
-            case "n" or "N" or "т" or "Т" when !e.InEditable && !e.Ctrl && !DrawerOpen:
+            case "n" or "N" or "т" or "Т" when !e.InEditable && !e.Ctrl && !DrawerOpen && CanCreateTask:
                 e.Handled = true;
                 OpenCreate();
                 break;
@@ -345,6 +384,26 @@
         }
     }
 
+    private async Task AssignTask((TaskResponse Task, Guid? UserId) args)
+    {
+        var (task, userId) = args;
+        var before = task;
+        ReplaceTask(task with { AssigneeId = userId });
+
+        var result = await Api.AssignTask(task.Id, new AssignTaskRequest(userId));
+        if (result.Ok)
+        {
+            ReplaceTask(result.Value!);
+            var who = Users.Find(userId);
+            Toasts.Ok(who is null ? $"{task.Code}: исполнитель снят" : $"{task.Code} → {who.FullName}");
+        }
+        else
+        {
+            ReplaceTask(before);
+            Toasts.Error(result.Error ?? "Не удалось назначить исполнителя");
+        }
+    }
+
     private async Task RenameTask((TaskResponse Task, string Title) args)
     {
         var result = await Api.UpdateTask(args.Task.Id, new UpdateTaskRequest(args.Title, null, null));
@@ -390,6 +449,7 @@
 
     private async Task StartRename()
     {
+        if (!CanManageBoard) return;
         if (_board is null) return;
         _renameValue = _board.Name;
         _renaming = true;

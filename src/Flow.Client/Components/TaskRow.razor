@@ -1,4 +1,4 @@
-@* Строка задачи в списке проекта: код · название (+описание) · селект статуса · дата · меню «…».
+@* Строка задачи в списке проекта: код · название (+описание) · исполнитель (аватар) · селект статуса · дата · меню «…».
    Клик по строке (вне селекта/меню) → OnOpen. Переименование — инлайн, Enter/blur сохраняет, Esc отменяет. *@
 @inject BrowserInterop Browser
 
@@ -25,11 +25,22 @@
         }
     </div>
     <div>
-        <StatusSelect Statuses="Statuses" Value="Item.StatusId" OnChange="id => OnStatusChange.InvokeAsync((Item, id))" />
+        <AssigneeSelect Compact="true" Value="Item.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="id => OnAssign.InvokeAsync((Item, id))" />
+    </div>
+    <div>
+        @if (CanEdit)
+        {
+            <StatusSelect Statuses="Statuses" Value="Item.StatusId" OnChange="id => OnStatusChange.InvokeAsync((Item, id))" />
+        }
+        else
+        {
+            var st = Statuses.FirstOrDefault(x => x.Id == Item.StatusId);
+            <span class="status-pill" @onclick:stopPropagation><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span>
+        }
     </div>
     <div class="task-date" title="@Ru.DateTimeFull(Item.CreatedAt)">@Ru.DateShort(Item.CreatedAt)</div>
     <div>
-        <RowMenu OnOpen="Open" OnRename="StartRename" OnCopy="() => OnCopy.InvokeAsync(Item)" OnDelete="() => OnDelete.InvokeAsync(Item)" />
+        <RowMenu OnOpen="Open" ShowRename="CanEdit" ShowDelete="CanEdit" OnRename="StartRename" OnCopy="() => OnCopy.InvokeAsync(Item)" OnDelete="() => OnDelete.InvokeAsync(Item)" />
     </div>
 </div>
 
@@ -38,8 +49,13 @@
     [Parameter, EditorRequired] public IReadOnlyList<StatusResponse> Statuses { get; set; } = [];
     [Parameter] public bool Selected { get; set; }
     [Parameter] public bool Flash { get; set; }
+    /// <summary>Права actor'а на эту задачу (Permissions.CanEditTask / CanAssign); без них — только просмотр.</summary>
+    [Parameter] public bool CanEdit { get; set; } = true;
+    [Parameter] public bool CanAssign { get; set; } = true;
+    [Parameter] public Guid? OnlyAssigneeId { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnOpen { get; set; }
     [Parameter] public EventCallback<(TaskResponse Task, Guid StatusId)> OnStatusChange { get; set; }
+    [Parameter] public EventCallback<(TaskResponse Task, Guid? UserId)> OnAssign { get; set; }
     [Parameter] public EventCallback<(TaskResponse Task, string Title)> OnRename { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnCopy { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnDelete { get; set; }
@@ -58,6 +74,7 @@
 
     public async Task StartRename()
     {
+        if (!CanEdit) return;
         _title = Item.Title;
         _renaming = true;
         _cancelled = false;

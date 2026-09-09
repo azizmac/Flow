@@ -1,6 +1,9 @@
 namespace Flow.Shared.Contracts.Tasks;
 
-/// <summary>BoardId нужен странице /tasks/{id}: по нему клиент подгружает ключ и статусы проекта.</summary>
+/// <summary>
+/// BoardId нужен странице /tasks/{id}: по нему клиент подгружает ключ и статусы проекта.
+/// CreatedById — кто создал (null у задач до ролей); вместе с AssigneeId определяет «свою задачу» для Member.
+/// </summary>
 public sealed record TaskResponse(
     Guid Id,
     Guid BoardId,
@@ -9,4 +12,5 @@ public sealed record TaskResponse(
     string? Description,
     Guid StatusId,
     Guid? AssigneeId,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    Guid? CreatedById);

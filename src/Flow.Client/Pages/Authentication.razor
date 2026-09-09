@@ -1,0 +1,44 @@
+@* Служебные состояния OIDC: login → редирект в Flow.Auth, login-callback → обмен кода на токены, logout, logout-callback.
+   Сама форма входа живёт в Flow.Auth (/account/login), здесь только переходы. *@
+@page "/authentication/{action}"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+
+<RemoteAuthenticatorView Action="@Action">
+    <LoggingIn>
+        <div class="auth-card"><div class="auth-text">Переходим ко входу…</div></div>
+    </LoggingIn>
+    <CompletingLoggingIn>
+        <div class="auth-card"><div class="auth-text">Входим…</div></div>
+    </CompletingLoggingIn>
+    <LogInFailed Context="reason">
+        <div class="auth-card">
+            <div class="auth-title">Не удалось войти</div>
+            <div class="auth-text">@reason</div>
+            <a class="auth-link" href="authentication/login">Попробовать снова</a>
+        </div>
+    </LogInFailed>
+    <LogOut>
+        <div class="auth-card"><div class="auth-text">Выходим…</div></div>
+    </LogOut>
+    <CompletingLogOut>
+        <div class="auth-card"><div class="auth-text">Завершаем сессию…</div></div>
+    </CompletingLogOut>
+    <LogOutSucceeded>
+        <div class="auth-card">
+            <div class="auth-title">Вы вышли</div>
+            <a class="auth-link" href="authentication/login">Войти снова</a>
+        </div>
+    </LogOutSucceeded>
+    <LogOutFailed Context="reason">
+        <div class="auth-card">
+            <div class="auth-title">Не удалось выйти</div>
+            <div class="auth-text">@reason</div>
+            <a class="auth-link" href="boards">К проектам</a>
+        </div>
+    </LogOutFailed>
+</RemoteAuthenticatorView>
+
+@code {
+    [Parameter] public string? Action { get; set; }
+}

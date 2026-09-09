@@ -13,5 +13,6 @@ public static class TaskMappingExtensions
         task.Description,
         task.StatusId,
         task.AssigneeId,
-        task.CreatedAt);
+        task.CreatedAt,
+        task.CreatedById);
 }

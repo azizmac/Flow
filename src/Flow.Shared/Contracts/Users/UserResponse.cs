@@ -1,5 +1,6 @@
 namespace Flow.Shared.Contracts.Users;
 
+/// <summary>Role и Status — из Flow.Api (не из токена); IsActive = Status != Deactivated, оставлен для совместимости.</summary>
 public sealed record UserResponse(
     Guid Id,
     string Username,
@@ -13,4 +14,7 @@ public sealed record UserResponse(
     string? PhoneNumber,
     IReadOnlyList<UserLinkResponse> Links,
     bool IsActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    UserRole Role,
+    UserStatus Status,
+    DateTime? StatusChangedAt);

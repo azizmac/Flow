@@ -1,0 +1,146 @@
+/* Страница входа Flow.Auth. Копия нужных DRESSY-токенов из Flow.Client/wwwroot/css/tokens.css —
+   сервисы не ссылаются друг на друга, поэтому палитра продублирована. Менять вместе с клиентом. */
+
+:root {
+    --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-text: var(--font-display);
+
+    --fw-medium: 500;
+    --fw-semibold: 600;
+    --fw-black: 900;
+
+    --text-h3: 22px;
+    --text-body: 15px;
+    --text-sm: 14px;
+
+    --space-2: 10px;
+    --space-3: 15px;
+    --space-4: 20px;
+    --space-6: 30px;
+    --space-8: 40px;
+
+    --radius-pill: 999px;
+    --r-xl: 16px;
+    --control-h-md: 40px;
+    --control-h: 50px;
+
+    --bg-deep: #082019;
+    --bg-content: #153E32;
+    --surface: #1B4A3B;
+    --surface-raised: #245A48;
+
+    --accent: #FFBA00;
+    --accent-hover: #FFCB40;
+    --accent-pressed: #E8A900;
+    --on-accent: #0C3B2E;
+    --danger: #E2604F;
+
+    --text-primary: #FFFFFF;
+    --text-secondary: rgba(255, 255, 255, 0.68);
+    --text-tertiary: rgba(255, 255, 255, 0.42);
+    --border: rgba(255, 255, 255, 0.10);
+
+    --shadow-card: 0 40px 80px -30px rgba(0, 0, 0, 0.35);
+    --tracking-tight: -0.4px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: var(--font-text);
+    font-size: var(--text-body);
+    -webkit-font-smoothing: antialiased;
+}
+
+.login {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: var(--space-6) var(--space-4);
+    background:
+        radial-gradient(1200px 600px at 20% -10%, rgba(255, 186, 0, 0.10), transparent 60%),
+        var(--bg-deep);
+}
+
+.login-card {
+    width: 100%;
+    max-width: 400px;
+    background: var(--bg-content);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-card);
+    padding: var(--space-8) var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+}
+
+.login-brand { display: flex; align-items: center; gap: var(--space-2); }
+.login-mark {
+    width: 30px; height: 30px;
+    display: grid; place-items: center;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: var(--fw-black);
+    font-size: 16px;
+}
+.login-name { font-weight: var(--fw-semibold); font-size: 16px; letter-spacing: var(--tracking-tight); }
+
+.login-title {
+    margin: 0;
+    font-size: 28px;
+    font-weight: var(--fw-black);
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+
+.login-form { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.ds-field { display: flex; flex-direction: column; gap: var(--space-2); width: 100%; }
+.ds-field-label { font-weight: var(--fw-medium); font-size: var(--text-body); color: var(--text-secondary); }
+.ds-field-row {
+    display: flex; align-items: center; gap: var(--space-2);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border);
+    transition: border-color 0.18s ease;
+}
+.ds-field:focus-within .ds-field-row { border-bottom-color: var(--text-primary); }
+.ds-field.error .ds-field-row { border-bottom-color: var(--danger); }
+.ds-field-row input {
+    flex: 1; min-width: 0;
+    background: transparent; border: none; outline: none;
+    color: var(--text-primary);
+    font-family: var(--font-text);
+    font-size: var(--text-h3);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-tight);
+    padding: 0;
+}
+.ds-field-row input::placeholder { color: var(--text-tertiary); font-weight: var(--fw-medium); }
+.ds-field-error { font-weight: var(--fw-medium); font-size: var(--text-sm); color: var(--danger); }
+
+.ds-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--font-display);
+    font-weight: var(--fw-medium);
+    font-size: var(--text-body);
+    line-height: 1;
+    border: none; cursor: pointer;
+    border-radius: var(--radius-pill);
+    height: var(--control-h);
+    padding: 0 var(--space-6);
+    background: var(--accent);
+    color: var(--on-accent);
+    transition: background 0.15s ease, transform 0.1s ease;
+}
+.ds-btn:hover { background: var(--accent-hover); }
+.ds-btn:active { background: var(--accent-pressed); transform: scale(0.98); }
+.ds-btn:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.ds-btn.full { width: 100%; }
+
+.login-hint { margin: 0; color: var(--text-tertiary); font-size: var(--text-sm); }

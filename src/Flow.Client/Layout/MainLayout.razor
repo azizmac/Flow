@@ -1,8 +1,14 @@
+@* Sidebar — только для аутентифицированных: AuthorizeRouteView рисует Authorizing/NotAuthorized внутри этого же layout,
+   и без сессии сайдбар не должен ни показываться, ни ходить в API. *@
 @inherits LayoutComponentBase
 @inject HotkeyService Hotkeys
 
 <div class="flow-app">
-    <Sidebar />
+    <AuthorizeView>
+        <Authorized>
+            <Sidebar />
+        </Authorized>
+    </AuthorizeView>
     <div class="main">
         @Body
     </div>

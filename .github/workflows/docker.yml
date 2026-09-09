@@ -1,4 +1,4 @@
-# Джоба: сборка Docker-образа Flow.Api; при push=true — публикация в registry.
+# Джоба: сборка Docker-образа (Flow.Api или Flow.Auth — по input dockerfile); при push=true — публикация в registry.
 # Ожидает (через secrets: inherit) секреты REGISTRY_USERNAME / REGISTRY_PASSWORD
 # и переменные REGISTRY / IMAGE_NAME (передаются оркестратором через input image).
 name: Docker image
@@ -14,6 +14,10 @@ on:
         description: Полное имя образа, например docker.io/user/flow-api
         type: string
         default: flow-api
+      dockerfile:
+        description: Dockerfile для сборки (src/Flow.Api|Flow.Auth|Flow.Client/Dockerfile)
+        type: string
+        default: src/Flow.Api/Dockerfile
 
 jobs:
   docker:
@@ -49,7 +53,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile
+          file: ${{ inputs.dockerfile }}
           push: ${{ inputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

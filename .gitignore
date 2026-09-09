@@ -7,3 +7,8 @@ riderModule.iml
 .env.*
 .idea
 .idea/*
+# Локальные конфиги запуска серверов Claude Code (пути машины)
+.claude/launch.json
+
+# Пример переменных compose — в git, в отличие от .env
+!.env.example

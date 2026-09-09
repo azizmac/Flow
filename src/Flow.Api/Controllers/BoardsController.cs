@@ -3,6 +3,7 @@ using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
 using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
 using Flow.Application.Features.Boards.Queries.BoardListQuery;
+using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Boards;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +12,7 @@ namespace Flow.Api.Controllers;
 
 [ApiController]
 [Route("boards")]
-public class BoardsController(IMediator mediator) : ControllerBase
+public class BoardsController(IMediator mediator, IActorAccessor actor) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> CreateBoard(CreateBoardRequest request, CancellationToken cancellationToken)
@@ -19,7 +20,7 @@ public class BoardsController(IMediator mediator) : ControllerBase
         try
         {
             var result = await mediator.Send(
-                new BoardCreateCommand(request.Name, request.Key),
+                new BoardCreateCommand(actor.Require(), request.Name, request.Key),
                 cancellationToken);
 
             if (result.IsKeyTaken)
@@ -54,7 +55,7 @@ public class BoardsController(IMediator mediator) : ControllerBase
         try
         {
             var response = await mediator.Send(
-                new BoardRenameCommand(id, request.Name),
+                new BoardRenameCommand(actor.Require(), id, request.Name),
                 cancellationToken);
 
             return response is null ? NotFound() : Ok(response);
@@ -68,7 +69,7 @@ public class BoardsController(IMediator mediator) : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteBoard(Guid id, CancellationToken cancellationToken)
     {
-        var deleted = await mediator.Send(new BoardDeleteCommand(id), cancellationToken);
+        var deleted = await mediator.Send(new BoardDeleteCommand(actor.Require(), id), cancellationToken);
         return deleted ? NoContent() : NotFound();
     }
 }

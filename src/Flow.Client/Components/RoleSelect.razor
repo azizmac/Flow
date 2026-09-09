@@ -1,0 +1,19 @@
+@* Выбор роли сегментами (как типы ссылок в профиле): доступные — из Permissions.CreatableRoles/AssignableRoles,
+   остальные показаны выключенными с подсказкой, почему. *@
+
+<div class="seg role-seg" role="radiogroup">
+    @foreach (var role in Enum.GetValues<UserRole>())
+    {
+        var allowed = Allowed.Contains(role);
+        <button type="button" class="seg-btn @(role == Value ? "on" : "")" disabled="@(!allowed || Disabled)"
+                title="@(allowed ? Permissions.RoleHint(role) : "Ваша роль не позволяет выдать эту")"
+                @onclick="() => OnChange.InvokeAsync(role)">@Permissions.RoleLabel(role)</button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public UserRole Value { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<UserRole> Allowed { get; set; } = [];
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<UserRole> OnChange { get; set; }
+}

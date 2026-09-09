@@ -1,29 +1,44 @@
 using Flow.Application.Abstractions;
+using Flow.Application.Security;
 using MediatR;
 
 namespace Flow.Application.Features.Users.Commands.UserChangeUsernameCommand;
 
-internal sealed class UserChangeUsernameCommandHandler(IUserRepository users, IUnitOfWork unitOfWork)
+internal sealed class UserChangeUsernameCommandHandler(IUserRepository users, ActorResolver actors, IPermissionService permissions, IAccountService accounts, IUnitOfWork unitOfWork)
     : IRequestHandler<UserChangeUsernameCommand, UserUpdateResult>
 {
     public async Task<UserUpdateResult> Handle(UserChangeUsernameCommand request, CancellationToken cancellationToken)
     {
-        var user = await users.GetByIdAsync(request.UserId, cancellationToken);
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
+
+        var user = actor.Id == request.UserId ? actor : await users.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
             return UserUpdateResult.NotFound();
 
-        // Нормализация живёт в домене, поэтому сначала применяем, потом сравниваем. Если username не изменился
-        // (тот же после нормализации) — конфликта нет; если изменился и занят — откатываем и возвращаем 409.
+        permissions.EnsureCanEditCredentials(actor, user);
+
+        // Нормализация (trim + lower) живёт в домене: применяем, чтобы узнать итоговое значение, и сразу откатываем —
+        // проверять занятость и ходить в Flow.Auth надо до того, как копия в Users изменится.
         var previous = user.Username;
         user.ChangeUsername(request.Username);
+        var candidate = user.Username;
+        user.ChangeUsername(previous);
 
-        if (user.Username != previous && await users.ExistsByUsernameAsync(user.Username, cancellationToken))
-        {
-            var taken = user.Username;
-            user.ChangeUsername(previous);
-            return UserUpdateResult.UsernameTaken(taken);
-        }
+        if (candidate == previous)
+            return UserUpdateResult.Success(user.ToResponse());
 
+        if (await users.ExistsByUsernameAsync(candidate, cancellationToken))
+            return UserUpdateResult.UsernameTaken(candidate);
+
+        // Источник истины — Flow.Auth: копия в Users меняется только после его согласия.
+        var account = await accounts.ChangeUsernameAsync(user.Id, candidate, cancellationToken);
+        if (account.Status == AccountResultStatus.Invalid)
+            throw new ArgumentException(account.Error ?? "Flow.Auth rejected the username.", nameof(request.Username));
+
+        if (!account.IsSuccess)
+            return UserUpdateResult.UsernameTaken(candidate);
+
+        user.ChangeUsername(candidate);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return UserUpdateResult.Success(user.ToResponse());

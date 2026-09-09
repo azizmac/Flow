@@ -5,6 +5,9 @@ using Flow.Application.Features.Users.Commands.UserSetLinkCommand;
 using Flow.Application.Features.Users.Queries.UserGetQuery;
 using Flow.Application.Features.Users.Queries.UserSearchQuery;
 using Flow.Shared.Contracts.Users;
+using Flow.Infrastructure.Persistence.Repositories;
+using UserRole = Flow.Domain.Entities.UserRole;
+using UserStatus = Flow.Domain.Entities.UserStatus;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -16,7 +19,7 @@ public class UserPersistenceTests(PostgresFixture db)
 {
     private async Task<UserResponse> CreateAsync(string username, string firstName = "Илья", string lastName = "Моторин")
     {
-        var result = await db.SendAsync(new UserCreateCommand(username, $"{username}@example.com", firstName, lastName));
+        var result = await db.SendAsync(new UserCreateCommand(PostgresFixture.OwnerId, username, $"{username}@example.com", firstName, lastName, "correct horse battery"));
         Assert.False(result.IsConflict);
         return result.Response!;
     }
@@ -25,8 +28,8 @@ public class UserPersistenceTests(PostgresFixture db)
     public async Task CreateUser_Should_PersistLinks_And_LoadThemBack()
     {
         var user = await CreateAsync("links");
-        await db.SendAsync(new UserSetLinkCommand(user.Id, UserLinkType.GitHub, "https://github.com/links"));
-        await db.SendAsync(new UserSetLinkCommand(user.Id, UserLinkType.Telegram, "https://t.me/links"));
+        await db.SendAsync(new UserSetLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.GitHub, "https://github.com/links"));
+        await db.SendAsync(new UserSetLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.Telegram, "https://t.me/links"));
 
         var loaded = await db.SendAsync(new UserGetQuery(user.Id));
 
@@ -40,9 +43,9 @@ public class UserPersistenceTests(PostgresFixture db)
     public async Task SetLink_SameType_Should_UpdateRow_NotInsertSecond()
     {
         var user = await CreateAsync("relink");
-        await db.SendAsync(new UserSetLinkCommand(user.Id, UserLinkType.GitHub, "https://github.com/old"));
+        await db.SendAsync(new UserSetLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.GitHub, "https://github.com/old"));
 
-        await db.SendAsync(new UserSetLinkCommand(user.Id, UserLinkType.GitHub, "https://github.com/new"));
+        await db.SendAsync(new UserSetLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.GitHub, "https://github.com/new"));
 
         var links = await db.QueryAsync(ctx => ctx.Users.Where(u => u.Id == user.Id).SelectMany(u => u.Links).ToListAsync());
         var link = Assert.Single(links);
@@ -53,9 +56,9 @@ public class UserPersistenceTests(PostgresFixture db)
     public async Task RemoveLink_Should_DeleteRow()
     {
         var user = await CreateAsync("unlink");
-        await db.SendAsync(new UserSetLinkCommand(user.Id, UserLinkType.Website, "https://example.com"));
+        await db.SendAsync(new UserSetLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.Website, "https://example.com"));
 
-        await db.SendAsync(new UserRemoveLinkCommand(user.Id, UserLinkType.Website));
+        await db.SendAsync(new UserRemoveLinkCommand(PostgresFixture.OwnerId, user.Id, UserLinkType.Website));
 
         Assert.Equal(0, await db.QueryAsync(ctx => ctx.Users.Where(u => u.Id == user.Id).SelectMany(u => u.Links).CountAsync()));
     }
@@ -66,7 +69,7 @@ public class UserPersistenceTests(PostgresFixture db)
         // Регрессия на будущее: дубликат не должен долетать до IX_Users_Username и превращаться в 500.
         await CreateAsync("dupuser");
 
-        var second = await db.SendAsync(new UserCreateCommand("DupUser", "another@example.com", "A", "B"));
+        var second = await db.SendAsync(new UserCreateCommand(PostgresFixture.OwnerId, "DupUser", "another@example.com", "A", "B", "correct horse battery"));
 
         Assert.True(second.IsUsernameTaken);
         Assert.Equal(1, await db.QueryAsync(ctx => ctx.Users.CountAsync(u => u.Username == "dupuser")));
@@ -77,7 +80,7 @@ public class UserPersistenceTests(PostgresFixture db)
     {
         await CreateAsync("dupmail");
 
-        var second = await db.SendAsync(new UserCreateCommand("dupmail2", "DupMail@Example.com", "A", "B"));
+        var second = await db.SendAsync(new UserCreateCommand(PostgresFixture.OwnerId, "dupmail2", "DupMail@Example.com", "A", "B", "correct horse battery"));
 
         Assert.True(second.IsEmailTaken);
     }
@@ -99,7 +102,7 @@ public class UserPersistenceTests(PostgresFixture db)
     {
         await CreateAsync("search.active", "Пётр", "Поисков");
         var inactive = await CreateAsync("search.inactive", "Пётр", "Поисков");
-        await db.SendAsync(new UserDeactivateCommand(inactive.Id));
+        await db.SendAsync(new UserDeactivateCommand(PostgresFixture.OwnerId, inactive.Id));
 
         var byUsername = await db.SendAsync(new UserSearchQuery("SEARCH."));
         var byLastName = await db.SendAsync(new UserSearchQuery("поисков"));
@@ -116,5 +119,34 @@ public class UserPersistenceTests(PostgresFixture db)
         var result = await db.SendAsync(new UserSearchQuery("%"));
 
         Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task Role_And_Status_Should_Persist_And_CountByRole()
+    {
+        var owner = await CreateAsync("role.owner");
+        var admin = await CreateAsync("role.admin");
+        await CreateAsync("role.member");
+
+        await db.QueryAsync(async ctx =>
+        {
+            ctx.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.TrackAll;
+            var users = await ctx.Users.Where(u => u.Username.StartsWith("role.")).ToListAsync();
+            users.Single(u => u.Id == owner.Id).ChangeRole(UserRole.Owner);
+            users.Single(u => u.Id == admin.Id).ChangeRole(UserRole.Admin);
+            users.Single(u => u.Id == admin.Id).MarkActive();
+            return await ctx.SaveChangesAsync();
+        });
+
+        var reloaded = await db.QueryAsync(ctx => ctx.Users.Where(u => u.Username.StartsWith("role.")).ToDictionaryAsync(u => u.Username));
+        Assert.Equal(UserRole.Owner, reloaded["role.owner"].Role);
+        Assert.Equal(UserStatus.Invited, reloaded["role.owner"].Status);
+        Assert.Equal(UserStatus.Active, reloaded["role.admin"].Status);
+        Assert.NotNull(reloaded["role.admin"].StatusChangedAt);
+        Assert.Equal(UserRole.Member, reloaded["role.member"].Role);
+
+        var admins = await db.QueryAsync(ctx => new UserRepository(ctx).CountByRoleAsync(UserRole.Admin, CancellationToken.None));
+        Assert.Equal(1, admins);
+        Assert.True(await db.QueryAsync(ctx => new UserRepository(ctx).CountByRoleAsync(UserRole.Owner, CancellationToken.None)) >= 1);
     }
 }

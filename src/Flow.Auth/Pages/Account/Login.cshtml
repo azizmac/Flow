@@ -1,0 +1,55 @@
+@page "/account/login"
+@model Flow.Auth.Pages.Account.LoginModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Вход — Flow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="~/css/auth.css" asp-append-version="true" />
+</head>
+<body>
+    <main class="login">
+        <div class="login-card">
+            <div class="login-brand">
+                <span class="login-mark">F</span>
+                <span class="login-name">Flow</span>
+            </div>
+            <h1 class="login-title">Вход</h1>
+
+            <form method="post" class="login-form" autocomplete="on">
+                <input type="hidden" asp-for="ReturnUrl" />
+
+                <label class="ds-field @(Model.Error is not null ? "error" : "")">
+                    <span class="ds-field-label">Логин</span>
+                    <span class="ds-field-row">
+                        <input asp-for="Input.Login" placeholder="@("@username") или почта" autocomplete="username" autofocus />
+                    </span>
+                </label>
+
+                <label class="ds-field @(Model.Error is not null ? "error" : "")">
+                    <span class="ds-field-label">Пароль</span>
+                    <span class="ds-field-row">
+                        <input asp-for="Input.Password" type="password" placeholder="••••••••" autocomplete="current-password" />
+                    </span>
+                </label>
+
+                @if (Model.Error is not null)
+                {
+                    <div class="ds-field-error" role="alert">@Model.Error</div>
+                }
+
+                <button type="submit" class="ds-btn full">Войти</button>
+            </form>
+
+            <p class="login-hint">Нет доступа? Попросите администратора workspace добавить вас.</p>
+        </div>
+    </main>
+</body>
+</html>

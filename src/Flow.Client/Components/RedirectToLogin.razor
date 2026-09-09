@@ -1,0 +1,6 @@
+@* Без сессии — на вход через Flow.Auth; после входа RemoteAuthenticatorView вернёт на исходный адрес (returnUrl). *@
+@inject NavigationManager Nav
+
+@code {
+    protected override void OnInitialized() => Nav.NavigateToLogin("authentication/login");
+}

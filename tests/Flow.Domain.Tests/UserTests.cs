@@ -19,8 +19,25 @@ public class UserTests
         Assert.Equal("Моторин", user.LastName);
         Assert.Equal("Илья Моторин", user.FullName);
         Assert.True(user.IsActive);
-        Assert.Null(user.DeactivatedAt);
+        Assert.Equal(UserRole.Member, user.Role);
+        Assert.Equal(UserStatus.Invited, user.Status);
+        Assert.Null(user.StatusChangedAt);
         Assert.Empty(user.Links);
+    }
+
+    [Fact]
+    public void CreateWithId_Should_UseGivenId_And_ValidateLikeCreate()
+    {
+        var id = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+        var user = User.CreateWithId(id, " Admin ", "Admin@Flow.com", "Admin", "Flow");
+
+        Assert.Equal(id, user.Id);
+        Assert.Equal("admin", user.Username);
+        Assert.Equal("admin@flow.com", user.Email);
+        Assert.True(user.IsActive);
+        Assert.Throws<ArgumentException>(() => User.CreateWithId(Guid.Empty, "admin", "admin@flow.com", "Admin", "Flow"));
+        Assert.Throws<ArgumentException>(() => User.CreateWithId(id, "bad user!", "admin@flow.com", "Admin", "Flow"));
     }
 
     [Theory]
@@ -168,18 +185,80 @@ public class UserTests
     }
 
     [Fact]
-    public void Deactivate_Then_Activate_Should_ToggleState()
+    public void Deactivate_Then_Activate_Should_ToggleStatus()
     {
         var user = CreateUser();
 
         user.Deactivate();
         Assert.False(user.IsActive);
-        Assert.NotNull(user.DeactivatedAt);
+        Assert.False(user.CanBeAssigned);
+        Assert.Equal(UserStatus.Deactivated, user.Status);
+        Assert.NotNull(user.StatusChangedAt);
         Assert.Throws<InvalidOperationException>(user.Deactivate);
 
         user.Activate();
         Assert.True(user.IsActive);
-        Assert.Null(user.DeactivatedAt);
+        Assert.Equal(UserStatus.Active, user.Status);
         Assert.Throws<InvalidOperationException>(user.Activate);
+    }
+
+    [Fact]
+    public void Activate_Invited_Should_Throw()
+    {
+        var user = CreateUser();
+
+        Assert.Throws<InvalidOperationException>(user.Activate);
+    }
+
+    [Fact]
+    public void Deactivate_Owner_Should_Throw()
+    {
+        var user = CreateUser();
+        user.ChangeRole(UserRole.Owner);
+
+        Assert.Throws<InvalidOperationException>(user.Deactivate);
+        Assert.Equal(UserStatus.Invited, user.Status);
+    }
+
+    [Fact]
+    public void MarkActive_Should_Move_Invited_To_Active_Only()
+    {
+        var user = CreateUser();
+
+        user.MarkActive();
+        Assert.Equal(UserStatus.Active, user.Status);
+        var changedAt = user.StatusChangedAt;
+        Assert.NotNull(changedAt);
+
+        user.MarkActive();
+        Assert.Equal(changedAt, user.StatusChangedAt);
+
+        user.Deactivate();
+        Assert.Throws<InvalidOperationException>(user.MarkActive);
+    }
+
+    [Fact]
+    public void ChangeRole_Should_Set_Role_And_Reject_Unknown()
+    {
+        var user = CreateUser();
+
+        user.ChangeRole(UserRole.Admin);
+        Assert.Equal(UserRole.Admin, user.Role);
+        Assert.True(user.Role >= UserRole.Developer);
+
+        Assert.Throws<ArgumentException>(() => user.ChangeRole((UserRole)42));
+    }
+
+    [Fact]
+    public void IsActive_Should_Follow_Status()
+    {
+        var user = CreateUser();
+        Assert.True(user.IsActive);
+
+        user.MarkActive();
+        Assert.True(user.IsActive);
+
+        user.Deactivate();
+        Assert.False(user.IsActive);
     }
 }

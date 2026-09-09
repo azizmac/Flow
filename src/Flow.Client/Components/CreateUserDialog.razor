@@ -1,0 +1,202 @@
+@* Модалка «Новый человек»: имя, фамилия, username (подсказка транслитом, ^[a-z0-9][a-z0-9._-]{0,30}[a-z0-9]$), email,
+   начальный пароль (генерируется, показывается один раз — сообщить человеку лично; учётная запись создаётся в Flow.Auth).
+   409 → ошибка под занятым полем (сервер говорит, что именно занято). Enter — создать, Esc — закрыть. *@
+@implements IDisposable
+@inject FlowApi Api
+@inject HotkeyService Hotkeys
+@inject BrowserInterop Browser
+@inject UserDirectory Users
+@inject AppState State
+
+<div class="modal-scrim @(_in ? "in" : "")" @onclick="Cancel">
+    <div class="modal" role="dialog" aria-modal="true" @onclick:stopPropagation>
+        <div>
+            <h3>Новый человек</h3>
+            <div class="hint">Учётная запись для входа и профиль. Должность, телефон и ссылки — потом, в профиле.</div>
+        </div>
+
+        <div class="form-2col">
+            <DsInput Id="cu-first" Label="Имя" Placeholder="Илья" MaxLength="100"
+                     Value="@_first" ValueChanged="OnFirstChanged" Error="@_firstError" OnKeyDown="OnFieldKey" />
+            <DsInput Id="cu-last" Label="Фамилия" Placeholder="Моторин" MaxLength="100"
+                     Value="@_last" ValueChanged="OnLastChanged" Error="@_lastError" OnKeyDown="OnFieldKey" />
+        </div>
+
+        <div>
+            <DsInput Id="cu-username" Label="Username" Icon="at" Placeholder="ilya.motorin" MaxLength="32"
+                     Value="@_username" ValueChanged="OnUsernameChanged" Error="@_usernameError" OnKeyDown="OnFieldKey" />
+            <div class="hint" style="margin-top:8px;">Для упоминаний <code>@@@UsernamePreview</code> и адреса профиля. @Ru.UsernameRule.</div>
+        </div>
+
+        <DsInput Id="cu-email" Label="Почта" Icon="mail" Type="email" Placeholder="ilya@company.ru" MaxLength="254"
+                 Value="@_email" ValueChanged="OnEmailChanged" Error="@_emailError" OnKeyDown="OnFieldKey" />
+
+        <div class="ds-field">
+            <span class="ds-field-label">Роль</span>
+            <RoleSelect Value="_role" Allowed="Permissions.CreatableRoles(Users.Find(State.CurrentUserId))" OnChange="r => _role = r" />
+            <div class="hint">@Permissions.RoleHint(_role)</div>
+        </div>
+
+        <div>
+            <DsInput Id="cu-password" Label="Начальный пароль" Type="@(_showPassword ? "text" : "password")" Placeholder="не короче 8 символов" MaxLength="128"
+                     Value="@_password" ValueChanged="OnPasswordChanged" Error="@_passwordError" OnKeyDown="OnFieldKey" />
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                <button type="button" class="icon-lnk" @onclick="() => _showPassword = !_showPassword"><Icon Name="view" Size="13" />@(_showPassword ? "Скрыть" : "Показать")</button>
+                <button type="button" class="icon-lnk" @onclick="GeneratePassword"><Icon Name="plus" Size="13" />Сгенерировать</button>
+                <button type="button" class="icon-lnk" @onclick="CopyPassword" disabled="@(_password.Length == 0)"><Icon Name="copy" Size="13" />Скопировать</button>
+            </div>
+            <div class="hint" style="margin-top:8px;">Сообщите пароль человеку лично. При первом входе Flow попросит его заменить на свой.</div>
+        </div>
+
+        @if (_serverError is not null)
+        {
+            <div class="ds-field-error">@_serverError</div>
+        }
+
+        <div class="modal-actions">
+            <DsButton Variant="secondary" Size="md" OnClick="Cancel" Disabled="_busy">Отмена</DsButton>
+            <DsButton Variant="primary" Size="md" OnClick="Submit" Disabled="!IsValid" Busy="_busy">Добавить</DsButton>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<UserResponse> OnCreated { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private bool _in;
+    private bool _busy;
+    private string _first = "";
+    private string _last = "";
+    private string _username = "";
+    private string _email = "";
+    private string _password = Passwords.Generate();
+    private UserRole _role = UserRole.Member;
+    private bool _showPassword;
+    private bool _usernameTouched;
+    private string? _firstError;
+    private string? _lastError;
+    private string? _usernameError;
+    private string? _emailError;
+    private string? _passwordError;
+    private string? _serverError;
+    private IDisposable? _hotkeys;
+
+    private string UsernamePreview => _username.Length == 0 ? "username" : _username;
+
+    private bool IsValid => _first.Trim().Length > 0 && _last.Trim().Length > 0
+                            && Ru.UsernamePattern().IsMatch(_username) && EmailLooksValid(_email)
+                            && _password.Length >= Passwords.MinLength && !_busy;
+
+    private static bool EmailLooksValid(string email)
+    {
+        var e = email.Trim();
+        var at = e.IndexOf('@');
+        return at > 0 && at < e.Length - 1 && e.Length <= 254 && !e.Contains(' ');
+    }
+
+    protected override void OnInitialized()
+    {
+        _hotkeys = Hotkeys.Subscribe(async e =>
+        {
+            if (e.Key == "Escape") { e.Handled = true; await Cancel(); }
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _in = true;
+            StateHasChanged();
+            await Browser.FocusAsync("cu-first");
+        }
+    }
+
+    private void OnFirstChanged(string v) { _first = v; _firstError = null; _serverError = null; Suggest(); }
+    private void OnLastChanged(string v) { _last = v; _lastError = null; _serverError = null; Suggest(); }
+
+    private void Suggest()
+    {
+        if (_usernameTouched) return;
+        _username = Ru.SuggestUsername(_first, _last);
+        _usernameError = null;
+    }
+
+    private void OnUsernameChanged(string v)
+    {
+        _username = v.Trim().ToLowerInvariant();
+        _usernameTouched = _username.Length > 0;
+        _serverError = null;
+        _usernameError = _username.Length > 0 && !Ru.UsernamePattern().IsMatch(_username) ? Ru.UsernameRule : null;
+    }
+
+    private void OnEmailChanged(string v)
+    {
+        _email = v;
+        _serverError = null;
+        _emailError = _email.Trim().Length > 0 && !EmailLooksValid(_email) ? "Похоже на неверный адрес" : null;
+    }
+
+    private void OnPasswordChanged(string v)
+    {
+        _password = v;
+        _serverError = null;
+        _passwordError = _password.Length > 0 && _password.Length < Passwords.MinLength ? $"Не короче {Passwords.MinLength} символов" : null;
+    }
+
+    private void GeneratePassword() { _password = Passwords.Generate(); _passwordError = null; }
+
+    private async Task CopyPassword()
+    {
+        if (await Browser.CopyAsync(_password)) _serverError = null;
+    }
+
+    private async Task OnFieldKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Submit();
+    }
+
+    private Task Cancel() => _busy ? Task.CompletedTask : OnCancel.InvokeAsync();
+
+    private async Task Submit()
+    {
+        if (_first.Trim().Length == 0) { _firstError = "Введите имя"; return; }
+        if (_last.Trim().Length == 0) { _lastError = "Введите фамилию"; return; }
+        if (!Ru.UsernamePattern().IsMatch(_username)) { _usernameError = Ru.UsernameRule; return; }
+        if (!EmailLooksValid(_email)) { _emailError = "Введите почту"; return; }
+        if (_password.Length < Passwords.MinLength) { _passwordError = $"Не короче {Passwords.MinLength} символов"; return; }
+        if (!IsValid) return;
+
+        _busy = true;
+        _serverError = null;
+        var result = await Api.CreateUser(new CreateUserRequest(_username, _email.Trim(), _first.Trim(), _last.Trim(), _password, _role));
+        _busy = false;
+
+        if (result.Ok)
+        {
+            await OnCreated.InvokeAsync(result.Value!);
+            return;
+        }
+
+        if (result.Conflict)
+        {
+            // Сервер: «Username 'x' уже занят» / «Email 'x' уже занят» — кладём под нужное поле.
+            var msg = result.Error ?? "Уже занято";
+            if (msg.Contains("mail", StringComparison.OrdinalIgnoreCase) || msg.Contains("почт", StringComparison.OrdinalIgnoreCase))
+                _emailError = "Почта уже занята";
+            else
+                _usernameError = "Username уже занят";
+        }
+        else if (result.Status == System.Net.HttpStatusCode.BadRequest && (result.Error?.Contains("assword", StringComparison.OrdinalIgnoreCase) ?? false))
+        {
+            _passwordError = result.Error;
+        }
+        else
+        {
+            _serverError = result.Error;
+        }
+    }
+
+    public void Dispose() => _hotkeys?.Dispose();
+}
