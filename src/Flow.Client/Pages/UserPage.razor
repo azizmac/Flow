@@ -4,7 +4,7 @@
    Профиль: карточка «Личные данные» (PATCH /users/{id}, PATCH-семантика: пустая строка очищает поле),
    «Аккаунт» (username и email — отдельные PATCH, 409 → ошибка под полем), справа — «Ссылки» (PUT/DELETE links/{type})
    и «Пароль» (POST /users/{id}/password: свой — с текущим, чужой — сброс; ограничение до Owner — #20). Задачи: назначенные на человека по всем проектам.
-   Деактивация/активация из UI убрана до появления ролей (docs/TZ_user_roles.md): это право только Owner. *@
+   Роль (RoleSelect, PATCH /users/{id}/role) и «Деактивировать/Активировать» — по правам из Permissions (Owner/Admin). *@
 @page "/users/{Id:guid}"
 @implements IDisposable
 @inject FlowApi Api
@@ -29,7 +29,14 @@
         @if (_user is not null)
         {
             <button type="button" class="icon-lnk" @onclick="CopyLink"><Icon Name="copy" Size="14" />Скопировать ссылку</button>
-            <UserMenu User="_user" Size="30" Style="color:rgba(255,255,255,0.5)" OnOpen="() => { }" OnCopy="CopyUsername" />
+            @if (CanDeactivate)
+            {
+                <DsButton Variant="@(_user.IsActive ? "secondary" : "primary")" Size="sm" Icon="@(_user.IsActive ? "user-off" : "user")" OnClick="() => SetActive(!_user.IsActive)" Busy="_savingStatus">
+                    @(_user.IsActive ? "Деактивировать" : "Активировать")
+                </DsButton>
+            }
+            <UserMenu User="_user" Size="30" Style="color:rgba(255,255,255,0.5)" CanDeactivate="CanDeactivate"
+                      OnOpen="() => { }" OnCopy="CopyUsername" OnDeactivate="() => SetActive(false)" OnActivate="() => SetActive(true)" />
         }
     </div>
 </div>
@@ -66,14 +73,8 @@ else if (_user is not null)
             <div class="profile-head-text">
                 <div class="profile-name-row">
                     <h1 class="profile-name">@_user.FullName</h1>
-                    @if (_user.IsActive)
-                    {
-                        <span class="status-pill"><span class="sd" style="background:var(--sage)"></span>Активен</span>
-                    }
-                    else
-                    {
-                        <span class="status-pill"><span class="sd" style="background:rgba(255,255,255,0.35)"></span>Деактивирован</span>
-                    }
+                    <RoleChip Role="_user.Role" />
+                    <span class="status-pill"><span class="sd" style="background:@Permissions.StatusColor(_user.Status)"></span>@Permissions.StatusLabel(_user.Status)</span>
                     @if (IsMe)
                     {
                         <span class="me-chip">это я</span>
@@ -136,6 +137,21 @@ else if (_user is not null)
         {
             <div class="profile-grid">
                 <div class="profile-main">
+                    @if (!CanEditProfile)
+                    {
+                        <div class="side-card">
+                            <div class="section-title">Личные данные</div>
+                            <div class="meta-grid narrow">
+                                <div class="meta-k">Имя</div><div class="meta-v">@_user.FullName</div>
+                                <div class="meta-k">Должность</div><div class="meta-v">@(string.IsNullOrEmpty(_user.JobTitle) ? "—" : _user.JobTitle)</div>
+                                <div class="meta-k">Телефон</div><div class="meta-v">@(string.IsNullOrEmpty(_user.PhoneNumber) ? "—" : _user.PhoneNumber)</div>
+                                <div class="meta-k">Почта</div><div class="meta-v">@_user.Email</div>
+                                <div class="meta-k">О себе</div><div class="meta-v">@(string.IsNullOrEmpty(_user.Bio) ? "—" : _user.Bio)</div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
                     <div class="side-card">
                         <div class="card-head">
                             <div class="section-title">Личные данные</div>
@@ -168,6 +184,19 @@ else if (_user is not null)
                         }
                     </div>
 
+                    }
+
+                    @if (CanChangeRole)
+                    {
+                        <div class="side-card">
+                            <div class="section-title">Роль</div>
+                            <div class="hint">@Permissions.RoleHint(_user.Role). Роль действует сразу, без повторного входа.</div>
+                            <RoleSelect Value="_user.Role" Allowed="Permissions.AssignableRoles(Me, _user)" Disabled="_savingRole" OnChange="ChangeRole" />
+                        </div>
+                    }
+
+                    @if (CanEditCredentials)
+                    {
                     <div class="side-card">
                         <div class="section-title">Аккаунт</div>
                         <div class="hint">Username и почта уникальны — меняются отдельно и могут быть заняты другим человеком.</div>
@@ -188,13 +217,14 @@ else if (_user is not null)
                             </div>
                         </div>
                     </div>
+                    }
                 </div>
 
                 <div class="profile-side">
                     <div class="side-card">
                         <div class="card-head">
                             <div class="section-title">Ссылки</div>
-                            @if (FreeLinkTypes.Count > 0 && _linkType is null)
+                            @if (CanEditProfile && FreeLinkTypes.Count > 0 && _linkType is null)
                             {
                                 <button type="button" class="icon-lnk" @onclick="() => StartLink(FreeLinkTypes[0])"><Icon Name="plus" Size="13" />Добавить</button>
                             }
@@ -209,8 +239,11 @@ else if (_user is not null)
                                 <div class="link-row" @key="l.Type">
                                     <span class="link-type">@UserLinks.Label(l.Type)</span>
                                     <a class="link-url" href="@l.Url" target="_blank" rel="noopener noreferrer" title="@l.Url">@UserLinks.Short(l.Url)</a>
-                                    <DsIconButton Icon="edit" Size="24" Title="Изменить" Style="color:rgba(255,255,255,0.4)" OnClick="() => StartLink(l.Type, l.Url)" />
-                                    <DsIconButton Icon="close-simple" Size="24" Title="Удалить" Style="color:rgba(255,255,255,0.4)" OnClick="() => RemoveLink(l.Type)" />
+                                    @if (CanEditProfile)
+                                    {
+                                        <DsIconButton Icon="edit" Size="24" Title="Изменить" Style="color:rgba(255,255,255,0.4)" OnClick="() => StartLink(l.Type, l.Url)" />
+                                        <DsIconButton Icon="close-simple" Size="24" Title="Удалить" Style="color:rgba(255,255,255,0.4)" OnClick="() => RemoveLink(l.Type)" />
+                                    }
                                 </div>
                             }
                         </div>
@@ -233,6 +266,8 @@ else if (_user is not null)
                         }
                     </div>
 
+                    @if (CanEditCredentials)
+                    {
                     <div class="side-card">
                         <div class="section-title">Пароль</div>
                         @if (IsMe)
@@ -267,6 +302,7 @@ else if (_user is not null)
                             }
                         }
                     </div>
+                    }
 
                     <div class="side-card">
                         <div class="meta-grid narrow">
@@ -323,6 +359,14 @@ else if (_user is not null)
     private string Tab => TabParam == "tasks" ? "tasks" : "profile";
 
     private bool IsMe => _user is not null && State.CurrentUserId == _user.Id;
+
+    // Права по матрице docs/TZ_user_roles.md — только показ; Flow.Api ответит 403, если что.
+    private UserResponse? Me => Users.Find(State.CurrentUserId);
+    private bool CanEditProfile => _user is not null && Permissions.CanEditProfile(Me, _user);
+    private bool CanEditCredentials => _user is not null && Permissions.CanEditCredentials(Me, _user);
+    private bool CanChangeRole => _user is not null && Permissions.CanChangeRole(Me, _user);
+    private bool CanDeactivate => _user is not null && Permissions.CanDeactivate(Me, _user);
+    private bool _savingRole, _savingStatus;
 
     private bool IsDirty => _user is not null && (
         _first.Trim() != _user.FirstName || _last.Trim() != _user.LastName
@@ -565,6 +609,33 @@ else if (_user is not null)
         var fresh = await Api.GetUser(_user.Id);
         if (fresh.Ok) Apply(fresh.Value!);
         Toasts.Ok($"{UserLinks.Label(type)}: ссылка удалена");
+    }
+
+    // ---- роль / статус ----
+
+    private async Task ChangeRole(UserRole role)
+    {
+        if (_user is null || _savingRole || role == _user.Role) return;
+        _savingRole = true;
+        var result = await Api.ChangeUserRole(_user.Id, new ChangeUserRoleRequest(role));
+        _savingRole = false;
+        if (!result.Ok) { Toasts.Error(result.Error ?? "Не удалось сменить роль"); return; }
+
+        Apply(result.Value!);
+        Toasts.Ok($"{_user!.FullName}: теперь {Permissions.RoleLabel(_user.Role)}");
+    }
+
+    private async Task SetActive(bool active)
+    {
+        if (_user is null || _savingStatus) return;
+        _savingStatus = true;
+        var result = active ? await Api.ActivateUser(_user.Id) : await Api.DeactivateUser(_user.Id);
+        _savingStatus = false;
+        if (!result.Ok) { Toasts.Error(result.Error ?? "Не удалось изменить статус"); return; }
+
+        var fresh = await Api.GetUser(_user.Id);
+        if (fresh.Ok) Apply(fresh.Value!);
+        Toasts.Ok(active ? "Снова активен: может входить и получать задачи" : "Деактивирован: вход закрыт, назначать нельзя");
     }
 
     // ---- пароль ----

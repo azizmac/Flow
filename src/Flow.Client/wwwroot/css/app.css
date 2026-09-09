@@ -909,6 +909,26 @@ a.sb-me:active { transform: scale(0.98); }
     border: 1px dashed rgba(255, 255, 255, 0.3);
     color: rgba(255, 255, 255, 0.4);
 }
+.role-chip {
+    display: inline-flex;
+    align-items: center;
+    font: var(--fw-bold) 10px var(--font-display);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--r-sm);
+    padding: 3px 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.role-chip.owner { color: var(--on-accent); background: var(--accent); }
+.role-chip.admin { color: #fff; background: var(--sage); }
+.role-seg { flex-wrap: wrap; }
+.role-seg .seg-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.pop-sep { height: 1px; background: var(--border); margin: 4px 0; }
+
 .me-chip {
     display: inline-flex;
     align-items: center;

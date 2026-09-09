@@ -1,11 +1,23 @@
-@* Меню «…» человека: Открыть профиль · Скопировать @username. Деактивация — после ролей (docs/TZ_user_roles.md). *@
+@* Меню «…» человека: Открыть профиль · Скопировать @username · (Owner) Деактивировать / Активировать. *@
 
 <DsIconButton Id="@_id" Icon="more" Size="@Size" Title="Действия" OnClick="Toggle" Style="@Style" />
 @if (_open)
 {
-    <Popover AnchorId="@_id" Align="right" Width="210" Offset="4" OnClose="Close">
+    <Popover AnchorId="@_id" Align="right" Width="230" Offset="4" OnClose="Close">
         <button type="button" class="pop-item" @onclick="() => Fire(OnOpen)"><Icon Name="view" Size="15" />Открыть профиль</button>
         <button type="button" class="pop-item" @onclick="() => Fire(OnCopy)"><Icon Name="at" Size="15" />Скопировать @@username</button>
+        @if (CanDeactivate)
+        {
+            <div class="pop-sep"></div>
+            @if (User.IsActive)
+            {
+                <button type="button" class="pop-item danger" @onclick="() => Fire(OnDeactivate)"><Icon Name="user-off" Size="15" />Деактивировать</button>
+            }
+            else
+            {
+                <button type="button" class="pop-item" @onclick="() => Fire(OnActivate)"><Icon Name="user" Size="15" />Активировать</button>
+            }
+        }
     </Popover>
 }
 
@@ -13,8 +25,12 @@
     [Parameter, EditorRequired] public UserResponse User { get; set; } = default!;
     [Parameter] public int Size { get; set; } = 26;
     [Parameter] public string? Style { get; set; } = "color:rgba(255,255,255,0.4)";
+    /// <summary>Показывать пункт деактивации/активации — Permissions.CanDeactivate(me, User).</summary>
+    [Parameter] public bool CanDeactivate { get; set; }
     [Parameter] public EventCallback OnOpen { get; set; }
     [Parameter] public EventCallback OnCopy { get; set; }
+    [Parameter] public EventCallback OnDeactivate { get; set; }
+    [Parameter] public EventCallback OnActivate { get; set; }
 
     private readonly string _id = "um-" + Guid.NewGuid().ToString("N")[..8];
     private bool _open;

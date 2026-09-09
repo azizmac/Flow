@@ -27,7 +27,8 @@
         }
         else
         {
-            var list = Users.Filter(_query);
+            // Member на своей задаче назначает только себя (Permissions.CanAssign): список сужаем до него.
+            var list = OnlyUserId is { } only ? Users.Filter(_query).Where(u => u.Id == only).ToList() : Users.Filter(_query);
             if (list.Count == 0)
             {
                 <div class="pop-empty">@(Users.Active.Count == 0 ? "Пока нет людей — добавьте на странице «Люди»" : "Никого не найдено")</div>
@@ -58,6 +59,8 @@
     [Parameter] public bool Compact { get; set; }
     [Parameter] public string Align { get; set; } = "left";
     [Parameter] public bool Disabled { get; set; }
+    /// <summary>Ограничить выбор одним пользователем (Member — только себя); null — все активные.</summary>
+    [Parameter] public Guid? OnlyUserId { get; set; }
 
     private readonly string _id = "as-" + Guid.NewGuid().ToString("N")[..8];
     private readonly string _inputId = "asq-" + Guid.NewGuid().ToString("N")[..8];

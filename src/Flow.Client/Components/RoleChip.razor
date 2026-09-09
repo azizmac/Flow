@@ -1,0 +1,14 @@
+@* Чип роли workspace: Owner — акцентный, Admin — sage, остальные нейтральные. Подсказка — что роль может. *@
+
+<span class="role-chip @Variant" title="@Permissions.RoleHint(Role)">@Permissions.RoleLabel(Role)</span>
+
+@code {
+    [Parameter, EditorRequired] public UserRole Role { get; set; }
+
+    private string Variant => Role switch
+    {
+        UserRole.Owner => "owner",
+        UserRole.Admin => "admin",
+        _ => string.Empty
+    };
+}

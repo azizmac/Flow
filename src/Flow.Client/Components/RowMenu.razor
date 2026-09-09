@@ -8,15 +8,24 @@
         {
             <button type="button" class="pop-item" @onclick="() => Fire(OnOpen)"><Icon Name="view" Size="15" />Открыть</button>
         }
-        <button type="button" class="pop-item" @onclick="() => Fire(OnRename)"><Icon Name="edit" Size="15" />Переименовать</button>
+        @if (ShowRename)
+        {
+            <button type="button" class="pop-item" @onclick="() => Fire(OnRename)"><Icon Name="edit" Size="15" />Переименовать</button>
+        }
         <button type="button" class="pop-item" @onclick="() => Fire(OnCopy)"><Icon Name="copy" Size="15" />Скопировать код</button>
         <div class="pop-sep"></div>
-        <button type="button" class="pop-item danger" @onclick="() => Fire(OnDelete)"><Icon Name="trash" Size="15" />Удалить</button>
+        @if (ShowDelete)
+        {
+            <button type="button" class="pop-item danger" @onclick="() => Fire(OnDelete)"><Icon Name="trash" Size="15" />Удалить</button>
+        }
     </Popover>
 }
 
 @code {
     [Parameter] public bool ShowOpen { get; set; } = true;
+    /// <summary>Пункты, требующие прав (Permissions.CanEditTask / CanManageBoards); без них меню — открыть и скопировать.</summary>
+    [Parameter] public bool ShowRename { get; set; } = true;
+    [Parameter] public bool ShowDelete { get; set; } = true;
     [Parameter] public int Size { get; set; } = 26;
     [Parameter] public string? Style { get; set; }
     [Parameter] public EventCallback OnOpen { get; set; }

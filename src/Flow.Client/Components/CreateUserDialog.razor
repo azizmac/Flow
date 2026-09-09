@@ -5,6 +5,8 @@
 @inject FlowApi Api
 @inject HotkeyService Hotkeys
 @inject BrowserInterop Browser
+@inject UserDirectory Users
+@inject AppState State
 
 <div class="modal-scrim @(_in ? "in" : "")" @onclick="Cancel">
     <div class="modal" role="dialog" aria-modal="true" @onclick:stopPropagation>
@@ -28,6 +30,12 @@
 
         <DsInput Id="cu-email" Label="Почта" Icon="mail" Type="email" Placeholder="ilya@company.ru" MaxLength="254"
                  Value="@_email" ValueChanged="OnEmailChanged" Error="@_emailError" OnKeyDown="OnFieldKey" />
+
+        <div class="ds-field">
+            <span class="ds-field-label">Роль</span>
+            <RoleSelect Value="_role" Allowed="Permissions.CreatableRoles(Users.Find(State.CurrentUserId))" OnChange="r => _role = r" />
+            <div class="hint">@Permissions.RoleHint(_role)</div>
+        </div>
 
         <div>
             <DsInput Id="cu-password" Label="Начальный пароль" Placeholder="не короче 8 символов" MaxLength="128"
@@ -62,6 +70,7 @@
     private string _username = "";
     private string _email = "";
     private string _password = Passwords.Generate();
+    private UserRole _role = UserRole.Member;
     private bool _usernameTouched;
     private string? _firstError;
     private string? _lastError;
@@ -159,7 +168,7 @@
 
         _busy = true;
         _serverError = null;
-        var result = await Api.CreateUser(new CreateUserRequest(_username, _email.Trim(), _first.Trim(), _last.Trim(), _password));
+        var result = await Api.CreateUser(new CreateUserRequest(_username, _email.Trim(), _first.Trim(), _last.Trim(), _password, _role));
         _busy = false;
 
         if (result.Ok)

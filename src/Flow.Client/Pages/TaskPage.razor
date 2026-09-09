@@ -27,7 +27,7 @@
         @if (_task is not null)
         {
             <button type="button" class="icon-lnk" @onclick="CopyLink"><Icon Name="copy" Size="14" />Скопировать ссылку</button>
-            <RowMenu ShowOpen="false" Size="30" Style="color:rgba(255,255,255,0.5)"
+            <RowMenu ShowOpen="false" ShowRename="CanEdit" ShowDelete="CanEdit" Size="30" Style="color:rgba(255,255,255,0.5)"
                      OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => _deleting = true" />
         }
     </div>
@@ -72,7 +72,7 @@ else if (_task is not null && _board is not null)
                 }
                 else
                 {
-                    <div class="task-page-title" title="Нажмите, чтобы переименовать" @onclick="StartTitleEdit">@_task.Title</div>
+                    <div class="task-page-title" title="@(CanEdit ? "Нажмите, чтобы переименовать" : null)" @onclick="StartTitleEdit">@_task.Title</div>
                 }
             </div>
             <div style="display:flex;flex-direction:column;gap:10px;">
@@ -86,7 +86,7 @@ else if (_task is not null && _board is not null)
                             <DsButton Variant="primary" Size="sm" OnClick="SaveDesc" Busy="_busy">Сохранить</DsButton>
                         </div>
                     }
-                    else
+                    else if (CanEdit)
                     {
                         <button type="button" class="icon-lnk" @onclick="StartDescEdit"><Icon Name="edit" Size="13" />Редактировать</button>
                     }
@@ -107,9 +107,19 @@ else if (_task is not null && _board is not null)
             <div class="side-card">
                 <div class="meta-grid narrow">
                     <div class="meta-k">Статус</div>
-                    <div><StatusSelect Statuses="_board.Statuses" Value="_task.StatusId" OnChange="ChangeStatus" /></div>
+                    <div>
+                        @if (CanEdit)
+                        {
+                            <StatusSelect Statuses="_board.Statuses" Value="_task.StatusId" OnChange="ChangeStatus" />
+                        }
+                        else
+                        {
+                            var st = _board.Statuses.FirstOrDefault(x => x.Id == _task.StatusId);
+                            <span class="status-pill"><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span>
+                        }
+                    </div>
                     <div class="meta-k">Исполнитель</div>
-                    <div><AssigneeSelect Value="_task.AssigneeId" OnChange="Assign" /></div>
+                    <div><AssigneeSelect Value="_task.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" /></div>
                     <div class="meta-k">Проект</div>
                     <div class="meta-v"><KeyChip Value="@_board.Key" /><a href="@BackHref" style="color:#fff;">@_board.Name</a></div>
                     <div class="meta-k">Создана</div>
@@ -133,9 +143,12 @@ else if (_task is not null && _board is not null)
                     <UserCard User="who" AnchorId="tp-who" OnClose="() => _whoOpen = false" />
                 }
             }
-            <button type="button" class="icon-lnk danger" style="padding:0 4px;align-self:flex-start;" @onclick="() => _deleting = true">
-                <Icon Name="trash" Size="14" />Удалить задачу
-            </button>
+            @if (CanEdit)
+            {
+                <button type="button" class="icon-lnk danger" style="padding:0 4px;align-self:flex-start;" @onclick="() => _deleting = true">
+                    <Icon Name="trash" Size="14" />Удалить задачу
+                </button>
+            }
         </div>
     </div>
 }
@@ -158,6 +171,12 @@ else if (_task is not null && _board is not null)
     private string? _loadError;
     private bool _busy;
     private bool _deleting;
+
+    // Права по матрице docs/TZ_user_roles.md — только показ; Flow.Api ответит 403, если что.
+    private UserResponse? Me => Users.Find(State.CurrentUserId);
+    private bool CanEdit => _task is not null && Permissions.CanEditTask(Me, _task);
+    private bool CanAssign => _task is not null && Permissions.CanAssign(Me, _task);
+    private Guid? OnlyAssigneeId => Permissions.CanAssignAnyone(Me) ? null : Me?.Id;
     private bool _editingTitle;
     private bool _titleCancelled;
     private string _title = "";
@@ -234,6 +253,7 @@ else if (_task is not null && _board is not null)
 
     private async Task StartTitleEdit()
     {
+        if (!CanEdit) return;
         _title = _task!.Title;
         _editingTitle = true;
         _titleCancelled = false;
@@ -276,6 +296,7 @@ else if (_task is not null && _board is not null)
 
     private async Task StartDescEdit()
     {
+        if (!CanEdit) return;
         _description = _task!.Description ?? "";
         _editingDesc = true;
         StateHasChanged();

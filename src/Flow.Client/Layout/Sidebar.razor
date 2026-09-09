@@ -92,9 +92,21 @@
         // Профиль текущего пользователя — сразу в справочник; остальных подгружаем следом (аватары исполнителей).
         var me = await Api.GetMe();
         if (me.Ok)
+        {
             Users.Put(me.Value!);
+        }
+        else if (me.Unauthorized)
+        {
+            // Токен есть, но Flow.Api его не принял (сменились ключи Flow.Auth, профиль удалён руками): чистим сессию,
+            // чтобы человек вошёл заново, а не смотрел на пустой сайдбар.
+            _meError = "Сессия устарела";
+            Nav.NavigateToLogout("authentication/logout", "authentication/logged-out");
+            return;
+        }
         else
-            _meError = me.Unauthorized ? "Профиля нет" : "Нет связи с API";
+        {
+            _meError = "Нет связи с API";
+        }
 
         if (!Users.IsLoaded)
             _ = Users.EnsureLoadedAsync();

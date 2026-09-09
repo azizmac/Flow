@@ -25,7 +25,7 @@
             <div class="meta-k">Статус</div>
             <div><StatusSelect Statuses="Board.Statuses" Value="_statusId" OnChange="id => _statusId = id" /></div>
             <div class="meta-k">Исполнитель</div>
-            <div><AssigneeSelect Value="_assigneeId" OnChange="id => _assigneeId = id" /></div>
+            <div><AssigneeSelect Value="_assigneeId" OnlyUserId="OnlyAssigneeId" OnChange="id => _assigneeId = id" /></div>
             <div class="meta-k">Проект</div>
             <div class="meta-v"><KeyChip Value="@Board.Key" />@Board.Name</div>
         </div>
@@ -56,7 +56,7 @@ else if (Item is not null)
         </div>
         <div style="display:flex;align-items:center;gap:4px;">
             <a class="icon-lnk" style="margin-right:8px;" href="@($"tasks/{Item.Id}")"><Icon Name="expand" Size="15" />На всю страницу</a>
-            <RowMenu ShowOpen="false" Size="30" Style="color:rgba(255,255,255,0.5)"
+            <RowMenu ShowOpen="false" ShowRename="CanEdit" ShowDelete="CanEdit" Size="30" Style="color:rgba(255,255,255,0.5)"
                      OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => OnDelete.InvokeAsync(Item)" />
             <DsIconButton Icon="close" Size="30" Title="Закрыть (Esc)" OnClick="Close" />
         </div>
@@ -70,14 +70,24 @@ else if (Item is not null)
         }
         else
         {
-            <div class="drawer-title" title="Нажмите, чтобы переименовать" @onclick="StartTitleEdit">@Item.Title</div>
+            <div class="drawer-title" title="@(CanEdit ? "Нажмите, чтобы переименовать" : null)" @onclick="StartTitleEdit">@Item.Title</div>
         }
         <div class="meta-grid">
             <div class="meta-k">Статус</div>
-            <div><StatusSelect Statuses="Board.Statuses" Value="Item.StatusId" OnChange="ChangeStatus" /></div>
+            <div>
+                @if (CanEdit)
+                {
+                    <StatusSelect Statuses="Board.Statuses" Value="Item.StatusId" OnChange="ChangeStatus" />
+                }
+                else
+                {
+                    var st = Board.Statuses.FirstOrDefault(x => x.Id == Item.StatusId);
+                    <span class="status-pill"><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span>
+                }
+            </div>
             <div class="meta-k">Исполнитель</div>
             <div class="meta-v">
-                <AssigneeSelect Value="Item.AssigneeId" OnChange="Assign" />
+                <AssigneeSelect Value="Item.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" />
                 @if (Item.AssigneeId is { } aid && Users.Find(aid) is { } who)
                 {
                     <button type="button" id="@_whoId" class="icon-lnk" @onclick="() => _whoOpen = true" title="Карточка"><Icon Name="view" Size="13" />@@@who.Username</button>
@@ -103,7 +113,7 @@ else if (Item is not null)
                         <DsButton Variant="primary" Size="sm" OnClick="SaveDesc" Busy="_busy">Сохранить</DsButton>
                     </div>
                 }
-                else
+                else if (CanEdit)
                 {
                     <button type="button" class="icon-lnk" @onclick="StartDescEdit"><Icon Name="edit" Size="13" />Редактировать</button>
                 }
@@ -125,7 +135,10 @@ else if (Item is not null)
     </div>
     <div class="drawer-foot">
         <div class="kbd-hint"><span class="kbd">↑</span><span class="kbd">↓</span> между задачами <span class="kbd">Esc</span> закрыть</div>
-        <button type="button" class="icon-lnk danger" @onclick="() => OnDelete.InvokeAsync(Item)"><Icon Name="trash" Size="14" />Удалить</button>
+        @if (CanEdit)
+        {
+            <button type="button" class="icon-lnk danger" @onclick="() => OnDelete.InvokeAsync(Item)"><Icon Name="trash" Size="14" />Удалить</button>
+        }
     </div>
 }
 
@@ -137,6 +150,10 @@ else if (Item is not null)
     [Parameter] public EventCallback<TaskResponse> OnCreated { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnUpdated { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnDelete { get; set; }
+    /// <summary>Права actor'а на Item (Permissions.CanEditTask / CanAssign); OnlyAssigneeId — Member назначает только себя.</summary>
+    [Parameter] public bool CanEdit { get; set; } = true;
+    [Parameter] public bool CanAssign { get; set; } = true;
+    [Parameter] public Guid? OnlyAssigneeId { get; set; }
 
     private bool IsCreate => Item is null;
 
@@ -250,6 +267,7 @@ else if (Item is not null)
 
     private async Task StartTitleEdit()
     {
+        if (!CanEdit) return;
         _title = Item!.Title;
         _editingTitle = true;
         _titleCancelled = false;
@@ -295,6 +313,7 @@ else if (Item is not null)
 
     private async Task StartDescEdit()
     {
+        if (!CanEdit) return;
         _description = Item!.Description ?? "";
         _editingDesc = true;
         StateHasChanged();

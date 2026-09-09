@@ -96,6 +96,10 @@ public sealed class FlowApi(HttpClient http)
     public Task<ApiResult<UserResponse>> ChangeEmail(Guid id, ChangeEmailRequest request, CancellationToken ct = default) =>
         Send<UserResponse>(HttpMethod.Patch, $"users/{id}/email", request, ct);
 
+    /// <summary>PATCH /users/{id}/role: 403 — роль actor'а не позволяет, 400 — последний Owner.</summary>
+    public Task<ApiResult<UserResponse>> ChangeUserRole(Guid id, ChangeUserRoleRequest request, CancellationToken ct = default) =>
+        Send<UserResponse>(HttpMethod.Patch, $"users/{id}/role", request, ct);
+
     /// <summary>CurrentPassword = null — сброс (Owner). 400 — неверный текущий или слабый новый пароль (текст от Flow.Auth).</summary>
     public Task<ApiResult<bool>> ChangePassword(Guid id, ChangePasswordRequest request, CancellationToken ct = default) =>
         SendNoContent($"users/{id}/password", request, ct);

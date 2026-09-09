@@ -8,6 +8,7 @@
 @inject BrowserInterop Browser
 @inject HotkeyService Hotkeys
 @inject AppState State
+@inject UserDirectory Users
 
 <PageTitle>Проекты — Flow</PageTitle>
 
@@ -18,7 +19,10 @@
             <Icon Name="search" Size="16" />
             <input placeholder="Поиск по проектам..." value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
         </label>
-        <DsButton Variant="primary" Size="md" Icon="plus" OnClick="OpenCreate">Новый проект</DsButton>
+        @if (CanManage)
+        {
+            <DsButton Variant="primary" Size="md" Icon="plus" OnClick="OpenCreate">Новый проект</DsButton>
+        }
     </div>
 </div>
 
@@ -43,9 +47,9 @@
         <div class="board-grid stagger">
             @foreach (var b in Filtered)
             {
-                <BoardCard @key="b.Id" Board="b" OnOpen="Open" OnRename="Rename" OnDelete="AskDelete" OnCopy="CopyKey" />
+                <BoardCard @key="b.Id" Board="b" CanManage="CanManage" OnOpen="Open" OnRename="Rename" OnDelete="AskDelete" OnCopy="CopyKey" />
             }
-            @if (!HasSearch)
+            @if (!HasSearch && CanManage)
             {
                 <div class="board-card new" @onclick="OpenCreate" role="button" tabindex="0" @onkeydown="OnNewCardKey">
                     <Icon Name="plus" Size="22" />
@@ -101,11 +105,15 @@
         }
     }
 
+    /// <summary>Проекты создают, переименовывают и удаляют Admin и Owner (docs/TZ_user_roles.md).</summary>
+    private bool CanManage => Permissions.CanManageBoards(Users.Find(State.CurrentUserId));
+
     protected override async Task OnInitializedAsync()
     {
+        Users.Changed += OnUsersChanged;
         _hotkeys = Hotkeys.Subscribe(e =>
         {
-            if (!e.InEditable && !e.Ctrl && e.Key is "n" or "N" or "т" or "Т" && !_createOpen && _deleting is null)
+            if (CanManage && !e.InEditable && !e.Ctrl && e.Key is "n" or "N" or "т" or "Т" && !_createOpen && _deleting is null)
             {
                 e.Handled = true;
                 _createOpen = true;
@@ -192,5 +200,11 @@
         if (i >= 0) _boards[i] = updated;
     }
 
-    public void Dispose() => _hotkeys?.Dispose();
+    private void OnUsersChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Users.Changed -= OnUsersChanged;
+        _hotkeys?.Dispose();
+    }
 }

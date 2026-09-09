@@ -29,7 +29,10 @@
             else
             {
                 <h2 title="@_board.Name" @ondblclick="StartRename">@_board.Name</h2>
-                <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
+                @if (CanManageBoard)
+                {
+                    <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
+                }
             }
         }
         else
@@ -42,7 +45,10 @@
             <Icon Name="search" Size="16" />
             <input placeholder="Найти задачу или код..." value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
         </label>
-        <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate" Disabled="_board is null">Создать задачу</DsButton>
+        @if (CanCreateTask)
+        {
+            <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate" Disabled="_board is null">Создать задачу</DsButton>
+        }
     </div>
 </div>
 
@@ -84,7 +90,10 @@
                     <div class="empty">
                         <div class="empty-title">Пока нет задач</div>
                         <div>Создайте первую — код будет <span class="code accent">@_board.Key-@_board.NextTaskNumber</span></div>
-                        <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate">Создать первую</DsButton>
+                        @if (CanCreateTask)
+                        {
+                            <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate">Создать первую</DsButton>
+                        }
                     </div>
                 }
                 else if (Visible.Count == 0)
@@ -107,6 +116,7 @@
                     @foreach (var t in Visible)
                     {
                         <TaskRow @key="t.Id" Item="t" Statuses="_board.Statuses"
+                                 CanEdit="Permissions.CanEditTask(Me, t)" CanAssign="Permissions.CanAssign(Me, t)" OnlyAssigneeId="OnlyAssigneeId"
                                  Selected="TaskId == t.Id" Flash="_flashId == t.Id"
                                  OnOpen="OpenTask" OnStatusChange="ChangeStatus" OnAssign="AssignTask" OnRename="RenameTask"
                                  OnCopy="CopyCode" OnDelete="AskDeleteTask" />
@@ -121,6 +131,7 @@
     @if (_board is not null && (_createOpen || SelectedTask is not null))
     {
         <TaskDrawer Board="_board" Item="@(_createOpen ? null : SelectedTask)"
+                    CanEdit="@(SelectedTask is { } sel && Permissions.CanEditTask(Me, sel))" CanAssign="@(SelectedTask is { } sel2 && Permissions.CanAssign(Me, sel2))" OnlyAssigneeId="OnlyAssigneeId"
                     OnClose="CloseDrawer" OnCreated="OnTaskCreated" OnUpdated="OnTaskUpdated" OnDelete="AskDeleteTask" />
     }
 </Drawer>
@@ -163,6 +174,12 @@
     private bool DrawerOpen => _createOpen || (TaskId is not null && SelectedTask is not null);
 
     private TaskResponse? SelectedTask => TaskId is null ? null : _tasks.FirstOrDefault(t => t.Id == TaskId);
+
+    // Права по матрице docs/TZ_user_roles.md; Flow.Api — источник истины, здесь только показ кнопок.
+    private UserResponse? Me => Users.Find(State.CurrentUserId);
+    private bool CanManageBoard => Permissions.CanManageBoards(Me);
+    private bool CanCreateTask => Permissions.CanCreateTask(Me);
+    private Guid? OnlyAssigneeId => Permissions.CanAssignAnyone(Me) ? null : Me?.Id;
 
     private List<TaskResponse> Visible
     {
@@ -270,6 +287,7 @@
 
     private void OpenCreate()
     {
+        if (!CanCreateTask) return;
         if (_board is null) return;
         if (TaskId is not null)
             Nav.NavigateTo(Nav.GetUriWithQueryParameter("task", (string?)null));
@@ -288,7 +306,7 @@
             case "Escape":
                 if (DrawerOpen) { e.Handled = true; CloseDrawer(); }
                 break;
-            case "n" or "N" or "т" or "Т" when !e.InEditable && !e.Ctrl && !DrawerOpen:
+            case "n" or "N" or "т" or "Т" when !e.InEditable && !e.Ctrl && !DrawerOpen && CanCreateTask:
                 e.Handled = true;
                 OpenCreate();
                 break;
@@ -431,6 +449,7 @@
 
     private async Task StartRename()
     {
+        if (!CanManageBoard) return;
         if (_board is null) return;
         _renameValue = _board.Name;
         _renaming = true;
