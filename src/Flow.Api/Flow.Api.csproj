@@ -13,6 +13,8 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Bearer JWT от Flow.Auth: discovery/JWKS по Auth:BaseUrl, audience flow-api. -->
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
         <!-- Нужно самому startup-проекту для dotnet ef (DbContext живёт в Flow.Infrastructure). -->
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
             <PrivateAssets>all</PrivateAssets>

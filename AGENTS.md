@@ -2,7 +2,7 @@
 
 ## Слойная архитектура
 ```
-Flow.Api           → контроллеры (только IMediator)
+Flow.Api           → контроллеры (только IMediator + IActorAccessor); Bearer JWT от Flow.Auth (JwtBearer), fallback-политика «всё закрыто», Auth/ClaimsActorAccessor, Auth/ApiExceptionFilter, Bootstrap/BootstrapOwnerSeeder (миграции + профиль bootstrap-пользователя при старте)
 Flow.Auth          → отдельный сервис аутентификации (:5100, база flow_auth): ASP.NET Core Identity + BCrypt, OpenIddict (code+PKCE, refresh, client_credentials), страница входа, admin-API /accounts. Ссылается только на Flow.Shared
 Flow.Shared        → DTO-контракты (Boards, Tasks, Users, Accounts) — общий
 Flow.Application   → Features/{Boards,Tasks,Users,Bootstrap}/{Commands,Queries}/*, Abstractions (IBoardRepository, ITaskItemRepository, IUserRepository, IUnitOfWork, IAccountService), Exceptions (AuthUnavailableException)
@@ -41,6 +41,9 @@ Shared намеренно **не ссылается** на Domain (свои enum
 - Старт: `Security/AuthDatabaseInitializer` — миграции → клиенты → bootstrap. Ключи: Development — dev-сертификаты OpenIddict; `Auth:UseEphemeralKeys` — тесты; иначе PFX из `Auth:SigningCertificate`/`Auth:EncryptionCertificate` (Docker: `sh docker/auth/make-certs.sh`). `Auth:AllowInsecureHttp` — http вне Development (локальный compose). `DataProtection:KeysPath` — persist ключей cookie/antiforgery в контейнере.
 - Страница входа `Pages/Account/Login` (логин = username или email); Razor настроен на `UnicodeRanges.All`, иначе кириллица уходит как `&#x...;`.
 - Миграции: `cd src/Flow.Auth && dotnet ef migrations add <Name> --output-dir Migrations` (design-time фабрика `Data/AuthDbContextFactory`, хост не поднимается).
+- Flow.Api как resource server: `AddJwtBearer(Authority = Auth:BaseUrl, Audience = flow-api, ValidIssuer = Auth:Issuer ?? BaseUrl, MapInboundClaims = false)`; `FallbackPolicy = RequireAuthenticatedUser` — анонимен только `GET /`. Actor — `IActorAccessor` (`Auth/ClaimsActorAccessor`, claim `sub`). `AuthUnavailableException` → 502 `{ message }` в `Auth/ApiExceptionFilter` (глобальный фильтр MVC). Заголовка `X-Actor-Id` нет и не будет.
+- Flow.Api при старте (`Bootstrap/BootstrapOwnerSeeder`): `FlowDbContext.Database.MigrateAsync()` → `SeedBootstrapUserCommand` из секции `Bootstrap` (`Enabled=false` отключает). В Docker миграции больше руками не нужны.
+- Ручные запросы к Flow.Api: токен берётся из клиента (sessionStorage после входа) или через code+PKCE у Flow.Auth; токен `flow-api` (client_credentials) к Flow.Api **не подходит** — у него `aud = flow-auth`.
 - Flow.Api → Flow.Auth: `Flow.Infrastructure/Auth/AuthAccountService : IAccountService` (typed HttpClient) + `ClientCredentialsTokenProvider` (singleton, кэш токена flow-api до exp−30с, повтор один раз после 401). Секция `Auth` в Flow.Api: `BaseUrl`, `ApiClient:ClientId/Secret`. Без настроек — `AuthUnavailableException` при первом вызове, не на старте.
 
 ## MediatR и DI
@@ -55,7 +58,9 @@ Shared намеренно **не ссылается** на Domain (свои enum
 | GET/PATCH/DELETE | `/boards/{id}`, `/boards/{id}/name` |
 | POST/GET | `/boards/{boardId}/tasks` (`?assigneeId=`) |
 | GET/PATCH/DELETE | `/tasks/{id}`, PATCH `/tasks/{id}/assignee` |
-| POST/GET | `/users`, `/users/search?q=&limit=` |
+| POST/GET | `/users` (POST требует `Password` → учётная запись в Flow.Auth), `/users/search?q=&limit=` |
+| GET | `/users/me` — профиль текущего actor (claim sub); 401, если профиля нет |
+| POST | `/users/{id}/password` — `{ currentPassword?, newPassword }`; null = сброс (право Owner — #18) |
 | GET/PATCH | `/users/{id}`, `/users/by-username/{username}`, `/users/{id}/username`, `/users/{id}/email` |
 | PUT/DELETE | `/users/{id}/links/{type}` |
 | POST | `/users/{id}/deactivate`, `/users/{id}/activate` |
@@ -77,7 +82,7 @@ Shared намеренно **не ссылается** на Domain (свои enum
 ## Команды
 - Требуется .NET SDK 10.x (закреплено в `global.json`, `rollForward: latestMinor`); SDK 8/9 сборку не соберут (NETSDK1045).
 - Build/test: `dotnet build Flow.slnx`, `dotnet test Flow.slnx`
-- `Flow.Infrastructure.Tests` поднимает Postgres через Testcontainers — нужен запущенный Docker.
+- `Flow.Infrastructure.Tests`, `Flow.Auth.Tests`, `Flow.Api.Tests` поднимают Postgres через Testcontainers — нужен запущенный Docker.
 - Migrations: `dotnet ef database update --project src/Flow.Infrastructure --startup-project src/Flow.Api`
 - Docker: `docker compose up -d postgres` (init-скрипт `docker/postgres/init.sql` создаёт вторую базу `flow_auth`); `sh docker/auth/make-certs.sh` → `docker compose up -d auth` (:5100). Базовый пользователь — якорь `x-bootstrap` в compose (`BOOTSTRAP_*`).
 - Клиент локально: `dotnet run --project src/Flow.Api` (:5000) + `dotnet run --project src/Flow.Client` (:5016); клиент читает `ApiBaseUrl` из `wwwroot/appsettings.json`.
@@ -96,6 +101,7 @@ Shared намеренно **не ссылается** на Domain (свои enum
 - `Flow.Domain.Tests` — юнит-тесты сущностей (Board, TaskItem, TaskCode, User).
 - `Flow.Application.Tests` — фичи с `Fakes/` (FakeBoardRepository, FakeTaskItemRepository, FakeUserRepository, FakeAccountService, FakeUnitOfWork) + `TestMediatorFactory` (`Create()` — 4 фейка, `CreateWithAccounts()` — плюс FakeAccountService для ассертов на вызовы в Flow.Auth). `AccountFeatureTests` — связка Users ↔ Flow.Auth и bootstrap.
 - `Flow.Infrastructure.Tests` — интеграционные на реальном Postgres (Testcontainers, образ `postgres:16-alpine`): миграции, удаление доски с задачами, дубликат ключа, пользователи (ссылки, unique-индексы, поиск). `PostgresFixture` подменяет `IAccountService` на `AlwaysSucceedingAccountService` — в Flow.Auth не ходит. `AuthAccountServiceTests` — юнит-тесты HTTP-клиента admin-API на `HttpMessageHandler`-заглушке (маппинг 409/400/5xx, кэш токена, повтор после 401).
+- `Flow.Api.Tests` — `WebApplicationFactory<Program>` + Testcontainers (`ApiFixture`): JwtBearer переключён на локальный симметричный ключ (`PostConfigure<JwtBearerOptions>`: Authority/ConfigurationManager = null), токены выпускает `ApiFixture.CreateToken(sub)`, `IAccountService` → `FakeAccountService` из Flow.Application.Tests. Кейсы: 401 без токена / чужой aud / чужой iss, `/users/me`, обязательный пароль при `POST /users`, 502 при недоступном Flow.Auth, bootstrap-профиль после старта и идемпотентность сидера.
 - `Flow.Auth.Tests` — `WebApplicationFactory<Program>` + Testcontainers (`AuthFixture`, один хост на коллекцию, эфемерные ключи): discovery/JWKS, admin-API (401/409/400), BCrypt-хеш `$2a$12$`, lockout, disable, bootstrap-пользователь, полный code+PKCE → JWT → refresh. Страница входа проходится как браузером (`LoginPage`: antiforgery из HTML).
 
 ## Навигация

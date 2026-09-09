@@ -13,5 +13,6 @@
     <Project Path="tests/Flow.Application.Tests/Flow.Application.Tests.csproj" />
     <Project Path="tests/Flow.Infrastructure.Tests/Flow.Infrastructure.Tests.csproj" />
     <Project Path="tests/Flow.Auth.Tests/Flow.Auth.Tests.csproj" />
+    <Project Path="tests/Flow.Api.Tests/Flow.Api.Tests.csproj" />
   </Folder>
 </Solution>

@@ -49,6 +49,16 @@ jobs:
           dotnet test tests/Flow.Infrastructure.Tests -c Release --no-build \
             --logger "trx;LogFileName=infrastructure.trx" --results-directory TestResults
 
+      - name: Integration tests (Flow.Auth, WebApplicationFactory + Testcontainers/Postgres)
+        run: |
+          dotnet test tests/Flow.Auth.Tests -c Release --no-build \
+            --logger "trx;LogFileName=auth.trx" --results-directory TestResults
+
+      - name: Integration tests (Flow.Api, WebApplicationFactory + Testcontainers/Postgres)
+        run: |
+          dotnet test tests/Flow.Api.Tests -c Release --no-build \
+            --logger "trx;LogFileName=api.trx" --results-directory TestResults
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

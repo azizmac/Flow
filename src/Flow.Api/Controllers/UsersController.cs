@@ -1,6 +1,7 @@
 using Flow.Application.Features.Users;
 using Flow.Application.Features.Users.Commands.UserActivateCommand;
 using Flow.Application.Features.Users.Commands.UserChangeEmailCommand;
+using Flow.Application.Features.Users.Commands.UserChangePasswordCommand;
 using Flow.Application.Features.Users.Commands.UserChangeUsernameCommand;
 using Flow.Application.Features.Users.Commands.UserCreateCommand;
 using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
@@ -8,9 +9,11 @@ using Flow.Application.Features.Users.Commands.UserRemoveLinkCommand;
 using Flow.Application.Features.Users.Commands.UserSetLinkCommand;
 using Flow.Application.Features.Users.Commands.UserUpdateProfileCommand;
 using Flow.Application.Features.Users.Queries.UserGetByUsernameQuery;
+using Flow.Application.Features.Users.Queries.UserGetMeQuery;
 using Flow.Application.Features.Users.Queries.UserGetQuery;
 using Flow.Application.Features.Users.Queries.UserListQuery;
 using Flow.Application.Features.Users.Queries.UserSearchQuery;
+using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Users;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -23,15 +26,19 @@ namespace Flow.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("users")]
-public class UsersController(IMediator mediator) : ControllerBase
+public class UsersController(IMediator mediator, IActorAccessor actor) : ControllerBase
 {
+    /// <summary>Создаёт учётную запись в Flow.Auth (нужен начальный пароль) и профиль. 502 — Flow.Auth недоступен.</summary>
     [HttpPost]
     public async Task<IActionResult> CreateUser(CreateUserRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { Message = "Password is required." });
+
         try
         {
             var result = await mediator.Send(
-                new UserCreateCommand(request.Username, request.Email, request.FirstName, request.LastName, request.Password ?? string.Empty),
+                new UserCreateCommand(request.Username, request.Email, request.FirstName, request.LastName, request.Password),
                 cancellationToken);
 
             if (result.IsConflict)
@@ -62,6 +69,17 @@ public class UsersController(IMediator mediator) : ControllerBase
     {
         var users = await mediator.Send(new UserSearchQuery(q, limit), cancellationToken);
         return Ok(users);
+    }
+
+    /// <summary>Профиль текущего пользователя (claim sub). 401 — токен валиден, а профиля нет (удалён руками).</summary>
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMe(CancellationToken cancellationToken)
+    {
+        if (actor.ActorId is not { } actorId)
+            return Unauthorized();
+
+        var me = await mediator.Send(new UserGetMeQuery(actorId), cancellationToken);
+        return me is null ? Unauthorized(new { Message = "Профиль для этой учётной записи не найден." }) : Ok(me);
     }
 
     [HttpGet("{id:guid}")]
@@ -123,6 +141,27 @@ public class UsersController(IMediator mediator) : ControllerBase
         {
             var result = await mediator.Send(new UserChangeEmailCommand(id, request.Email), cancellationToken);
             return ToActionResult(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// CurrentPassword задан — смена своего пароля; null — сброс. Кто вправе сбрасывать чужой (Owner) — IPermissionService (#18).
+    /// Неверный текущий или слабый новый пароль → 400 с текстом Flow.Auth.
+    /// </summary>
+    [HttpPost("{id:guid}/password")]
+    public async Task<IActionResult> ChangePassword(Guid id, ChangePasswordRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await mediator.Send(
+                new UserChangePasswordCommand(id, request.CurrentPassword, request.NewPassword),
+                cancellationToken);
+
+            return result.IsNotFound ? NotFound() : NoContent();
         }
         catch (ArgumentException ex)
         {
