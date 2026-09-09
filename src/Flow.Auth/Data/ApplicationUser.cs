@@ -7,4 +7,11 @@ namespace Flow.Auth.Data;
 /// связаны без дополнительных таблиц. Имя, должность, ссылки и роль workspace здесь намеренно отсутствуют:
 /// это профиль, которым владеет Flow.Api.
 /// </summary>
-public sealed class ApplicationUser : IdentityUser<Guid>;
+public sealed class ApplicationUser : IdentityUser<Guid>
+{
+    /// <summary>
+    /// Пароль задан не самим человеком (bootstrap, начальный от админа, сброс Owner'ом): до его смены
+    /// /connect/authorize не выдаёт код, а ведёт на /account/change-password. Снимается при смене с текущим паролем.
+    /// </summary>
+    public bool MustChangePassword { get; set; }
+}

@@ -281,12 +281,13 @@ else if (_user is not null)
                         }
                         else
                         {
-                            <div class="hint">Сброс без текущего пароля — для основателя workspace. Сообщите новый пароль человеку лично.</div>
+                            <div class="hint">Сброс без текущего пароля — для основателя workspace. Сообщите новый пароль человеку лично: при входе Flow попросит заменить его на свой.</div>
                             @if (_pwResetOpen)
                             {
                                 <div class="pw-form" @onkeydown="OnPasswordKey">
-                                    <DsInput Label="Новый пароль" Value="@_pwNew" ValueChanged="v => { _pwNew = v; _pwError = null; }" MaxLength="128" Error="@_pwError" />
+                                    <DsInput Label="Новый пароль" Type="@(_pwShow ? "text" : "password")" Value="@_pwNew" ValueChanged="v => { _pwNew = v; _pwError = null; }" MaxLength="128" Error="@_pwError" />
                                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <button type="button" class="icon-lnk" @onclick="() => _pwShow = !_pwShow"><Icon Name="view" Size="13" />@(_pwShow ? "Скрыть" : "Показать")</button>
                                         <button type="button" class="icon-lnk" @onclick="GeneratePassword"><Icon Name="plus" Size="13" />Сгенерировать</button>
                                         <button type="button" class="icon-lnk" @onclick="CopyPassword" disabled="@(_pwNew.Length == 0)"><Icon Name="copy" Size="13" />Скопировать</button>
                                     </div>
@@ -343,7 +344,7 @@ else if (_user is not null)
     // пароль
     private string _pwCurrent = "", _pwNew = "";
     private string? _pwError;
-    private bool _savingPassword, _pwResetOpen;
+    private bool _savingPassword, _pwResetOpen, _pwShow;
 
     // ссылки
     private UserLinkType? _linkType;

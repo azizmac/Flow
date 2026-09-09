@@ -32,7 +32,8 @@ public sealed class AccountsController(UserManager<ApplicationUser> users) : Con
             UserName = Normalize(request.Username),
             Email = Normalize(request.Email),
             EmailConfirmed = true,
-            LockoutEnabled = true
+            LockoutEnabled = true,
+            MustChangePassword = request.MustChangePassword
         };
 
         var result = await users.CreateAsync(user, request.Password);
@@ -77,7 +78,10 @@ public sealed class AccountsController(UserManager<ApplicationUser> users) : Con
         return result.Succeeded ? NoContent() : ToError(result);
     }
 
-    /// <summary>С CurrentPassword — смена своего пароля; без него — сброс (Owner). Оба меняют security stamp.</summary>
+    /// <summary>
+    /// С CurrentPassword — смена своего пароля (снимает MustChangePassword); без него — сброс Owner'ом
+    /// (ставит MustChangePassword: новый пароль задан не самим человеком). Оба меняют security stamp.
+    /// </summary>
     [HttpPost("{id:guid}/password")]
     public async Task<IActionResult> ChangePassword(Guid id, ChangeAccountPasswordRequest request)
     {
@@ -97,6 +101,11 @@ public sealed class AccountsController(UserManager<ApplicationUser> users) : Con
                 result = await users.AddPasswordAsync(user, request.NewPassword);
         }
 
+        if (!result.Succeeded)
+            return ToError(result);
+
+        user.MustChangePassword = request.CurrentPassword is null;
+        result = await users.UpdateAsync(user);
         return result.Succeeded ? NoContent() : ToError(result);
     }
 
@@ -135,7 +144,7 @@ public sealed class AccountsController(UserManager<ApplicationUser> users) : Con
     private static string Normalize(string value) => value.Trim().ToLowerInvariant();
 
     private static AccountResponse ToResponse(ApplicationUser user) =>
-        new(user.Id, user.UserName!, user.Email!, IsDisabled(user));
+        new(user.Id, user.UserName!, user.Email!, IsDisabled(user), user.MustChangePassword);
 
     /// <summary>Постоянная блокировка (disable) отличается от временной (5 неудачных попыток) горизонтом LockoutEnd.</summary>
     internal static bool IsDisabled(ApplicationUser user) =>

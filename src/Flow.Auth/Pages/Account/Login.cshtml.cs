@@ -77,6 +77,10 @@ public sealed class LoginModel(SignInManager<ApplicationUser> signIn, UserManage
 
         await signIn.SignInAsync(user, isPersistent: false);
 
-        return LocalRedirect(string.IsNullOrEmpty(ReturnUrl) || !Url.IsLocalUrl(ReturnUrl) ? "/" : ReturnUrl);
+        var returnUrl = string.IsNullOrEmpty(ReturnUrl) || !Url.IsLocalUrl(ReturnUrl) ? "/" : ReturnUrl;
+        if (user.MustChangePassword)
+            return LocalRedirect("/account/change-password?ReturnUrl=" + Uri.EscapeDataString(returnUrl));
+
+        return LocalRedirect(returnUrl);
     }
 }

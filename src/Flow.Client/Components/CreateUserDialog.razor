@@ -38,13 +38,14 @@
         </div>
 
         <div>
-            <DsInput Id="cu-password" Label="Начальный пароль" Placeholder="не короче 8 символов" MaxLength="128"
+            <DsInput Id="cu-password" Label="Начальный пароль" Type="@(_showPassword ? "text" : "password")" Placeholder="не короче 8 символов" MaxLength="128"
                      Value="@_password" ValueChanged="OnPasswordChanged" Error="@_passwordError" OnKeyDown="OnFieldKey" />
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                <button type="button" class="icon-lnk" @onclick="() => _showPassword = !_showPassword"><Icon Name="view" Size="13" />@(_showPassword ? "Скрыть" : "Показать")</button>
                 <button type="button" class="icon-lnk" @onclick="GeneratePassword"><Icon Name="plus" Size="13" />Сгенерировать</button>
                 <button type="button" class="icon-lnk" @onclick="CopyPassword" disabled="@(_password.Length == 0)"><Icon Name="copy" Size="13" />Скопировать</button>
             </div>
-            <div class="hint" style="margin-top:8px;">Сообщите пароль человеку лично — после входа он сменит его в профиле.</div>
+            <div class="hint" style="margin-top:8px;">Сообщите пароль человеку лично. При первом входе Flow попросит его заменить на свой.</div>
         </div>
 
         @if (_serverError is not null)
@@ -71,6 +72,7 @@
     private string _email = "";
     private string _password = Passwords.Generate();
     private UserRole _role = UserRole.Member;
+    private bool _showPassword;
     private bool _usernameTouched;
     private string? _firstError;
     private string? _lastError;

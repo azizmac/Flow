@@ -55,6 +55,9 @@ API проверяет Bearer-токен, «кто действует» (actor) 
   После первого входа пароль меняется в профиле; принудительная смена — вне ТЗ.
 - **`Invited → Active`** — при первом `GET /users/me` от этого `sub` (клиент вызывает его при старте). Auth о входах Flow не сообщает.
 - **Защита от перебора** — lockout Identity: 5 неудач → 5 минут. Отдельный rate limiter не нужен.
+- **Начальный пароль обязателен к смене** (#26): пароль, заданный не самим человеком (bootstrap, админ при создании,
+  сброс Owner'ом), помечается `MustChangePassword`; пока флаг стоит, Flow.Auth после входа показывает страницу смены и не
+  выдаёт код клиенту. Снимается сменой пароля с текущим. Реализовано внутри Flow.Auth, клиент и Api не участвуют.
 - **Ключи**: Development — `AddDevelopmentEncryptionCertificate()/SigningCertificate()`; Docker/Production — два PFX
   из `Auth:SigningCertificate:*` (подпись access/id token) и `Auth:EncryptionCertificate:*` (коды и refresh-токены
   OpenIddict шифрует всегда, даже при незашифрованном access token). Без сертификатов в Production сервис не стартует.
@@ -338,7 +341,6 @@ services:
 - Внешние провайдеры (GitHub/Google) через OpenIddict client-stack в Flow.Auth.
 - Отзыв живых access token'ов при деактивации (короче срок или introspection).
 - Компенсация «учётная запись создана, профиль нет» при `UserCreate` (`DeleteAsync` в admin-API) и outbox для вызовов Auth.
-- Принудительная смена пароля базового пользователя после первого входа (claim `must_change_password` → модалка в клиенте).
 - Очистка истёкших токенов (`OpenIddict.Quartz`).
 - Роли Identity, 2FA, роль в токене.
 

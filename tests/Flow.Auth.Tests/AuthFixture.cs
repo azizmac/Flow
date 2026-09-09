@@ -81,11 +81,14 @@ public sealed class AuthFixture : IAsyncLifetime
         return json.RootElement.GetProperty("access_token").GetString()!;
     }
 
-    /// <summary>Создаёт учётную запись через admin-API. Username/email уникальны по имени теста.</summary>
-    public async Task<AccountResponse> CreateAccountAsync(string username, string password = "correct horse battery", Guid? id = null)
+    /// <summary>
+    /// Создаёт учётную запись через admin-API. Username/email уникальны по имени теста. По умолчанию без обязательной
+    /// смены пароля — иначе каждый тест входа упирался бы в /account/change-password.
+    /// </summary>
+    public async Task<AccountResponse> CreateAccountAsync(string username, string password = "correct horse battery", Guid? id = null, bool mustChangePassword = false)
     {
         using var admin = await CreateAdminClientAsync();
-        using var response = await admin.PostAsJsonAsync("/accounts", new CreateAccountRequest(id ?? Guid.NewGuid(), username, $"{username}@example.com", password));
+        using var response = await admin.PostAsJsonAsync("/accounts", new CreateAccountRequest(id ?? Guid.NewGuid(), username, $"{username}@example.com", password, mustChangePassword));
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<AccountResponse>())!;
     }

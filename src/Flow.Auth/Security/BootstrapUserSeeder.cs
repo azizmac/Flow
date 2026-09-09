@@ -9,8 +9,9 @@ namespace Flow.Auth.Security;
 /// Создаёт учётную запись базового пользователя из секции Bootstrap при первом запуске.
 /// Хеш пароля пишется напрямую и CreateAsync вызывается без пароля: валидаторы пароля не применяются
 /// (пароль "admin" из env допустим — это решение оператора), уникальность username/email — применяется.
-/// Если запись с Bootstrap:Id уже есть, ничего не делает, даже если env изменился: пароль после первого входа
-/// принадлежит пользователю. Профиль Owner с тем же Id сеет Flow.Api.
+/// Пароль помечается как подлежащий смене (<see cref="ApplicationUser.MustChangePassword"/>): пока он равен
+/// bootstrap-паролю, войти в приложение нельзя — только сменить. Если запись уже есть, а пароль всё ещё
+/// bootstrap-овский (базы, созданные до этого правила), флаг ставится при старте. Профиль Owner с тем же Id сеет Flow.Api.
 /// </summary>
 public sealed class BootstrapUserSeeder(
     UserManager<ApplicationUser> users,
@@ -27,8 +28,12 @@ public sealed class BootstrapUserSeeder(
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (await users.FindByIdAsync(bootstrap.Id.ToString()) is not null)
+        var existing = await users.FindByIdAsync(bootstrap.Id.ToString());
+        if (existing is not null)
+        {
+            await FlagDefaultPasswordAsync(existing, bootstrap.Password);
             return false;
+        }
 
         var user = new ApplicationUser
         {
@@ -36,7 +41,8 @@ public sealed class BootstrapUserSeeder(
             UserName = bootstrap.Username.Trim().ToLowerInvariant(),
             Email = bootstrap.Email.Trim().ToLowerInvariant(),
             EmailConfirmed = true,
-            LockoutEnabled = true
+            LockoutEnabled = true,
+            MustChangePassword = true
         };
         user.PasswordHash = hasher.HashPassword(user, bootstrap.Password);
 
@@ -45,7 +51,20 @@ public sealed class BootstrapUserSeeder(
             throw new InvalidOperationException(
                 "Bootstrap user could not be created: " + string.Join("; ", result.Errors.Select(e => e.Description)));
 
-        logger.LogInformation("Bootstrap user {Username} <{Email}> created with id {Id}", user.UserName, user.Email, user.Id);
+        logger.LogInformation("Bootstrap user {Username} <{Email}> created with id {Id}; password must be changed on first login", user.UserName, user.Email, user.Id);
         return true;
+    }
+
+    private async Task FlagDefaultPasswordAsync(ApplicationUser user, string defaultPassword)
+    {
+        if (user.MustChangePassword || user.PasswordHash is null)
+            return;
+
+        if (hasher.VerifyHashedPassword(user, user.PasswordHash, defaultPassword) == PasswordVerificationResult.Failed)
+            return;
+
+        user.MustChangePassword = true;
+        await users.UpdateAsync(user);
+        logger.LogWarning("Bootstrap user {Username} still has the default password — change required on next login", user.UserName);
     }
 }

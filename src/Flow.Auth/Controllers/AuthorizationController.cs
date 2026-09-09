@@ -73,6 +73,13 @@ public sealed class AuthorizationController(
                 }));
         }
 
+        // Пароль задан не самим человеком (bootstrap, админ, сброс): код не выдаём, пока не сменит.
+        if (user.MustChangePassword)
+        {
+            var authorizeUrl = Request.PathBase + Request.Path + QueryString.Create(Request.HasFormContentType ? Request.Form : Request.Query);
+            return Redirect("/account/change-password?ReturnUrl=" + Uri.EscapeDataString(authorizeUrl));
+        }
+
         var identity = await CreateIdentityAsync(user);
         identity.SetScopes(request.GetScopes());
         identity.SetResources(await scopes.ListResourcesAsync(identity.GetScopes()).ToListAsync());

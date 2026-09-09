@@ -90,6 +90,9 @@ public sealed class LoginTests(AuthFixture auth)
         using var client = auth.CreateClient();
         using var login = await LoginPage.PostAsync(client, "admin@flow.com", "admin", "/");
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+        // Пароль bootstrap-овский — сначала на смену (#26).
+        Assert.Equal(ChangePasswordPage.Path, ChangePasswordPage.PathOf(login.Headers.Location!));
+        Assert.True(user.MustChangePassword);
     }
 
     [Fact]
