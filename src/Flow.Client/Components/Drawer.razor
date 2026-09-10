@@ -1,5 +1,8 @@
 @* Слайдер справа поверх main (сайдбар не затемняется). Всегда смонтирован — открытие/закрытие через класс,
-   чтобы CSS-переходы (translateX) можно было прервать. Контент остаётся на время выходной анимации (160ms). *@
+   чтобы CSS-переходы (translateX) можно было прервать. Контент остаётся на время выходной анимации (160ms).
+   Фокус: при открытии уходит внутрь и не выпускается Tab'ом (см. flow.js), при закрытии возвращается на
+   элемент, с которого дровер открыли. *@
+@inject BrowserInterop Browser
 
 <div class="drawer-scrim @(Open ? "in" : "")" @onclick="RequestClose"></div>
 <div class="drawer @(Open ? "in" : "") @(_closing ? "closing" : "")" role="dialog" aria-modal="true" aria-hidden="@(!Open)">
@@ -16,13 +19,18 @@
 
     private bool _wasOpen;
     private bool _closing;
+    private bool _needFocus;
     private CancellationTokenSource? _closeCts;
 
     protected override void OnParametersSet()
     {
+        if (!_wasOpen && Open)
+            _needFocus = true;
+
         if (_wasOpen && !Open)
         {
             _closing = true;
+            _ = Browser.PopFocusAsync();
             _closeCts?.Cancel();
             _closeCts = new CancellationTokenSource();
             _ = EndClosing(_closeCts.Token);
@@ -34,6 +42,16 @@
         }
 
         _wasOpen = Open;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_needFocus)
+            return;
+
+        _needFocus = false;
+        await Browser.PushFocusAsync();
+        await Browser.FocusFirstInAsync(".drawer.in");
     }
 
     private async Task EndClosing(CancellationToken ct)

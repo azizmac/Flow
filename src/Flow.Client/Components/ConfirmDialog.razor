@@ -1,6 +1,9 @@
-@* Модалка подтверждения (удаление проекта/задачи). Enter — подтвердить, Esc — закрыть. *@
+@* Модалка подтверждения (удаление проекта/задачи). Enter — подтвердить, Esc — закрыть.
+   Фокус при открытии — на кнопке действия (совпадает с Enter-хоткеем), Tab заперт внутри,
+   при закрытии возвращается на вызвавший элемент. *@
 @implements IDisposable
 @inject HotkeyService Hotkeys
+@inject BrowserInterop Browser
 
 <div class="modal-scrim @(_in ? "in" : "")" @onclick="Cancel">
     <div class="modal" role="dialog" aria-modal="true" @onclick:stopPropagation>
@@ -13,7 +16,7 @@
         </div>
         <div class="modal-actions">
             <DsButton Variant="secondary" Size="md" OnClick="Cancel" Disabled="_busy">Отмена</DsButton>
-            <DsButton Variant="danger" Size="md" OnClick="Confirm" Busy="_busy" Icon="trash">@ConfirmLabel</DsButton>
+            <DsButton Id="@_confirmId" Variant="danger" Size="md" OnClick="Confirm" Busy="_busy" Icon="trash">@ConfirmLabel</DsButton>
         </div>
     </div>
 </div>
@@ -25,6 +28,7 @@
     [Parameter] public EventCallback OnConfirm { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
 
+    private readonly string _confirmId = "cd-" + Guid.NewGuid().ToString("N")[..8];
     private bool _in;
     private bool _busy;
     private IDisposable? _hotkeys;
@@ -38,13 +42,15 @@
         });
     }
 
-    protected override void OnAfterRender(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
-        {
-            _in = true;
-            StateHasChanged();
-        }
+        if (!firstRender)
+            return;
+
+        _in = true;
+        StateHasChanged();
+        await Browser.PushFocusAsync();
+        await Browser.FocusAsync(_confirmId);
     }
 
     private Task Cancel() => _busy ? Task.CompletedTask : OnCancel.InvokeAsync();
@@ -63,5 +69,9 @@
         }
     }
 
-    public void Dispose() => _hotkeys?.Dispose();
+    public void Dispose()
+    {
+        _hotkeys?.Dispose();
+        _ = Browser.PopFocusAsync();
+    }
 }

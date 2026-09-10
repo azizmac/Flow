@@ -2,6 +2,7 @@
 
 <button type="button" id="@Id" class="ds-iconbtn @Variant @Class" title="@Title" aria-label="@Title"
         style="@($"width:{Size}px;height:{Size}px;{Style}")" disabled="@Disabled"
+        aria-haspopup="@AriaHasPopup" aria-expanded="@(AriaHasPopup is null ? null : AriaExpanded ? "true" : "false")"
         @onclick="OnClick" @onclick:stopPropagation="StopPropagation">
     <Icon Name="@Icon" Size="@IconSize" />
 </button>
@@ -16,6 +17,9 @@
     [Parameter] public string? Id { get; set; }
     [Parameter] public bool Disabled { get; set; }
     [Parameter] public bool StopPropagation { get; set; } = true;
+    /// <summary>Если кнопка открывает слой — "menu"/"listbox"/"dialog"; тогда же отдаём aria-expanded.</summary>
+    [Parameter] public string? AriaHasPopup { get; set; }
+    [Parameter] public bool AriaExpanded { get; set; }
     [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
 
     private int IconSize => (int)Math.Round(Size * 0.5);

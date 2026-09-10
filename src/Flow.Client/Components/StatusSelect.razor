@@ -1,17 +1,21 @@
 @* Селект статуса «в строке»: триггер-пилюля с точкой + поповер со статусами проекта.
    Выбор → OnChange(statusId). Открытие/закрытие — локальное состояние. *@
 
-<div class="status-sel" id="@_id" @onclick="Toggle" @onclick:stopPropagation title="Сменить статус">
+<div class="status-sel @(Disabled ? "disabled" : "")" id="@_id" @onclick="Toggle" @onclick:stopPropagation
+     @onkeydown="OnKey" @onkeydown:stopPropagation
+     role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-disabled="@(Disabled ? "true" : "false")"
+     aria-expanded="@(_open ? "true" : "false")" title="@(Disabled ? "Сохраняем…" : "Сменить статус")">
     <span class="sd" style="background:@StatusColors.For(Current)"></span>
     <span class="lbl">@(Current?.Name ?? "—")</span>
     <Icon Name="chevrons" Size="12" />
 </div>
 @if (_open)
 {
-    <Popover AnchorId="@_id" Align="left" Width="200" OnClose="Close">
+    <Popover AnchorId="@_id" Align="left" Width="200" Role="listbox" OnClose="Close">
         @foreach (var s in Statuses)
         {
-            <button type="button" class="pop-item @(s.Id == Value ? "cur" : "")" @onclick="() => Select(s)">
+            <button type="button" class="pop-item @(s.Id == Value ? "cur" : "")" role="option"
+                    aria-selected="@((s.Id == Value).ToString().ToLowerInvariant())" @onclick="() => Select(s)">
                 <span class="sd" style="background:@StatusColors.For(s)"></span>@s.Name
             </button>
         }
@@ -22,13 +26,26 @@
     [Parameter, EditorRequired] public IReadOnlyList<StatusResponse> Statuses { get; set; } = [];
     [Parameter] public Guid Value { get; set; }
     [Parameter] public EventCallback<Guid> OnChange { get; set; }
+    /// <summary>Пока летит PATCH — селект не принимает новые клики.</summary>
+    [Parameter] public bool Disabled { get; set; }
 
     private readonly string _id = "ss-" + Guid.NewGuid().ToString("N")[..8];
     private bool _open;
 
+    // Enter/Space/↓ открывают список — как у нативного select.
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (!Disabled && e.Key is "Enter" or " " or "ArrowDown")
+            _open = true;
+    }
+
     private StatusResponse? Current => Statuses.FirstOrDefault(s => s.Id == Value);
 
-    private void Toggle() => _open = !_open;
+    private void Toggle()
+    {
+        if (!Disabled)
+            _open = !_open;
+    }
 
     private void Close() => _open = false;
 

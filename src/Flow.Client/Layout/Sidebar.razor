@@ -1,5 +1,5 @@
 @* Drawer-nav 240px по Sidebar.dc.html. «Проекты» → /boards; «Задачи» → последний открытый проект (или /boards);
-   «Люди» → /users. Дашборды/Настройки — в API ещё нет, показаны неактивными.
+   «Люди» → /users. Дашборды/Настройки — в API ещё нет: помечены «скоро» и не притворяются кликабельными.
    Футер — текущий пользователь: claim sub из токена Flow.Auth → AppState.CurrentUserId, профиль — GET /users/me;
    кнопка «Выйти» → authentication/logout (endsession в Flow.Auth). *@
 @implements IDisposable
@@ -12,7 +12,7 @@
 <nav class="sb">
     <div class="sb-brand"><div class="sb-mark">F</div><div class="sb-word">FLOW</div></div>
 
-    <div class="sb-ws" title="Переключение рабочих пространств появится позже">
+    <div class="sb-ws" title="Пока одно рабочее пространство">
         <div>
             <div class="sb-ws-name">Flow</div>
             <div class="sb-ws-sub">Workspace</div>
@@ -25,8 +25,8 @@
     <a class="sb-item @(IsBoards ? "active" : "")" href="boards"><Icon Name="grid" Size="18" />Проекты</a>
     <a class="sb-item @(IsTasks ? "active" : "")" href="@TasksHref"><Icon Name="check" Size="18" />Задачи</a>
     <a class="sb-item @(IsUsers ? "active" : "")" href="users"><Icon Name="users" Size="18" />Люди</a>
-    <span class="sb-item disabled" aria-disabled="true"><Icon Name="chart" Size="18" />Дашборды</span>
-    <span class="sb-item disabled" aria-disabled="true"><Icon Name="settings" Size="18" />Настройки</span>
+    <span class="sb-item disabled" aria-disabled="true" title="Раздел появится позже"><Icon Name="chart" Size="18" />Дашборды<span class="sb-soon">скоро</span></span>
+    <span class="sb-item disabled" aria-disabled="true" title="Раздел появится позже"><Icon Name="settings" Size="18" />Настройки<span class="sb-soon">скоро</span></span>
 
     <div class="sb-foot">
         @if (Me is { } me)

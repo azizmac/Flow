@@ -41,10 +41,7 @@
         }
     </div>
     <div class="topbar-right">
-        <label class="search">
-            <Icon Name="search" Size="16" />
-            <input placeholder="Найти задачу или код..." value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
-        </label>
+        <SearchBox Placeholder="Найти задачу или код..." Value="@_search" ValueChanged="v => _search = v" />
         @if (CanCreateTask)
         {
             <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate" Disabled="_board is null">Создать задачу</DsButton>
@@ -55,7 +52,7 @@
 <div class="content no-scroll">
     @if (_loading)
     {
-        <div class="meta-line">Загрузка…</div>
+        <Skeleton Kind="rows" Count="5" />
     }
     else if (_notFound)
     {
@@ -84,7 +81,7 @@
 
         <div class="panel">
             <div class="list-cols list-head"><div>Код</div><div>Задача</div><div>Кто</div><div>Статус</div><div>Создана</div><div></div></div>
-            <div class="panel-rows">
+            <div class="panel-rows rows-in">
                 @if (_tasks.Count == 0)
                 {
                     <div class="empty">

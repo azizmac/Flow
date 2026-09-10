@@ -35,7 +35,7 @@
 
 @if (_loading)
 {
-    <div class="content"><div class="meta-line">Загрузка…</div></div>
+    <div class="content task-page"><Skeleton Kind="task" /></div>
 }
 else if (_notFound)
 {
@@ -72,7 +72,9 @@ else if (_task is not null && _board is not null)
                 }
                 else
                 {
-                    <div class="task-page-title" title="@(CanEdit ? "Нажмите, чтобы переименовать" : null)" @onclick="StartTitleEdit">@_task.Title</div>
+                    <div class="task-page-title" title="@(CanEdit ? "Нажмите, чтобы переименовать" : null)"
+                         role="@(CanEdit ? "button" : null)" tabindex="@(CanEdit ? 0 : -1)"
+                         @onclick="StartTitleEdit" @onkeydown="OnTitleActivate">@_task.Title</div>
                 }
             </div>
             <div style="display:flex;flex-direction:column;gap:10px;">
@@ -80,7 +82,7 @@ else if (_task is not null && _board is not null)
                     <div class="section-title">Описание</div>
                     @if (_editingDesc)
                     {
-                        <div style="display:flex;gap:8px;align-items:center;">
+                        <div class="desc-actions">
                             <span class="hint">Markdown · <span class="kbd">Ctrl Enter</span> сохранить</span>
                             <button type="button" class="icon-lnk" @onclick="() => _editingDesc = false">Отмена</button>
                             <DsButton Variant="primary" Size="sm" OnClick="SaveDesc" Busy="_busy">Сохранить</DsButton>
@@ -107,15 +109,23 @@ else if (_task is not null && _board is not null)
             <div class="side-card">
                 <div class="meta-grid narrow">
                     <div class="meta-k">Статус</div>
-                    <div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         @if (CanEdit)
                         {
-                            <StatusSelect Statuses="_board.Statuses" Value="_task.StatusId" OnChange="ChangeStatus" />
+                            <StatusSelect Statuses="_board.Statuses" Value="_task.StatusId" OnChange="ChangeStatus" Disabled="_busy" />
                         }
                         else
                         {
                             var st = _board.Statuses.FirstOrDefault(x => x.Id == _task.StatusId);
                             <span class="status-pill"><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span>
+                        }
+                        @if (_busy)
+                        {
+                            <span class="save-state" aria-live="polite"><span class="ds-spin"></span>Сохраняем…</span>
+                        }
+                        else if (_savedAt is not null)
+                        {
+                            <span class="save-state ok" aria-live="polite"><Icon Name="check" Size="13" />Сохранено</span>
                         }
                     </div>
                     <div class="meta-k">Исполнитель</div>
@@ -125,7 +135,8 @@ else if (_task is not null && _board is not null)
                     <div class="meta-k">Создана</div>
                     <div class="meta-v">@Ru.DateTimeFull(_task.CreatedAt)</div>
                     <div class="meta-k">ID</div>
-                    <div class="meta-v mono" title="Скопировать ID" @onclick="CopyId">@_task.Id</div>
+                    <div class="meta-v mono" title="Скопировать ID" role="button" tabindex="0"
+                         @onclick="CopyId" @onkeydown="OnCopyIdKey">@_task.Id</div>
                 </div>
             </div>
             @if (_task.AssigneeId is { } aid && Users.Find(aid) is { } who)
@@ -170,6 +181,8 @@ else if (_task is not null && _board is not null)
     private bool _notFound;
     private string? _loadError;
     private bool _busy;
+    private DateTime? _savedAt;
+    private CancellationTokenSource? _savedCts;
     private bool _deleting;
 
     // Права по матрице docs/TZ_user_roles.md — только показ; Flow.Api ответит 403, если что.
@@ -186,6 +199,32 @@ else if (_task is not null && _board is not null)
     private IDisposable? _hotkeys;
 
     private string BackHref => _task is null ? "boards" : $"boards/{_task.BoardId}";
+
+    private Task OnTitleActivate(KeyboardEventArgs e) =>
+        e.Key is "Enter" or " " ? StartTitleEdit() : Task.CompletedTask;
+
+    private Task OnCopyIdKey(KeyboardEventArgs e) =>
+        e.Key is "Enter" or " " ? CopyId() : Task.CompletedTask;
+
+    // Тихое подтверждение сохранения рядом со статусом — см. тот же приём в TaskDrawer.
+    private async Task FlashSaved()
+    {
+        _savedAt = DateTime.UtcNow;
+        _savedCts?.Cancel();
+        _savedCts = new CancellationTokenSource();
+        var token = _savedCts.Token;
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(1800, token);
+            _savedAt = null;
+            StateHasChanged();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
 
     protected override void OnInitialized()
     {
@@ -327,6 +366,7 @@ else if (_task is not null && _board is not null)
         }
 
         _task = result.Value!;
+        _ = FlashSaved();
         return true;
     }
 
@@ -367,5 +407,6 @@ else if (_task is not null && _board is not null)
     {
         Users.Changed -= OnUsersChanged;
         _hotkeys?.Dispose();
+        _savedCts?.Cancel();
     }
 }

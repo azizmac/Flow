@@ -14,5 +14,6 @@ public static class StatusColors
         _ => "var(--danger)"
     };
 
-    public static string For(StatusResponse status) => For(status.Type);
+    /// <summary>Статуса может не быть в списке проекта (Current = null) — тогда цвет «неизвестного».</summary>
+    public static string For(StatusResponse? status) => For(status?.Type);
 }

@@ -1,12 +1,15 @@
 @* Поповер в fixed-слое (не режется overflow панели/строк). Позиционируется по якорю AnchorId:
    Align=left — под левым краем якоря (transform-origin top left), Align=right — под правым (top right).
-   Если снизу не хватает места — раскрывается вверх. Клик по скриму / Esc → OnClose. *@
+   Если снизу не хватает места — раскрывается вверх. Клик по скриму / Esc → OnClose.
+   Клавиатура: при открытии фокус уходит на первый (или текущий) пункт; ↑↓ Home End и Tab
+   листают пункты (перехват в flow.js — там preventDefault синхронный), при закрытии фокус
+   возвращается на якорь. *@
 @implements IDisposable
 @inject BrowserInterop Browser
 @inject HotkeyService Hotkeys
 
-<div class="pop-scrim" @onclick="Close" @oncontextmenu:preventDefault></div>
-<div class="pop @(_in ? "in" : "")" style="@PositionStyle" @onclick:stopPropagation>
+<div id="@_scrimId" class="pop-scrim" @onclick="Close" @onclick:stopPropagation @oncontextmenu:preventDefault></div>
+<div id="@_popId" class="pop @(_in ? "in" : "")" style="@PositionStyle" role="@Role" @onclick:stopPropagation>
     @ChildContent
 </div>
 
@@ -17,7 +20,11 @@
     [Parameter] public int Offset { get; set; } = 6;
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
+    /// <summary>ARIA-роль слоя: menu для меню действий, listbox для выбора значения.</summary>
+    [Parameter] public string Role { get; set; } = "menu";
 
+    private readonly string _scrimId = "pops-" + Guid.NewGuid().ToString("N")[..8];
+    private readonly string _popId = "pop-" + Guid.NewGuid().ToString("N")[..8];
     private bool _in;
     private double _left;
     private double _top;
@@ -48,21 +55,33 @@
         if (!firstRender)
             return;
 
-        var r = await Browser.RectAsync(AnchorId);
+        var r = await Browser.RectAsync(AnchorId, _scrimId);
         if (r is not null)
         {
-            _left = Align == "right" ? Math.Max(8, r.Right - Width) : Math.Min(r.Left, r.Vw - Width - 8);
+            var left = Align == "right" ? Math.Max(8, r.Right - Width) : Math.Min(r.Left, r.Vw - Width - 8);
             // высоту меню заранее не знаем — оцениваем по 40px на пункт, максимум 260
             var estimated = 260;
             _up = r.Bottom + Offset + estimated > r.Vh && r.Top > estimated;
-            _top = _up ? r.Top - Offset : r.Bottom + Offset;
+            var top = _up ? r.Top - Offset : r.Bottom + Offset;
+
+            // left/top у fixed-слоя отсчитываются от containing block: обычно это viewport,
+            // но предок с transform (карточка в stagger-анимации, press-эффект) перехватывает
+            // отсчёт на себя — вычитаем его начало координат, иначе меню уезжает от якоря.
+            _left = left - r.OriginX;
+            _top = top - r.OriginY;
         }
 
         _in = true;
         StateHasChanged();
+        await Browser.MenuFocusAsync(_popId, "first");
     }
 
-    private Task Close() => OnClose.InvokeAsync();
+    private async Task Close()
+    {
+        // Фокус вернуть на якорь — иначе после Esc он улетает в начало документа.
+        await Browser.FocusAsync(AnchorId);
+        await OnClose.InvokeAsync();
+    }
 
     public void Dispose() => _hotkeys?.Dispose();
 }
