@@ -18,6 +18,8 @@ The longer-term goal is an AI assistant inside the tracker: grounded in the team
 - **Authentication.** A separate `Flow.Auth` service: ASP.NET Core Identity with BCrypt and OpenIddict (authorization code + PKCE, refresh, client credentials). The client signs in over OIDC; the API acts as a resource server validating Bearer JWTs. The initial password must be changed at first sign-in.
 - **Infrastructure.** PostgreSQL 16, EF Core, migrations applied on API startup. Build, tests and image publishing run in GitHub Actions.
 
+![Tasks of a project](docs/images/board.png)
+
 ## Roadmap
 
 Done:
@@ -48,11 +50,43 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-The client is at http://localhost:5016; sign in as `admin@flow.com` / `admin` and set a new password when prompted.
+The first build takes a few minutes. Once the containers are up, the client is at http://localhost:5016 — continue with "First sign-in" below.
 
 Services: client :5016, API :8080, authentication :5100, PostgreSQL :5432, S3-compatible storage :9000 with its console on :9001. Ports and the bootstrap user's credentials come from `.env`, which is not tracked in git. If a local PostgreSQL already holds port 5432, set `POSTGRES_PORT=5433`.
 
 Token-signing certificates are generated on first start, and the `flow` and `flow_auth` databases are created by migrations. Stop the stack with `docker compose down`, or `docker compose down -v` to drop its data as well.
+
+## First sign-in
+
+The first start creates a bootstrap user — the single account every other account is created from:
+
+| | |
+|---|---|
+| Login | `admin` (the email `admin@flow.com` works too) |
+| Password | `admin` — must be changed at first sign-in |
+| Role | Owner: full rights over projects, people and roles |
+
+The values come from `.env` (`BOOTSTRAP_USERNAME`, `BOOTSTRAP_EMAIL`, `BOOTSTRAP_PASSWORD`) and are applied once, when the database is created. Changing them after the first run has no effect — change the password through the UI instead.
+
+**1. Open http://localhost:5016.** The client checks for a session and, finding none, sends you to the Flow.Auth sign-in page on :5100. The login field accepts either a username or an email.
+
+![Flow sign-in page](docs/images/login.png)
+
+**2. Set your own password.** The initial password is flagged as temporary, so a password-change form opens instead of the app: the current password is `admin`, the new one must be at least 8 characters. Authentication does not complete until it is changed.
+
+![Mandatory initial password change](docs/images/change-password.png)
+
+**3. You are in.** After saving, the browser returns to the client with a session, on the Projects page. From there, "Новый проект" asks for a name and a key (say `WEB`), and tasks get codes `WEB-1`, `WEB-2` and so on.
+
+![Project list](docs/images/boards.png)
+
+**4. Check yourself under "Люди" (People).** The bootstrap user shows up as "Основатель" (Owner) with an active status; the "Добавить" button creates everyone else — they also get a temporary password to change at their first sign-in.
+
+![People section showing the bootstrap user](docs/images/users.png)
+
+Sign out with the icon next to your name at the bottom of the sidebar. A forgotten password is reset by an Owner from that person's profile; if the Owner account itself is lost, `docker compose down -v` wipes the data and the bootstrap user is created again.
+
+The interface is in Russian.
 
 ## Documentation
 
