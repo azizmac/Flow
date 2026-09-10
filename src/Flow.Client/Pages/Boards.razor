@@ -15,10 +15,7 @@
 <div class="topbar">
     <div class="topbar-left"><h2>Проекты</h2></div>
     <div class="topbar-right">
-        <label class="search">
-            <Icon Name="search" Size="16" />
-            <input placeholder="Поиск по проектам..." value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
-        </label>
+        <SearchBox Placeholder="Поиск по проектам..." Value="@_search" ValueChanged="v => _search = v" />
         @if (CanManage)
         {
             <DsButton Variant="primary" Size="md" Icon="plus" OnClick="OpenCreate">Новый проект</DsButton>
@@ -29,7 +26,7 @@
 <div class="content">
     @if (_loading)
     {
-        <div class="meta-line">Загрузка…</div>
+        <Skeleton Kind="cards" Count="4" />
     }
     else if (_loadError is not null)
     {

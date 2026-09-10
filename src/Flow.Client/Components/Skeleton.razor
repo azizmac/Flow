@@ -1,0 +1,83 @@
+@* Скелетоны на время загрузки: Kind="cards" — сетка карточек проектов, Kind="rows" — строки списка задач.
+   Форма повторяет реальный контент, чтобы при подстановке данных ничего не прыгало. *@
+
+<div class="skel-wrap" role="status" aria-busy="true" aria-live="polite">
+    <span class="sr-only">Загрузка…</span>
+
+    @if (Kind == "task")
+    {
+        <div class="task-page-main" aria-hidden="true">
+            <div>
+                <div class="skel" style="width:64px;height:12px;"></div>
+                <div class="skel" style="width:44%;height:30px;margin-top:12px;"></div>
+            </div>
+            <div>
+                <div class="skel" style="width:88px;height:14px;"></div>
+                <div class="skel" style="height:180px;margin-top:10px;border-radius:var(--r-lg);"></div>
+            </div>
+        </div>
+        <div class="task-page-side" aria-hidden="true">
+            <div class="side-card">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                        <div class="skel" style="width:64px;height:12px;"></div>
+                        <div class="skel" style="width:110px;height:16px;"></div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else if (Kind == "cards")
+    {
+        <div class="board-grid">
+            @for (var i = 0; i < Count; i++)
+            {
+                <div class="board-card skel-card" aria-hidden="true">
+                    <div class="skel" style="width:52px;height:22px;border-radius:var(--radius-pill);"></div>
+                    <div>
+                        <div class="skel" style="width:62%;height:17px;"></div>
+                        <div class="skel" style="width:38%;height:12px;margin-top:8px;"></div>
+                    </div>
+                    <div class="board-card-pills">
+                        <div class="skel" style="width:78px;height:22px;border-radius:var(--radius-pill);"></div>
+                        <div class="skel" style="width:66px;height:22px;border-radius:var(--radius-pill);"></div>
+                        <div class="skel" style="width:88px;height:22px;border-radius:var(--radius-pill);"></div>
+                    </div>
+                    <div class="board-card-foot">
+                        <div class="skel" style="width:64px;height:12px;"></div>
+                        <div class="skel" style="width:96px;height:12px;"></div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="panel">
+            <div class="list-cols list-head"><div>Код</div><div>Задача</div><div>Кто</div><div>Статус</div><div>Создана</div><div></div></div>
+            <div class="panel-rows">
+                @for (var i = 0; i < Count; i++)
+                {
+                    <div class="task-row list-cols skel-row" aria-hidden="true">
+                        <div class="skel" style="width:52px;height:12px;"></div>
+                        <div class="skel" style="width:@(RowWidths[i % RowWidths.Length])%;height:13px;"></div>
+                        <div class="skel" style="width:24px;height:24px;border-radius:50%;"></div>
+                        <div class="skel" style="width:104px;height:24px;border-radius:8px;"></div>
+                        <div class="skel" style="width:44px;height:12px;"></div>
+                        <div></div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>cards — экран проектов, rows — список задач, task — карточка задачи на всю страницу.</summary>
+    [Parameter] public string Kind { get; set; } = "rows";
+    [Parameter] public int Count { get; set; } = 4;
+
+    // Разная длина «названий» — ровная стопка одинаковых полос выглядит мертвее.
+    private static readonly int[] RowWidths = [58, 34, 72, 46, 64];
+}

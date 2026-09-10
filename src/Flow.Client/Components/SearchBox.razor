@@ -1,0 +1,29 @@
+@* Поле поиска в шапке: иконка, инпут, крестик очистки. Esc в поле очищает запрос
+   (и не всплывает — иначе глобальный хоткей закрыл бы дровер вместо очистки). *@
+
+<label class="search @(HasValue ? "filled" : "")">
+    <Icon Name="search" Size="16" />
+    <input id="@Id" placeholder="@Placeholder" value="@Value" autocomplete="off" spellcheck="false"
+           @oninput="OnInput" @onkeydown="OnKey" @onkeydown:stopPropagation="HasValue" />
+    @if (HasValue)
+    {
+        <button type="button" class="search-clear" title="Очистить" aria-label="Очистить поиск" @onclick="Clear">
+            <Icon Name="close-simple" Size="12" />
+        </button>
+    }
+</label>
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? Id { get; set; }
+
+    private bool HasValue => Value.Length > 0;
+
+    private Task OnInput(ChangeEventArgs e) => ValueChanged.InvokeAsync(e.Value?.ToString() ?? "");
+
+    private Task OnKey(KeyboardEventArgs e) => e.Key == "Escape" && HasValue ? Clear() : Task.CompletedTask;
+
+    private Task Clear() => ValueChanged.InvokeAsync(string.Empty);
+}

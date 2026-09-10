@@ -55,6 +55,14 @@ else if (Item is not null)
             <button type="button" class="icon-lnk" @onclick="CopyCode"><Icon Name="copy" Size="13" />Скопировать</button>
         </div>
         <div style="display:flex;align-items:center;gap:4px;">
+            @if (_busy)
+            {
+                <span class="save-state" aria-live="polite"><span class="ds-spin"></span>Сохраняем…</span>
+            }
+            else if (_savedAt is not null)
+            {
+                <span class="save-state ok" aria-live="polite"><Icon Name="check" Size="13" />Сохранено</span>
+            }
             <a class="icon-lnk" style="margin-right:8px;" href="@($"tasks/{Item.Id}")"><Icon Name="expand" Size="15" />На всю страницу</a>
             <RowMenu ShowOpen="false" ShowRename="CanEdit" ShowDelete="CanEdit" Size="30" Style="color:rgba(255,255,255,0.5)"
                      OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => OnDelete.InvokeAsync(Item)" />
@@ -70,14 +78,16 @@ else if (Item is not null)
         }
         else
         {
-            <div class="drawer-title" title="@(CanEdit ? "Нажмите, чтобы переименовать" : null)" @onclick="StartTitleEdit">@Item.Title</div>
+            <div class="drawer-title" title="@(CanEdit ? "Нажмите, чтобы переименовать" : null)"
+                 role="@(CanEdit ? "button" : null)" tabindex="@(CanEdit ? 0 : -1)"
+                 @onclick="StartTitleEdit" @onkeydown="OnTitleActivate">@Item.Title</div>
         }
         <div class="meta-grid">
             <div class="meta-k">Статус</div>
             <div>
                 @if (CanEdit)
                 {
-                    <StatusSelect Statuses="Board.Statuses" Value="Item.StatusId" OnChange="ChangeStatus" />
+                    <StatusSelect Statuses="Board.Statuses" Value="Item.StatusId" OnChange="ChangeStatus" Disabled="_busy" />
                 }
                 else
                 {
@@ -107,7 +117,7 @@ else if (Item is not null)
                 <div class="meta-k">Описание</div>
                 @if (_editingDesc)
                 {
-                    <div style="display:flex;gap:8px;align-items:center;">
+                    <div class="desc-actions">
                         <span class="hint">Markdown · <span class="kbd">Ctrl Enter</span> сохранить</span>
                         <button type="button" class="icon-lnk" @onclick="CancelDesc">Отмена</button>
                         <DsButton Variant="primary" Size="sm" OnClick="SaveDesc" Busy="_busy">Сохранить</DsButton>
@@ -169,6 +179,8 @@ else if (Item is not null)
     private bool _editingDesc;
     private bool _titleCancelled;
     private Guid? _itemId;
+    private DateTime? _savedAt;
+    private CancellationTokenSource? _savedCts;
     private IDisposable? _hotkeys;
 
     protected override void OnInitialized()
@@ -226,6 +238,30 @@ else if (Item is not null)
     }
 
     private Task Close() => OnClose.InvokeAsync();
+
+    private Task OnTitleActivate(KeyboardEventArgs e) =>
+        e.Key is "Enter" or " " ? StartTitleEdit() : Task.CompletedTask;
+
+    // Успешное сохранение подтверждаем меткой в шапке: тост на каждую смену статуса был бы навязчив,
+    // а молчание не даёт понять, сохранилось ли.
+    private async Task FlashSaved()
+    {
+        _savedAt = DateTime.UtcNow;
+        _savedCts?.Cancel();
+        _savedCts = new CancellationTokenSource();
+        var token = _savedCts.Token;
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(1800, token);
+            _savedAt = null;
+            StateHasChanged();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
 
     private async Task OnBodyKey(KeyboardEventArgs e)
     {
@@ -357,6 +393,7 @@ else if (Item is not null)
         }
 
         await OnUpdated.InvokeAsync(result.Value!);
+        _ = FlashSaved();
         return true;
     }
 
@@ -375,5 +412,6 @@ else if (Item is not null)
     {
         Users.Changed -= OnUsersChanged;
         _hotkeys?.Dispose();
+        _savedCts?.Cancel();
     }
 }

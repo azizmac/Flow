@@ -1,12 +1,12 @@
 @* Сегментный фильтр по статусу: «Все N» + по кнопке на статус (точка + имя + счётчик). Один активный. *@
 
 <div class="seg" role="tablist">
-    <button type="button" class="seg-btn @(Value is null ? "on" : "")" role="tab" @onclick="() => Select(null)">
+    <button type="button" class="seg-btn @(Value is null ? "on" : "")" role="tab" aria-selected="@((Value is null).ToString().ToLowerInvariant())" @onclick="() => Select(null)">
         Все <span class="n">@Total</span>
     </button>
     @foreach (var s in Statuses)
     {
-        <button type="button" class="seg-btn @(Value == s.Id ? "on" : "")" role="tab" @onclick="() => Select(s.Id)">
+        <button type="button" class="seg-btn @(Value == s.Id ? "on" : "")" role="tab" aria-selected="@((Value == s.Id).ToString().ToLowerInvariant())" @onclick="() => Select(s.Id)">
             <span class="sd" style="background:@StatusColors.For(s)"></span>@s.Name <span class="n">@Counts.GetValueOrDefault(s.Id)</span>
         </button>
     }

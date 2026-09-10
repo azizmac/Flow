@@ -3,7 +3,8 @@
 @inject BrowserInterop Browser
 
 <div class="task-row list-cols @(IsDone ? "done" : "") @(Selected ? "sel" : "") @(Flash ? "flash" : "")"
-     id="@ElementId" @onclick="Open" @key="Item.Id">
+     id="@ElementId" @onclick="Open" @onkeydown="OnRowKey" @key="Item.Id"
+     role="button" tabindex="0" aria-label="@($"{Item.Code}: {Item.Title}")">
     <div class="code">@Item.Code</div>
     <div class="task-cell-title">
         <div class="task-title">
@@ -71,6 +72,11 @@
     private bool IsDone => Statuses.FirstOrDefault(s => s.Id == Item.StatusId)?.IsFinal == true;
 
     private Task Open() => _renaming ? Task.CompletedTask : OnOpen.InvokeAsync(Item);
+
+    // Строка — не нативная кнопка, поэтому Enter/Space открываем вручную.
+    // Стрелки не перехватываем: ими HotkeyService листает задачи.
+    private Task OnRowKey(KeyboardEventArgs e) =>
+        !_renaming && (e.Key == "Enter" || e.Key == " ") ? Open() : Task.CompletedTask;
 
     public async Task StartRename()
     {

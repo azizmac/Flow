@@ -1,5 +1,6 @@
 @* Модалка «Новый проект»: название + ключ (авто-uppercase, валидация ^[A-Z][A-Z0-9]{1,9}$),
-   живая подсказка «KEY-1, KEY-2…», 409 → «Ключ уже занят». Enter — создать, Esc — закрыть. *@
+   живая подсказка «KEY-1, KEY-2…», 409 → «Ключ уже занят». Enter — создать, Esc — закрыть.
+   Ключ подставляется из названия, пока пользователь не правил его сам. *@
 @implements IDisposable
 @inject FlowApi Api
 @inject HotkeyService Hotkeys
@@ -67,6 +68,7 @@
         {
             _in = true;
             StateHasChanged();
+            await Browser.PushFocusAsync();
             await Browser.FocusAsync("cb-name");
         }
     }
@@ -76,6 +78,56 @@
         _name = value;
         _nameError = null;
         _serverError = null;
+
+        // Ключ ведём за названием, пока его не тронули руками.
+        if (!_keyTouched)
+        {
+            _key = SuggestKey(value);
+            _keyError = null;
+        }
+    }
+
+    /// <summary>
+    /// Название → ключ: «Мобильное приложение» → MP (первые буквы слов), «Флоу» → FLO (первые буквы).
+    /// Кириллица транслитерируется, иначе поле осталось бы пустым для русских названий.
+    /// </summary>
+    private static string SuggestKey(string name)
+    {
+        var words = name.Split([' ', '-', '_', '.', ',', '/'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => Translit(w))
+            .Where(w => w.Length > 0 && char.IsLetter(w[0]))
+            .ToArray();
+
+        if (words.Length == 0)
+            return "";
+
+        var key = words.Length > 1
+            ? new string(words.Take(5).Select(w => w[0]).ToArray())
+            : words[0][..Math.Min(3, words[0].Length)];
+
+        return key.Length >= 2 ? key.ToUpperInvariant() : "";
+    }
+
+    private const string Cyrillic = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя";
+    private static readonly string[] Latin =
+    [
+        "A", "B", "V", "G", "D", "E", "E", "ZH", "Z", "I", "I", "K", "L", "M", "N", "O", "P",
+        "R", "S", "T", "U", "F", "H", "C", "CH", "SH", "SCH", "", "Y", "", "E", "YU", "YA"
+    ];
+
+    private static string Translit(string word)
+    {
+        var sb = new System.Text.StringBuilder(word.Length);
+        foreach (var ch in word.ToLowerInvariant())
+        {
+            var idx = Cyrillic.IndexOf(ch);
+            if (idx >= 0)
+                sb.Append(Latin[idx]);
+            else if (ch is >= 'a' and <= 'z' or >= '0' and <= '9')
+                sb.Append(char.ToUpperInvariant(ch));
+        }
+
+        return sb.ToString();
     }
 
     private void OnKeyChanged(string value)
@@ -128,5 +180,9 @@
             _serverError = result.Error;
     }
 
-    public void Dispose() => _hotkeys?.Dispose();
+    public void Dispose()
+    {
+        _hotkeys?.Dispose();
+        _ = Browser.PopFocusAsync();
+    }
 }

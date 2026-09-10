@@ -1,6 +1,6 @@
 @* DRESSY Button — pill. Variant: primary | secondary | tertiary | danger. Size: sm | md | lg. *@
 
-<button type="@Type" class="ds-btn @Variant @Size @(FullWidth ? "full" : "") @Class" style="@Style"
+<button type="@Type" id="@Id" class="ds-btn @Variant @Size @(FullWidth ? "full" : "") @Class" style="@Style"
         disabled="@(Disabled || Busy)" title="@Title" @onclick="OnClick" @onclick:stopPropagation="StopPropagation">
     @if (Busy)
     {
@@ -25,6 +25,7 @@
     [Parameter] public string? Style { get; set; }
     [Parameter] public string? Class { get; set; }
     [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Id { get; set; }
     [Parameter] public bool StopPropagation { get; set; }
     [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }

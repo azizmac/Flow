@@ -4,7 +4,7 @@
 <div class="toasts" aria-live="polite">
     @foreach (var t in Toasts.Items)
     {
-        <div class="toast in @(t.Kind == ToastKind.Error ? "error" : t.Kind == ToastKind.Ok ? "ok" : "")" @key="t.Id">
+        <div class="toast @(t.Leaving ? "out" : "") @(t.Kind == ToastKind.Error ? "error" : t.Kind == ToastKind.Ok ? "ok" : "")" @key="t.Id">
             <Icon Name="@(t.Kind == ToastKind.Error ? "danger" : "check")" Size="15" />@t.Text
         </div>
     }
