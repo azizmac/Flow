@@ -1,3 +1,15 @@
+# Стек приложения: auth, api, client. Данные (PostgreSQL и S3) живут в отдельном стеке —
+# docker-compose.data.yml, проект flow-data. Здесь нет ни одного тома с данными проекта, поэтому
+# `docker compose down -v` безопасен: он уносит только ключи и сертификаты Flow.Auth, которые
+# пересоздаются при следующем старте. См. docs/TZ_infra_data_split.md.
+#
+#   sh docker/data/init-env.sh                       # один раз: общая сеть и тома данных
+#   docker compose -f docker-compose.data.yml up -d  # данные
+#   docker compose up -d --build                     # приложение
+#
+# Адреса БД и S3 — переменные: POSTGRES_HOST и S3_ENDPOINT можно увести на внешние сервисы
+# и не поднимать docker-compose.data.yml вовсе.
+
 # Базовый пользователь (Owner) при первом запуске — один и тот же в auth (учётная запись) и api (профиль).
 # См. docs/TZ_auth.md, секция Bootstrap. Пароль после первого входа лучше сменить в профиле.
 x-bootstrap: &bootstrap
@@ -10,76 +22,17 @@ x-bootstrap: &bootstrap
   Bootstrap__LastName: ${BOOTSTRAP_LAST_NAME:-Flow}
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-flow}
-      POSTGRES_USER: ${POSTGRES_USER:-flow}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flow}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      # Создаёт вторую базу flow_auth при инициализации тома (только при первом старте).
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flow} -d ${POSTGRES_DB:-flow}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - flow-network
-
-  s3:
-    image: minio/minio:latest
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-flow}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-flow12345}
-    ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
-    volumes:
-      - minio-data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - flow-network
-
-  s3-init:
-    image: minio/mc:latest
-    depends_on:
-      s3:
-        condition: service_healthy
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-flow}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-flow12345}
-      S3_BUCKET: ${S3_BUCKET:-flow}
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://s3:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
-      mc mb -p local/$$S3_BUCKET || true
-      "
-    networks:
-      - flow-network
-
   auth:
     build:
       context: .
       dockerfile: src/Flow.Auth/Dockerfile
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
+    # depends_on на postgres нет: база в другом проекте Compose, ждать её healthcheck отсюда нельзя.
+    # Сервис сам дожидается БД при старте (Startup:DatabaseWaitTimeoutSeconds), иначе перезапускается.
     environment:
       <<: *bootstrap
       ConnectionStrings__Postgres: >-
-        Host=postgres;Port=5432;Database=${AUTH_DB:-flow_auth};Username=${POSTGRES_USER:-flow};Password=${POSTGRES_PASSWORD:-flow}
+        Host=${POSTGRES_HOST:-postgres};Port=${POSTGRES_INTERNAL_PORT:-5432};Database=${AUTH_DB:-flow_auth};Username=${POSTGRES_USER:-flow};Password=${POSTGRES_PASSWORD:-flow}
       # Issuer — адрес, который видит браузер: он же попадает в iss токенов и в discovery.
       Auth__Issuer: ${AUTH_ISSUER:-http://localhost:5100}
       Auth__Client__RedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/login-callback
@@ -109,10 +62,6 @@ services:
       dockerfile: src/Flow.Api/Dockerfile
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
-      s3:
-        condition: service_healthy
       auth:
         condition: service_started
     environment:
@@ -125,12 +74,12 @@ services:
       Auth__ApiClient__Secret: ${AUTH_API_CLIENT_SECRET:-dev-only-change-me}
       Cors__Origins__0: http://localhost:${CLIENT_PORT:-5016}
       ConnectionStrings__Postgres: >-
-        Host=postgres;Port=5432;Database=${POSTGRES_DB:-flow};Username=${POSTGRES_USER:-flow};Password=${POSTGRES_PASSWORD:-flow}
-      S3__Endpoint: http://s3:9000
+        Host=${POSTGRES_HOST:-postgres};Port=${POSTGRES_INTERNAL_PORT:-5432};Database=${POSTGRES_DB:-flow};Username=${POSTGRES_USER:-flow};Password=${POSTGRES_PASSWORD:-flow}
+      S3__Endpoint: ${S3_ENDPOINT:-http://s3:9000}
       S3__AccessKey: ${MINIO_ROOT_USER:-flow}
       S3__SecretKey: ${MINIO_ROOT_PASSWORD:-flow12345}
       S3__Bucket: ${S3_BUCKET:-flow}
-      S3__UseSsl: "false"
+      S3__UseSsl: ${S3_USE_SSL:-false}
     ports:
       - "${API_PORT:-8080}:8080"
     networks:
@@ -156,12 +105,13 @@ services:
       - flow-network
 
 networks:
+  # Та же сеть, что у стека данных; создаётся docker/data/init-env.sh.
   flow-network:
     name: flow-network
-    driver: bridge
+    external: true
 
 volumes:
-  postgres-data:
-  minio-data:
+  # Не данные проекта, а ключи подписи и cookie Flow.Auth: при потере пересоздаются, пользователи
+  # просто входят заново. Поэтому тома обычные и `down -v` их уносит.
   auth-keys:
   auth-certs:

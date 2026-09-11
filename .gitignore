@@ -12,3 +12,6 @@ riderModule.iml
 
 # Пример переменных compose — в git, в отличие от .env
 !.env.example
+
+# Каталог бэкапов стека данных (docker/data/backup.sh).
+/backups/

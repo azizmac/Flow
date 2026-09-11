@@ -11,13 +11,21 @@ namespace Flow.Api.Bootstrap;
 /// идемпотентно). Миграции здесь же, потому что сидеру нужна схема, а в Docker больше некому их применять.
 /// Роль Owner этому профилю отдаст миграция ролей (#17) как самому раннему по CreatedAt.
 /// </summary>
-public sealed class BootstrapOwnerSeeder(IServiceProvider services, IOptions<BootstrapOptions> options, ILogger<BootstrapOwnerSeeder> logger)
+public sealed class BootstrapOwnerSeeder(
+    IServiceProvider services,
+    IOptions<BootstrapOptions> options,
+    IConfiguration configuration,
+    ILogger<BootstrapOwnerSeeder> logger)
     : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         await using var scope = services.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<FlowDbContext>().Database.MigrateAsync(cancellationToken);
+        var db = scope.ServiceProvider.GetRequiredService<FlowDbContext>();
+
+        // База — в отдельном стеке Compose, ждать её healthcheck оттуда нельзя: ждём сами.
+        await DatabaseReadiness.WaitAsync(db, DatabaseReadiness.TimeoutFrom(configuration), logger, cancellationToken);
+        await db.Database.MigrateAsync(cancellationToken);
 
         var bootstrap = options.Value;
         if (!bootstrap.Enabled)

@@ -51,14 +51,60 @@ Docker with the Compose plugin is the only prerequisite.
 git clone https://github.com/azizmac/Flow.git
 cd Flow
 cp .env.example .env
-docker compose up -d --build
+sh docker/data/init-env.sh                       # once: shared network and data volumes
+docker compose -f docker-compose.data.yml up -d  # data: PostgreSQL and S3
+docker compose up -d --build                     # application
 ```
 
 The first build takes a few minutes. Once the containers are up, the client is at http://localhost:5016 — continue with "First sign-in" below.
 
-Services: client :5016, API :8080, authentication :5100, PostgreSQL :5432, S3-compatible storage :9000 with its console on :9001. Ports and the bootstrap user's credentials come from `.env`, which is not tracked in git. If a local PostgreSQL already holds port 5432, set `POSTGRES_PORT=5433`.
+Services: client :5016, API :8080, authentication :5100, PostgreSQL :5432, S3-compatible storage :9000 with its console on :9001. Ports and the bootstrap user's credentials come from `.env`, which is not tracked in git — the same file feeds both stacks. If a local PostgreSQL already holds port 5432, set `POSTGRES_PORT=5433`. On Windows, run `docker/data/init-env.ps1` instead of the shell script.
 
-Token-signing certificates are generated on first start, and the `flow` and `flow_auth` databases are created by migrations. Stop the stack with `docker compose down`, or `docker compose down -v` to drop its data as well.
+Token-signing certificates are generated on first start, and the `flow` and `flow_auth` databases are created by migrations. The two stacks start in any order: a service that comes up before the database waits for it (`Startup:DatabaseWaitTimeoutSeconds`, 60 s by default).
+
+### Two stacks, and why
+
+Data lives in its own Compose project (`docker-compose.data.yml`, project `flow-data`) on external volumes `flow-postgres-data` and `flow-minio-data`. The application stack owns no project data at all, so `docker compose down -v` cannot touch it — it only drops Flow.Auth's keys and certificates, which are recreated on the next start.
+
+| What you want | Command |
+|---|---|
+| Update the application | `docker compose up -d --build` |
+| Reset the application, keep the data | `docker compose down -v && docker compose up -d` |
+| Stop the data stack (data stays) | `docker compose -f docker-compose.data.yml down` |
+| Delete the data, deliberately | `docker compose -f docker-compose.data.yml down` then `docker volume rm flow-postgres-data flow-minio-data` |
+
+To keep the data somewhere specific, create the volumes with `DATA_ROOT=/mnt/flow sh docker/data/init-env.sh`. To use a managed PostgreSQL or an external S3, point `POSTGRES_HOST` and `S3_ENDPOINT` at them in `.env` and skip `docker-compose.data.yml` entirely.
+
+### Backups
+
+```bash
+# one-off backup into ./backups/<timestamp>
+docker compose -f docker-compose.data.yml --profile backup run --rm backup /scripts/backup.sh
+
+# scheduled: BACKUP_CRON (03:00 daily), keeping BACKUP_KEEP copies
+docker compose -f docker-compose.data.yml --profile backup up -d
+
+# restore; stop the application first, and `stop s3` for the objects
+docker compose -f docker-compose.data.yml --profile backup run --rm backup \
+    /scripts/restore.sh 2026-09-11T03-00-00 --yes
+```
+
+### Coming from a single-stack checkout
+
+Volumes were renamed, so an existing deployment has to move its data over once:
+
+```bash
+docker compose down
+sh docker/data/init-env.sh
+docker run --rm -v flow_postgres-data:/from -v flow-postgres-data:/to alpine \
+    sh -c 'cd /from && cp -a . /to'
+docker run --rm -v flow_minio-data:/from -v flow-minio-data:/to alpine \
+    sh -c 'cd /from && cp -a . /to'
+docker compose -f docker-compose.data.yml up -d
+docker compose up -d
+```
+
+Check `docker compose -f docker-compose.data.yml logs postgres` and sign in before removing the old volumes (`docker volume rm flow_postgres-data flow_minio-data`).
 
 ## First sign-in
 
@@ -88,7 +134,7 @@ The values come from `.env` (`BOOTSTRAP_USERNAME`, `BOOTSTRAP_EMAIL`, `BOOTSTRAP
 
 ![People section showing the bootstrap user](docs/images/users.png)
 
-Sign out with the icon next to your name at the bottom of the sidebar. A forgotten password is reset by an Owner from that person's profile; if the Owner account itself is lost, `docker compose down -v` wipes the data and the bootstrap user is created again.
+Sign out with the icon next to your name at the bottom of the sidebar. A forgotten password is reset by an Owner from that person's profile; if the Owner account itself is lost, removing the data volumes (see "Two stacks, and why") wipes everything and the bootstrap user is created again.
 
 The interface is in Russian.
 
@@ -101,6 +147,7 @@ Project documentation is written in Russian.
 - [`docs/TZ_user.md`](docs/TZ_user.md) — users and profiles
 - [`docs/TZ_user_roles.md`](docs/TZ_user_roles.md) — roles, states, permission matrix
 - [`docs/TZ_auth.md`](docs/TZ_auth.md) — authentication and Flow.Auth
+- [`docs/TZ_infra_data_split.md`](docs/TZ_infra_data_split.md) — splitting the database and S3 into a data stack
 - [`docs/TZ_task_activity_comments.md`](docs/TZ_task_activity_comments.md) — comments, change log, Markdown editor, due dates
 - [`docs/Struktura_board_task_status.md`](docs/Struktura_board_task_status.md) — domain model structure
 - [`docs/Sravnenie_DbContext_podhodov.md`](docs/Sravnenie_DbContext_podhodov.md) — DbContext approaches compared
