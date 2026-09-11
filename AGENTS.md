@@ -120,4 +120,4 @@ Shared намеренно **не ссылается** на Domain (свои enum
 ## Навигация
 - Структура проекта: `docs/Struktura_board_task_status.md`
 - Сравнение подходов DbContext: `docs/Sravnenie_DbContext_podhodov.md`
-- ТЗ: `docs/TZ_board_task_status.md`, `docs/TZ_user.md`, `docs/TZ_user_roles.md` (роли/статусы — план, #15), `docs/TZ_auth.md` (аутентификация, #21)
+- ТЗ: `docs/TZ_board_task_status.md`, `docs/TZ_user.md`, `docs/TZ_user_roles.md` (роли/статусы — план, #15), `docs/TZ_auth.md` (аутентификация, #21), `docs/TZ_playwright.md` (E2E на Playwright — план)
