@@ -25,6 +25,9 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
 
         builder.Property(t => t.CreatedAt).IsRequired();
 
+        // DateOnly → date в Postgres (Npgsql маппит сам).
+        builder.Property(t => t.DueDate);
+
         builder.HasOne<Status>()
             .WithMany()
             .HasForeignKey(t => t.StatusId)

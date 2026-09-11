@@ -1,4 +1,5 @@
 using Flow.Application.Abstractions;
+using Flow.Application.Features.Tasks.Mentions;
 using Flow.Application.Security;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,7 @@ public static class FlowApplicationServiceCollectionExtensions
 
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<ActorResolver>();
+        services.AddScoped<MentionResolver>();
 
         return services;
     }

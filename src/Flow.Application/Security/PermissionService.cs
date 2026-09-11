@@ -30,6 +30,15 @@ internal sealed class PermissionService : IPermissionService
         Require(assignsSelf || unassignsSelf, "Member может назначить исполнителем только себя.");
     }
 
+    public void EnsureCanComment(User actor) =>
+        Require(actor.Role >= UserRole.Member, "Reader не может комментировать задачи.");
+
+    public void EnsureCanEditComment(User actor, TaskComment comment) =>
+        Require(comment.AuthorId == actor.Id, "Править можно только свои комментарии.");
+
+    public void EnsureCanDeleteComment(User actor, TaskComment comment) =>
+        Require(comment.AuthorId == actor.Id || actor.Role >= UserRole.Admin, "Удалять чужие комментарии могут Admin и Owner.");
+
     public void EnsureCanManageUsers(User actor) =>
         Require(actor.Role >= UserRole.Admin, "Добавлять людей могут Admin и Owner.");
 

@@ -1,5 +1,6 @@
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
+using Flow.Domain.Entities;
 using Flow.Application.Features.Tasks;
 using Flow.Shared.Contracts.Tasks;
 using MediatR;
@@ -7,7 +8,7 @@ using MediatR;
 namespace Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 
 /// <summary>Бросает ArgumentException/InvalidOperationException при невалидных данных (см. Board.CreateTask).</summary>
-internal sealed class TaskCreateCommandHandler(IBoardRepository boards, ITaskItemRepository tasks, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class TaskCreateCommandHandler(IBoardRepository boards, ITaskItemRepository tasks, ITaskActivityRepository activities, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskCreateCommand, TaskResponse?>
 {
     public async Task<TaskResponse?> Handle(TaskCreateCommand request, CancellationToken cancellationToken)
@@ -24,6 +25,7 @@ internal sealed class TaskCreateCommandHandler(IBoardRepository boards, ITaskIte
         // Board.Tasks не подгружен (не нужен для создания), поэтому EF не отследит новую задачу
         // через изменение коллекции сам — регистрируем её явно.
         tasks.Add(task);
+        activities.Add(TaskActivity.Created(task.Id, actor.Id));
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return task.ToResponse();

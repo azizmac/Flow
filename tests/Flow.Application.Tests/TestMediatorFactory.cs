@@ -22,13 +22,28 @@ public static class TestMediatorFactory
         return (mediator, boards, tasks, users);
     }
 
+    /// <summary>Плюс фейки ленты — для тестов активности и комментариев.</summary>
+    public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities) CreateWithTimeline()
+    {
+        var all = Build();
+        return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Comments, all.Activities);
+    }
+
     /// <summary>То же, плюс FakeAccountService — для тестов, которым важно, что ушло в Flow.Auth.</summary>
     public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts) CreateWithAccounts()
+    {
+        var all = Build();
+        return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Accounts);
+    }
+
+    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities) Build()
     {
         var boards = new FakeBoardRepository();
         var tasks = new FakeTaskItemRepository();
         var users = new FakeUserRepository();
         var accounts = new FakeAccountService();
+        var comments = new FakeTaskCommentRepository();
+        var activities = new FakeTaskActivityRepository();
 
         var owner = User.CreateWithId(OwnerId, "owner", "owner@example.com", "Owner", "Flow");
         owner.ChangeRole(UserRole.Owner);
@@ -40,10 +55,12 @@ public static class TestMediatorFactory
         services.AddSingleton<ITaskItemRepository>(tasks);
         services.AddSingleton<IUserRepository>(users);
         services.AddSingleton<IAccountService>(accounts);
+        services.AddSingleton<ITaskCommentRepository>(comments);
+        services.AddSingleton<ITaskActivityRepository>(activities);
         services.AddSingleton<IUnitOfWork>(new FakeUnitOfWork());
         services.AddFlowApplication();
 
         var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
-        return (mediator, boards, tasks, users, accounts);
+        return (mediator, boards, tasks, users, accounts, comments, activities);
     }
 }

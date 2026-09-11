@@ -1,11 +1,12 @@
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
+using Flow.Domain.Entities;
 using MediatR;
 
 namespace Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 
 /// <summary>Инвариант «назначать можно только активного пользователя» живёт здесь: у TaskItem нет доступа к User.</summary>
-internal sealed class TaskAssignCommandHandler(ITaskItemRepository tasks, IUserRepository users, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class TaskAssignCommandHandler(ITaskItemRepository tasks, IUserRepository users, ITaskActivityRepository activities, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskAssignCommand, TaskAssignResult>
 {
     public async Task<TaskAssignResult> Handle(TaskAssignCommand request, CancellationToken cancellationToken)
@@ -17,6 +18,8 @@ internal sealed class TaskAssignCommandHandler(ITaskItemRepository tasks, IUserR
             return TaskAssignResult.NotFound();
 
         permissions.EnsureCanAssign(actor, task, request.UserId);
+
+        var previous = task.AssigneeId;
 
         if (request.UserId is null)
         {
@@ -33,6 +36,9 @@ internal sealed class TaskAssignCommandHandler(ITaskItemRepository tasks, IUserR
 
             task.Assign(user.Id);
         }
+
+        if (task.AssigneeId != previous)
+            activities.Add(TaskActivity.AssigneeChanged(task.Id, actor.Id, previous, task.AssigneeId));
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

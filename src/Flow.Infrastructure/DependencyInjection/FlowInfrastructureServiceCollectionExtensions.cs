@@ -29,6 +29,8 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ITaskItemRepository, TaskItemRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();
+        services.AddScoped<ITaskActivityRepository, TaskActivityRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Служебные вызовы в Flow.Auth (admin-API /accounts): секция "Auth" — BaseUrl и клиент flow-api.

@@ -1,6 +1,7 @@
 using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskListQuery;
@@ -88,6 +89,14 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
             return BadRequest(new { Message = result.ValidationError });
 
         return Ok(result.Response);
+    }
+
+    /// <summary>DueDate = null в теле — снять срок.</summary>
+    [HttpPatch("tasks/{id:guid}/due-date")]
+    public async Task<IActionResult> SetDueDate(Guid id, SetTaskDueDateRequest request, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new TaskSetDueDateCommand(actor.Require(), id, request.DueDate), cancellationToken);
+        return result.IsNotFound ? NotFound() : Ok(result.Response);
     }
 
     [HttpDelete("tasks/{id:guid}")]

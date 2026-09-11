@@ -76,4 +76,17 @@ public class TaskItemTests
 
         Assert.Throws<ArgumentException>(() => task.Assign(Guid.Empty));
     }
+
+    [Fact]
+    public void SetDueDate_Should_SetAndClear()
+    {
+        var (_, task) = CreateBoardWithTask();
+        Assert.Null(task.DueDate);
+
+        task.SetDueDate(new DateOnly(2024, 1, 1));
+        Assert.Equal(new DateOnly(2024, 1, 1), task.DueDate);
+
+        task.SetDueDate(null);
+        Assert.Null(task.DueDate);
+    }
 }
