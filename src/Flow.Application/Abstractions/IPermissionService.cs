@@ -21,6 +21,15 @@ public interface IPermissionService
     /// <summary>Назначить исполнителя: Developer+ — любого; Member — только себя на свою задачу (и снять себя).</summary>
     void EnsureCanAssign(User actor, TaskItem task, Guid? assigneeId);
 
+    /// <summary>Комментировать задачи — Member и выше (Reader только читает).</summary>
+    void EnsureCanComment(User actor);
+
+    /// <summary>Править комментарий — только автор.</summary>
+    void EnsureCanEditComment(User actor, TaskComment comment);
+
+    /// <summary>Удалить комментарий — автор либо Admin и Owner.</summary>
+    void EnsureCanDeleteComment(User actor, TaskComment comment);
+
     /// <summary>Добавлять людей — Admin и Owner.</summary>
     void EnsureCanManageUsers(User actor);
 

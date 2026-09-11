@@ -87,6 +87,32 @@ public static partial class Ru
         return $"{d.Day} {MonthsShort[d.Month - 1]} {d.Year}";
     }
 
+    /// <summary>«15 сен» для срока (DateOnly, без часового пояса); год — если не текущий.</summary>
+    public static string DateOnlyShort(DateOnly d)
+    {
+        var s = $"{d.Day} {MonthsShort[d.Month - 1]}";
+        return d.Year == DateTime.Now.Year ? s : $"{s} {d.Year}";
+    }
+
+    /// <summary>Разбор yyyy-MM-dd из журнала активности; null — «без срока» или мусор.</summary>
+    public static DateOnly? ParseDateOnly(string? iso) =>
+        iso is not null && DateOnly.TryParseExact(iso, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var d) ? d : null;
+
+    /// <summary>«только что», «5 мин назад», «2 ч назад», «вчера», дальше — дата.</summary>
+    public static string Ago(DateTime utc)
+    {
+        var d = ToLocal(utc);
+        var span = DateTime.Now - d;
+        if (span < TimeSpan.FromMinutes(1)) return "только что";
+        if (span < TimeSpan.FromHours(1)) return $"{(int)span.TotalMinutes} мин назад";
+        if (span < TimeSpan.FromHours(24) && d.Date == DateTime.Today) return $"{(int)span.TotalHours} ч назад";
+        if (d.Date == DateTime.Today.AddDays(-1)) return $"вчера в {d.Hour:00}:{d.Minute:00}";
+        return DateShort(utc);
+    }
+
+    public static string Comments(int n) => $"{n} {Plural(n, "комментарий", "комментария", "комментариев")}";
+
     /// <summary>«6 сен 2026, 14:20».</summary>
     public static string DateTimeFull(DateTime utc)
     {

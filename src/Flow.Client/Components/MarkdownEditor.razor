@@ -1,0 +1,237 @@
+@* Markdown-редактор как в GitHub: вкладки «Написать / Предпросмотр», тулбар (заголовок, жирный, курсив,
+   зачёркнутый, код, цитата, списки, чек-лист, ссылка), хоткеи Ctrl B / I / K, Ctrl Enter → OnSubmit,
+   Esc → OnCancel, автодополнение @username из UserDirectory (↑↓ Enter Tab Esc — перехват в flow.js по data-mention).
+   Правки текста делает flow.editor.* прямо в textarea (сохраняет каретку), возвращая новое значение в Value. *@
+@implements IDisposable
+@inject BrowserInterop Browser
+@inject UserDirectory Users
+
+<div class="md-editor @Class @(_preview ? "preview" : "")">
+    <div class="md-head">
+        <div class="md-tabs" role="tablist">
+            <button type="button" class="md-tab @(!_preview ? "on" : "")" role="tab" aria-selected="@((!_preview).ToString().ToLowerInvariant())" @onclick="ShowWrite"><Icon Name="edit" Size="13" />Написать</button>
+            <button type="button" class="md-tab @(_preview ? "on" : "")" role="tab" aria-selected="@(_preview.ToString().ToLowerInvariant())" @onclick="() => _preview = true"><Icon Name="eye" Size="13" />Предпросмотр</button>
+        </div>
+        @if (!_preview)
+        {
+            <div class="md-tools" role="toolbar" aria-label="Форматирование">
+                <button type="button" class="md-tool" title="Заголовок" @onclick='() => Prefix("### ")'><Icon Name="heading" Size="15" /></button>
+                <button type="button" class="md-tool" title="Жирный (Ctrl B)" @onclick='() => Wrap("**", "**", "жирный")'><Icon Name="bold" Size="15" /></button>
+                <button type="button" class="md-tool" title="Курсив (Ctrl I)" @onclick='() => Wrap("_", "_", "курсив")'><Icon Name="italic" Size="15" /></button>
+                <button type="button" class="md-tool" title="Зачёркнутый" @onclick='() => Wrap("~~", "~~", "текст")'><Icon Name="strikethrough" Size="15" /></button>
+                <span class="md-sep"></span>
+                <button type="button" class="md-tool" title="Код" @onclick='() => Wrap("`", "`", "код")'><Icon Name="code" Size="15" /></button>
+                <button type="button" class="md-tool" title="Цитата" @onclick='() => Prefix("> ")'><Icon Name="quote" Size="15" /></button>
+                <button type="button" class="md-tool" title="Ссылка (Ctrl K)" @onclick='() => Wrap("[", "](url)", "текст ссылки")'><Icon Name="link" Size="15" /></button>
+                <span class="md-sep"></span>
+                <button type="button" class="md-tool" title="Список" @onclick='() => Prefix("- ")'><Icon Name="list" Size="15" /></button>
+                <button type="button" class="md-tool" title="Нумерованный список" @onclick='() => Prefix("1. ", ordered: true)'><Icon Name="list-ordered" Size="15" /></button>
+                <button type="button" class="md-tool" title="Чек-лист" @onclick='() => Prefix("- [ ] ")'><Icon Name="check-square" Size="15" /></button>
+            </div>
+        }
+    </div>
+
+    @if (_preview)
+    {
+        <MarkdownView Text="@Value" Placeholder="Нечего показывать" Class="md-preview" Style="@($"min-height:{MinHeight}px;")" />
+    }
+    else
+    {
+        <div class="md-body">
+            <textarea id="@Id" class="md-text" style="@($"min-height:{MinHeight}px;")" placeholder="@Placeholder"
+                      value="@Value" disabled="@Busy" spellcheck="true" data-mention="@(_mentionOpen ? "1" : null)"
+                      aria-autocomplete="@(_mentionOpen ? "list" : null)"
+                      @oninput="OnInput" @onkeydown="OnKeyDown" @onblur="OnBlur"></textarea>
+            @if (_mentionOpen && _mentionItems.Count > 0)
+            {
+                <div class="md-mention" role="listbox">
+                    @for (var i = 0; i < _mentionItems.Count; i++)
+                    {
+                        var idx = i;
+                        var u = _mentionItems[i];
+                        <button type="button" class="pop-item user @(idx == _mentionIndex ? "cur" : "")" role="option" aria-selected="@((idx == _mentionIndex).ToString().ToLowerInvariant())"
+                                @onmousedown:preventDefault @onclick="() => PickMention(idx)">
+                            <Avatar User="u" Size="22" />
+                            <span class="pop-user">
+                                <span class="pop-user-name">@u.FullName</span>
+                                <span class="pop-user-un">@@@u.Username</span>
+                            </span>
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <div class="md-foot">
+        <span class="hint">Markdown · <span class="kbd">@@</span> упомянуть · <span class="kbd">Ctrl Enter</span> @SubmitHint</span>
+        @if (ShowActions)
+        {
+            <div class="md-actions">
+                @if (OnCancel.HasDelegate)
+                {
+                    <button type="button" class="icon-lnk" @onclick="OnCancel" disabled="@Busy">Отмена</button>
+                }
+                <DsButton Variant="primary" Size="sm" OnClick="Submit" Busy="Busy" Disabled="@(!CanSubmit)">@SubmitLabel</DsButton>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Что нужно сделать, критерии готовности, ссылки…";
+    [Parameter] public int MinHeight { get; set; } = 140;
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public bool Autofocus { get; set; }
+    [Parameter] public string? Class { get; set; }
+    /// <summary>Кнопки «Отмена»/Submit под редактором. Без них хоткеи всё равно работают.</summary>
+    [Parameter] public bool ShowActions { get; set; } = true;
+    [Parameter] public string SubmitLabel { get; set; } = "Сохранить";
+    [Parameter] public string SubmitHint { get; set; } = "сохранить";
+    /// <summary>Пустой текст не отправляем (комментарий); для описания пустое допустимо — AllowEmpty.</summary>
+    [Parameter] public bool AllowEmpty { get; set; }
+    [Parameter] public EventCallback OnSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    /// <summary>Id textarea — чтобы страница могла поставить фокус (Browser.FocusAsync).</summary>
+    [Parameter] public string Id { get; set; } = "md-" + Guid.NewGuid().ToString("N")[..8];
+
+    private bool _preview;
+    private bool _mentionOpen;
+    private int _mentionAt;
+    private int _mentionIndex;
+    private IReadOnlyList<UserResponse> _mentionItems = [];
+    private bool _focused;
+
+    private bool CanSubmit => !Busy && (AllowEmpty || !string.IsNullOrWhiteSpace(Value));
+
+    protected override void OnInitialized() => Users.Changed += OnUsersChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Autofocus && !_focused)
+        {
+            _focused = true;
+            await Browser.FocusAsync(Id);
+        }
+    }
+
+    private void OnUsersChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task ShowWrite()
+    {
+        if (!_preview) return;
+        _preview = false;
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync(Id);
+    }
+
+    private async Task SetValue(string? value)
+    {
+        if (value is null) return;
+        Value = value;
+        await ValueChanged.InvokeAsync(value);
+    }
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        await SetValue(e.Value?.ToString() ?? string.Empty);
+        await DetectMention();
+    }
+
+    // Токен «@…» перед кареткой: начинается с @, перед ним — начало текста или пробел/скобка, без пробелов внутри.
+    private async Task DetectMention()
+    {
+        var state = await Browser.EditorStateAsync(Id);
+        if (state is null || state.Start != state.End) { CloseMention(); return; }
+
+        var text = state.Value;
+        var caret = Math.Min(state.Start, text.Length);
+        var at = text.LastIndexOf('@', Math.Max(0, caret - 1));
+        if (at < 0 || (at > 0 && (char.IsLetterOrDigit(text[at - 1]) || text[at - 1] is '/' or '_' or '.')))
+        {
+            CloseMention();
+            return;
+        }
+
+        var query = text[(at + 1)..caret];
+        if (query.Length == 0 || query.Any(char.IsWhiteSpace) || query.Length > 32)
+        {
+            CloseMention();
+            return;
+        }
+
+        if (!Users.IsLoaded)
+            _ = Users.EnsureLoadedAsync();
+
+        var items = Users.Filter(query, 6);
+        if (items.Count == 0) { CloseMention(); return; }
+
+        _mentionAt = at;
+        _mentionItems = items;
+        _mentionIndex = Math.Min(_mentionIndex, items.Count - 1);
+        _mentionOpen = true;
+    }
+
+    private void CloseMention()
+    {
+        _mentionOpen = false;
+        _mentionIndex = 0;
+        _mentionItems = [];
+    }
+
+    private async Task PickMention(int index)
+    {
+        if (index < 0 || index >= _mentionItems.Count) return;
+        var user = _mentionItems[index];
+        var value = await Browser.EditorInsertMentionAsync(Id, _mentionAt, user.Username);
+        CloseMention();
+        await SetValue(value);
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (_mentionOpen)
+        {
+            switch (e.Key)
+            {
+                case "ArrowDown": _mentionIndex = (_mentionIndex + 1) % _mentionItems.Count; return;
+                case "ArrowUp": _mentionIndex = (_mentionIndex - 1 + _mentionItems.Count) % _mentionItems.Count; return;
+                case "Enter":
+                case "Tab": await PickMention(_mentionIndex); return;
+                case "Escape": CloseMention(); return;
+            }
+        }
+
+        var ctrl = e.CtrlKey || e.MetaKey;
+        if (ctrl && e.Key == "Enter") { await Submit(); return; }
+        if (e.Key == "Escape" && OnCancel.HasDelegate) { await OnCancel.InvokeAsync(); return; }
+        if (!ctrl) return;
+
+        // Ctrl B / I / K — как в GitHub. preventDefault не нужен: браузер по этим сочетаниям в textarea ничего не делает.
+        switch (e.Key.ToLowerInvariant())
+        {
+            case "b": await Wrap("**", "**", "жирный"); break;
+            case "i": await Wrap("_", "_", "курсив"); break;
+            case "k": await Wrap("[", "](url)", "текст ссылки"); break;
+        }
+    }
+
+    private void OnBlur() => CloseMention();
+
+    private async Task Wrap(string before, string after, string placeholder) =>
+        await SetValue(await Browser.EditorWrapAsync(Id, before, after, placeholder));
+
+    private async Task Prefix(string prefix, bool ordered = false) =>
+        await SetValue(await Browser.EditorPrefixLinesAsync(Id, prefix, ordered));
+
+    private async Task Submit()
+    {
+        if (!CanSubmit) return;
+        await OnSubmit.InvokeAsync();
+    }
+
+    public void Dispose() => Users.Changed -= OnUsersChanged;
+}

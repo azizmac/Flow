@@ -26,6 +26,14 @@ public static class Permissions
 
     public static bool CanManageUsers(UserResponse? me) => me?.Role >= UserRole.Admin;
 
+    /// <summary>Комментировать — Member+; Reader только читает (docs/TZ_task_activity_comments.md).</summary>
+    public static bool CanComment(UserResponse? me) => me?.Role >= UserRole.Member;
+
+    public static bool CanEditComment(UserResponse? me, TaskCommentResponse comment) => me is not null && comment.AuthorId == me.Id;
+
+    public static bool CanDeleteComment(UserResponse? me, TaskCommentResponse comment) =>
+        me is not null && (comment.AuthorId == me.Id || me.Role >= UserRole.Admin);
+
     public static bool CanEditProfile(UserResponse? me, UserResponse target) =>
         me is not null && (me.Id == target.Id || me.Role >= UserRole.Admin);
 

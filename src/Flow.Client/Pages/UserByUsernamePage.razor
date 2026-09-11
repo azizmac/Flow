@@ -1,0 +1,45 @@
+@* /u/{username} — цель ссылок-упоминаний (@username в Markdown): ищет профиль по username и уводит на /users/{id}. *@
+@page "/u/{Username}"
+@inject FlowApi Api
+@inject NavigationManager Nav
+
+<PageTitle>@@@Username — Flow</PageTitle>
+
+<div class="content">
+    @if (_notFound)
+    {
+        <div class="empty">
+            <div class="empty-title">Пользователь @@@Username не найден</div>
+            <a href="users">К людям</a>
+        </div>
+    }
+    else if (_error is not null)
+    {
+        <div class="empty">
+            <div class="empty-title">Не удалось открыть профиль</div>
+            <div>@_error</div>
+        </div>
+    }
+    else
+    {
+        <Skeleton Kind="task" />
+    }
+</div>
+
+@code {
+    [Parameter] public string Username { get; set; } = "";
+
+    private bool _notFound;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var result = await Api.GetUserByUsername(Username.ToLowerInvariant());
+        if (result.Ok)
+            Nav.NavigateTo($"users/{result.Value!.Id}", replace: true);
+        else if (result.NotFound)
+            _notFound = true;
+        else
+            _error = result.Error;
+    }
+}

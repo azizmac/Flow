@@ -35,6 +35,9 @@ public sealed class FakeUserRepository : IUserRepository
             .Take(limit)
             .ToList());
 
+    public Task<IReadOnlyList<User>> GetByUsernamesAsync(IReadOnlyCollection<string> usernames, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<User>>(_users.Where(u => usernames.Contains(u.Username)).ToList());
+
     public Task<int> CountByRoleAsync(UserRole role, CancellationToken cancellationToken) =>
         Task.FromResult(_users.Count(u => u.Role == role));
 

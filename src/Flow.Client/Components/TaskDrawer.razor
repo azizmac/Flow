@@ -30,9 +30,8 @@
             <div class="meta-v"><KeyChip Value="@Board.Key" />@Board.Name</div>
         </div>
         <div class="desc-wrap">
-            <div class="desc-head"><div class="meta-k">Описание</div><span class="hint">Markdown</span></div>
-            <textarea class="desc-edit" placeholder="Что нужно сделать, критерии готовности, ссылки…"
-                      value="@_description" @oninput="e => _description = e.Value?.ToString() ?? string.Empty"></textarea>
+            <div class="desc-head"><div class="meta-k">Описание</div></div>
+            <MarkdownEditor @bind-Value="_description" MinHeight="120" ShowActions="false" AllowEmpty="true" SubmitHint="создать" OnSubmit="Create" />
         </div>
         @if (_error is not null)
         {
@@ -107,6 +106,8 @@ else if (Item is not null)
                     }
                 }
             </div>
+            <div class="meta-k">Срок</div>
+            <div><DueDateField Value="Item.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>
             <div class="meta-k">Проект</div>
             <div class="meta-v"><KeyChip Value="@Board.Key" />@Board.Name</div>
             <div class="meta-k">Создана</div>
@@ -118,7 +119,6 @@ else if (Item is not null)
                 @if (_editingDesc)
                 {
                     <div class="desc-actions">
-                        <span class="hint">Markdown · <span class="kbd">Ctrl Enter</span> сохранить</span>
                         <button type="button" class="icon-lnk" @onclick="CancelDesc">Отмена</button>
                         <DsButton Variant="primary" Size="sm" OnClick="SaveDesc" Busy="_busy">Сохранить</DsButton>
                     </div>
@@ -130,8 +130,8 @@ else if (Item is not null)
             </div>
             @if (_editingDesc)
             {
-                <textarea id="td-desc" class="desc-edit" placeholder="Что нужно сделать, критерии готовности, ссылки…"
-                          value="@_description" @oninput="e => _description = e.Value?.ToString() ?? string.Empty"></textarea>
+                <MarkdownEditor Id="td-desc" @bind-Value="_description" MinHeight="140" Autofocus="true" Busy="_busy" AllowEmpty="true"
+                                ShowActions="false" OnSubmit="SaveDesc" OnCancel="CancelDesc" />
             }
             else
             {
@@ -186,13 +186,14 @@ else if (Item is not null)
     protected override void OnInitialized()
     {
         Users.Changed += OnUsersChanged;
+        // Ctrl+Enter: в MarkdownEditor (описание) — его OnSubmit; в поле названия/вне полей — здесь.
         _hotkeys = Hotkeys.Subscribe(async e =>
         {
             if (e.Key == "Enter" && e.Ctrl)
             {
                 e.Handled = true;
+                if (e.InEditable && (IsCreate || _editingDesc)) return; // редактор описания сам вызовет Create/SaveDesc
                 if (IsCreate) await Create();
-                else if (_editingDesc) await SaveDesc();
             }
         });
     }
@@ -352,9 +353,24 @@ else if (Item is not null)
         if (!CanEdit) return;
         _description = Item!.Description ?? "";
         _editingDesc = true;
-        StateHasChanged();
-        await Task.Yield();
-        await Browser.FocusAsync("td-desc");
+        await Task.CompletedTask;
+    }
+
+    private bool IsDone => Board.Statuses.FirstOrDefault(s => s.Id == Item?.StatusId)?.IsFinal == true;
+
+    private async Task SetDueDate(DateOnly? dueDate)
+    {
+        _busy = true;
+        _error = null;
+        var result = await Api.SetDueDate(Item!.Id, new SetTaskDueDateRequest(dueDate));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось изменить срок");
+            return;
+        }
+
+        await OnUpdated.InvokeAsync(result.Value!);
     }
 
     private Task OnDescClick() => string.IsNullOrWhiteSpace(Item?.Description) ? StartDescEdit() : Task.CompletedTask;

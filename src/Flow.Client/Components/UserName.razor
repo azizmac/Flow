@@ -1,0 +1,15 @@
+@* Имя пользователя из справочника ссылкой на профиль; пока справочник не загружен — «…». *@
+@inject UserDirectory Users
+
+@if (Users.Find(Id) is { } u)
+{
+    <a class="tl-name" href="users/@u.Id" title="@("@" + u.Username)">@u.FullName</a>
+}
+else
+{
+    <span class="tl-name">…</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid Id { get; set; }
+}

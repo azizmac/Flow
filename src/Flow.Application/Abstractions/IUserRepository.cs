@@ -27,6 +27,12 @@ public interface IUserRepository
     /// </summary>
     Task<IReadOnlyList<User>> SearchAsync(string query, int limit, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Пользователи по нормализованным username одним запросом — для резолва @упоминаний в комментариях.
+    /// Деактивированных не фильтрует: упоминание ушедшего остаётся ссылкой на профиль. Неизвестные имена пропускаются.
+    /// </summary>
+    Task<IReadOnlyList<User>> GetByUsernamesAsync(IReadOnlyCollection<string> usernames, CancellationToken cancellationToken);
+
     /// <summary>Сколько пользователей с ролью — для инварианта «последний Owner нельзя понизить/деактивировать».</summary>
     Task<int> CountByRoleAsync(UserRole role, CancellationToken cancellationToken);
 

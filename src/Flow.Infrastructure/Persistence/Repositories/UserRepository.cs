@@ -42,6 +42,18 @@ public sealed class UserRepository(FlowDbContext db) : IUserRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<User>> GetByUsernamesAsync(IReadOnlyCollection<string> usernames, CancellationToken cancellationToken)
+    {
+        if (usernames.Count == 0)
+            return [];
+
+        // Деактивированных не фильтруем: упоминание ушедшего остаётся ссылкой на профиль.
+        return await db.Users
+            .Where(u => usernames.Contains(u.Username))
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<int> CountByRoleAsync(UserRole role, CancellationToken cancellationToken) =>
         db.Users.CountAsync(u => u.Role == role, cancellationToken);
 

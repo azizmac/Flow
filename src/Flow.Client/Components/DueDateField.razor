@@ -1,0 +1,38 @@
+@* Срок задачи: чип (просрочен — красный, ближайшие 2 дня — акцент) + при CanEdit нативный date-input и «Снять». *@
+
+@if (CanEdit)
+{
+    <div class="due-edit">
+        <input type="date" value="@(Value?.ToString("yyyy-MM-dd"))" disabled="@Disabled" aria-label="Срок"
+               @onchange="OnPick" />
+        @if (Value is not null)
+        {
+            <button type="button" class="icon-lnk" disabled="@Disabled" @onclick="() => OnChange.InvokeAsync(null)"><Icon Name="close-simple" Size="12" />Снять</button>
+        }
+    </div>
+}
+else if (Value is { } d)
+{
+    <DueChip Value="d" IsDone="IsDone" />
+}
+else
+{
+    <span class="meta-v" style="color:var(--text-tertiary);">—</span>
+}
+
+@code {
+    [Parameter] public DateOnly? Value { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool IsDone { get; set; }
+    [Parameter] public EventCallback<DateOnly?> OnChange { get; set; }
+
+    private async Task OnPick(ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString();
+        DateOnly? next = DateOnly.TryParseExact(raw, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var d) ? d : null;
+        if (next != Value)
+            await OnChange.InvokeAsync(next);
+    }
+}

@@ -15,10 +15,13 @@ Flow решает задачу командного учёта работы: п�
 - **Проекты и задачи.** Доска с ключом (`^[A-Z][A-Z0-9]{1,9}$`), четыре статуса по умолчанию, задачи с кодом вида `KEY-N`, назначение исполнителя, фильтр по исполнителю.
 - **Пользователи.** Профиль (имя, контакты, внешние ссылки), статусы `Invited / Active / Deactivated`, поиск и автодополнение.
 - **Роли и права.** `Reader → Member → Developer → Admin → Owner`; матрица прав проверяется на сервере, клиент скрывает недоступные действия. Правило «последнего Owner» защищает от потери администратора.
+- **Лента задачи.** Комментарии в Markdown с `@упоминаниями` (редактор с предпросмотром и тулбаром, как в GitHub), журнал изменений: название, описание, статус, исполнитель, срок, удалённые комментарии. Срок задачи с подсветкой просрочки.
 - **Аутентификация.** Отдельный сервис `Flow.Auth`: ASP.NET Core Identity + BCrypt, OpenIddict (authorization code + PKCE, refresh, client credentials). Клиент входит через OIDC, API работает как resource server с Bearer JWT. Начальный пароль обязателен к смене при первом входе.
 - **Инфраструктура.** PostgreSQL 16, EF Core, миграции применяются при старте API. Сборка, тесты и публикация образов — в GitHub Actions.
 
 ![Задачи проекта](docs/images/board.png)
+
+![Лента задачи](docs/images/task-timeline.png)
 
 ## Роудмап
 
@@ -30,6 +33,7 @@ Flow решает задачу командного учёта работы: п�
 - [x] Вынесенная аутентификация на OpenIddict, вход из клиента по OIDC
 - [x] Обязательная смена начального пароля
 - [x] Запуск всего стека одной командой в Docker, CI со сборкой образов
+- [x] Комментарии, журнал изменений и Markdown-редактор в задаче, срок задачи
 
 Дальше — подсистема `Flow.AI` ([#5](https://github.com/azizmac/Flow/issues/5), [#1](https://github.com/azizmac/Flow/issues/1)):
 
@@ -93,6 +97,7 @@ docker compose up -d --build
 - [`docs/TZ_user.md`](docs/TZ_user.md) — пользователи и профили
 - [`docs/TZ_user_roles.md`](docs/TZ_user_roles.md) — роли, статусы, матрица прав
 - [`docs/TZ_auth.md`](docs/TZ_auth.md) — аутентификация и Flow.Auth
+- [`docs/TZ_task_activity_comments.md`](docs/TZ_task_activity_comments.md) — комментарии, журнал изменений, Markdown-редактор, срок задачи
 - [`docs/Struktura_board_task_status.md`](docs/Struktura_board_task_status.md) — структура доменной модели
 - [`docs/Sravnenie_DbContext_podhodov.md`](docs/Sravnenie_DbContext_podhodov.md) — сравнение подходов к DbContext
 

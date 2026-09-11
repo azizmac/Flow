@@ -83,7 +83,6 @@ else if (_task is not null && _board is not null)
                     @if (_editingDesc)
                     {
                         <div class="desc-actions">
-                            <span class="hint">Markdown · <span class="kbd">Ctrl Enter</span> сохранить</span>
                             <button type="button" class="icon-lnk" @onclick="() => _editingDesc = false">Отмена</button>
                             <DsButton Variant="primary" Size="sm" OnClick="SaveDesc" Busy="_busy">Сохранить</DsButton>
                         </div>
@@ -95,14 +94,15 @@ else if (_task is not null && _board is not null)
                 </div>
                 @if (_editingDesc)
                 {
-                    <textarea id="tp-desc" class="desc-edit" style="min-height:220px;" placeholder="Что нужно сделать, критерии готовности, ссылки…"
-                              value="@_description" @oninput="e => _description = e.Value?.ToString() ?? string.Empty"></textarea>
+                    <MarkdownEditor Id="tp-desc" @bind-Value="_description" MinHeight="220" Autofocus="true" Busy="_busy" AllowEmpty="true"
+                                    ShowActions="false" OnSubmit="SaveDesc" OnCancel="() => _editingDesc = false" />
                 }
                 else
                 {
                     <MarkdownView Text="@_task.Description" Class="big" OnClick="OnDescClick" />
                 }
             </div>
+            <TaskTimeline @ref="_timeline" TaskItem="_task" Board="_board" OnCommentCountChanged="OnCommentCountChanged" />
         </div>
 
         <div class="task-page-side">
@@ -130,6 +130,8 @@ else if (_task is not null && _board is not null)
                     </div>
                     <div class="meta-k">Исполнитель</div>
                     <div><AssigneeSelect Value="_task.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" /></div>
+                    <div class="meta-k">Срок</div>
+                    <div><DueDateField Value="_task.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>
                     <div class="meta-k">Проект</div>
                     <div class="meta-v"><KeyChip Value="@_board.Key" /><a href="@BackHref" style="color:#fff;">@_board.Name</a></div>
                     <div class="meta-k">Создана</div>
@@ -197,6 +199,9 @@ else if (_task is not null && _board is not null)
     private string _description = "";
     private bool _whoOpen;
     private IDisposable? _hotkeys;
+    private TaskTimeline? _timeline;
+
+    private bool IsDone => _board?.Statuses.FirstOrDefault(s => s.Id == _task?.StatusId)?.IsFinal == true;
 
     private string BackHref => _task is null ? "boards" : $"boards/{_task.BoardId}";
 
@@ -229,9 +234,11 @@ else if (_task is not null && _board is not null)
     protected override void OnInitialized()
     {
         Users.Changed += OnUsersChanged;
-        _hotkeys = Hotkeys.Subscribe(async e =>
+        // Ctrl+Enter в описании обрабатывает MarkdownEditor (OnSubmit); глобальный хоткей глотаем, чтобы не сработал дважды.
+        _hotkeys = Hotkeys.Subscribe(e =>
         {
-            if (e.Key == "Enter" && e.Ctrl && _editingDesc) { e.Handled = true; await SaveDesc(); StateHasChanged(); }
+            if (e.Key == "Enter" && e.Ctrl && _editingDesc) e.Handled = true;
+            return Task.CompletedTask;
         });
     }
 
@@ -284,11 +291,7 @@ else if (_task is not null && _board is not null)
             _ = Users.EnsureLoadedAsync();
     }
 
-    private async Task OnBodyKey(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter" && (e.CtrlKey || e.MetaKey) && _editingDesc)
-            await SaveDesc();
-    }
+    private Task OnBodyKey(KeyboardEventArgs e) => Task.CompletedTask;
 
     private async Task StartTitleEdit()
     {
@@ -329,8 +332,33 @@ else if (_task is not null && _board is not null)
             return;
         }
 
+        var before = _task!;
         _task = result.Value!;
         _whoOpen = false;
+        _timeline?.NoteLocalChange(before, _task);
+    }
+
+    private async Task SetDueDate(DateOnly? dueDate)
+    {
+        _busy = true;
+        var result = await Api.SetDueDate(_task!.Id, new SetTaskDueDateRequest(dueDate));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось изменить срок");
+            return;
+        }
+
+        var before = _task;
+        _task = result.Value!;
+        _timeline?.NoteLocalChange(before, _task);
+        _ = FlashSaved();
+    }
+
+    private void OnCommentCountChanged(int count)
+    {
+        if (_task is not null)
+            _task = _task with { CommentCount = count };
     }
 
     private async Task StartDescEdit()
@@ -338,9 +366,7 @@ else if (_task is not null && _board is not null)
         if (!CanEdit) return;
         _description = _task!.Description ?? "";
         _editingDesc = true;
-        StateHasChanged();
-        await Task.Yield();
-        await Browser.FocusAsync("tp-desc");
+        await Task.CompletedTask;
     }
 
     private Task OnDescClick() => string.IsNullOrWhiteSpace(_task?.Description) ? StartDescEdit() : Task.CompletedTask;
@@ -365,7 +391,9 @@ else if (_task is not null && _board is not null)
             return false;
         }
 
+        var before = _task;
         _task = result.Value!;
+        _timeline?.NoteLocalChange(before, _task);
         _ = FlashSaved();
         return true;
     }

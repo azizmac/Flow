@@ -26,6 +26,9 @@ public sealed class TaskItem
 
     public DateTime CreatedAt { get; private set; }
 
+    /// <summary>Срок (дата без времени); null — без срока. Прошедшие даты допустимы: старые задачи переносят задним числом.</summary>
+    public DateOnly? DueDate { get; private set; }
+
     private TaskItem()
     {
         // EF Core
@@ -67,6 +70,9 @@ public sealed class TaskItem
     }
 
     public void Unassign() => AssigneeId = null;
+
+    /// <summary>null — снять срок.</summary>
+    public void SetDueDate(DateOnly? dueDate) => DueDate = dueDate;
 
     private static string ValidateTitle(string title)
     {

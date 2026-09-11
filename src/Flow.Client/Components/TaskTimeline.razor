@@ -1,0 +1,359 @@
+@* Лента задачи: комментарии (карточки) и журнал изменений (компактные строки) в одном хронологическом списке.
+   Данные — GET /tasks/{id}/comments + GET /tasks/{id}/activity параллельно, слияние по CreatedAt.
+   Соседние записи журнала одного актора в пределах минуты — одна группа. CommentAdded не показываем:
+   сам комментарий уже в ленте. Композер внизу — только Member+ (Permissions.CanComment). *@
+@implements IDisposable
+@inject FlowApi Api
+@inject ToastService Toasts
+@inject AppState State
+@inject UserDirectory Users
+
+<div class="timeline" id="timeline">
+    <div class="timeline-head">
+        <div class="section-title">Активность</div>
+        <div class="seg" role="tablist">
+            <button type="button" class="seg-btn @(_filter == Filter.All ? "on" : "")" role="tab" @onclick="() => _filter = Filter.All">Все</button>
+            <button type="button" class="seg-btn @(_filter == Filter.Comments ? "on" : "")" role="tab" @onclick="() => _filter = Filter.Comments">Комментарии <span class="n">@_comments.Count</span></button>
+            <button type="button" class="seg-btn @(_filter == Filter.History ? "on" : "")" role="tab" @onclick="() => _filter = Filter.History">История</button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="timeline-list"><div class="sk-line" style="width:60%"></div><div class="sk-line" style="width:40%"></div></div>
+    }
+    else if (_error is not null)
+    {
+        <div class="empty small">
+            <div>@_error</div>
+            <DsButton Variant="secondary" Size="sm" OnClick="Load">Повторить</DsButton>
+        </div>
+    }
+    else
+    {
+        var items = Visible.ToList();
+        <div class="timeline-list">
+            @if (items.Count == 0)
+            {
+                <div class="timeline-empty">@(_filter == Filter.Comments ? "Комментариев пока нет" : "Пока пусто")</div>
+            }
+            @foreach (var item in items)
+            {
+                if (item.Comment is { } c)
+                {
+                    <div class="tl-comment @(c.Id == _highlightId ? "flash" : "")" id="@("comment-" + c.Id.ToString("N"))" @key="c.Id">
+                        <Avatar User="Users.Find(c.AuthorId)" Size="30" />
+                        <div class="tl-card">
+                            <div class="tl-card-head">
+                                <UserName Id="c.AuthorId" />
+                                <span class="tl-time" title="@Ru.DateTimeFull(c.CreatedAt)">@Ru.Ago(c.CreatedAt)</span>
+                                @if (c.EditedAt is { } edited)
+                                {
+                                    <span class="tl-time" title="@($"Изменено {Ru.DateTimeFull(edited)}")">· изменено</span>
+                                }
+                                @if (_editingId != c.Id)
+                                {
+                                    <span class="tl-card-actions">
+                                        @if (Permissions.CanEditComment(Me, c))
+                                        {
+                                            <button type="button" class="md-tool" title="Редактировать" @onclick="() => StartEdit(c)"><Icon Name="edit" Size="14" /></button>
+                                        }
+                                        @if (Permissions.CanDeleteComment(Me, c))
+                                        {
+                                            <button type="button" class="md-tool danger" title="Удалить" @onclick="() => _deleting = c"><Icon Name="trash" Size="14" /></button>
+                                        }
+                                    </span>
+                                }
+                            </div>
+                            @if (_editingId == c.Id)
+                            {
+                                <MarkdownEditor @bind-Value="_editText" MinHeight="100" Autofocus="true" Busy="_busy"
+                                                SubmitLabel="Сохранить" OnSubmit="SaveEdit" OnCancel="() => _editingId = null" />
+                            }
+                            else
+                            {
+                                <MarkdownView Text="@c.Body" Class="tl-body" />
+                            }
+                        </div>
+                    </div>
+                }
+                else if (item.Group is { } g)
+                {
+                    var first = g[0];
+                    <div class="tl-event" @key="first.Id">
+                        <Avatar User="Users.Find(first.ActorId)" Size="22" />
+                        <div class="tl-event-body">
+                            <span class="tl-event-line">
+                                <UserName Id="first.ActorId" />
+                                @if (g.Count == 1)
+                                {
+                                    <span class="tl-sep">·</span>
+                                    @Render(first)
+                                }
+                                <span class="tl-time" title="@Ru.DateTimeFull(first.CreatedAt)">@Ru.Ago(first.CreatedAt)</span>
+                            </span>
+                            @if (g.Count > 1)
+                            {
+                                <ul class="tl-event-list">
+                                    @foreach (var a in g)
+                                    {
+                                        <li @key="a.Id">@Render(a)</li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    }
+
+    @if (Permissions.CanComment(Me))
+    {
+        <div class="tl-composer">
+            <Avatar User="Me" Size="30" />
+            <MarkdownEditor @bind-Value="_draft" Placeholder="Написать комментарий… @@username — упомянуть" MinHeight="96"
+                            Busy="_busy" SubmitLabel="Отправить" SubmitHint="отправить" OnSubmit="Send" Id="tl-draft" />
+        </div>
+    }
+    else if (Me is not null)
+    {
+        <div class="hint">Комментировать могут участники проекта и выше.</div>
+    }
+</div>
+
+@if (_deleting is { } del)
+{
+    <ConfirmDialog Title="Удалить комментарий?" Text="В истории останется отметка об удалении, текст восстановить нельзя."
+                   OnConfirm="ConfirmDelete" OnCancel="() => _deleting = null" />
+}
+
+@code {
+    [Parameter, EditorRequired] public TaskResponse TaskItem { get; set; } = default!;
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    /// <summary>Число комментариев изменилось — страница обновляет TaskResponse.CommentCount.</summary>
+    [Parameter] public EventCallback<int> OnCommentCountChanged { get; set; }
+
+    private enum Filter { All, Comments, History }
+
+    private sealed record Item(DateTime At, TaskCommentResponse? Comment, List<TaskActivityResponse>? Group);
+
+    private Guid _loadedId;
+    private bool _loading = true;
+    private string? _error;
+    private bool _busy;
+    private Filter _filter = Filter.All;
+    private List<TaskCommentResponse> _comments = [];
+    private List<TaskActivityResponse> _activity = [];
+    private string _draft = "";
+    private Guid? _editingId;
+    private string _editText = "";
+    private TaskCommentResponse? _deleting;
+    private Guid? _highlightId;
+
+    private UserResponse? Me => Users.Find(State.CurrentUserId);
+
+    private static readonly TimeSpan GroupWindow = TimeSpan.FromSeconds(60);
+
+    protected override void OnInitialized() => Users.Changed += OnUsersChanged;
+
+    private void OnUsersChanged() => InvokeAsync(StateHasChanged);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId != TaskItem.Id)
+        {
+            _loadedId = TaskItem.Id;
+            await Load();
+        }
+    }
+
+    public async Task Load()
+    {
+        _loading = true;
+        _error = null;
+        var comments = Api.GetComments(TaskItem.Id);
+        var activity = Api.GetActivity(TaskItem.Id);
+        await Task.WhenAll(comments, activity);
+        _loading = false;
+        if (!comments.Result.Ok || !activity.Result.Ok)
+        {
+            _error = comments.Result.Error ?? activity.Result.Error;
+            return;
+        }
+
+        _comments = comments.Result.Value!.ToList();
+        _activity = activity.Result.Value!.ToList();
+    }
+
+    /// <summary>
+    /// Изменение сделано на этой же странице (PATCH вернул новую задачу): дописываем записи локально, не перезагружая ленту.
+    /// При следующей загрузке их заменят серверные.
+    /// </summary>
+    public void NoteLocalChange(TaskResponse before, TaskResponse after)
+    {
+        if (State.CurrentUserId is not { } me) return;
+        var now = DateTime.UtcNow;
+
+        if (before.Title != after.Title)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.TitleChanged, before.Title, after.Title, now));
+        if ((before.Description ?? "") != (after.Description ?? ""))
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.DescriptionChanged, null, null, now));
+        if (before.StatusId != after.StatusId)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.StatusChanged, before.StatusId.ToString(), after.StatusId.ToString(), now));
+        if (before.AssigneeId != after.AssigneeId)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.AssigneeChanged, before.AssigneeId?.ToString(), after.AssigneeId?.ToString(), now));
+        if (before.DueDate != after.DueDate)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.DueDateChanged,
+                before.DueDate?.ToString("yyyy-MM-dd"), after.DueDate?.ToString("yyyy-MM-dd"), now));
+
+        StateHasChanged();
+    }
+
+    private IEnumerable<Item> Visible
+    {
+        get
+        {
+            var items = new List<Item>();
+            if (_filter != Filter.History)
+                items.AddRange(_comments.Select(c => new Item(c.CreatedAt, c, null)));
+
+            if (_filter != Filter.Comments)
+            {
+                List<TaskActivityResponse>? group = null;
+                foreach (var a in _activity.Where(a => a.Type != TaskActivityType.CommentAdded).OrderBy(a => a.CreatedAt))
+                {
+                    if (group is not null && group[0].ActorId == a.ActorId && a.CreatedAt - group[^1].CreatedAt <= GroupWindow)
+                    {
+                        group.Add(a);
+                        continue;
+                    }
+
+                    group = [a];
+                    items.Add(new Item(a.CreatedAt, null, group));
+                }
+            }
+
+            return items.OrderBy(i => i.At);
+        }
+    }
+
+    // ---- тексты журнала: без глагола в прошедшем времени (род актора неизвестен) ----
+
+    private RenderFragment Render(TaskActivityResponse a) => a.Type switch
+    {
+        TaskActivityType.Created => Text("задача создана"),
+        TaskActivityType.TitleChanged => Titles(a),
+        TaskActivityType.DescriptionChanged => Text("описание обновлено"),
+        TaskActivityType.StatusChanged => Statuses(a),
+        TaskActivityType.AssigneeChanged => Assignees(a),
+        TaskActivityType.DueDateChanged => DueDates(a),
+        TaskActivityType.CommentDeleted => Text("комментарий удалён"),
+        TaskActivityType.AttachmentAdded => Text("добавлен файл"),
+        TaskActivityType.AttachmentRemoved => Text("файл удалён"),
+        _ => Text(a.Type.ToString())
+    };
+
+    private static RenderFragment Text(string text) => @<span>@text</span>;
+
+    private static RenderFragment Titles(TaskActivityResponse a) =>
+        @<span>название: <s class="tl-old">@a.OldValue</s> <span class="tl-arrow">→</span> <b>@a.NewValue</b></span>;
+
+    private RenderFragment Statuses(TaskActivityResponse a) =>
+        @<span>статус: @StatusPill(a.OldValue) <span class="tl-arrow">→</span> @StatusPill(a.NewValue)</span>;
+
+    private RenderFragment StatusPill(string? id)
+    {
+        var st = Guid.TryParse(id, out var g) ? Board.Statuses.FirstOrDefault(s => s.Id == g) : null;
+        return @<span class="status-pill sm"><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "удалённый статус")</span>;
+    }
+
+    private RenderFragment Assignees(TaskActivityResponse a)
+    {
+        if (a.OldValue is null && a.NewValue is not null)
+            return @<span>назначен исполнитель: @UserChip(a.NewValue)</span>;
+        if (a.NewValue is null && a.OldValue is not null)
+            return @<span>исполнитель снят: @UserChip(a.OldValue)</span>;
+        return @<span>исполнитель: @UserChip(a.OldValue) <span class="tl-arrow">→</span> @UserChip(a.NewValue)</span>;
+    }
+
+    private RenderFragment UserChip(string? id)
+    {
+        var user = Guid.TryParse(id, out var g) ? Users.Find(g) : null;
+        return @<span class="tl-user"><Avatar User="user" Size="16" />@(user?.FullName ?? "—")</span>;
+    }
+
+    private static RenderFragment DueDates(TaskActivityResponse a)
+    {
+        var from = Ru.ParseDateOnly(a.OldValue);
+        var to = Ru.ParseDateOnly(a.NewValue);
+        if (from is null && to is { } set)
+            return @<span>срок: <b>@Ru.DateOnlyShort(set)</b></span>;
+        if (to is null && from is not null)
+            return @<span>срок снят (был <s class="tl-old">@Ru.DateOnlyShort(from.Value)</s>)</span>;
+        return @<span>срок: <s class="tl-old">@(from is { } f ? Ru.DateOnlyShort(f) : "—")</s> <span class="tl-arrow">→</span> <b>@(to is { } t ? Ru.DateOnlyShort(t) : "—")</b></span>;
+    }
+
+    // ---- комментарии ----
+
+    private async Task Send()
+    {
+        if (_busy || string.IsNullOrWhiteSpace(_draft)) return;
+        _busy = true;
+        var result = await Api.AddComment(TaskItem.Id, new CreateTaskCommentRequest(_draft));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось отправить комментарий");
+            return;
+        }
+
+        _comments.Add(result.Value!);
+        _draft = "";
+        _highlightId = result.Value!.Id;
+        if (_filter == Filter.History) _filter = Filter.All;
+        await OnCommentCountChanged.InvokeAsync(_comments.Count);
+    }
+
+    private void StartEdit(TaskCommentResponse c)
+    {
+        _editingId = c.Id;
+        _editText = c.Body;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (_editingId is not { } id || _busy) return;
+        _busy = true;
+        var result = await Api.UpdateComment(id, new UpdateTaskCommentRequest(_editText));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось сохранить комментарий");
+            return;
+        }
+
+        var index = _comments.FindIndex(c => c.Id == id);
+        if (index >= 0) _comments[index] = result.Value!;
+        _editingId = null;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (_deleting is not { } c) return;
+        _deleting = null;
+        var result = await Api.DeleteComment(c.Id);
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось удалить комментарий");
+            return;
+        }
+
+        _comments.RemoveAll(x => x.Id == c.Id);
+        if (State.CurrentUserId is { } me)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), TaskItem.Id, me, TaskActivityType.CommentDeleted, c.Id.ToString(), null, DateTime.UtcNow));
+        await OnCommentCountChanged.InvokeAsync(_comments.Count);
+    }
+
+    public void Dispose() => Users.Changed -= OnUsersChanged;
+}
