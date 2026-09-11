@@ -69,11 +69,11 @@ public sealed class TimelineApiTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.OK, due.StatusCode);
         Assert.Equal(new DateOnly(2026, 10, 1), (await due.Content.ReadFromJsonAsync<TaskResponse>())!.DueDate);
 
-        var activity = await owner.GetFromJsonAsync<List<TaskActivityResponse>>($"/tasks/{task.Id}/activity");
+        var activity = (await owner.GetFromJsonAsync<List<TaskActivityResponse>>($"/tasks/{task.Id}/activity"))!;
 
         Assert.Equal(
             new[] { TaskActivityType.Created, TaskActivityType.TitleChanged, TaskActivityType.DueDateChanged },
-            activity!.Select(a => a.Type));
+            activity.Select(a => a.Type));
         Assert.Equal("2026-10-01", activity[2].NewValue);
     }
 
