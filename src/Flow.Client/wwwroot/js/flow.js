@@ -48,6 +48,14 @@ window.flow = (function () {
             }
         }
 
+        // Открыт список @упоминаний в Markdown-редакторе: стрелки/Enter/Tab/Esc принадлежат списку,
+        // а не textarea. preventDefault обязан быть синхронным — поэтому здесь, .NET-обработчик дальше сам решает.
+        if (e.target && e.target.getAttribute && e.target.getAttribute('data-mention') === '1'
+            && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Tab' || e.key === 'Escape')) {
+            e.preventDefault();
+            return;
+        }
+
         const pop = e.target && e.target.closest ? e.target.closest('.pop') : null;
         if (pop) {
             const mode = e.key === 'Tab' ? (e.shiftKey ? 'prev' : 'next') : MENU_KEYS[e.key];
@@ -177,6 +185,56 @@ window.flow = (function () {
         scrollIntoView: function (id) {
             const el = document.getElementById(id);
             if (el) el.scrollIntoView({ block: 'nearest' });
+        },
+
+        // ---- Markdown-редактор (MarkdownEditor.razor): правки текста в textarea с сохранением каретки. ----
+        // Возвращают новое значение — .NET держит его в состоянии, чтобы после ре-рендера textarea не откатилась.
+        editor: {
+            // Текущее значение и границы выделения.
+            state: function (id) {
+                const el = document.getElementById(id);
+                if (!el) return null;
+                return { value: el.value, start: el.selectionStart, end: el.selectionEnd };
+            },
+
+            // Обернуть выделение (или вставить placeholder): **текст**, `код`, [ссылка](url).
+            wrap: function (id, before, after, placeholder) {
+                const el = document.getElementById(id);
+                if (!el) return null;
+                const s = el.selectionStart, e = el.selectionEnd;
+                const selected = el.value.substring(s, e);
+                const inner = selected.length ? selected : placeholder;
+                el.setRangeText(before + inner + after, s, e, 'end');
+                // Без выделения — ставим каретку внутрь обёртки, чтобы можно было сразу печатать.
+                if (!selected.length) el.setSelectionRange(s + before.length, s + before.length + inner.length);
+                el.focus();
+                return el.value;
+            },
+
+            // Префикс строк выделения: заголовок, цитата, список (ordered — с нумерацией).
+            prefixLines: function (id, prefix, ordered) {
+                const el = document.getElementById(id);
+                if (!el) return null;
+                const v = el.value;
+                const lineStart = v.lastIndexOf('\n', el.selectionStart - 1) + 1;
+                let lineEnd = v.indexOf('\n', el.selectionEnd);
+                if (lineEnd < 0) lineEnd = v.length;
+                const lines = v.substring(lineStart, lineEnd).split('\n');
+                const out = lines.map(function (l, i) { return (ordered ? (i + 1) + '. ' : prefix) + l; }).join('\n');
+                el.setRangeText(out, lineStart, lineEnd, 'select');
+                el.focus();
+                return el.value;
+            },
+
+            // Заменить «@частичное» перед кареткой на «@username ».
+            insertMention: function (id, atPos, username) {
+                const el = document.getElementById(id);
+                if (!el) return null;
+                const caret = el.selectionStart;
+                el.setRangeText('@' + username + ' ', atPos, caret, 'end');
+                el.focus();
+                return el.value;
+            }
         }
     };
 })();

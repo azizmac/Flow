@@ -24,6 +24,19 @@
         {
             <div class="task-desc">@Ru.PlainFirstLine(Item.Description)</div>
         }
+        @if (Item.DueDate is { } due || Item.CommentCount > 0)
+        {
+            <div class="task-meta-chips">
+                @if (Item.DueDate is { } d)
+                {
+                    <DueChip Value="d" IsDone="IsDone" />
+                }
+                @if (Item.CommentCount > 0)
+                {
+                    <span class="count-chip" title="@Ru.Comments(Item.CommentCount)"><Icon Name="message" Size="12" />@Item.CommentCount</span>
+                }
+            </div>
+        }
     </div>
     <div>
         <AssigneeSelect Compact="true" Value="Item.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="id => OnAssign.InvokeAsync((Item, id))" />

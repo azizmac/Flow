@@ -10,6 +10,9 @@ public sealed record AnchorRect(
     double Left, double Top, double Right, double Bottom, double Width, double Height,
     double Vw, double Vh, double OriginX, double OriginY);
 
+/// <summary>Значение и выделение textarea Markdown-редактора (flow.editor.state).</summary>
+public sealed record EditorState(string Value, int Start, int End);
+
 /// <summary>Обёртка над wwwroot/js/flow.js: буфер обмена, фокус, геометрия элементов, localStorage.</summary>
 public sealed class BrowserInterop(IJSRuntime js)
 {
@@ -117,6 +120,56 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
         catch (JSException)
         {
+        }
+    }
+
+    // ---- Markdown-редактор (flow.editor.*): все методы возвращают новое значение textarea или null. ----
+
+    public async Task<EditorState?> EditorStateAsync(string elementId)
+    {
+        try
+        {
+            return await js.InvokeAsync<EditorState?>("flow.editor.state", elementId);
+        }
+        catch (JSException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<string?> EditorWrapAsync(string elementId, string before, string after, string placeholder)
+    {
+        try
+        {
+            return await js.InvokeAsync<string?>("flow.editor.wrap", elementId, before, after, placeholder);
+        }
+        catch (JSException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<string?> EditorPrefixLinesAsync(string elementId, string prefix, bool ordered = false)
+    {
+        try
+        {
+            return await js.InvokeAsync<string?>("flow.editor.prefixLines", elementId, prefix, ordered);
+        }
+        catch (JSException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<string?> EditorInsertMentionAsync(string elementId, int atPosition, string username)
+    {
+        try
+        {
+            return await js.InvokeAsync<string?>("flow.editor.insertMention", elementId, atPosition, username);
+        }
+        catch (JSException)
+        {
+            return null;
         }
     }
 

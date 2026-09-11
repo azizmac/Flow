@@ -1,0 +1,20 @@
+@* Чип срока: «15 сен»; просрочен (дата раньше сегодня, задача не в финальном статусе) — danger, сегодня/завтра — акцент. *@
+
+<span class="due-chip @State" title="@($"Срок: {Ru.DateOnlyShort(Value)}")"><Icon Name="calendar" Size="12" />@Ru.DateOnlyShort(Value)</span>
+
+@code {
+    [Parameter, EditorRequired] public DateOnly Value { get; set; }
+    [Parameter] public bool IsDone { get; set; }
+
+    private string State
+    {
+        get
+        {
+            if (IsDone) return "";
+            var today = DateOnly.FromDateTime(DateTime.Now);
+            if (Value < today) return "overdue";
+            if (Value <= today.AddDays(1)) return "soon";
+            return "";
+        }
+    }
+}

@@ -64,6 +64,27 @@ public sealed class FlowApi(HttpClient http)
     public Task<ApiResult<TaskResponse>> AssignTask(Guid id, AssignTaskRequest request, CancellationToken ct = default) =>
         Send<TaskResponse>(HttpMethod.Patch, $"tasks/{id}/assignee", request, ct);
 
+    /// <summary>DueDate = null — снять срок.</summary>
+    public Task<ApiResult<TaskResponse>> SetDueDate(Guid id, SetTaskDueDateRequest request, CancellationToken ct = default) =>
+        Send<TaskResponse>(HttpMethod.Patch, $"tasks/{id}/due-date", request, ct);
+
+    // ---- Лента задачи: комментарии и журнал (CommentsController) ----
+
+    public Task<ApiResult<IReadOnlyList<TaskCommentResponse>>> GetComments(Guid taskId, CancellationToken ct = default) =>
+        Get<IReadOnlyList<TaskCommentResponse>>($"tasks/{taskId}/comments", ct);
+
+    public Task<ApiResult<TaskCommentResponse>> AddComment(Guid taskId, CreateTaskCommentRequest request, CancellationToken ct = default) =>
+        Send<TaskCommentResponse>(HttpMethod.Post, $"tasks/{taskId}/comments", request, ct);
+
+    public Task<ApiResult<TaskCommentResponse>> UpdateComment(Guid id, UpdateTaskCommentRequest request, CancellationToken ct = default) =>
+        Send<TaskCommentResponse>(HttpMethod.Patch, $"comments/{id}", request, ct);
+
+    public Task<ApiResult<bool>> DeleteComment(Guid id, CancellationToken ct = default) =>
+        Delete($"comments/{id}", ct);
+
+    public Task<ApiResult<IReadOnlyList<TaskActivityResponse>>> GetActivity(Guid taskId, CancellationToken ct = default) =>
+        Get<IReadOnlyList<TaskActivityResponse>>($"tasks/{taskId}/activity", ct);
+
     // ---- пользователи (UsersController) ----
 
     public Task<ApiResult<IReadOnlyList<UserResponse>>> GetUsers(bool includeInactive = false, CancellationToken ct = default) =>
