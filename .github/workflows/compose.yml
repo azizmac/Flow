@@ -1,0 +1,21 @@
+# Джоба: синтаксис compose-файлов. Стеки два (приложение и данные), ошибка в любом ломает запуск проекта
+# одной командой — дешевле поймать здесь.
+name: Compose config
+
+on:
+  workflow_call:
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Стек приложения
+        run: docker compose -f docker-compose.yml config -q
+
+      - name: Стек данных
+        run: docker compose -f docker-compose.data.yml config -q

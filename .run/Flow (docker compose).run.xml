@@ -1,4 +1,6 @@
 <component name="ProjectRunConfigurationManager">
+  <!-- Только приложение. Данные поднимает конфигурация "Flow (data stack)", сеть и тома —
+       docker/data/init-env.sh (один раз перед первым запуском). -->
   <configuration default="false" name="Flow (docker compose)" type="docker-deploy" factoryName="docker-compose.yml" server-name="Docker">
     <deployment type="docker-compose.yml">
       <settings>

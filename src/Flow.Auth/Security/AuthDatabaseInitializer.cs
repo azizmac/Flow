@@ -7,14 +7,20 @@ namespace Flow.Auth.Security;
 /// При старте: миграции → клиенты и scope'ы OpenIddict → базовый пользователь. Один hosted service вместо трёх,
 /// чтобы порядок был детерминирован (сидеры зависят от схемы).
 /// </summary>
-public sealed class AuthDatabaseInitializer(IServiceProvider services) : IHostedService
+public sealed class AuthDatabaseInitializer(
+    IServiceProvider services,
+    IConfiguration configuration,
+    ILogger<AuthDatabaseInitializer> logger) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         await using var scope = services.CreateAsyncScope();
         var provider = scope.ServiceProvider;
+        var db = provider.GetRequiredService<AuthDbContext>();
 
-        await provider.GetRequiredService<AuthDbContext>().Database.MigrateAsync(cancellationToken);
+        // База — в отдельном стеке Compose (docs/TZ_infra_data_split.md), ждать её healthcheck оттуда нельзя.
+        await DatabaseReadiness.WaitAsync(db, DatabaseReadiness.TimeoutFrom(configuration), logger, cancellationToken);
+        await db.Database.MigrateAsync(cancellationToken);
         await provider.GetRequiredService<ClientSeeder>().SeedAsync(cancellationToken);
         await provider.GetRequiredService<BootstrapUserSeeder>().SeedAsync(cancellationToken);
     }

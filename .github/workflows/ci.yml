@@ -17,6 +17,10 @@ jobs:
     name: Build & test
     uses: ./.github/workflows/build.yml
 
+  compose:
+    name: Compose config
+    uses: ./.github/workflows/compose.yml
+
   docker:
     name: Docker image
     needs: build

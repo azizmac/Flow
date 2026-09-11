@@ -51,14 +51,60 @@ Flow решает задачу командного учёта работы: п�
 git clone https://github.com/azizmac/Flow.git
 cd Flow
 cp .env.example .env
-docker compose up -d --build
+sh docker/data/init-env.sh                       # один раз: общая сеть и тома данных
+docker compose -f docker-compose.data.yml up -d  # данные: PostgreSQL и S3
+docker compose up -d --build                     # приложение
 ```
 
 Первая сборка занимает несколько минут. Когда контейнеры поднялись, клиент открывается на http://localhost:5016 — дальше см. «Первый вход».
 
-Сервисы: клиент :5016, API :8080, аутентификация :5100, PostgreSQL :5432, S3-совместимое хранилище :9000 и его консоль :9001. Все порты и учётные данные базового пользователя задаются в `.env` — файл в git не попадает. Если порт 5432 уже занят локальным PostgreSQL, поставьте `POSTGRES_PORT=5433`.
+Сервисы: клиент :5016, API :8080, аутентификация :5100, PostgreSQL :5432, S3-совместимое хранилище :9000 и его консоль :9001. Все порты и учётные данные базового пользователя задаются в `.env` — файл в git не попадает и читается обоими стеками. Если порт 5432 уже занят локальным PostgreSQL, поставьте `POSTGRES_PORT=5433`. На Windows вместо shell-скрипта — `docker/data/init-env.ps1`.
 
-Сертификаты подписи токенов создаются при первом старте, базы `flow` и `flow_auth` поднимаются миграциями. Остановить стек: `docker compose down`; вместе с данными: `docker compose down -v`.
+Сертификаты подписи токенов создаются при первом старте, базы `flow` и `flow_auth` поднимаются миграциями. Порядок запуска стеков любой: сервис, стартовавший раньше базы, дожидается её (`Startup:DatabaseWaitTimeoutSeconds`, по умолчанию 60 с).
+
+### Почему стека два
+
+Данные живут отдельным проектом Compose (`docker-compose.data.yml`, проект `flow-data`) на внешних томах `flow-postgres-data` и `flow-minio-data`. В стеке приложения нет ни одного тома с данными проекта, поэтому `docker compose down -v` их не трогает физически: он уносит только ключи и сертификаты Flow.Auth, которые пересоздаются при следующем старте.
+
+| Что нужно | Команда |
+|---|---|
+| Обновить приложение | `docker compose up -d --build` |
+| Пересобрать приложение с нуля, данные сохранить | `docker compose down -v && docker compose up -d` |
+| Остановить данные (тома остаются) | `docker compose -f docker-compose.data.yml down` |
+| Осознанно удалить данные | `docker compose -f docker-compose.data.yml down`, затем `docker volume rm flow-postgres-data flow-minio-data` |
+
+Чтобы данные лежали на конкретном диске, создайте тома командой `DATA_ROOT=/mnt/flow sh docker/data/init-env.sh`. Чтобы работать с managed-PostgreSQL или внешним S3, укажите `POSTGRES_HOST` и `S3_ENDPOINT` в `.env` — стек данных тогда не нужен вовсе.
+
+### Бэкапы
+
+```bash
+# разовый бэкап в ./backups/<дата>
+docker compose -f docker-compose.data.yml --profile backup run --rm backup /scripts/backup.sh
+
+# по расписанию: BACKUP_CRON (по умолчанию 03:00 ежедневно), хранится BACKUP_KEEP копий
+docker compose -f docker-compose.data.yml --profile backup up -d
+
+# восстановление; приложение остановить, для объектов S3 — ещё и `stop s3`
+docker compose -f docker-compose.data.yml --profile backup run --rm backup \
+    /scripts/restore.sh 2026-09-11T03-00-00 --yes
+```
+
+### Если стек уже был поднят раньше
+
+Имена томов изменились, поэтому существующее развёртывание один раз переносит данные:
+
+```bash
+docker compose down
+sh docker/data/init-env.sh
+docker run --rm -v flow_postgres-data:/from -v flow-postgres-data:/to alpine \
+    sh -c 'cd /from && cp -a . /to'
+docker run --rm -v flow_minio-data:/from -v flow-minio-data:/to alpine \
+    sh -c 'cd /from && cp -a . /to'
+docker compose -f docker-compose.data.yml up -d
+docker compose up -d
+```
+
+Перед удалением старых томов (`docker volume rm flow_postgres-data flow_minio-data`) проверьте `docker compose -f docker-compose.data.yml logs postgres` и вход в приложение.
 
 ## Первый вход
 
@@ -88,7 +134,7 @@ docker compose up -d --build
 
 ![Раздел «Люди» с базовым пользователем](docs/images/users.png)
 
-Выход — иконка справа от имени в нижней части бокового меню. Если пароль забыт, его сбрасывает Owner в профиле нужного человека; если потерян сам Owner — `docker compose down -v` очищает данные и базовый пользователь создаётся заново.
+Выход — иконка справа от имени в нижней части бокового меню. Если пароль забыт, его сбрасывает Owner в профиле нужного человека; если потерян сам Owner — удаление томов данных (см. «Почему стека два») очищает всё и базовый пользователь создаётся заново.
 
 ## Документация
 
@@ -97,6 +143,7 @@ docker compose up -d --build
 - [`docs/TZ_user.md`](docs/TZ_user.md) — пользователи и профили
 - [`docs/TZ_user_roles.md`](docs/TZ_user_roles.md) — роли, статусы, матрица прав
 - [`docs/TZ_auth.md`](docs/TZ_auth.md) — аутентификация и Flow.Auth
+- [`docs/TZ_infra_data_split.md`](docs/TZ_infra_data_split.md) — вынос БД и S3 в отдельный стек данных
 - [`docs/TZ_task_activity_comments.md`](docs/TZ_task_activity_comments.md) — комментарии, журнал изменений, Markdown-редактор, срок задачи
 - [`docs/Struktura_board_task_status.md`](docs/Struktura_board_task_status.md) — структура доменной модели
 - [`docs/Sravnenie_DbContext_podhodov.md`](docs/Sravnenie_DbContext_podhodov.md) — сравнение подходов к DbContext
