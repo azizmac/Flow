@@ -1,4 +1,7 @@
-# Flow
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/Flow.Client/wwwroot/brand/logo-inverse.svg">
+  <img src="src/Flow.Client/wwwroot/brand/logo.svg" alt="Flow" height="44">
+</picture>
 
 [English](README.md) · Русский
 

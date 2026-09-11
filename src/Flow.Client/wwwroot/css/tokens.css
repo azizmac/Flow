@@ -84,6 +84,12 @@
     --accent-soft: rgba(255, 186, 0, 0.14);
     --on-accent: #0C3B2E;
 
+    /* Бренд: знак Flow (Components/BrandMark.razor, комплект — wwwroot/brand/).
+       Коралл сейчас совпадает с --danger, но токен отдельный: семантику ошибки
+       можно перекрасить, не трогая логотип, и наоборот. */
+    --brand-ink: #15181B;
+    --brand-coral: #E2604F;
+
     --sage: #6D9773;
     --tan: #BB8A52;
     --danger: #E2604F;

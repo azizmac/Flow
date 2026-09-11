@@ -343,19 +343,9 @@ input, textarea { font-family: inherit; }
     flex-shrink: 0;
     box-shadow: var(--shadow-sidebar);
 }
-.sb-brand { display: flex; align-items: center; gap: 10px; padding: 0 22px 26px; }
-.sb-mark {
-    width: 34px;
-    height: 34px;
-    border-radius: 9px;
-    background: var(--accent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font: var(--fw-black) 16px var(--font-display);
-    color: var(--on-accent);
-    flex-shrink: 0;
-}
+/* color задаёт верхнюю долю знака (BrandMark рисует её currentColor) — на тёмном сайдбаре светлую. */
+.sb-brand { display: flex; align-items: center; gap: 10px; padding: 0 22px 26px; color: #F2F2EF; }
+.brand-mark { display: block; flex-shrink: 0; }
 .sb-word { font: var(--fw-black) 17px/1 var(--font-display); color: #fff; letter-spacing: -0.3px; }
 .sb-ws {
     display: flex;

@@ -1,0 +1,14 @@
+@* Знак Flow: круг, разрезанный волной. Верхняя доля — currentColor (наследует цвет текста,
+   поэтому знак живёт и на светлом, и на тёмном фоне), нижняя — фирменный коралловый.
+   Полный комплект (лок-ап, монохром, инверсия, favicon) — в wwwroot/brand/. *@
+
+<svg class="brand-mark @Class" width="@Size" height="@Size" viewBox="0 0 96 96"
+     xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flow" focusable="false">
+    <path fill="currentColor" d="M8.05 50C22 30 34 70 48 50C62 30 74 70 87.95 50A40 40 0 0 0 8.05 50Z" />
+    <path fill="var(--brand-coral)" d="M8.05 50C22 30 34 70 48 50C62 30 74 70 87.95 50A40 40 0 0 1 8.05 50Z" />
+</svg>
+
+@code {
+    [Parameter] public int Size { get; set; } = 34;
+    [Parameter] public string? Class { get; set; }
+}
