@@ -37,7 +37,8 @@ services:
     # Тег зафиксирован: публикация образов MinIO CE прекращена в октябре 2025, репозиторий заархивирован
     # в феврале 2026 — latest давно не обновляется. Этот релиз последний с полной веб-консолью.
     # Замена хранилища (кандидат — Garage) решается в ТЗ вложений.
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    # Источник — quay.io: из Docker Hub образы minio/minio уже сняты (pull access denied).
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -57,7 +58,8 @@ services:
       - flow-network
 
   s3-init:
-    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    # Тот же quay.io: в Docker Hub образа больше нет.
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
     depends_on:
       s3:
         condition: service_healthy

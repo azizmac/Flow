@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <!-- Оба стека одной кнопкой. Составная конфигурация запускает вложенные параллельно, порядок
+       не гарантирован — это нормально: сервис, стартовавший раньше базы, дожидается её сам
+       (Startup:DatabaseWaitTimeoutSeconds). Сеть и тома создаёт docker/data/init-env.ps1
+       (или init-env.sh) — один раз перед первым запуском; из терминала обе части делает
+       docker/up.ps1 (docker/up.sh). -->
+  <configuration default="false" name="Flow (full stack)" type="CompoundRunConfigurationType">
+    <toRun name="Flow (data stack)" type="docker-deploy" />
+    <toRun name="Flow (docker compose)" type="docker-deploy" />
+    <method v="2" />
+  </configuration>
+</component>

@@ -51,6 +51,12 @@ Docker with the Compose plugin is the only prerequisite.
 git clone https://github.com/azizmac/Flow.git
 cd Flow
 cp .env.example .env
+sh docker/up.sh                                  # network and volumes, then data and application
+```
+
+What the script does step by step, and its flags, is covered in "The start script" below. On Windows, run `powershell -ExecutionPolicy Bypass -File docker/up.ps1` instead. The same thing by hand:
+
+```bash
 sh docker/data/init-env.sh                       # once: shared network and data volumes
 docker compose -f docker-compose.data.yml up -d  # data: PostgreSQL and S3
 docker compose up -d --build                     # application
@@ -61,6 +67,25 @@ The first build takes a few minutes. Once the containers are up, the client is a
 Services: client :5016, API :8080, authentication :5100, PostgreSQL :5432, S3-compatible storage :9000 with its console on :9001. Ports and the bootstrap user's credentials come from `.env`, which is not tracked in git — the same file feeds both stacks. If a local PostgreSQL already holds port 5432, set `POSTGRES_PORT=5433`. On Windows, run `docker/data/init-env.ps1` instead of the shell script.
 
 Token-signing certificates are generated on first start, and the `flow` and `flow_auth` databases are created by migrations. The two stacks start in any order: a service that comes up before the database waits for it (`Startup:DatabaseWaitTimeoutSeconds`, 60 s by default).
+
+### The start script
+
+`docker/up.sh` (and its Windows twin `docker/up.ps1`) is the same three commands in the right order, because Compose has no `depends_on` across projects and the data stack has to come up separately. Step by step:
+
+1. **`.env`** — copied from `.env.example` if missing. Both stacks read it; without it the compose defaults apply.
+2. **`docker/data/init-env.sh`** — the shared `flow-network` network and the external `flow-postgres-data`, `flow-minio-data` volumes. `DATA_ROOT` puts the volumes on a directory of your choice: `DATA_ROOT=/mnt/flow sh docker/up.sh` (only honoured when the volumes are created).
+3. **Data stack** — `docker compose -f docker-compose.data.yml up -d`: PostgreSQL and S3.
+4. **Application stack** — `docker compose up -d --build`: auth, api, client.
+
+| Flag | What it does |
+|---|---|
+| *none* | brings everything up, rebuilding the application images |
+| `--no-build` (`-NoBuild` in PowerShell) | skips the rebuild — a fast restart on unchanged code |
+| `--help` | the short usage text from the script header |
+
+Every step is idempotent: an existing network, volumes and `.env` are left alone, and running containers are not needlessly recreated. So the same `sh docker/up.sh` both sets the project up from scratch and updates it after a `git pull`.
+
+You don't need the script if the data lives elsewhere: point `POSTGRES_HOST` and `S3_ENDPOINT` at it in `.env` and bring up the application alone — `docker compose up -d --build`. In Rider, the compound `Flow (full stack)` configuration starts both halves.
 
 ### Two stacks, and why
 
