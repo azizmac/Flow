@@ -112,7 +112,7 @@
     {
         <div class="tl-composer">
             <Avatar User="Me" Size="30" />
-            <MarkdownEditor @bind-Value="_draft" Placeholder="Написать комментарий… @@username — упомянуть" MinHeight="96"
+            <MarkdownEditor @bind-Value="_draft" Placeholder="@DraftPlaceholder" MinHeight="96"
                             Busy="_busy" SubmitLabel="Отправить" SubmitHint="отправить" OnSubmit="Send" Id="tl-draft" />
         </div>
     }
@@ -150,6 +150,7 @@
     private string _editText = "";
     private TaskCommentResponse? _deleting;
     private Guid? _highlightId;
+    private const string DraftPlaceholder = "Написать комментарий… @username — упомянуть";
 
     private UserResponse? Me => Users.Find(State.CurrentUserId);
 
