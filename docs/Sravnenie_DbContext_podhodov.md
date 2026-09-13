@@ -1,6 +1,6 @@
 # Сравнение подходов к DbContext: FlowDbContext vs классический EF6-стиль
 
-Повод: пример `ApplicationDbContext` из другого проекта (`DressyBackendLogic`), где `DbContext` написан в более старом стиле. Ниже — что отличается в `Flow.Infrastructure/Persistence/FlowDbContext.cs` и почему.
+Повод: пример `ApplicationDbContext` из стороннего проекта, где `DbContext` написан в более старом стиле. Ниже — что отличается в `Flow.Infrastructure/Persistence/FlowDbContext.cs` и почему.
 
 ## 1. Конструктор
 
