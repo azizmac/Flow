@@ -14,4 +14,7 @@ public static class AuthConstants
 
     /// <summary>Политика авторизации admin-API: Bearer-токен с aud = flow-auth и scope auth:admin.</summary>
     public const string AdminPolicy = "AuthAdmin";
+
+    /// <summary>Политика страниц с cookie-схемой (например, смена пароля в общей с Api программе).</summary>
+    public const string CookiePolicy = "AuthCookie";
 }

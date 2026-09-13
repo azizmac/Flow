@@ -20,8 +20,8 @@ in-process, без admin-API и client_credentials между своими же 
   через client_credentials. Токен-модель и JWT-валидация в этом ТЗ не пересматриваются.
 - **Cookie-аутентификация браузера не делается.** Вопрос отложен: куки требуют same-origin и не закрывают
   задачу машинных клиентов, а OpenIddict уже есть.
-- **Две БД остаются**: `flow` и `flow_auth` в том же Postgres, у каждого контекста свои миграции.
-  Единая БД со схемами — возможный следующий шаг, вне этого ТЗ.
+- **Одна БД `flow`, у модулей свои схемы**: таблицы ядра — в `public`, Auth-модуля (Identity и OpenIddict) —
+  в схеме `auth`; у каждого контекста своя история миграций. База `flow_auth` больше не используется.
 - **`Flow.Auth` становится Razor Class Library** (`src/Flow.Auth`) и подключается к хосту одним вызовом
   `AddAuthModule(...)`; страницы, контроллеры и статические файлы модуля работают из-под хоста.
 - **Учётные записи — in-process.** `IAccountService` реализуется в Auth-модуле поверх `UserManager`;
@@ -38,7 +38,7 @@ in-process, без admin-API и client_credentials между своими же 
 
 ```
 Flow.Api (единственный backend-процесс)
- ├─ Flow.Auth (RCL): Identity + BCrypt, OpenIddict server, /connect/*, /account/*, AuthDbContext (flow_auth)
+ ├─ Flow.Auth (RCL): Identity + BCrypt, OpenIddict server, /connect/*, /account/*, AuthDbContext (схема auth)
  ├─ ядро: Domain/Application/Infrastructure (Boards, Tasks, Users; flow)
  └─ Flow.Shared (DTO для клиента)
 Flow.Client (Blazor WASM) → один адрес backend'а
@@ -64,7 +64,7 @@ Docker: api + client (+ data stack без изменений)
 |---|---|---|
 | 0 | Документ и baseline | build + все тесты зелёные |
 | 1 | Auth: `AddAuthModule`, тонкий `Program.cs` (поведение не меняется) | build + тесты |
-| 2 | RCL + подключение к Flow.Api + compose/CI/тесты + `AuthPostgres` | логин/OIDC из-под хоста, docker api+client |
+| 2 | RCL + подключение к Flow.Api, таблицы Auth — в схеме `auth`, compose/CI/тесты | логин/OIDC из-под хоста, docker api+client |
 | 3 | In-process учётки, удаление admin-API и client_credentials-обвязки | `POST /users` без HTTP, вход новым пользователем |
 | 4 | Локальная валидация токенов (`OpenIddict.Validation.UseLocalServer`), отказ от JwtBearer+discovery | уходит `Auth:BaseUrl`, тесты auth |
 | 5 | Чистка дублей, `AGENTS.md`, README, `.run` | `docker/up.sh` с нуля, первый вход |

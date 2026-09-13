@@ -144,11 +144,7 @@ public sealed class AccountsController(UserManager<ApplicationUser> users) : Con
     private static string Normalize(string value) => value.Trim().ToLowerInvariant();
 
     private static AccountResponse ToResponse(ApplicationUser user) =>
-        new(user.Id, user.UserName!, user.Email!, IsDisabled(user), user.MustChangePassword);
-
-    /// <summary>Постоянная блокировка (disable) отличается от временной (5 неудачных попыток) горизонтом LockoutEnd.</summary>
-    internal static bool IsDisabled(ApplicationUser user) =>
-        user.LockoutEnd is { } end && end > DateTimeOffset.UtcNow.AddYears(100);
+        new(user.Id, user.UserName!, user.Email!, LockoutPolicy.IsDisabled(user), user.MustChangePassword);
 
     /// <summary>Дубликаты username/email → 409 (Flow.Api транслирует в UsernameTaken/EmailTaken), остальное → 400.</summary>
     private IActionResult ToError(IdentityResult result)

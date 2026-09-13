@@ -12,7 +12,6 @@ set -eu
 NAME=${1:-}
 CONFIRM=${2:-}
 DB=${POSTGRES_DB:-flow}
-AUTH_DB=${AUTH_DB:-flow_auth}
 
 if [ -z "$NAME" ]; then
     echo "укажите каталог бэкапа. Доступные:"
@@ -24,7 +23,7 @@ SRC=/backups/$NAME
 [ -d "$SRC" ] || { echo "нет каталога $SRC"; exit 1; }
 
 if [ "$CONFIRM" != "--yes" ]; then
-    echo "восстановление из $SRC перезапишет текущие данные баз $DB и $AUTH_DB."
+    echo "восстановление из $SRC перезапишет текущие данные базы $DB."
     echo "повторите с флагом --yes, если это то, что нужно."
     exit 1
 fi
@@ -45,7 +44,6 @@ restore_db() {
 
 echo "восстановление из $SRC"
 restore_db "$DB"
-restore_db "$AUTH_DB"
 
 if [ -f "$SRC/minio-data.tar.gz" ] && [ -d /minio-data ]; then
     rm -rf /minio-data/..?* /minio-data/.[!.]* /minio-data/* 2>/dev/null || true

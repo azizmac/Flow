@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flow.Auth.Data;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -16,6 +17,7 @@ namespace Flow.Auth.Controllers;
 /// а здесь решается, кто входит и какие claims попадут в токены. Роль и статус workspace сюда намеренно не
 /// попадают — их Flow.Api читает из своей БД на каждую команду (см. docs/TZ_auth.md).
 /// </summary>
+[AllowAnonymous]
 public sealed class AuthorizationController(
     UserManager<ApplicationUser> users,
     IOpenIddictApplicationManager applications,

@@ -15,9 +15,10 @@ using Xunit;
 namespace Flow.Api.Tests;
 
 /// <summary>
-/// Хост Flow.Api (WebApplicationFactory) на Postgres из Testcontainers: при старте сам применяет миграции и сеет
-/// bootstrap-профиль — тот же путь, что в Docker. Flow.Auth не поднимается: JwtBearer переключён на локальный
-/// симметричный ключ (токены выпускает <see cref="CreateToken"/>), IAccountService → FakeAccountService. Требует Docker.
+/// Хост Flow.Api (WebApplicationFactory) на Postgres из Testcontainers: при старте сам применяет миграции обоих
+/// контекстов (ядро — public, Auth-модуль — схема auth) и сеет bootstrap-профиль — тот же путь, что в Docker.
+/// Проверка токенов переключена на локальный симметричный ключ (токены выпускает <see cref="CreateToken"/>),
+/// IAccountService → FakeAccountService. Требует Docker.
 /// </summary>
 public sealed class ApiFixture : IAsyncLifetime
 {
@@ -42,6 +43,7 @@ public sealed class ApiFixture : IAsyncLifetime
             builder.UseSetting("ConnectionStrings:Postgres", _container.GetConnectionString());
             builder.UseSetting("Auth:BaseUrl", Issuer);
             builder.UseSetting("Auth:Issuer", Issuer);
+            builder.UseSetting("Auth:UseEphemeralKeys", "true");
             builder.UseSetting("Auth:ApiClient:Secret", "unused");
 
             builder.ConfigureTestServices(services =>

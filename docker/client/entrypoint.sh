@@ -1,10 +1,10 @@
 #!/bin/sh
 # Пишет wwwroot/appsettings.json из env при старте контейнера: Blazor читает его в браузере,
-# поэтому адреса Flow.Api и Flow.Auth должны быть теми, что видит браузер (localhost:…), а не именами сервисов compose.
+# поэтому адреса Api и Auth-модуля должны быть теми, что видит браузер (localhost:…), а не именами сервисов compose.
 set -eu
 
 API_BASE_URL="${API_BASE_URL:-http://localhost:8080}"
-AUTH_BASE_URL="${AUTH_BASE_URL:-http://localhost:5100}"
+AUTH_BASE_URL="${AUTH_BASE_URL:-$API_BASE_URL}"
 
 cat > /usr/share/nginx/html/appsettings.json <<EOF
 {

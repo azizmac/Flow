@@ -10,9 +10,10 @@ using Xunit;
 namespace Flow.Auth.Tests;
 
 /// <summary>
-/// Один Postgres-контейнер и один хост Flow.Auth (WebApplicationFactory) на всю коллекцию: при старте хост сам
-/// применяет миграции, сеет клиентов и bootstrap-пользователя — то есть проверяется тот же путь, что и в Docker.
-/// Ключи — эфемерные (Auth:UseEphemeralKeys), чтобы не трогать хранилище сертификатов. Требует Docker.
+/// Один Postgres-контейнер и один хост Flow.Api с Auth-модулем (WebApplicationFactory) на всю коллекцию: при старте
+/// хост сам применяет миграции обоих контекстов (таблицы ядра — в public, Auth-модуля — в схеме auth) и сеет клиентов
+/// и bootstrap-пользователя — тот же путь, что и в Docker. Ключи — эфемерные (Auth:UseEphemeralKeys), чтобы не трогать
+/// хранилище сертификатов. Требует Docker.
 /// </summary>
 public sealed class AuthFixture : IAsyncLifetime
 {
@@ -22,9 +23,9 @@ public sealed class AuthFixture : IAsyncLifetime
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
 
-    public WebApplicationFactory<Program> Factory { get; private set; } = null!;
+    private WebApplicationFactory<Program> Factory { get; set; } = null!;
 
-    public IServiceProvider Services => Factory.Services;
+    private IServiceProvider Services => Factory.Services;
 
     public async Task InitializeAsync()
     {
@@ -33,6 +34,7 @@ public sealed class AuthFixture : IAsyncLifetime
         Factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseSetting("ConnectionStrings:Postgres", _container.GetConnectionString());
+            builder.UseSetting("Auth:BaseUrl", "http://localhost");
             builder.UseSetting("Auth:Issuer", "http://localhost");
             builder.UseSetting("Auth:UseEphemeralKeys", "true");
             builder.UseSetting("Auth:ApiClient:Secret", ApiClientSecret);

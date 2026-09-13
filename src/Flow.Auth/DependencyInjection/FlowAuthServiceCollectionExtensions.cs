@@ -21,8 +21,8 @@ public static class FlowAuthServiceCollectionExtensions
 {
     /// <summary>
     /// Регистрирует Auth-модуль: Identity + BCrypt, cookie-схему, OpenIddict (server + validation для admin-API),
-    /// AuthDbContext на строке подключения "Postgres", сидеры, DataProtection и кодировщик Razor.
-    /// Использование в Flow.Auth/Program.cs.
+    /// AuthDbContext на строке подключения "AuthPostgres", сидеры, DataProtection и кодировщик Razor.
+    /// Использование в Flow.Api/Program.cs.
     /// </summary>
     public static IServiceCollection AddAuthModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
@@ -31,13 +31,14 @@ public static class FlowAuthServiceCollectionExtensions
         services.Configure<AuthOptions>(authSection);
         services.Configure<BootstrapOptions>(configuration.GetSection(BootstrapOptions.SectionName));
 
-        // ---- БД: Identity + OpenIddict в одной базе flow_auth ----
+        // ---- БД: Identity + OpenIddict в схеме auth общей базы flow ----
         var connectionString = configuration.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("Connection string \"Postgres\" is not configured.");
 
         services.AddDbContext<AuthDbContext>(options =>
         {
-            options.UseNpgsql(connectionString);
+            options.UseNpgsql(connectionString, npgsql =>
+                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "auth"));
             options.UseOpenIddict();
         });
 
@@ -127,6 +128,10 @@ public static class FlowAuthServiceCollectionExtensions
                 .AddAuthenticationSchemes(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
                 .RequireAuthenticatedUser()
                 .RequireAssertion(context => context.User.HasScope(AuthConstants.AdminScope)));
+
+            options.AddPolicy(AuthConstants.CookiePolicy, policy => policy
+                .AddAuthenticationSchemes(IdentityConstants.ApplicationScheme)
+                .RequireAuthenticatedUser());
         });
 
         // Cookie, antiforgery и TempData подписываются ключами Data Protection: в контейнере их надо пережить рестарт.

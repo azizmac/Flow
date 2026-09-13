@@ -1,5 +1,6 @@
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-USER $APP_UID
+# Без USER $APP_UID: Auth-модуль пишет сертификаты (/certs) и ключи Data Protection (/keys) в volumes,
+# которые Docker создаёт от root. При переходе на non-root нужно chown этих каталогов.
 WORKDIR /app
 EXPOSE 8080
 
