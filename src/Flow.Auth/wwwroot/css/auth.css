@@ -1,4 +1,4 @@
-/* Страница входа Flow.Auth. Копия нужных DRESSY-токенов из Flow.Client/wwwroot/css/tokens.css —
+/* Страница входа Flow.Auth. Копия нужных токенов из Flow.Client/wwwroot/css/tokens.css —
    сервисы не ссылаются друг на друга, поэтому палитра продублирована. Менять вместе с клиентом. */
 
 :root {

@@ -1,7 +1,7 @@
 /* ════════════════════════════════════════════════════════════════════
    Flow — app shell + компоненты.
    Источник: Flow MVP.dc.html / Sidebar.dc.html + Profile.dc.html (Claude Design handoff, артефакт «Flow CRM»)
-   + компоненты DRESSY (Button, IconButton, Input, Tag) в CSS-виде.
+   + базовые контролы (Button, IconButton, Input, Tag) в CSS-виде.
    Motion-правила: только transform/opacity/цвета, hover под pointer:fine,
    press-feedback scale(.97), reduced-motion отключает transform.
    ════════════════════════════════════════════════════════════════════ */
@@ -190,7 +190,7 @@ input, textarea { font-family: inherit; }
 .ds-icon { display: inline-flex; flex-shrink: 0; vertical-align: middle; }
 .ds-icon svg { display: block; }
 
-/* ---------- DRESSY Button (pill) ---------- */
+/* ---------- Button (pill) ---------- */
 .ds-btn {
     display: inline-flex;
     align-items: center;
@@ -222,7 +222,7 @@ input, textarea { font-family: inherit; }
 .ds-btn:active:not(:disabled) { transform: scale(0.97); }
 .ds-btn .ds-icon { flex: none; }
 
-/* ---------- DRESSY IconButton (circle) ---------- */
+/* ---------- IconButton (circle) ---------- */
 .ds-iconbtn {
     display: inline-flex;
     align-items: center;
@@ -243,7 +243,7 @@ input, textarea { font-family: inherit; }
 .ds-iconbtn:active { transform: scale(0.94); }
 .ds-iconbtn:disabled { color: var(--text-disabled); cursor: not-allowed; }
 
-/* ---------- DRESSY Input (underline field) ---------- */
+/* ---------- Input (underline field) ---------- */
 .ds-field { display: flex; flex-direction: column; gap: var(--space-3); width: 100%; }
 .ds-field-label {
     font-family: var(--font-display);
@@ -261,7 +261,7 @@ input, textarea { font-family: inherit; }
     position: relative;
 }
 .ds-field:focus-within .ds-field-row { border-bottom-color: var(--text-primary); }
-/* Линия под полем «наливается» из центра — DRESSY-подчёркивание, а не мгновенная смена цвета. */
+/* Линия под полем «наливается» из центра, а не меняет цвет рывком. */
 .ds-field-row::after {
     content: "";
     position: absolute;
@@ -305,7 +305,7 @@ input, textarea { font-family: inherit; }
 }
 @keyframes err-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
-/* ---------- DRESSY Tag (pill) ---------- */
+/* ---------- Tag (pill) ---------- */
 .ds-tag {
     display: inline-flex;
     align-items: center;

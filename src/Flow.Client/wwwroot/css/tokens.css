@@ -1,17 +1,17 @@
 /* ════════════════════════════════════════════════════════════════════
    Flow — design tokens.
-   База: DRESSY Design System (Inter 500/600/900, шаг отступов 5px,
-   pill-контролы 34/50px, радиусы 5/10/25). Палитра — Flow (тёмно-зелёная
-   с янтарным акцентом) поверх семантических алиасов DRESSY.
+   База: Inter 500/600/900, шаг отступов 5px, pill-контролы 34/50px,
+   радиусы 5/10/25. Палитра — тёмно-зелёная с янтарным акцентом поверх
+   семантических алиасов.
    ════════════════════════════════════════════════════════════════════ */
 
 :root {
-    /* ── DRESSY · fonts ── */
+    /* ── fonts ── */
     --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-text: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-    /* ── DRESSY · weights ── */
+    /* ── weights ── */
     --fw-regular: 400;
     --fw-medium: 500;
     --fw-semibold: 600;
@@ -19,7 +19,7 @@
     --fw-extrabold: 800;
     --fw-black: 900;
 
-    /* ── DRESSY · type scale ── */
+    /* ── type scale ── */
     --text-display: 40px;
     --text-h1: 40px;
     --text-h2: 25px;
@@ -40,7 +40,7 @@
     --tracking-label: 0.37px;
     --tracking-wide: 0.08em;
 
-    /* ── DRESSY · spacing (base 5px) ── */
+    /* ── spacing (base 5px) ── */
     --space-1: 5px;
     --space-2: 10px;
     --space-3: 15px;
@@ -50,7 +50,7 @@
     --space-8: 40px;
     --space-10: 50px;
 
-    /* ── DRESSY · radii ── */
+    /* ── radii ── */
     --radius-pill: 999px;
     --radius-card: 25px;
     --radius-sheet: 30px;
@@ -64,7 +64,7 @@
     --r-lg: 12px;
     --r-xl: 16px;
 
-    /* ── DRESSY · control sizes ── */
+    /* ── control sizes ── */
     --control-h-sm: 34px;
     --control-h-md: 40px;   /* Flow: компактный md для topbar (hint-size из макета) */
     --control-h: 50px;
@@ -106,7 +106,7 @@
     --border-strong: rgba(255, 255, 255, 0.22);
     --border-subtle: rgba(255, 255, 255, 0.06);
 
-    /* ── DRESSY semantic aliases → Flow ── */
+    /* ── семантические алиасы → Flow ── */
     --bg: var(--bg-content);
     --surface-panel: var(--surface);
     --error: var(--danger);
