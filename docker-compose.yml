@@ -31,9 +31,8 @@ services:
     # Сервис сам дожидается БД при старте (Startup:DatabaseWaitTimeoutSeconds), иначе перезапускается.
     environment:
       <<: *bootstrap
-      # Auth-модуль в составе Api: discovery/JWKS по внутреннему адресу (IssuerRewritingConfigurationRetriever),
-      # issuer в токенах — внешний (Auth__Issuer), он же виден браузеру.
-      Auth__BaseUrl: http://localhost:8080
+      # Внешний issuer токенов и OIDC discovery — адрес backend'а, который видит браузер.
+      # Api валидирует токены локально через OpenIddict и внутренний URL для discovery/JWKS не использует.
       Auth__Issuer: ${AUTH_ISSUER:-http://localhost:8080}
       Auth__Client__RedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/login-callback
       Auth__Client__PostLogoutRedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/logout-callback

@@ -4,10 +4,7 @@ using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
 using Flow.Auth.DependencyInjection;
 using Flow.Infrastructure.DependencyInjection;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.IdentityModel.Protocols;
-using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,33 +13,6 @@ builder.Services.AddFlowApplication();
 builder.Services.AddAuthModule(builder.Configuration, builder.Environment);
 builder.Services.AddControllers(options => options.Filters.Add<ApiExceptionFilter>());
 builder.Services.AddRazorPages();
-
-// ---- Аутентификация: Bearer JWT от Auth-модуля (docs/TZ_auth.md) ----
-// Discovery/JWKS — по Auth:BaseUrl (в Docker внутренний адрес), issuer в токене — Auth:Issuer (внешний).
-var jwt = builder.Configuration.GetSection(JwtAuthOptions.SectionName).Get<JwtAuthOptions>() ?? new JwtAuthOptions();
-if (string.IsNullOrWhiteSpace(jwt.BaseUrl))
-    throw new InvalidOperationException("Auth:BaseUrl is not configured — Flow.Api cannot validate tokens without the Auth module.");
-
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        var issuer = string.IsNullOrWhiteSpace(jwt.Issuer) ? jwt.BaseUrl : jwt.Issuer;
-        var requireHttps = jwt.RequireHttpsMetadata ?? !builder.Environment.IsDevelopment();
-
-        options.Authority = jwt.BaseUrl;
-        options.Audience = JwtAuthOptions.Audience;
-        options.RequireHttpsMetadata = requireHttps;
-        // Discovery и JWKS — по внутреннему адресу (Docker: http://localhost:8080), даже если issuer внешний.
-        options.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
-            jwt.BaseUrl.TrimEnd('/') + "/.well-known/openid-configuration",
-            new IssuerRewritingConfigurationRetriever(issuer, jwt.BaseUrl),
-            new HttpDocumentRetriever { RequireHttps = requireHttps });
-        // Оставляем имена claims как в токене (sub, name, email), без переписывания в схемы XML.
-        options.MapInboundClaims = false;
-        options.TokenValidationParameters.ValidIssuer = issuer;
-        options.TokenValidationParameters.NameClaimType = "name";
-    });
 
 // Закрыто всё; исключения — явные [AllowAnonymous] (health, OIDC-эндпоинты, страница входа).
 builder.Services.AddAuthorization(options =>

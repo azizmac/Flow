@@ -129,7 +129,7 @@ public sealed class AuthorizationController(
 
         if (request.IsClientCredentialsGrantType())
         {
-            // client_id/client_secret уже проверены OpenIddict — сюда попадает только flow-api.
+            // client_id/client_secret уже проверены OpenIddict; этот grant оставлен для будущих машинных клиентов.
             var application = await applications.FindByClientIdAsync(request.ClientId!)
                 ?? throw new InvalidOperationException("The application cannot be found.");
 

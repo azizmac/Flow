@@ -7,12 +7,8 @@ using Flow.Auth.Security;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.WebEncoders;
-using OpenIddict.Abstractions;
+using OpenIddict.Validation.AspNetCore;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace Flow.Auth.DependencyInjection;
@@ -20,9 +16,9 @@ namespace Flow.Auth.DependencyInjection;
 public static class FlowAuthServiceCollectionExtensions
 {
     /// <summary>
-    /// Регистрирует Auth-модуль: Identity + BCrypt, cookie-схему, OpenIddict server, AuthDbContext
-    /// на строке подключения "Postgres" (схема auth), публичный контракт IAccountService, сидеры,
-    /// DataProtection и кодировщик Razor. Использование в Flow.Api/Program.cs.
+    /// Регистрирует Auth-модуль: Identity + BCrypt, cookie-схему, OpenIddict server и локальную validation,
+    /// AuthDbContext на строке подключения "Postgres" (схема auth), публичный контракт IAccountService,
+    /// сидеры, DataProtection и кодировщик Razor. Использование в Flow.Api/Program.cs.
     /// </summary>
     public static IServiceCollection AddAuthModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
@@ -71,7 +67,11 @@ public static class FlowAuthServiceCollectionExtensions
 
         // Cookie нужна только между /account/login и /connect/authorize.
         services
-            .AddAuthentication(IdentityConstants.ApplicationScheme)
+            .AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+            })
             .AddCookie(IdentityConstants.ApplicationScheme, options =>
             {
                 options.Cookie.Name = "flow.auth";
@@ -100,7 +100,7 @@ public static class FlowAuthServiceCollectionExtensions
 
                 options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.OfflineAccess, AuthConstants.ApiScope);
 
-                // Access token — подписанный JWT без шифрования: Flow.Api валидирует его штатным JwtBearer по JWKS.
+                // Access token — подписанный JWT без шифрования; локальная Validation использует ключи server напрямую.
                 options.DisableAccessTokenEncryption();
                 options.SetAccessTokenLifetime(TimeSpan.FromMinutes(auth.AccessTokenLifetimeMinutes));
                 options.SetRefreshTokenLifetime(TimeSpan.FromDays(auth.RefreshTokenLifetimeDays));
@@ -115,6 +115,14 @@ public static class FlowAuthServiceCollectionExtensions
                 // Локальный Docker ходит по http; за TLS-терминатором флаг должен быть выключен.
                 if (environment.IsDevelopment() || auth.AllowInsecureHttp)
                     aspnet.DisableTransportSecurityRequirement();
+            })
+            .AddValidation(options =>
+            {
+                // Server и resource server живут в одном процессе: ключи и issuer берутся напрямую
+                // из OpenIddict server, без HTTP-запроса к discovery/JWKS собственного приложения.
+                options.UseLocalServer();
+                options.UseAspNetCore();
+                options.AddAudiences(AuthConstants.ApiResource);
             });
 
         services.AddAuthorization(options =>

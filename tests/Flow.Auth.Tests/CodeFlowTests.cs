@@ -1,8 +1,12 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Flow.Application.Features.Bootstrap;
 using Flow.Auth.Contracts;
+using Flow.Shared.Contracts.Users;
+using MediatR;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,6 +22,16 @@ public sealed class CodeFlowTests(AuthFixture auth)
     public async Task CodeFlow_Should_Issue_Jwt_For_FlowApi_And_Refresh()
     {
         var account = await auth.CreateAccountAsync("code-user");
+        await using (var scope = auth.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new SeedBootstrapUserCommand(
+                account.Id,
+                account.UserName!,
+                account.Email!,
+                "Code",
+                "User"));
+        }
+
         using var client = auth.CreateClient();
 
         var tokens = await AuthorizeAsync(client, "code-user", "correct horse battery");
@@ -33,6 +47,16 @@ public sealed class CodeFlowTests(AuthFixture auth)
         var idToken = Jwt.Payload(tokens.GetProperty("id_token").GetString()!);
         Assert.Equal("code-user", idToken.GetProperty("name").GetString());
         Assert.Equal("flow-client", idToken.GetProperty("aud").GetString());
+
+        // Новый клиент не имеет login-cookie: API может принять запрос только через production Validation.UseLocalServer.
+        using var api = auth.CreateApiClient();
+        using var withoutToken = await api.GetAsync("/users/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, withoutToken.StatusCode);
+        Assert.Contains("Bearer", withoutToken.Headers.WwwAuthenticate.ToString());
+
+        api.DefaultRequestHeaders.Authorization = new("Bearer", tokens.GetProperty("access_token").GetString());
+        var me = await api.GetFromJsonAsync<UserResponse>("/users/me");
+        Assert.Equal(account.Id, me!.Id);
 
         var refreshed = await RefreshAsync(client, tokens.GetProperty("refresh_token").GetString()!);
         Assert.Equal(HttpStatusCode.OK, refreshed.Status);
@@ -53,6 +77,30 @@ public sealed class CodeFlowTests(AuthFixture auth)
 
         Assert.Equal(HttpStatusCode.BadRequest, refreshed.Status);
         Assert.Equal("invalid_grant", refreshed.Body.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Token_Without_FlowApi_Audience_Should_Be_Rejected_By_Api()
+    {
+        var account = await auth.CreateAccountAsync("no-api-audience");
+        await using (var scope = auth.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new SeedBootstrapUserCommand(
+                account.Id,
+                account.UserName!,
+                account.Email!,
+                "No Api",
+                "Audience"));
+        }
+
+        using var login = auth.CreateClient();
+        var tokens = await AuthorizeAsync(login, account.UserName!, "correct horse battery", "openid profile email");
+
+        using var api = auth.CreateApiClient();
+        api.DefaultRequestHeaders.Authorization = new("Bearer", tokens.GetProperty("access_token").GetString());
+        using var response = await api.GetAsync("/users/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
@@ -77,7 +125,7 @@ public sealed class CodeFlowTests(AuthFixture auth)
     }
 
     /// <summary>authorize → login → authorize → redirect_uri?code= → token. Возвращает JSON ответа token endpoint.</summary>
-    private static async Task<JsonElement> AuthorizeAsync(HttpClient client, string login, string password)
+    private static async Task<JsonElement> AuthorizeAsync(HttpClient client, string login, string password, string scope = Scope)
     {
         var verifier = Base64Url(RandomNumberGenerator.GetBytes(32));
         var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
@@ -87,7 +135,7 @@ public sealed class CodeFlowTests(AuthFixture auth)
             ["client_id"] = "flow-client",
             ["redirect_uri"] = AuthFixture.ClientRedirectUri,
             ["response_type"] = "code",
-            ["scope"] = Scope,
+            ["scope"] = scope,
             ["state"] = "s1",
             ["code_challenge"] = challenge,
             ["code_challenge_method"] = "S256"

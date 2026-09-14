@@ -20,9 +20,9 @@ public sealed class AuthFixture : IAsyncLifetime
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
 
-    public WebApplicationFactory<Program> Factory { get; private set; } = null!;
+    private WebApplicationFactory<Program> Factory { get; set; } = null!;
 
-    public IServiceProvider Services => Factory.Services;
+    private IServiceProvider Services => Factory.Services;
 
     public async Task InitializeAsync()
     {
@@ -31,7 +31,6 @@ public sealed class AuthFixture : IAsyncLifetime
         Factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseSetting("ConnectionStrings:Postgres", _container.GetConnectionString());
-            builder.UseSetting("Auth:BaseUrl", "http://localhost");
             builder.UseSetting("Auth:Issuer", "http://localhost");
             builder.UseSetting("Auth:UseEphemeralKeys", "true");
             builder.UseSetting("Auth:Client:RedirectUris:0", ClientRedirectUri);
@@ -53,6 +52,13 @@ public sealed class AuthFixture : IAsyncLifetime
     {
         AllowAutoRedirect = false,
         HandleCookies = true
+    });
+
+    /// <summary>Клиент API без cookie: аутентификация возможна только по Bearer-токену.</summary>
+    public HttpClient CreateApiClient() => Factory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        AllowAutoRedirect = false,
+        HandleCookies = false
     });
 
     /// <summary>

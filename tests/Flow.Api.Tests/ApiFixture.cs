@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using Flow.Application.Tests.Fakes;
 using Flow.Auth.Contracts;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -17,7 +18,8 @@ namespace Flow.Api.Tests;
 /// <summary>
 /// Хост Flow.Api (WebApplicationFactory) на Postgres из Testcontainers: при старте сам применяет миграции обоих
 /// контекстов (ядро — public, Auth-модуль — схема auth) и сеет bootstrap-профиль — тот же путь, что в Docker.
-/// Проверка токенов переключена на локальный симметричный ключ (токены выпускает <see cref="CreateToken"/>),
+/// Production OpenIddict Validation заменена тестовой JwtBearer-схемой с локальным симметричным ключом
+/// (токены выпускает <see cref="CreateToken"/>); настоящая локальная validation покрыта Flow.Auth.Tests.
 /// IAccountService → FakeAccountService. Требует Docker.
 /// </summary>
 public sealed class ApiFixture : IAsyncLifetime
@@ -26,7 +28,7 @@ public sealed class ApiFixture : IAsyncLifetime
     public static readonly Guid BootstrapId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
     private static readonly SymmetricSecurityKey SigningKey =
-        new(Encoding.UTF8.GetBytes("flow-api-tests-signing-key-must-be-at-least-32-bytes"));
+        new("flow-api-tests-signing-key-must-be-at-least-32-bytes"u8.ToArray());
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
 
@@ -41,7 +43,6 @@ public sealed class ApiFixture : IAsyncLifetime
         Factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseSetting("ConnectionStrings:Postgres", _container.GetConnectionString());
-            builder.UseSetting("Auth:BaseUrl", Issuer);
             builder.UseSetting("Auth:Issuer", Issuer);
             builder.UseSetting("Auth:UseEphemeralKeys", "true");
 
@@ -49,16 +50,21 @@ public sealed class ApiFixture : IAsyncLifetime
             {
                 services.AddSingleton<IAccountService>(Accounts);
 
-                // Без discovery: проверяем подпись локальным ключом, issuer и audience — как у настоящего Flow.Auth.
-                services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+                services
+                    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                    .AddJwtBearer(options =>
+                    {
+                        options.MapInboundClaims = false;
+                        options.TokenValidationParameters.IssuerSigningKey = SigningKey;
+                        options.TokenValidationParameters.ValidIssuer = Issuer;
+                        options.TokenValidationParameters.ValidAudience = "flow-api";
+                    });
+
+                services.PostConfigure<AuthenticationOptions>(options =>
                 {
-                    options.Authority = null;
-                    options.MetadataAddress = null;
-                    options.ConfigurationManager = null;
-                    options.RequireHttpsMetadata = false;
-                    options.TokenValidationParameters.IssuerSigningKey = SigningKey;
-                    options.TokenValidationParameters.ValidIssuer = Issuer;
-                    options.TokenValidationParameters.ValidAudience = "flow-api";
+                    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+                    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
                 });
             });
         });
@@ -88,6 +94,7 @@ public sealed class ApiFixture : IAsyncLifetime
             Issuer = issuer,
             Audience = audience,
             Expires = DateTime.UtcNow.AddMinutes(10),
+            TokenType = "at+jwt",
             Subject = new ClaimsIdentity([new Claim("sub", subject.ToString()), new Claim("name", "test")]),
             SigningCredentials = new SigningCredentials(SigningKey, SecurityAlgorithms.HmacSha256)
         });
