@@ -5,6 +5,7 @@
     <Project Path="src/Flow.Infrastructure/Flow.Infrastructure.csproj" />
     <Project Path="src/Flow.Api/Flow.Api.csproj" />
     <Project Path="src/Flow.Auth/Flow.Auth.csproj" />
+    <Project Path="src/Flow.Auth.Contracts/Flow.Auth.Contracts.csproj" />
     <Project Path="src/Flow.Client/Flow.Client.csproj" />
     <Project Path="src/Flow.Shared/Flow.Shared.csproj" />
   </Folder>

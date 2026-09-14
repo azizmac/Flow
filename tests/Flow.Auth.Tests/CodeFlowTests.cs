@@ -2,7 +2,9 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Flow.Auth.Contracts;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Flow.Auth.Tests;
 
@@ -44,9 +46,8 @@ public sealed class CodeFlowTests(AuthFixture auth)
         using var client = auth.CreateClient();
         var tokens = await AuthorizeAsync(client, "refresh-disabled", "correct horse battery");
 
-        using var admin = await auth.CreateAdminClientAsync();
-        using var disable = await admin.PostAsync($"/accounts/{account.Id}/disable", null);
-        Assert.Equal(HttpStatusCode.NoContent, disable.StatusCode);
+        await using var scope = auth.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IAccountService>().DisableAsync(account.Id, CancellationToken.None);
 
         var refreshed = await RefreshAsync(client, tokens.GetProperty("refresh_token").GetString()!);
 

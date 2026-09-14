@@ -6,8 +6,8 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 namespace Flow.Auth.Security;
 
 /// <summary>
-/// Регистрирует scope'ы и двух клиентов OpenIddict из конфигурации. Идемпотентен: существующие записи
-/// обновляются, поэтому смена redirect URI или секрета в конфиге подхватывается перезапуском.
+/// Регистрирует scope'ы и клиента OpenIddict из конфигурации. Идемпотентен: существующие записи
+/// обновляются, поэтому смена redirect URI в конфиге подхватывается перезапуском.
 /// </summary>
 public sealed class ClientSeeder(
     IOpenIddictApplicationManager applications,
@@ -15,12 +15,15 @@ public sealed class ClientSeeder(
     IOptions<AuthOptions> options,
     ILogger<ClientSeeder> logger)
 {
+    private const string LegacyApiClientId = "flow-api";
+    private const string LegacyAdminScope = "auth:admin";
+
     public async Task SeedAsync(CancellationToken cancellationToken)
     {
         var auth = options.Value;
 
+        await RemoveLegacyAdminClientAsync(cancellationToken);
         await UpsertScopeAsync(AuthConstants.ApiScope, "Flow API", AuthConstants.ApiResource, cancellationToken);
-        await UpsertScopeAsync(AuthConstants.AdminScope, "Flow.Auth admin API", AuthConstants.AuthResource, cancellationToken);
 
         var client = new OpenIddictApplicationDescriptor
         {
@@ -51,25 +54,23 @@ public sealed class ClientSeeder(
             client.PostLogoutRedirectUris.Add(new Uri(uri, UriKind.Absolute));
 
         await UpsertApplicationAsync(client, cancellationToken);
+    }
 
-        if (string.IsNullOrWhiteSpace(auth.ApiClient.Secret))
-            throw new InvalidOperationException("Auth:ApiClient:Secret is not configured — Flow.Api cannot call the admin API without it.");
-
-        var api = new OpenIddictApplicationDescriptor
+    private async Task RemoveLegacyAdminClientAsync(CancellationToken cancellationToken)
+    {
+        var application = await applications.FindByClientIdAsync(LegacyApiClientId, cancellationToken);
+        if (application is not null)
         {
-            ClientId = auth.ApiClient.ClientId,
-            ClientSecret = auth.ApiClient.Secret,
-            ClientType = ClientTypes.Confidential,
-            DisplayName = "Flow.Api",
-            Permissions =
-            {
-                Permissions.Endpoints.Token,
-                Permissions.GrantTypes.ClientCredentials,
-                Permissions.Prefixes.Scope + AuthConstants.AdminScope
-            }
-        };
+            await applications.DeleteAsync(application, cancellationToken);
+            logger.LogInformation("Legacy OpenIddict client {ClientId} deleted", LegacyApiClientId);
+        }
 
-        await UpsertApplicationAsync(api, cancellationToken);
+        var scope = await scopes.FindByNameAsync(LegacyAdminScope, cancellationToken);
+        if (scope is not null)
+        {
+            await scopes.DeleteAsync(scope, cancellationToken);
+            logger.LogInformation("Legacy OpenIddict scope {Scope} deleted", LegacyAdminScope);
+        }
     }
 
     private async Task UpsertApplicationAsync(OpenIddictApplicationDescriptor descriptor, CancellationToken cancellationToken)

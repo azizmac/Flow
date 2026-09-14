@@ -1,5 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Unicode;
+using Flow.Auth.Contracts;
 using Flow.Auth.Data;
 using Flow.Auth.Options;
 using Flow.Auth.Security;
@@ -12,7 +13,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.WebEncoders;
 using OpenIddict.Abstractions;
-using OpenIddict.Validation.AspNetCore;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace Flow.Auth.DependencyInjection;
@@ -20,9 +20,9 @@ namespace Flow.Auth.DependencyInjection;
 public static class FlowAuthServiceCollectionExtensions
 {
     /// <summary>
-    /// Регистрирует Auth-модуль: Identity + BCrypt, cookie-схему, OpenIddict (server + validation для admin-API),
-    /// AuthDbContext на строке подключения "AuthPostgres", сидеры, DataProtection и кодировщик Razor.
-    /// Использование в Flow.Api/Program.cs.
+    /// Регистрирует Auth-модуль: Identity + BCrypt, cookie-схему, OpenIddict server, AuthDbContext
+    /// на строке подключения "Postgres" (схема auth), публичный контракт IAccountService, сидеры,
+    /// DataProtection и кодировщик Razor. Использование в Flow.Api/Program.cs.
     /// </summary>
     public static IServiceCollection AddAuthModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
@@ -92,11 +92,13 @@ public static class FlowAuthServiceCollectionExtensions
                     .SetEndSessionEndpointUris("connect/endsession")
                     .SetUserInfoEndpointUris("connect/userinfo");
 
+                // client_credentials сейчас не используется ни одним клиентом; grant оставлен под машинных
+                // клиентов (система-робот) — для них позже будет зарегистрирован отдельный confidential-клиент.
                 options.AllowAuthorizationCodeFlow().RequireProofKeyForCodeExchange()
                     .AllowRefreshTokenFlow()
                     .AllowClientCredentialsFlow();
 
-                options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.OfflineAccess, AuthConstants.ApiScope, AuthConstants.AdminScope);
+                options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.OfflineAccess, AuthConstants.ApiScope);
 
                 // Access token — подписанный JWT без шифрования: Flow.Api валидирует его штатным JwtBearer по JWKS.
                 options.DisableAccessTokenEncryption();
@@ -113,26 +115,17 @@ public static class FlowAuthServiceCollectionExtensions
                 // Локальный Docker ходит по http; за TLS-терминатором флаг должен быть выключен.
                 if (environment.IsDevelopment() || auth.AllowInsecureHttp)
                     aspnet.DisableTransportSecurityRequirement();
-            })
-            .AddValidation(options =>
-            {
-                // Валидация Bearer-токенов для собственного admin-API: только токены с aud = flow-auth.
-                options.UseLocalServer();
-                options.UseAspNetCore();
-                options.AddAudiences(AuthConstants.AuthResource);
             });
 
         services.AddAuthorization(options =>
         {
-            options.AddPolicy(AuthConstants.AdminPolicy, policy => policy
-                .AddAuthenticationSchemes(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
-                .RequireAuthenticatedUser()
-                .RequireAssertion(context => context.User.HasScope(AuthConstants.AdminScope)));
-
             options.AddPolicy(AuthConstants.CookiePolicy, policy => policy
                 .AddAuthenticationSchemes(IdentityConstants.ApplicationScheme)
                 .RequireAuthenticatedUser());
         });
+
+        // Публичный контракт модуля для ядра: учётные записи управляются in-process поверх Identity.
+        services.AddScoped<IAccountService, AuthAccountManager>();
 
         // Cookie, antiforgery и TempData подписываются ключами Data Protection: в контейнере их надо пережить рестарт.
         var keysPath = configuration["DataProtection:KeysPath"];

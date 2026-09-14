@@ -10,8 +10,6 @@ public sealed class AuthOptions
 
     public ClientOptions Client { get; set; } = new();
 
-    public ApiClientOptions ApiClient { get; set; } = new();
-
     public BCryptOptions BCrypt { get; set; } = new();
 
     public int AccessTokenLifetimeMinutes { get; set; } = 60;
@@ -38,14 +36,6 @@ public sealed class AuthOptions
         public string[] RedirectUris { get; set; } = [];
 
         public string[] PostLogoutRedirectUris { get; set; } = [];
-    }
-
-    /// <summary>Конфиденциальный клиент Flow.Api для admin-API (client_credentials, scope auth:admin).</summary>
-    public sealed class ApiClientOptions
-    {
-        public string ClientId { get; set; } = "flow-api";
-
-        public string Secret { get; set; } = string.Empty;
     }
 
     public sealed class BCryptOptions

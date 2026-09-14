@@ -37,7 +37,6 @@ services:
       Auth__Issuer: ${AUTH_ISSUER:-http://localhost:8080}
       Auth__Client__RedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/login-callback
       Auth__Client__PostLogoutRedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/logout-callback
-      Auth__ApiClient__Secret: ${AUTH_API_CLIENT_SECRET:-dev-only-change-me}
       # Локальный compose ходит по http; за TLS-терминатором оставить false.
       Auth__AllowInsecureHttp: ${AUTH_ALLOW_INSECURE_HTTP:-true}
       # PFX создаются сервисом сами при первом старте (Security/SelfSignedCertificates) в volume auth-certs;

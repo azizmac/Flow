@@ -8,8 +8,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <!-- Контракты admin-API (Accounts) общие с Flow.Infrastructure (AuthAccountService). -->
-        <ProjectReference Include="..\Flow.Shared\Flow.Shared.csproj" />
+        <!-- Публичный контракт модуля (IAccountService) — по нему ядро обращается к Auth. -->
+        <ProjectReference Include="..\Flow.Auth.Contracts\Flow.Auth.Contracts.csproj" />
     </ItemGroup>
 
     <ItemGroup>

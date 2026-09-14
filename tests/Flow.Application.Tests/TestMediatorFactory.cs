@@ -1,6 +1,7 @@
 using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
 using Flow.Application.Tests.Fakes;
+using Flow.Auth.Contracts;
 using Flow.Domain.Entities;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;

@@ -1,7 +1,9 @@
 using System.Net;
-using System.Net.Http.Json;
-using Flow.Shared.Contracts.Accounts;
+using Flow.Auth.Contracts;
+using Flow.Auth.Data;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Flow.Auth.Tests;
 
@@ -67,8 +69,8 @@ public sealed class PasswordChangePolicyTests(AuthFixture auth)
         Assert.StartsWith(AuthFixture.ClientRedirectUri, authorize.Headers.Location!.ToString());
         Assert.True(QueryHelpers.ParseQuery(authorize.Headers.Location.Query).ContainsKey("code"));
 
-        using var admin = await auth.CreateAdminClientAsync();
-        var reloaded = await admin.GetFromJsonAsync<AccountResponse>($"/accounts/{account.Id}");
+        await using var scope = auth.CreateScope();
+        var reloaded = await scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>().FindByIdAsync(account.Id.ToString());
         Assert.False(reloaded!.MustChangePassword);
 
         // Новый пароль работает, старый — нет.
@@ -84,15 +86,17 @@ public sealed class PasswordChangePolicyTests(AuthFixture auth)
     public async Task Owner_Reset_Should_Require_Change_And_Self_Change_Should_Clear_Flag()
     {
         var account = await auth.CreateAccountAsync("reset-flag");
-        using var admin = await auth.CreateAdminClientAsync();
+        await using var scope = auth.CreateScope();
+        var accounts = scope.ServiceProvider.GetRequiredService<IAccountService>();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-        using var reset = await admin.PostAsJsonAsync($"/accounts/{account.Id}/password", new ChangeAccountPasswordRequest(null, Initial));
-        Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
-        Assert.True((await admin.GetFromJsonAsync<AccountResponse>($"/accounts/{account.Id}"))!.MustChangePassword);
+        // Сброс без текущего пароля (Owner) — ставит MustChangePassword.
+        Assert.True((await accounts.ChangePasswordAsync(account.Id, null, Initial, CancellationToken.None)).IsSuccess);
+        Assert.True((await users.FindByIdAsync(account.Id.ToString()))!.MustChangePassword);
 
-        using var self = await admin.PostAsJsonAsync($"/accounts/{account.Id}/password", new ChangeAccountPasswordRequest(Initial, Chosen));
-        Assert.Equal(HttpStatusCode.NoContent, self.StatusCode);
-        Assert.False((await admin.GetFromJsonAsync<AccountResponse>($"/accounts/{account.Id}"))!.MustChangePassword);
+        // Смена со своим текущим — снимает флаг.
+        Assert.True((await accounts.ChangePasswordAsync(account.Id, Initial, Chosen, CancellationToken.None)).IsSuccess);
+        Assert.False((await users.FindByIdAsync(account.Id.ToString()))!.MustChangePassword);
     }
 
     [Fact]

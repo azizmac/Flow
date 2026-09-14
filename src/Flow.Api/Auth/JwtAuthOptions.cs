@@ -1,9 +1,10 @@
 namespace Flow.Api.Auth;
 
 /// <summary>
-/// Секция "Auth" в Flow.Api. BaseUrl — адрес Flow.Auth для discovery/JWKS и admin-API (в Docker внутренний,
-/// http://auth:8080); Issuer — внешний адрес, который Flow.Auth пишет в claim iss (в Docker тот, что видит браузер).
-/// Если Issuer не задан, считается равным BaseUrl. Остальные поля секции читает Flow.Infrastructure (AuthClientOptions).
+/// Секция "Auth" в Flow.Api. BaseUrl — адрес для discovery/JWKS: Auth-модуль живёт в этом же процессе,
+/// поэтому в Docker это self (http://localhost:8080); Issuer — внешний адрес, который модуль пишет в claim iss
+/// (в Docker тот, что видит браузер). Если Issuer не задан, считается равным BaseUrl. Остальные поля секции
+/// читает Auth-модуль (AuthOptions).
 /// </summary>
 public sealed class JwtAuthOptions
 {

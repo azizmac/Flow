@@ -1,6 +1,6 @@
-using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
 using Flow.Application.Features.Bootstrap;
+using Flow.Auth.Contracts;
 using Flow.Infrastructure.DependencyInjection;
 using Flow.Infrastructure.Persistence;
 using MediatR;

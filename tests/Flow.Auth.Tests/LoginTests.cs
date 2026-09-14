@@ -1,4 +1,5 @@
 using System.Net;
+using Flow.Auth.Contracts;
 using Flow.Auth.Data;
 using Flow.Auth.Security;
 using Microsoft.AspNetCore.Identity;
@@ -60,9 +61,9 @@ public sealed class LoginTests(AuthFixture auth)
     public async Task Disabled_Account_Should_Be_Refused_On_Login()
     {
         var account = await auth.CreateAccountAsync("disabled-user");
-        using var admin = await auth.CreateAdminClientAsync();
-        using var disable = await admin.PostAsync($"/accounts/{account.Id}/disable", null);
-        Assert.Equal(HttpStatusCode.NoContent, disable.StatusCode);
+        await using var scope = auth.CreateScope();
+        var accounts = scope.ServiceProvider.GetRequiredService<IAccountService>();
+        await accounts.DisableAsync(account.Id, CancellationToken.None);
 
         using var client = auth.CreateClient();
         using var login = await LoginPage.PostAsync(client, "disabled-user", "correct horse battery", "/");
@@ -70,8 +71,7 @@ public sealed class LoginTests(AuthFixture auth)
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         Assert.Contains("Доступ закрыт", await login.Content.ReadAsStringAsync());
 
-        using var enable = await admin.PostAsync($"/accounts/{account.Id}/enable", null);
-        Assert.Equal(HttpStatusCode.NoContent, enable.StatusCode);
+        await accounts.EnableAsync(account.Id, CancellationToken.None);
         using var again = await LoginPage.PostAsync(client, "disabled-user", "correct horse battery", "/");
         Assert.Equal(HttpStatusCode.Redirect, again.StatusCode);
     }

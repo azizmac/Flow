@@ -1,8 +1,8 @@
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
-using Flow.Application.Abstractions;
 using Flow.Application.Tests.Fakes;
+using Flow.Auth.Contracts;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -44,7 +44,6 @@ public sealed class ApiFixture : IAsyncLifetime
             builder.UseSetting("Auth:BaseUrl", Issuer);
             builder.UseSetting("Auth:Issuer", Issuer);
             builder.UseSetting("Auth:UseEphemeralKeys", "true");
-            builder.UseSetting("Auth:ApiClient:Secret", "unused");
 
             builder.ConfigureTestServices(services =>
             {
