@@ -156,6 +156,7 @@ else if (_task is not null && _board is not null)
                     <UserCard User="who" AnchorId="tp-who" OnClose="() => _whoOpen = false" />
                 }
             }
+            <SimilarTasks TaskId="_task.Id" />
             @if (CanEdit)
             {
                 <button type="button" class="icon-lnk danger" style="padding:0 4px;align-self:flex-start;" @onclick="() => _deleting = true">

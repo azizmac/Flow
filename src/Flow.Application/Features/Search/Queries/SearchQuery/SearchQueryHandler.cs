@@ -1,15 +1,18 @@
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
+using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Search;
 using MediatR;
 
 namespace Flow.Application.Features.Search.Queries.SearchQuery;
 
-internal sealed partial class SearchQueryHandler(
+internal sealed class SearchQueryHandler(
     ISearchQueryRepository index,
     IQueryEmbeddingCache queryEmbeddings,
+    IBoardRepository boards,
+    ITaskItemRepository tasks,
+    IUserRepository users,
     SearchOptions options,
     ActorResolver actors)
     : IRequestHandler<SearchQuery, SearchResponse?>
@@ -17,33 +20,41 @@ internal sealed partial class SearchQueryHandler(
     private static readonly SearchSourceType[] AllTypes =
         [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User];
 
-    [GeneratedRegex(@"\s+")]
-    private static partial Regex Whitespace();
+    /// <summary>Сколько текста описания уходит в подсказку прямого попадания по коду задачи.</summary>
+    private const int DirectSnippetLength = 160;
 
     public async Task<SearchResponse?> Handle(SearchQuery request, CancellationToken cancellationToken)
     {
-        await actors.ResolveAsync(request.ActorId, cancellationToken);
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
 
         if (!options.Enabled)
             return null;
 
-        var text = Normalize(request.Text);
-        if (text.Length == 0)
+        var intent = QueryIntentParser.Parse(request.Text);
+        if (intent.Text.Length == 0 && !intent.HasFilters)
             throw new ArgumentException("Запрос поиска не может быть пустым.", nameof(request.Text));
 
-        var query = options.Query;
         var started = Stopwatch.GetTimestamp();
+        var resolved = await ResolveAsync(intent, actor, request, cancellationToken);
 
-        // Векторная половина нужна во всех режимах, кроме Text. Недоступная модель — не 500:
-        // запрос тихо доезжает на полнотексте, а клиент видит degraded.
+        // Код задачи в строке — это не поиск, а прямое попадание: задача идёт первой в выдаче,
+        // а клиент может открыть её сразу.
+        var direct = resolved.Task is { } found ? ToItem(found) : null;
+
+        // «PROJ-142» и больше ничего: искать нечего, отдаём только саму задачу.
+        if (resolved.Text.Length == 0 && !HasSearchableFilters(resolved))
+            return Respond(direct is null ? [] : [direct], direct is null ? 0 : 1, false, SearchMode.Filters, intent, resolved, direct, started);
+
+        var query = options.Query;
         float[]? embedding = null;
         var degraded = false;
 
-        if (request.Mode != SearchMode.Text)
+        // Векторная половина нужна во всех режимах, кроме Text, и только когда есть что эмбеддить.
+        if (request.Mode != SearchMode.Text && resolved.Text.Length > 0)
         {
             try
             {
-                embedding = await queryEmbeddings.GetAsync(text, cancellationToken);
+                embedding = await queryEmbeddings.GetAsync(resolved.Text, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -53,42 +64,208 @@ internal sealed partial class SearchQueryHandler(
             }
         }
 
-        // Semantic без вектора искать нечем — в этом случае деградация переводит запрос в Text.
-        var useText = request.Mode != SearchMode.Semantic || embedding is null;
-        var mode = embedding is null ? SearchMode.Text : request.Mode;
+        var useText = resolved.Text.Length > 0 && (request.Mode != SearchMode.Semantic || embedding is null);
+
+        var mode = (embedding, useText) switch
+        {
+            (not null, true) => SearchMode.Hybrid,
+            (not null, false) => SearchMode.Semantic,
+            (null, true) => SearchMode.Text,
+            _ => SearchMode.Filters
+        };
 
         var criteria = new SearchCriteria(
-            Query: text,
+            Query: resolved.Text,
             QueryEmbedding: embedding,
             UseText: useText,
-            Types: request.Types is { Count: > 0 } types ? types.Distinct().ToArray() : AllTypes,
-            BoardId: request.BoardId,
+            Types: resolved.Types,
+            BoardId: resolved.BoardId,
             IncludeArchived: request.IncludeArchived,
             VectorTopN: query.VectorTopN,
             TextTopN: query.TextTopN,
             RrfK: query.RrfK,
             Limit: Math.Clamp(request.Limit, 1, Math.Max(1, query.MaxLimit)),
-            Offset: Math.Max(0, request.Offset));
+            Offset: Math.Max(0, request.Offset),
+            AssigneeId: resolved.AssigneeId,
+            StatusIds: resolved.StatusIds,
+            OverdueOnly: intent.Overdue,
+            UpdatedSince: resolved.UpdatedSince);
 
         var page = await index.SearchAsync(criteria, cancellationToken);
 
-        var items = page.Items
-            .Select(hit => new SearchResultItem(
-                hit.SourceType, hit.SourceId, hit.BoardId, hit.Title, hit.Snippet, hit.Score, hit.TaskCode, hit.UpdatedAt, hit.ParentId))
-            .ToArray();
+        var items = page.Items.Select(ToItem).ToList();
+        var total = page.Total;
 
-        return new SearchResponse(
-            items,
-            page.Total,
-            degraded,
-            (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
-            mode);
+        if (direct is not null)
+        {
+            // Та же задача могла найтись и текстом — оставляем её один раз и первой.
+            var duplicates = items.RemoveAll(item => item.SourceType == SearchSourceType.Task && item.SourceId == direct.SourceId);
+            items.Insert(0, direct);
+            total += duplicates > 0 ? 0 : 1;
+        }
+
+        return Respond(items, total, degraded, mode, intent, resolved, direct, started);
     }
 
+    private static SearchResponse Respond(
+        IReadOnlyList<SearchResultItem> items,
+        int total,
+        bool degraded,
+        SearchMode mode,
+        SearchIntent intent,
+        ResolvedIntent resolved,
+        SearchResultItem? direct,
+        long started) =>
+        new(items,
+            total,
+            degraded,
+            (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+            mode,
+            new SearchIntentResponse(resolved.Text, Labels(intent, resolved), direct?.SourceId));
+
     /// <summary>
-    /// Схлопывает пробелы и обрезает края: по нормализованной строке кэшируется вектор запроса,
-    /// поэтому «  падает   экспорт » и «падает экспорт» не должны считаться дважды.
+    /// Достраивает разобранную строку до фильтров, которые понимает индекс: @username → id,
+    /// проект:KEY → id, статус:… → набор id (название статуса своё у каждого проекта).
+    /// Нераспознанное возвращается в текст запроса — опечатка в фильтре не должна обнулять выдачу.
     /// </summary>
-    private static string Normalize(string? text) =>
-        text is null ? string.Empty : Whitespace().Replace(text, " ").Trim();
+    private async Task<ResolvedIntent> ResolveAsync(SearchIntent intent, User actor, SearchQuery request, CancellationToken cancellationToken)
+    {
+        var text = intent.Text;
+        Guid? assigneeId = intent.Mine ? actor.Id : null;
+        var boardId = request.BoardId;
+        IReadOnlyCollection<Guid> statusIds = [];
+        TaskItem? task = null;
+
+        if (intent.AssigneeUsername is { } username)
+        {
+            var user = await users.GetByUsernameAsync(username, cancellationToken);
+            if (user is null)
+                text = Append(text, "@" + username);
+            else
+                assigneeId = user.Id;
+        }
+
+        if (intent.TaskCode is { } code)
+        {
+            task = await tasks.GetByCodeAsync(code, cancellationToken);
+            if (task is null)
+                text = Append(text, code);
+        }
+
+        if (intent.BoardKey is not null || intent.StatusName is not null)
+        {
+            // Проекты со статусами — один запрос: их единицы, а названия статусов настраиваются на доске.
+            var all = await boards.GetAllAsync(cancellationToken);
+
+            if (intent.BoardKey is { } key)
+            {
+                var board = all.FirstOrDefault(b => string.Equals(b.Key, key, StringComparison.OrdinalIgnoreCase))
+                    ?? all.FirstOrDefault(b => b.Name.StartsWith(key, StringComparison.OrdinalIgnoreCase));
+
+                if (board is null)
+                    text = Append(text, key);
+                else
+                    boardId = board.Id;
+            }
+
+            if (intent.StatusName is { } statusName)
+            {
+                var matched = all
+                    .Where(b => boardId is null || b.Id == boardId)
+                    .SelectMany(b => b.Statuses)
+                    .Where(status => string.Equals(status.Name, statusName, StringComparison.OrdinalIgnoreCase))
+                    .Select(status => status.Id)
+                    .ToArray();
+
+                if (matched.Length == 0)
+                    text = Append(text, statusName);
+                else
+                    statusIds = matched;
+            }
+        }
+
+        // Исполнитель, статус и срок есть только у задач: проект «просроченным» не бывает.
+        IReadOnlyCollection<SearchSourceType> types =
+            intent.Overdue || assigneeId is not null || statusIds.Count > 0
+                ? [SearchSourceType.Task]
+                : request.Types is { Count: > 0 } requested ? requested.Distinct().ToArray() : AllTypes;
+
+        return new ResolvedIntent(
+            text.Trim(),
+            types,
+            boardId,
+            assigneeId,
+            statusIds,
+            intent.Period is { } period ? DateTime.UtcNow - period : null,
+            task);
+    }
+
+    /// <summary>Есть ли что отбирать, кроме прямого попадания по коду задачи.</summary>
+    private static bool HasSearchableFilters(ResolvedIntent resolved) =>
+        resolved.AssigneeId is not null
+        || resolved.StatusIds.Count > 0
+        || resolved.BoardId is not null
+        || resolved.UpdatedSince is not null
+        || resolved.Types.Count == 1;
+
+    private static List<string> Labels(SearchIntent intent, ResolvedIntent resolved)
+    {
+        var labels = new List<string>();
+
+        if (resolved.Task is { } task)
+            labels.Add(task.Code.Value);
+
+        if (intent.Mine)
+            labels.Add("мои");
+        else if (intent.AssigneeUsername is { } username && resolved.AssigneeId is not null)
+            labels.Add("@" + username);
+
+        if (intent.Overdue)
+            labels.Add("просроченные");
+
+        if (intent.BoardKey is { } key && resolved.BoardId is not null)
+            labels.Add("проект " + key.ToUpperInvariant());
+
+        if (intent.StatusName is { } status && resolved.StatusIds.Count > 0)
+            labels.Add("статус: " + status);
+
+        if (intent.Period is { } period)
+            labels.Add(period.TotalDays switch
+            {
+                <= 1 => "за день",
+                <= 7 => "за неделю",
+                <= 30 => "за месяц",
+                _ => "за год"
+            });
+
+        return labels;
+    }
+
+    private static string Append(string text, string value) => text.Length == 0 ? value : $"{text} {value}";
+
+    private static SearchResultItem ToItem(SearchHit hit) =>
+        new(hit.SourceType, hit.SourceId, hit.BoardId, hit.Title, hit.Snippet, hit.Score, hit.TaskCode, hit.UpdatedAt, hit.ParentId);
+
+    /// <summary>Прямое попадание собирается из самой задачи: в индексе её может ещё не быть.</summary>
+    private static SearchResultItem ToItem(TaskItem task) =>
+        new(SearchSourceType.Task,
+            task.Id,
+            task.BoardId,
+            task.Title,
+            task.Description is { Length: > 0 } description
+                ? description[..Math.Min(DirectSnippetLength, description.Length)]
+                : string.Empty,
+            Score: 1,
+            task.Code.Value,
+            task.CreatedAt,
+            ParentId: null);
+
+    private sealed record ResolvedIntent(
+        string Text,
+        IReadOnlyCollection<SearchSourceType> Types,
+        Guid? BoardId,
+        Guid? AssigneeId,
+        IReadOnlyCollection<Guid> StatusIds,
+        DateTime? UpdatedSince,
+        TaskItem? Task);
 }

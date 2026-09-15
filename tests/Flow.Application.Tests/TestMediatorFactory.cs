@@ -12,6 +12,15 @@ namespace Flow.Application.Tests;
 /// Собирает реальный DI-контейнер с AddFlowApplication() (тот же вызов, что и в Flow.Api/Program.cs) поверх
 /// фейковых репозиториев — тесты идут через настоящий IMediator, а не напрямую дёргают internal-хендлеры.
 /// </summary>
+public sealed record SearchTestContext(
+    IMediator Mediator,
+    SearchOptions Options,
+    FakeSearchQueryRepository Index,
+    FakeQueryEmbeddingCache Embeddings,
+    FakeBoardRepository Boards,
+    FakeTaskItemRepository Tasks,
+    FakeUserRepository Users);
+
 public static class TestMediatorFactory
 {
     /// <summary>Owner, который сеется в FakeUserRepository при создании: actor для команд в тестах, где права не проверяются.</summary>
@@ -42,6 +51,17 @@ public static class TestMediatorFactory
     {
         var all = Build();
         return (all.Mediator, all.SearchOptions, all.SearchIndex, all.Embeddings);
+    }
+
+    /// <summary>
+    /// Всё, что нужно тестам умного поиска: фейки репозиториев для сидирования проектов, задач
+    /// и людей — плюс критерии, с которыми хендлер пришёл в индекс. Кортеж на семь элементов
+    /// уже нечитаем, поэтому запись.
+    /// </summary>
+    public static SearchTestContext CreateSearchContext()
+    {
+        var all = Build();
+        return new SearchTestContext(all.Mediator, all.SearchOptions, all.SearchIndex, all.Embeddings, all.Boards, all.Tasks, all.Users);
     }
 
     /// <summary>То же, плюс FakeAccountService — для тестов, которым важно, что ушло в Flow.Auth.</summary>

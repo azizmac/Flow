@@ -150,6 +150,12 @@ Search parameters: `types` (`task,comment,board,user`), `boardId`, `includeArchi
 default), `mode` (`hybrid`, `semantic`, `text` — for debugging relevance), `limit` and `offset`. With the model
 unavailable the request still succeeds: the full-text half answers and the response is flagged `degraded: true`.
 
+Part of the query is parsed without the model: `@ivanov` and `мои` ("mine") filter by assignee, `PROJ-142` jumps
+straight to the task, plus `проект:DBACK` (project), `статус:в работе` (status), `просроченные` (overdue) and
+`за неделю` (last week). Recognised filters are shown as chips and the rest of the line goes to normal search.
+Alongside it, `GET /tasks/{id}/similar` returns similar tasks from the task's own vector, with no model call —
+in the UI that is the "Похожие задачи" block on the task card and in the create form.
+
 In the UI search is a box in the sidebar (suggestions as you type, grouped by type) and a `/search` page
 with filters, match highlighting and pagination.
 

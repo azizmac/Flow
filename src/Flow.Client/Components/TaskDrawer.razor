@@ -21,6 +21,8 @@
     <div class="drawer-body" @onkeydown="OnBodyKey">
         <input id="td-title" class="title-input" placeholder="Название задачи" value="@_title" maxlength="500"
                @oninput="e => _title = e.Value?.ToString() ?? string.Empty" />
+        @* Дубль дешевле не создать, чем потом склеивать: похожие показываются прямо по ходу набора. *@
+        <SimilarTasks Title="@_title" Limit="3" />
         <div class="meta-grid">
             <div class="meta-k">Статус</div>
             <div><StatusSelect Statuses="Board.Statuses" Value="_statusId" OnChange="id => _statusId = id" /></div>

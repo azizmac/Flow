@@ -55,8 +55,15 @@
     else if (_response is { } response)
     {
         <div class="filter-row">
-            <div class="meta-line">
-                @Ru.Results(response.Total)@(response.Total >= 100 ? " или больше" : "") · @response.TookMs мс
+            <div class="filter-row" style="gap:8px;">
+                <div class="meta-line">
+                    @Ru.Results(response.Total)@(response.Total >= 100 ? " или больше" : "") · @response.TookMs мс
+                </div>
+                @* Что распознано в строке: без этого непонятно, почему выдача сузилась. *@
+                @foreach (var filter in response.Intent.Filters)
+                {
+                    <span class="intent-chip">@filter</span>
+                }
             </div>
             @if (response.Degraded)
             {

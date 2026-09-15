@@ -13,11 +13,16 @@ public sealed class FakeSearchQueryRepository : ISearchQueryRepository
 
     public SearchPage Page { get; set; } = new([], 0);
 
+    public IReadOnlyList<SearchHit> Similar { get; set; } = [];
+
     public Task<SearchPage> SearchAsync(SearchCriteria criteria, CancellationToken cancellationToken)
     {
         LastCriteria = criteria;
         return Task.FromResult(Page);
     }
+
+    public Task<IReadOnlyList<SearchHit>> FindSimilarAsync(Guid taskId, int limit, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<SearchHit>>(Similar.Take(limit).ToArray());
 }
 
 /// <summary>Кэш векторов запроса: либо отдаёт вектор фейкового эмбеддера, либо падает, изображая погашенную модель.</summary>

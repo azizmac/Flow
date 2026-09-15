@@ -10,6 +10,13 @@ namespace Flow.Application.Abstractions;
 public interface ISearchQueryRepository
 {
     Task<SearchPage> SearchAsync(SearchCriteria criteria, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Похожие задачи по вектору самой задачи — без повторного инференса: он уже посчитан при
+    /// индексации. Исходная задача из выдачи исключается, закрытые не показываются.
+    /// Пустой список — у задачи ещё нет чанков (индексация не дошла).
+    /// </summary>
+    Task<IReadOnlyList<SearchHit>> FindSimilarAsync(Guid taskId, int limit, CancellationToken cancellationToken);
 }
 
 /// <param name="Query">Нормализованная строка запроса — уходит в websearch_to_tsquery и в подсветку.</param>
@@ -17,6 +24,10 @@ public interface ISearchQueryRepository
 /// <param name="UseText">Выполнять ли полнотекстовую половину (в режиме Semantic — нет).</param>
 /// <param name="Types">Типы источников; пусто — все.</param>
 /// <param name="IncludeArchived">Включать ли задачи в финальном статусе.</param>
+/// <param name="AssigneeId">Фильтр по исполнителю (@username или «мои»).</param>
+/// <param name="StatusIds">Статусы с подходящим названием: имя статуса своё у каждого проекта.</param>
+/// <param name="OverdueOnly">Только просроченные: срок в прошлом и задача не закрыта.</param>
+/// <param name="UpdatedSince">Окно по дате источника («за неделю»).</param>
 public sealed record SearchCriteria(
     string Query,
     float[]? QueryEmbedding,
@@ -28,7 +39,18 @@ public sealed record SearchCriteria(
     int TextTopN,
     int RrfK,
     int Limit,
-    int Offset);
+    int Offset,
+    Guid? AssigneeId = null,
+    IReadOnlyCollection<Guid>? StatusIds = null,
+    bool OverdueOnly = false,
+    DateTime? UpdatedSince = null)
+{
+    /// <summary>
+    /// Есть ли фильтры, которых нет в чанке: исполнитель, статус, срок. Они живут в TaskItems,
+    /// поэтому включают join и сужают выдачу до задач — проект или человек «просроченными» не бывают.
+    /// </summary>
+    public bool HasTaskFilters => AssigneeId is not null || StatusIds is { Count: > 0 } || OverdueOnly;
+}
 
 public sealed record SearchPage(IReadOnlyList<SearchHit> Items, int Total);
 

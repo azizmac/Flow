@@ -119,6 +119,12 @@ public sealed class FlowApi(HttpClient http)
         return Get<SearchResponse>(url.ToString(), ct);
     }
 
+    /// <summary>
+    /// Похожие задачи по вектору задачи — без повторного инференса. 404 — задачи нет или поиск выключен.
+    /// </summary>
+    public Task<ApiResult<IReadOnlyList<SearchResultItem>>> GetSimilarTasks(Guid taskId, int limit = 5, CancellationToken ct = default) =>
+        Get<IReadOnlyList<SearchResultItem>>($"tasks/{taskId}/similar?limit={limit}", ct);
+
     // ---- пользователи (UsersController) ----
 
     public Task<ApiResult<IReadOnlyList<UserResponse>>> GetUsers(bool includeInactive = false, CancellationToken ct = default) =>

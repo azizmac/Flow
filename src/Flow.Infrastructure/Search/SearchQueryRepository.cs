@@ -30,15 +30,24 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             AND c."SourceType" = ANY(@types)
             AND (@boardId::uuid IS NULL OR c."BoardId" = @boardId)
             AND (@includeArchived OR c."IsClosed" = false)
+            AND (@since::timestamptz IS NULL OR c."SourceUpdatedAt" >= @since)
+        """;
+
+    /// <summary>
+    /// Фильтры из строки запроса, которых в чанке нет: исполнитель, статус, просроченность.
+    /// Живут в TaskItems, поэтому идут вместе с join и только по задачам (см. SearchCriteria.HasTaskFilters).
+    /// </summary>
+    private const string TaskFilter =
+        """
+        AND (@assignee::uuid IS NULL OR ti."AssigneeId" = @assignee)
+            AND (@statuses::uuid[] IS NULL OR ti."StatusId" = ANY(@statuses))
+            AND (NOT @overdue OR (ti."DueDate" IS NOT NULL AND ti."DueDate" < CURRENT_DATE AND c."IsClosed" = false))
         """;
 
     public async Task<SearchPage> SearchAsync(SearchCriteria criteria, CancellationToken cancellationToken)
     {
         var useVector = criteria.QueryEmbedding is not null;
-        if (!useVector && !criteria.UseText)
-            return new SearchPage([], 0);
-
-        var sql = BuildSql(useVector, criteria.UseText);
+        var sql = BuildSql(useVector, criteria.UseText, criteria.HasTaskFilters);
         var parameters = BuildParameters(criteria);
 
         List<SearchRow> rows;
@@ -62,26 +71,20 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             rows = await db.Database.SqlQueryRaw<SearchRow>(sql, parameters).ToListAsync(cancellationToken);
         }
 
-        var items = rows
-            .Select(row => new SearchHit(
-                (SearchSourceType)row.SourceType,
-                row.SourceId,
-                row.BoardId,
-                row.Title,
-                row.Snippet,
-                row.Score,
-                row.TaskCode,
-                row.UpdatedAt,
-                row.ParentId))
-            .ToArray();
-
-        return new SearchPage(items, rows.Count == 0 ? 0 : (int)rows[0].Total);
+        return new SearchPage(rows.Select(ToHit).ToArray(), rows.Count == 0 ? 0 : (int)rows[0].Total);
     }
 
-    private static string BuildSql(bool useVector, bool useText)
+    private static string BuildSql(bool useVector, bool useText, bool taskFilters)
     {
         var sql = new StringBuilder();
         var halves = new List<string>();
+
+        // Источник обеих половин: при задачных фильтрах — чанки задач, склеенные с самими задачами.
+        var source = taskFilters
+            ? "\"SearchChunks\" c JOIN \"TaskItems\" ti ON ti.\"Id\" = c.\"SourceId\""
+            : "\"SearchChunks\" c";
+
+        var filter = taskFilters ? CommonFilter + "\n    " + TaskFilter : CommonFilter;
 
         sql.Append("WITH ");
 
@@ -95,8 +98,8 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                      SELECT v."Id", row_number() OVER (ORDER BY v.distance) AS rank
                      FROM (
                          SELECT c."Id", c."Embedding" <=> @query AS distance
-                         FROM "SearchChunks" c
-                         WHERE {CommonFilter}
+                         FROM {source}
+                         WHERE {filter}
                          ORDER BY c."Embedding" <=> @query
                          LIMIT @vectorTopN
                      ) v
@@ -116,8 +119,8 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                      SELECT t."Id", row_number() OVER (ORDER BY t.text_rank DESC) AS rank
                      FROM (
                          SELECT c."Id", ts_rank_cd(c."Tsv", tsq) AS text_rank
-                         FROM "SearchChunks" c, websearch_to_tsquery('russian', @text) tsq
-                         WHERE {CommonFilter} AND c."Tsv" @@ tsq
+                         FROM {source}, websearch_to_tsquery('russian', @text) tsq
+                         WHERE {filter} AND c."Tsv" @@ tsq
                          ORDER BY ts_rank_cd(c."Tsv", tsq) DESC
                          LIMIT @textTopN
                      ) t
@@ -126,10 +129,29 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             halves.Add("SELECT \"Id\" AS id, 1.0 / (@rrfK + rank) AS score FROM text_hits");
         }
 
-        // RRF: складываются обратные ранги, а не сами оценки — косинус и ts_rank несравнимы.
-        sql.Append(",\nmerged AS (\n    SELECT id, SUM(score) AS score FROM (\n        ");
-        sql.Append(string.Join("\n        UNION ALL\n        ", halves));
-        sql.Append("\n    ) both_halves GROUP BY id\n)");
+        if (halves.Count == 0)
+        {
+            // Искать нечего — в строке были только фильтры («мои просроченные»): отбираем по ним
+            // и сортируем по дате источника. Оценка у всех одна, порядок задаёт ORDER BY ниже.
+            sql.Clear();
+            sql.Append(
+                $"""
+                 WITH merged AS (
+                     SELECT c."Id" AS id, 0.0 AS score
+                     FROM {source}
+                     WHERE {filter}
+                     ORDER BY c."SourceUpdatedAt" DESC
+                     LIMIT @vectorTopN
+                 )
+                 """);
+        }
+        else
+        {
+            // RRF: складываются обратные ранги, а не сами оценки — косинус и ts_rank несравнимы.
+            sql.Append(",\nmerged AS (\n    SELECT id, SUM(score) AS score FROM (\n        ");
+            sql.Append(string.Join("\n        UNION ALL\n        ", halves));
+            sql.Append("\n    ) both_halves GROUP BY id\n)");
+        }
 
         // Свёртка чанков в источники: у источника остаётся его лучший чанк, он же идёт в подсветку.
         sql.Append(
@@ -168,6 +190,17 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
         return sql.ToString();
     }
 
+    private static SearchHit ToHit(SearchRow row) =>
+        new((SearchSourceType)row.SourceType,
+            row.SourceId,
+            row.BoardId,
+            row.Title,
+            row.Snippet,
+            row.Score,
+            row.TaskCode,
+            row.UpdatedAt,
+            row.ParentId);
+
     private NpgsqlParameter[] BuildParameters(SearchCriteria criteria)
     {
         var parameters = new List<NpgsqlParameter>
@@ -179,19 +212,98 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             new("text", criteria.Query),
             new("rrfK", criteria.RrfK),
             new("limit", criteria.Limit),
-            new("offset", criteria.Offset)
+            new("offset", criteria.Offset),
+            new("since", NpgsqlDbType.TimestampTz) { Value = (object?)criteria.UpdatedSince ?? DBNull.Value },
+            // vectorTopN задаёт и размер окна выдачи «только по фильтрам» — она тоже не безразмерна.
+            new("vectorTopN", criteria.VectorTopN)
         };
 
         if (criteria.QueryEmbedding is { } embedding)
-        {
             parameters.Add(new NpgsqlParameter("query", new HalfVector(embedding.Select(value => (Half)value).ToArray())));
-            parameters.Add(new NpgsqlParameter("vectorTopN", criteria.VectorTopN));
-        }
 
         if (criteria.UseText)
             parameters.Add(new NpgsqlParameter("textTopN", criteria.TextTopN));
 
+        if (criteria.HasTaskFilters)
+        {
+            parameters.Add(new NpgsqlParameter("assignee", NpgsqlDbType.Uuid) { Value = (object?)criteria.AssigneeId ?? DBNull.Value });
+            parameters.Add(new NpgsqlParameter("statuses", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
+            {
+                Value = criteria.StatusIds is { Count: > 0 } statuses ? statuses.ToArray() : DBNull.Value
+            });
+            parameters.Add(new NpgsqlParameter("overdue", criteria.OverdueOnly));
+        }
+
         return parameters.ToArray();
+    }
+
+    /// <summary>
+    /// Похожие задачи: вектор берётся у первого чанка самой задачи — он посчитан при индексации,
+    /// и модель здесь не нужна вовсе. Сначала ближайшие чанки по HNSW, потом свёртка в задачи:
+    /// иначе DISTINCT ON пришлось бы считать по всей таблице и индекс не работал бы.
+    /// </summary>
+    public async Task<IReadOnlyList<SearchHit>> FindSimilarAsync(Guid taskId, int limit, CancellationToken cancellationToken)
+    {
+        var parameters = new NpgsqlParameter[]
+        {
+            new("model", embedder.ModelVersion),
+            new("taskId", taskId),
+            new("limit", Math.Max(1, limit)),
+            // Запас на свёртку: у длинной задачи несколько чанков, и после DISTINCT ON их станет меньше.
+            new("scan", Math.Max(1, limit) * 5)
+        };
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            $"SET LOCAL hnsw.ef_search = {Math.Clamp(options.Query.HnswEfSearch, 1, 1000)}; " +
+            "SET LOCAL hnsw.iterative_scan = relaxed_order;",
+            cancellationToken);
+
+        var rows = await db.Database.SqlQueryRaw<SearchRow>(
+            """
+            WITH source AS (
+                SELECT "Embedding" FROM "SearchChunks"
+                WHERE "SourceType" = 1 AND "SourceId" = @taskId AND "ModelVersion" = @model
+                ORDER BY "ChunkIndex"
+                LIMIT 1
+            ),
+            near AS (
+                SELECT c."SourceId", c."BoardId", c."Content", c."SourceUpdatedAt",
+                       c."Embedding" <=> (SELECT "Embedding" FROM source) AS distance
+                FROM "SearchChunks" c
+                WHERE c."SourceType" = 1
+                  AND c."ModelVersion" = @model
+                  AND c."IsClosed" = false
+                  AND c."SourceId" <> @taskId
+                  AND EXISTS (SELECT 1 FROM source)
+                ORDER BY c."Embedding" <=> (SELECT "Embedding" FROM source)
+                LIMIT @scan
+            ),
+            best AS (
+                SELECT DISTINCT ON ("SourceId") "SourceId", "BoardId", "Content", "SourceUpdatedAt", distance
+                FROM near
+                ORDER BY "SourceId", distance
+            )
+            SELECT 1 AS "SourceType",
+                   b."SourceId" AS "SourceId",
+                   b."BoardId" AS "BoardId",
+                   COALESCE(ti."Title", '') AS "Title",
+                   left(b."Content", 200) AS "Snippet",
+                   (1 - b.distance)::double precision AS "Score",
+                   ti."Code" AS "TaskCode",
+                   b."SourceUpdatedAt" AS "UpdatedAt",
+                   NULL::uuid AS "ParentId",
+                   count(*) OVER () AS "Total"
+            FROM best b JOIN "TaskItems" ti ON ti."Id" = b."SourceId"
+            ORDER BY b.distance
+            LIMIT @limit
+            """,
+            parameters).ToListAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return rows.Select(ToHit).ToArray();
     }
 
     /// <summary>Строка выдачи: имена свойств совпадают с псевдонимами столбцов в SQL.</summary>

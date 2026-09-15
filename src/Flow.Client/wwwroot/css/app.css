@@ -457,6 +457,45 @@ input, textarea { font-family: inherit; }
 }
 .gs-all.on { background: var(--surface); }
 
+/* Чип распознанного фильтра из строки запроса («@ivanov», «просроченные»). */
+.intent-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font: var(--fw-semibold) 11px var(--font-display);
+    white-space: nowrap;
+}
+.gs-note.chips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px; }
+
+/* ---------- Похожие задачи ---------- */
+.side-card.similar { gap: 6px; }
+.similar .section-title { display: flex; align-items: center; gap: 8px; }
+.similar-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 8px;
+    margin: 0 -8px;
+    border-radius: var(--r-md);
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: background-color 140ms ease;
+}
+.similar-row:hover { background: var(--surface-raised); }
+.similar-title {
+    flex: 1;
+    min-width: 0;
+    font: var(--fw-medium) 12.5px var(--font-text);
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.similar-score { flex: none; font: var(--fw-bold) 10.5px var(--font-display); color: var(--text-tertiary); }
+
 /* ---------- Поиск: страница выдачи ---------- */
 .sr-list { display: flex; flex-direction: column; }
 .sr-row {

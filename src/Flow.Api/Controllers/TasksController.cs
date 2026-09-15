@@ -3,6 +3,7 @@ using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
+using Flow.Application.Features.Search.Queries.SimilarTasksQuery;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskListQuery;
 using Flow.Application.Abstractions;
@@ -104,5 +105,16 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     {
         var deleted = await mediator.Send(new TaskDeleteCommand(actor.Require(), id), cancellationToken);
         return deleted ? NoContent() : NotFound();
+    }
+
+    /// <summary>
+    /// Похожие задачи по вектору этой задачи (без повторного инференса), исключая её саму.
+    /// Читать может любая роль. 404 — задачи нет или поиск выключен.
+    /// </summary>
+    [HttpGet("tasks/{id:guid}/similar")]
+    public async Task<IActionResult> GetSimilar(Guid id, CancellationToken cancellationToken, [FromQuery] int limit = 5)
+    {
+        var similar = await mediator.Send(new SimilarTasksQuery(actor.Require(), id, limit), cancellationToken);
+        return similar is null ? NotFound() : Ok(similar);
     }
 }

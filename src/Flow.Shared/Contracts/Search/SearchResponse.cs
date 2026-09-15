@@ -9,12 +9,23 @@ namespace Flow.Shared.Contracts.Search;
 /// <param name="Degraded">Векторную половину выполнить не удалось (модель недоступна или не уложилась
 /// в таймаут) — выдача построена только по полнотексту.</param>
 /// <param name="Mode">Режим, в котором запрос реально выполнен; при деградации — Text.</param>
+/// <param name="Intent">Что распознано в строке запроса: фильтры и прямое попадание по коду задачи.</param>
 public sealed record SearchResponse(
     IReadOnlyList<SearchResultItem> Items,
     int Total,
     bool Degraded,
     long TookMs,
-    SearchMode Mode);
+    SearchMode Mode,
+    SearchIntentResponse Intent);
+
+/// <summary>
+/// Разбор строки запроса: «@ivanov просроченные проект:DBACK» — это фильтры, а не смысл, и стоят
+/// они ноль. Клиент показывает их чипами, иначе человек не поймёт, почему выдача сузилась.
+/// </summary>
+/// <param name="Text">Остаток строки, ушедший в поиск; пусто — были только фильтры.</param>
+/// <param name="Filters">Человекочитаемые подписи распознанного — для чипов.</param>
+/// <param name="TaskId">Задача, найденная по коду в строке (PROJ-142): её открывают напрямую.</param>
+public sealed record SearchIntentResponse(string Text, IReadOnlyList<string> Filters, Guid? TaskId);
 
 /// <param name="Title">Название источника: задачи, задачи-владельца комментария, проекта или человека.</param>
 /// <param name="Snippet">Фрагмент найденного чанка; совпадения обёрнуты в &lt;mark&gt;.</param>

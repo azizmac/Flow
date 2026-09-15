@@ -1,5 +1,8 @@
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Search.Queries.SearchQuery;
+using Flow.Application.Features.Search.Queries.SimilarTasksQuery;
+using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCommentAddCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
@@ -234,6 +237,110 @@ public class SearchQueryTests(SearchFixture fixture)
             fixture.Embedder.Unavailable = false;
         }
     }
+
+    [Fact]
+    public async Task Assignee_Filter_From_Query_String_Narrows_To_Assigned_Tasks()
+    {
+        var board = await CreateBoardAsync();
+        var mine = await CreateTaskAsync(board.Id, "Подготовить релиз бухгалтерии");
+        var others = await CreateTaskAsync(board.Id, "Подготовить релиз склада");
+        await fixture.SendAsync(new TaskAssignCommand(Owner, mine!.Id, Owner));
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync("подготовить релиз @owner", board.Id, SearchMode.Text);
+
+        Assert.Contains(response!.Items, item => item.SourceId == mine.Id);
+        Assert.DoesNotContain(response.Items, item => item.SourceId == others!.Id);
+        Assert.Contains("@owner", response.Intent.Filters);
+    }
+
+    [Fact]
+    public async Task Overdue_Filter_Keeps_Only_Tasks_With_Past_Due_Date()
+    {
+        var board = await CreateBoardAsync();
+        var overdue = await CreateTaskAsync(board.Id, "Инвентаризация склада просрочена");
+        var future = await CreateTaskAsync(board.Id, "Инвентаризация склада в срок");
+        await fixture.SendAsync(new TaskSetDueDateCommand(Owner, overdue!.Id, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-3))));
+        await fixture.SendAsync(new TaskSetDueDateCommand(Owner, future!.Id, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))));
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync("инвентаризация просроченные", board.Id, SearchMode.Text);
+
+        Assert.Contains(response!.Items, item => item.SourceId == overdue.Id);
+        Assert.DoesNotContain(response.Items, item => item.SourceId == future.Id);
+    }
+
+    [Fact]
+    public async Task Status_Filter_From_Query_String_Narrows_By_Status_Name()
+    {
+        var board = await CreateBoardAsync();
+        var done = board.Statuses.First(status => status.IsFinal);
+        var closed = await CreateTaskAsync(board.Id, "Мембрана кровли переделана");
+        var open = await CreateTaskAsync(board.Id, "Мембрана кровли в работе");
+        await fixture.SendAsync(new TaskUpdateCommand(Owner, closed!.Id, null, null, done.Id));
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync($"мембрана кровли статус:{done.Name}", board.Id, SearchMode.Text, includeArchived: true);
+
+        Assert.Contains(response!.Items, item => item.SourceId == closed.Id);
+        Assert.DoesNotContain(response.Items, item => item.SourceId == open!.Id);
+    }
+
+    [Fact]
+    public async Task Filters_Without_Text_List_Sources_By_Date()
+    {
+        var board = await CreateBoardAsync();
+        var first = await CreateTaskAsync(board.Id, "Первая задача фильтра");
+        var second = await CreateTaskAsync(board.Id, "Вторая задача фильтра");
+        await fixture.SendAsync(new TaskAssignCommand(Owner, first!.Id, Owner));
+        await fixture.SendAsync(new TaskAssignCommand(Owner, second!.Id, Owner));
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync("мои", board.Id);
+
+        // Искать нечего — выдача просто отобрана фильтром; новая задача идёт первой.
+        Assert.Equal(SearchMode.Filters, response!.Mode);
+        Assert.Equal(second.Id, response.Items[0].SourceId);
+        Assert.Contains(response.Items, item => item.SourceId == first.Id);
+        Assert.All(response.Items, item => Assert.Equal(SearchSourceType.Task, item.SourceType));
+    }
+
+    [Fact]
+    public async Task Task_Code_In_Query_Opens_The_Task_Directly()
+    {
+        var board = await CreateBoardAsync();
+        var task = await CreateTaskAsync(board.Id, "Задача по коду");
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync(task!.Code!);
+
+        Assert.Equal(task.Id, response!.Intent.TaskId);
+        Assert.Equal(task.Id, Assert.Single(response.Items).SourceId);
+    }
+
+    [Fact]
+    public async Task Similar_Tasks_Are_Closest_By_Vector_And_Exclude_The_Task_Itself()
+    {
+        var board = await CreateBoardAsync();
+        var source = await CreateTaskAsync(board.Id, "Падает выгрузка накладных в формате PDF");
+        var near = await CreateTaskAsync(board.Id, "Не выгружаются накладные PDF из реестра");
+        var far = await CreateTaskAsync(board.Id, "Перекрасить кнопку профиля");
+        await fixture.DrainIndexingAsync();
+
+        var similar = await fixture.SendAsync(new SimilarTasksQuery(Owner, source!.Id, 10));
+
+        Assert.NotNull(similar);
+        // Похожие ищутся по всей базе, а не внутри проекта: дубль обычно и заводят в соседнем.
+        // Поэтому проверяется не место в списке, а порядок «близкая выше далёкой».
+        Assert.DoesNotContain(similar!, item => item.SourceId == source.Id);
+        var nearHit = Assert.Single(similar!, item => item.SourceId == near!.Id);
+        var farHit = Assert.Single(similar!, item => item.SourceId == far!.Id);
+        Assert.True(nearHit.Score > farHit.Score, $"близкая {nearHit.Score:F3} должна быть выше далёкой {farHit.Score:F3}");
+    }
+
+    [Fact]
+    public async Task Similar_Is_Null_For_Unknown_Task() =>
+        Assert.Null(await fixture.SendAsync(new SimilarTasksQuery(Owner, Guid.NewGuid(), 5)));
 
     [Fact]
     public async Task Nothing_Found_Is_An_Empty_Page_Not_An_Error()

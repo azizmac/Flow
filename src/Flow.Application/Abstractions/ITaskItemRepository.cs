@@ -15,6 +15,9 @@ public interface ITaskItemRepository
     /// </summary>
     Task<IReadOnlyDictionary<Guid, int>> CountByBoardIdsAsync(IReadOnlyCollection<Guid> boardIds, CancellationToken cancellationToken);
 
+    /// <summary>Задача по коду (PROJ-142) — прямое попадание из строки поиска. Регистр не важен.</summary>
+    Task<TaskItem?> GetByCodeAsync(string code, CancellationToken cancellationToken);
+
     /// <summary>Нужно для валидации ChangeStatus — статус должен принадлежать той же доске, что и задача.</summary>
     Task<bool> StatusBelongsToBoardAsync(Guid statusId, Guid boardId, CancellationToken cancellationToken);
 
