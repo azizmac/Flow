@@ -22,7 +22,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     /// <summary>Owner, который сеется после миграций: actor для команд в интеграционных тестах.</summary>
     public static readonly Guid OwnerId = Guid.Parse("00000000-0000-0000-0000-00000000aaaa");
 
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:pg16").Build();
 
     private ServiceProvider _services = null!;
 
@@ -46,7 +46,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         _services = services.BuildServiceProvider();
 
         await using var scope = _services.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<FlowDbContext>().Database.MigrateAsync();
+        await FlowDatabase.MigrateAsync(scope.ServiceProvider, CancellationToken.None);
 
         await SendAsync(new SeedBootstrapUserCommand(OwnerId, "owner", "owner@example.com", "Owner", "Flow"));
     }

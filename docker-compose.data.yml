@@ -7,11 +7,14 @@
 #   docker compose -f docker-compose.data.yml up -d        # поднять данные
 #   docker compose -f docker-compose.data.yml down          # остановить (данные остаются в томах)
 #   docker volume rm flow-postgres-data flow-minio-data     # осознанно удалить данные
+#
+# Эмбеддер поиска — профиль ai:
+#   docker compose -f docker-compose.data.yml --profile ai up -d
 name: flow-data
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-flow}
@@ -75,12 +78,37 @@ services:
     networks:
       - flow-network
 
+  # Эмбеддер поиска: llama-server с Qwen3-Embedding по OpenAI-совместимому /v1/embeddings.
+  # Профиль ai включается явно:
+  #   docker compose -f docker-compose.data.yml --profile ai up -d
+  # Веса кладут во внешний том flow-models-data (создаёт docker/data/init-env.sh, путь задаёт MODELS_ROOT):
+  # это тяжёлые данные со своим жизненным циклом, пересборка приложения их не трогает.
+  # Если модель крутится на другой машине (GPU), сервис не поднимают вовсе — EMBEDDINGS_QUERY_ENDPOINT
+  # просто указывает наружу. Межстековых depends_on нет: недоступность модели — деградация поиска, не сбой старта.
+  embeddings:
+    image: ${EMBEDDINGS_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    profiles: ["ai"]
+    restart: unless-stopped
+    # --pooling last обязателен для Qwen3-Embedding: пулинг по последнему токену делает сам сервер.
+    command: >
+      --model /models/${EMBEDDINGS_MODEL_FILE:-Qwen3-Embedding-0.6B-Q8_0.gguf}
+      --alias ${EMBEDDINGS_MODEL:-Qwen3-Embedding-0.6B}
+      --embedding --pooling last
+      --ctx-size 8192 --batch-size 8192 --ubatch-size 8192
+      --host 0.0.0.0 --port 8081
+    volumes:
+      - models-data:/models
+    ports:
+      - "${EMBEDDINGS_BIND:-127.0.0.1}:${EMBEDDINGS_PORT:-8081}:8081"
+    networks:
+      - flow-network
+
   # Бэкапы по расписанию. По умолчанию выключены — профиль включается явно:
   #   docker compose -f docker-compose.data.yml --profile backup up -d
   # Разовый бэкап тем же контейнером и тем же скриптом:
   #   docker compose -f docker-compose.data.yml --profile backup run --rm backup /scripts/backup.sh
   backup:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     profiles: ["backup"]
     restart: unless-stopped
     depends_on:
@@ -119,4 +147,9 @@ volumes:
     external: true
   minio-data:
     name: flow-minio-data
+    external: true
+  # Веса моделей: том внешний по той же причине, что и данные — `docker compose down -v` их не уносит,
+  # а перекачивать гигабайты заново дорого.
+  models-data:
+    name: flow-models-data
     external: true

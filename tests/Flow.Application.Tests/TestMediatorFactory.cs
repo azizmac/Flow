@@ -1,5 +1,6 @@
 using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
+using Flow.Application.Features.Search;
 using Flow.Application.Tests.Fakes;
 using Flow.Domain.Entities;
 using MediatR;
@@ -29,6 +30,13 @@ public static class TestMediatorFactory
         return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Comments, all.Activities);
     }
 
+    /// <summary>Плюс очередь индексации — для тестов о том, что попадает в поисковый индекс.</summary>
+    public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeTaskCommentRepository Comments, FakeSearchIndexQueue SearchIndex) CreateWithSearchIndex()
+    {
+        var all = Build();
+        return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Comments, all.SearchIndex);
+    }
+
     /// <summary>То же, плюс FakeAccountService — для тестов, которым важно, что ушло в Flow.Auth.</summary>
     public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts) CreateWithAccounts()
     {
@@ -36,7 +44,7 @@ public static class TestMediatorFactory
         return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Accounts);
     }
 
-    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities) Build()
+    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchIndex) Build()
     {
         var boards = new FakeBoardRepository();
         var tasks = new FakeTaskItemRepository();
@@ -44,6 +52,7 @@ public static class TestMediatorFactory
         var accounts = new FakeAccountService();
         var comments = new FakeTaskCommentRepository();
         var activities = new FakeTaskActivityRepository();
+        var searchIndex = new FakeSearchIndexQueue();
 
         var owner = User.CreateWithId(OwnerId, "owner", "owner@example.com", "Owner", "Flow");
         owner.ChangeRole(UserRole.Owner);
@@ -57,10 +66,15 @@ public static class TestMediatorFactory
         services.AddSingleton<IAccountService>(accounts);
         services.AddSingleton<ITaskCommentRepository>(comments);
         services.AddSingleton<ITaskActivityRepository>(activities);
+        services.AddSingleton<ISearchIndexQueue>(searchIndex);
+        services.AddSingleton<ISearchIndexRepository>(new FakeSearchIndexRepository());
+        services.AddSingleton<IEmbeddingGenerator>(new FakeEmbeddingGenerator());
+        // Поиск включён: иначе /search/reindex отвечал бы «выключено» раньше проверки прав.
+        services.AddSingleton(new SearchOptions { Enabled = true });
         services.AddSingleton<IUnitOfWork>(new FakeUnitOfWork());
         services.AddFlowApplication();
 
         var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
-        return (mediator, boards, tasks, users, accounts, comments, activities);
+        return (mediator, boards, tasks, users, accounts, comments, activities, searchIndex);
     }
 }

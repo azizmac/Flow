@@ -117,6 +117,35 @@ docker compose -f docker-compose.data.yml --profile backup run --rm backup \
     /scripts/restore.sh 2026-09-11T03-00-00 --yes
 ```
 
+### Поиск: индекс и эмбеддинги
+
+Заготовка векторного поиска (`docs/TZ_search_vector.md`). По умолчанию **выключена** — `SEARCH_ENABLED=false`:
+индекс не наполняется, фоновый воркер не стартует, поведение остального API прежнее. Postgres теперь идёт
+образом `pgvector/pgvector:pg16` (данные и тома те же), расширение `vector` ставится миграцией.
+
+Чтобы включить, нужна модель эмбеддингов. Она живёт в стеке данных под профилем `ai` — сайдкар
+`llama-server` с `Qwen3-Embedding-0.6B`; веса кладутся во внешний том `flow-models-data`
+(файл задаётся `EMBEDDINGS_MODEL_FILE`, каталог тома — `MODELS_ROOT`):
+
+```bash
+docker compose -f docker-compose.data.yml --profile ai up -d   # эмбеддер на :8081
+SEARCH_ENABLED=true docker compose up -d                        # API с включённым индексом
+```
+
+Если модель крутится на другой машине (например, с GPU), профиль `ai` не нужен — достаточно указать
+`EMBEDDINGS_QUERY_ENDPOINT` и `EMBEDDINGS_INDEXING_ENDPOINT` на неё.
+
+Дальше индекс наполняется сам: каждая правка задачи, комментария, проекта или человека попадает в очередь
+той же транзакцией, что и сама правка, а фоновый воркер считает векторы. Два служебных эндпоинта:
+
+| Метод | Путь | Кто | Зачем |
+|---|---|---|---|
+| `GET` | `/search/status` | Admin, Owner | Размер очереди, застрявшие записи, число чанков по типам, версия модели, доступность эмбеддера |
+| `POST` | `/search/reindex` | Owner | Поставить в очередь всё (или один проект / типы источников) — при первом включении и после смены модели |
+
+Самого поиска (`GET /search`) пока нет: он появится вместе с гибридным запросом — вектор плюс полнотекстовый
+поиск с объединением результатов.
+
 ### Если стек уже был поднят раньше
 
 Имена томов изменились, поэтому существующее развёртывание один раз переносит данные:
@@ -173,6 +202,8 @@ docker compose up -d
 - [`docs/TZ_auth.md`](docs/TZ_auth.md) — аутентификация и Flow.Auth
 - [`docs/TZ_infra_data_split.md`](docs/TZ_infra_data_split.md) — вынос БД и S3 в отдельный стек данных
 - [`docs/TZ_task_activity_comments.md`](docs/TZ_task_activity_comments.md) — комментарии, журнал изменений, Markdown-редактор, срок задачи
+- [`docs/TZ_search_vector.md`](docs/TZ_search_vector.md) — векторный и умный поиск: модель, хранилище, индексация, этапы
+- [`docs/TZ_search_stage1-3.md`](docs/TZ_search_stage1-3.md) — схема индекса, эмбеддер и индексация (этапы 1–3)
 - [`docs/Struktura_board_task_status.md`](docs/Struktura_board_task_status.md) — структура доменной модели
 - [`docs/Sravnenie_DbContext_podhodov.md`](docs/Sravnenie_DbContext_podhodov.md) — сравнение подходов к DbContext
 

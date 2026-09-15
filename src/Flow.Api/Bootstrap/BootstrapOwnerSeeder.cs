@@ -25,7 +25,8 @@ public sealed class BootstrapOwnerSeeder(
 
         // База — в отдельном стеке Compose, ждать её healthcheck оттуда нельзя: ждём сами.
         await DatabaseReadiness.WaitAsync(db, DatabaseReadiness.TimeoutFrom(configuration), logger, cancellationToken);
-        await db.Database.MigrateAsync(cancellationToken);
+        // Не db.Database.MigrateAsync: после миграции нужно перечитать каталог типов Npgsql — см. FlowDatabase.
+        await FlowDatabase.MigrateAsync(scope.ServiceProvider, cancellationToken);
 
         var bootstrap = options.Value;
         if (!bootstrap.Enabled)

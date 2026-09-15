@@ -1,4 +1,5 @@
 using Flow.Domain.Entities;
+using Flow.Infrastructure.Search.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flow.Infrastructure.Persistence;
@@ -16,6 +17,14 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
 
     public DbSet<TaskActivity> TaskActivities => Set<TaskActivity>();
+
+    /// <summary>
+    /// Поисковый индекс — проекция, а не домен: наружу из сборки не торчит, Application работает
+    /// с ним через ISearchIndexQueue и ISearchIndexRepository.
+    /// </summary>
+    internal DbSet<SearchChunk> SearchChunks => Set<SearchChunk>();
+
+    internal DbSet<SearchIndexRequest> SearchIndexQueue => Set<SearchIndexRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

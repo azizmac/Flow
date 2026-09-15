@@ -117,6 +117,36 @@ docker compose -f docker-compose.data.yml --profile backup run --rm backup \
     /scripts/restore.sh 2026-09-11T03-00-00 --yes
 ```
 
+### Search: index and embeddings
+
+Groundwork for vector search (`docs/TZ_search_vector.md`). **Off by default** — `SEARCH_ENABLED=false`:
+nothing is indexed, the background worker does not start, and the rest of the API behaves exactly as before.
+Postgres now runs the `pgvector/pgvector:pg16` image (same data, same volumes); the `vector` extension is
+installed by a migration.
+
+Turning it on needs an embedding model. It lives in the data stack under the `ai` profile — a `llama-server`
+sidecar with `Qwen3-Embedding-0.6B`; weights go into the external `flow-models-data` volume (file name from
+`EMBEDDINGS_MODEL_FILE`, volume location from `MODELS_ROOT`):
+
+```bash
+docker compose -f docker-compose.data.yml --profile ai up -d   # embedder on :8081
+SEARCH_ENABLED=true docker compose up -d                        # API with indexing on
+```
+
+If the model runs on another machine (a GPU box, say), skip the `ai` profile and point
+`EMBEDDINGS_QUERY_ENDPOINT` and `EMBEDDINGS_INDEXING_ENDPOINT` at it.
+
+After that the index fills itself: every edit of a task, comment, project or person is queued in the same
+transaction as the edit, and a background worker computes the vectors. Two operational endpoints:
+
+| Method | Path | Who | What for |
+|---|---|---|---|
+| `GET` | `/search/status` | Admin, Owner | Queue size, stuck entries, chunk counts per type, model version, embedder availability |
+| `POST` | `/search/reindex` | Owner | Queue everything (or one project / selected source types) — on first enable and after a model change |
+
+Search itself (`GET /search`) is not there yet: it arrives together with the hybrid query — vectors plus
+full-text search, merged into one ranking.
+
 ### Coming from a single-stack checkout
 
 Volumes were renamed, so an existing deployment has to move its data over once:
@@ -177,6 +207,8 @@ Project documentation is written in Russian.
 - [`docs/TZ_auth.md`](docs/TZ_auth.md) — authentication and Flow.Auth
 - [`docs/TZ_infra_data_split.md`](docs/TZ_infra_data_split.md) — splitting the database and S3 into a data stack
 - [`docs/TZ_task_activity_comments.md`](docs/TZ_task_activity_comments.md) — comments, change log, Markdown editor, due dates
+- [`docs/TZ_search_vector.md`](docs/TZ_search_vector.md) — vector and smart search: model, storage, indexing, stages
+- [`docs/TZ_search_stage1-3.md`](docs/TZ_search_stage1-3.md) — index schema, embedder and indexing (stages 1–3)
 - [`docs/Struktura_board_task_status.md`](docs/Struktura_board_task_status.md) — domain model structure
 - [`docs/Sravnenie_DbContext_podhodov.md`](docs/Sravnenie_DbContext_podhodov.md) — DbContext approaches compared
 

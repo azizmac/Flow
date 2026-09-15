@@ -50,4 +50,10 @@ public interface IPermissionService
     /// Проверка «последний Owner» — в хендлере (нужен репозиторий).
     /// </summary>
     void EnsureCanChangeRole(User actor, User target, UserRole newRole);
+
+    /// <summary>Состояние поискового индекса (GET /search/status) — Admin и Owner: это эксплуатация, не поиск.</summary>
+    void EnsureCanViewSearchDiagnostics(User actor);
+
+    /// <summary>Массовая переиндексация (POST /search/reindex) — только Owner: она грузит модель и БД надолго.</summary>
+    void EnsureCanReindex(User actor);
 }

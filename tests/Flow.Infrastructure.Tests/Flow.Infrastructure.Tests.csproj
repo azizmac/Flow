@@ -19,6 +19,8 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Flow.Application\Flow.Application.csproj" />
         <ProjectReference Include="..\..\src\Flow.Infrastructure\Flow.Infrastructure.csproj" />
+        <!-- FakeEmbeddingGenerator: интеграционные тесты индексации модель не тянут. -->
+        <ProjectReference Include="..\Flow.Application.Tests\Flow.Application.Tests.csproj" />
     </ItemGroup>
 
 </Project>

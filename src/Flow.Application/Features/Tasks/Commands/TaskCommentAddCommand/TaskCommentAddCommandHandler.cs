@@ -2,6 +2,7 @@ using Flow.Application.Abstractions;
 using Flow.Application.Features.Tasks.Mentions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
+using Flow.Shared.Contracts.Search;
 using MediatR;
 
 namespace Flow.Application.Features.Tasks.Commands.TaskCommentAddCommand;
@@ -11,6 +12,7 @@ internal sealed class TaskCommentAddCommandHandler(
     ITaskCommentRepository comments,
     ITaskActivityRepository activities,
     MentionResolver mentions,
+    ISearchIndexQueue searchIndex,
     ActorResolver actors,
     IPermissionService permissions,
     IUnitOfWork unitOfWork)
@@ -31,6 +33,7 @@ internal sealed class TaskCommentAddCommandHandler(
 
         comments.Add(comment);
         activities.Add(TaskActivity.CommentAdded(task.Id, actor.Id, comment.Id));
+        searchIndex.Enqueue(SearchSourceType.Comment, comment.Id, task.BoardId, SearchIndexOperation.Upsert);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return TaskCommentResult.Success(comment.ToResponse());

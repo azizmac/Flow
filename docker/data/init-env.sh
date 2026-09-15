@@ -4,11 +4,13 @@
 #
 #   sh docker/data/init-env.sh
 #   DATA_ROOT=/mnt/flow sh docker/data/init-env.sh   # данные на своём каталоге вместо томов Docker
+#   MODELS_ROOT=/mnt/models sh docker/data/init-env.sh  # веса моделей отдельно от данных
 set -eu
 
 NETWORK=flow-network
 PG_VOLUME=flow-postgres-data
 S3_VOLUME=flow-minio-data
+MODELS_VOLUME=flow-models-data
 DATA_ROOT=${DATA_ROOT:-}
 
 if docker network inspect "$NETWORK" >/dev/null 2>&1; then
@@ -19,6 +21,7 @@ else
 fi
 
 # Том с bind-драйвером: данные лежат по указанному пути, а не в каталоге Docker.
+# Пустой path — обычный том Docker.
 create_volume() {
     name=$1
     path=$2
@@ -28,7 +31,7 @@ create_volume() {
         return
     fi
 
-    if [ -n "$DATA_ROOT" ]; then
+    if [ -n "$path" ]; then
         mkdir -p "$path"
         docker volume create \
             --driver local \
@@ -43,8 +46,11 @@ create_volume() {
     fi
 }
 
-create_volume "$PG_VOLUME" "$DATA_ROOT/postgres"
-create_volume "$S3_VOLUME" "$DATA_ROOT/minio"
+create_volume "$PG_VOLUME" "${DATA_ROOT:+$DATA_ROOT/postgres}"
+create_volume "$S3_VOLUME" "${DATA_ROOT:+$DATA_ROOT/minio}"
+# Веса моделей эмбеддера (профиль ai). MODELS_ROOT задаёт свой каталог — веса обычно живут не там,
+# где данные: их не бэкапят и при желании переиспользуют между установками.
+create_volume "$MODELS_VOLUME" "${MODELS_ROOT:-${DATA_ROOT:+$DATA_ROOT/models}}"
 
 echo
 echo "Готово. Дальше:"

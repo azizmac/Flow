@@ -73,6 +73,12 @@ internal sealed class PermissionService : IPermissionService
         }
     }
 
+    public void EnsureCanViewSearchDiagnostics(User actor) =>
+        Require(actor.Role >= UserRole.Admin, "Состояние поискового индекса доступно Admin и Owner.");
+
+    public void EnsureCanReindex(User actor) =>
+        Require(actor.Role == UserRole.Owner, "Запускать переиндексацию поиска может только Owner.");
+
     /// <summary>«Своя задача» для Member: создал или назначен исполнителем.</summary>
     private static bool IsOwn(User actor, TaskItem task) =>
         task.CreatedById == actor.Id || task.AssigneeId == actor.Id;
