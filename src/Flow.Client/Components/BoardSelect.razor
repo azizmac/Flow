@@ -1,0 +1,136 @@
+@* Выбор проекта в топбаре экрана задач: чип с ключом + название + шеврон, по клику — список проектов.
+   Value = null — «Все проекты»; это состояние тоже кликабельно и открывает список.
+   Поиск по списку появляется, когда проектов больше PopoverSearchFrom. *@
+@inject BrowserInterop Browser
+
+<div class="board-sel @(Compact ? "compact" : "") @(Disabled ? "disabled" : "")" id="@_id" @onclick="Toggle" @onclick:stopPropagation
+     @onkeydown="OnKey" role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox"
+     aria-expanded="@(_open ? "true" : "false")" title="Выбрать проект">
+    @if (Current is { } board)
+    {
+        <KeyChip Value="@board.Key" />
+        @if (Compact)
+        {
+            <span class="board-sel-name" title="@board.Name">@board.Name</span>
+        }
+        else
+        {
+            <h2 title="@board.Name">@board.Name</h2>
+        }
+    }
+    else
+    {
+        <span class="key-chip all">ВСЕ</span>
+        @if (Compact)
+        {
+            <span class="board-sel-name">Все проекты</span>
+        }
+        else
+        {
+            <h2>Все проекты</h2>
+        }
+    }
+    <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.45)" />
+</div>
+
+@if (_open)
+{
+    <Popover AnchorId="@_id" Align="left" Width="300" Role="listbox" OnClose="Close">
+        @if (Boards.Count > PopoverSearchFrom)
+        {
+            <div class="pop-search">
+                <input id="@_searchId" class="ds-input sm" placeholder="Найти проект…" value="@_search"
+                       @onclick:stopPropagation @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
+            </div>
+        }
+        @if (AllowAll)
+        {
+            <button type="button" class="pop-item @(Value is null ? "cur" : "")" role="option"
+                    aria-selected="@((Value is null).ToString().ToLowerInvariant())" @onclick="() => Select(null)">
+                <span class="key-chip all">ВСЕ</span>
+                <span class="pop-board-name">Все проекты</span>
+                <span class="n">@TotalCount</span>
+            </button>
+        }
+        @foreach (var b in Filtered)
+        {
+            <button type="button" class="pop-item @(b.Id == Value ? "cur" : "")" role="option"
+                    aria-selected="@((b.Id == Value).ToString().ToLowerInvariant())" @onclick="() => Select(b.Id)">
+                <KeyChip Value="@b.Key" />
+                <span class="pop-board-name" title="@b.Name">@b.Name</span>
+                <span class="n">@b.TaskCount</span>
+            </button>
+        }
+        @if (Filtered.Count == 0 && Boards.Count > 0)
+        {
+            <div class="pop-empty">Ничего не найдено</div>
+        }
+    </Popover>
+}
+
+@code {
+    private const int PopoverSearchFrom = 8;
+
+    [Parameter, EditorRequired] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
+    /// <summary>null — «Все проекты».</summary>
+    [Parameter] public Guid? Value { get; set; }
+    [Parameter] public EventCallback<Guid?> ValueChanged { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    /// <summary>Компактный вид для формы: обычный текст вместо заголовка страницы.</summary>
+    [Parameter] public bool Compact { get; set; }
+    /// <summary>Пункт «Все проекты». В форме создания задачи проект обязателен, поэтому там его нет.</summary>
+    [Parameter] public bool AllowAll { get; set; } = true;
+
+    private readonly string _id = "bs-" + Guid.NewGuid().ToString("N")[..8];
+    private readonly string _searchId = "bss-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _open;
+    private string _search = "";
+
+    private BoardResponse? Current => Boards.FirstOrDefault(b => b.Id == Value);
+
+    private int TotalCount => Boards.Sum(b => b.TaskCount);
+
+    private List<BoardResponse> Filtered
+    {
+        get
+        {
+            var s = _search.Trim();
+            return s.Length == 0
+                ? Boards.ToList()
+                : Boards.Where(b => b.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
+                                    || b.Key.Contains(s, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+    }
+
+    // Enter/Space/↓ открывают список — как у нативного select.
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (!Disabled && e.Key is "Enter" or " " or "ArrowDown")
+            _open = true;
+    }
+
+    private async Task Toggle()
+    {
+        if (Disabled)
+            return;
+
+        _open = !_open;
+        _search = "";
+
+        if (_open && Boards.Count > PopoverSearchFrom)
+        {
+            StateHasChanged();
+            await Task.Yield();
+            await Browser.FocusAsync(_searchId);
+        }
+    }
+
+    private void Close() => _open = false;
+
+    private async Task Select(Guid? id)
+    {
+        _open = false;
+        if (id != Value)
+            await ValueChanged.InvokeAsync(id);
+    }
+}

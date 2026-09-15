@@ -48,6 +48,34 @@ public sealed class FlowApi(HttpClient http)
     public Task<ApiResult<IReadOnlyList<TaskResponse>>> GetTasks(Guid boardId, Guid? assigneeId = null, CancellationToken ct = default) =>
         Get<IReadOnlyList<TaskResponse>>(assigneeId is null ? $"boards/{boardId}/tasks" : $"boards/{boardId}/tasks?assigneeId={assigneeId}", ct);
 
+    /// <summary>
+    /// Сводный список задач: boardId = null — по всем проектам. Фильтры и поиск считает сервер, поэтому
+    /// счётчики в ответе верны и тогда, когда выдана лишь первая страница.
+    /// </summary>
+    public Task<ApiResult<TaskListResponse>> SearchTasks(
+        Guid? boardId = null,
+        Guid? assigneeId = null,
+        bool unassigned = false,
+        Guid? statusId = null,
+        StatusType? statusType = null,
+        string? query = null,
+        int? limit = null,
+        string? cursor = null,
+        CancellationToken ct = default)
+    {
+        var parameters = new List<string>();
+        if (boardId is { } b) parameters.Add($"boardId={b}");
+        if (assigneeId is { } a) parameters.Add($"assigneeId={a}");
+        if (unassigned) parameters.Add("unassigned=true");
+        if (statusId is { } s) parameters.Add($"statusId={s}");
+        if (statusType is { } t) parameters.Add($"statusType={t}");
+        if (!string.IsNullOrWhiteSpace(query)) parameters.Add($"q={Uri.EscapeDataString(query.Trim())}");
+        if (limit is { } l) parameters.Add($"limit={l}");
+        if (!string.IsNullOrWhiteSpace(cursor)) parameters.Add($"cursor={Uri.EscapeDataString(cursor)}");
+
+        return Get<TaskListResponse>(parameters.Count == 0 ? "tasks" : $"tasks?{string.Join('&', parameters)}", ct);
+    }
+
     public Task<ApiResult<TaskResponse>> GetTask(Guid id, CancellationToken ct = default) =>
         Get<TaskResponse>($"tasks/{id}", ct);
 

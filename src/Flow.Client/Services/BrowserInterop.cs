@@ -123,13 +123,86 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
-    // ---- Markdown-редактор (flow.editor.*): все методы возвращают новое значение textarea или null. ----
+    // ---- Markdown-редактор (flowEditor.*, CodeMirror): все методы возвращают новое значение или null. ----
+
+    /// <summary>Подгружает бандл редактора (один раз на страницу). false — не загрузился, поля ввода не будет.</summary>
+    public async Task<bool> EnsureEditorLoadedAsync()
+    {
+        try
+        {
+            return await js.InvokeAsync<bool>("flow.loadEditor");
+        }
+        catch (JSException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Создаёт редактор в контейнере. dotNetRef принимает ввод (HandleEditorInput) и клавиши (HandleEditorKey).</summary>
+    public async Task<bool> EditorMountAsync<T>(string elementId, DotNetObjectReference<T> dotNetRef, string? value, string? placeholder, bool readOnly)
+        where T : class
+    {
+        try
+        {
+            return await js.InvokeAsync<bool>("flowEditor.mount", elementId, dotNetRef,
+                new { value, placeholder, readOnly });
+        }
+        catch (JSException)
+        {
+            return false;
+        }
+    }
+
+    public async Task EditorDestroyAsync(string elementId)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flowEditor.destroy", elementId);
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    public async Task EditorFocusAsync(string elementId)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flowEditor.focus", elementId);
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    public async Task EditorSetReadOnlyAsync(string elementId, bool readOnly)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flowEditor.setReadOnly", elementId, readOnly);
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    public async Task<string?> EditorSetValueAsync(string elementId, string value)
+    {
+        try
+        {
+            return await js.InvokeAsync<string?>("flowEditor.setValue", elementId, value);
+        }
+        catch (JSException)
+        {
+            return null;
+        }
+    }
 
     public async Task<EditorState?> EditorStateAsync(string elementId)
     {
         try
         {
-            return await js.InvokeAsync<EditorState?>("flow.editor.state", elementId);
+            return await js.InvokeAsync<EditorState?>("flowEditor.state", elementId);
         }
         catch (JSException)
         {
@@ -141,7 +214,7 @@ public sealed class BrowserInterop(IJSRuntime js)
     {
         try
         {
-            return await js.InvokeAsync<string?>("flow.editor.wrap", elementId, before, after, placeholder);
+            return await js.InvokeAsync<string?>("flowEditor.wrap", elementId, before, after, placeholder);
         }
         catch (JSException)
         {
@@ -153,7 +226,7 @@ public sealed class BrowserInterop(IJSRuntime js)
     {
         try
         {
-            return await js.InvokeAsync<string?>("flow.editor.prefixLines", elementId, prefix, ordered);
+            return await js.InvokeAsync<string?>("flowEditor.prefixLines", elementId, prefix, ordered);
         }
         catch (JSException)
         {
@@ -165,7 +238,7 @@ public sealed class BrowserInterop(IJSRuntime js)
     {
         try
         {
-            return await js.InvokeAsync<string?>("flow.editor.insertMention", elementId, atPosition, username);
+            return await js.InvokeAsync<string?>("flowEditor.insertMention", elementId, atPosition, username);
         }
         catch (JSException)
         {
