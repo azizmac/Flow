@@ -110,6 +110,40 @@ input, textarea { font-family: inherit; }
     text-overflow: ellipsis;
 }
 .topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+/* Селектор проекта: выглядит как заголовок экрана, ведёт себя как выпадающий список. */
+.board-sel {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 4px 8px;
+    margin-left: -8px;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+}
+.board-sel.disabled { cursor: default; opacity: 0.6; }
+.board-sel h2 { min-width: 0; }
+/* Компактный вид (форма создания задачи): не заголовок, а значение поля. */
+.board-sel.compact {
+    padding: 5px 10px;
+    margin-left: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+}
+.board-sel-name {
+    font: var(--fw-semibold) 13.5px var(--font-display);
+    color: #fff;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* Чип «все проекты»: та же форма, что у ключа проекта, но нейтральный — это не ключ. */
+.key-chip.all {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-secondary);
+}
 .topbar-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
 .topbar-back { display: flex; color: var(--text-tertiary); transition: color 150ms ease; }
 .topbar-crumbs {
@@ -344,7 +378,15 @@ input, textarea { font-family: inherit; }
     box-shadow: var(--shadow-sidebar);
 }
 /* color задаёт верхнюю долю знака (BrandMark рисует её currentColor) — на тёмном сайдбаре светлую. */
-.sb-brand { display: flex; align-items: center; gap: 10px; padding: 0 22px 26px; color: #F2F2EF; }
+.sb-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 22px 26px;
+    color: #F2F2EF;
+    text-decoration: none;
+    transition: opacity 160ms var(--ease-out);
+}
 .brand-mark { display: block; flex-shrink: 0; }
 .sb-word { font: var(--fw-black) 17px/1 var(--font-display); color: #fff; letter-spacing: -0.3px; }
 .sb-ws {
@@ -355,9 +397,13 @@ input, textarea { font-family: inherit; }
     padding: 10px 12px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: var(--r-md);
+    gap: 8px;
     /* Переключать пока нечего — не изображаем кликабельность (см. title в Sidebar.razor). */
     cursor: default;
 }
+/* Раздел ещё не сделан: тот же приглушённый вид, что у «Дашбордов» и «Настроек». */
+.sb-ws.disabled { opacity: 0.55; }
+.sb-ws .sb-soon { margin-left: auto; }
 .sb-ws-name { font: var(--fw-bold) 12.5px var(--font-display); color: #fff; }
 .sb-ws-sub { font: var(--fw-medium) 10.5px var(--font-text); color: rgba(255, 255, 255, 0.45); }
 /* ---------- Поиск: строка в сайдбаре ---------- */
@@ -889,6 +935,21 @@ a.sb-me:active { transform: scale(0.98); }
 .pop-item:focus-visible { outline: 0; background: rgba(255, 255, 255, 0.08); color: #fff; }
 .pop-item .sd { width: 7px; height: 7px; }
 .pop-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+.pop-item .n { margin-left: auto; font: var(--fw-bold) 11px var(--font-display); color: var(--text-tertiary); }
+.pop-board-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pop-empty { padding: 10px; font: var(--fw-medium) 12.5px var(--font-text); color: var(--text-tertiary); }
+.pop-search { padding: 2px 2px 6px; }
+.pop-search input {
+    width: 100%;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.12);
+    color: #fff;
+    font: var(--fw-medium) 12.5px var(--font-text);
+    outline: 0;
+}
+.pop-search input:focus { border-color: var(--accent); }
 
 /* ---------- Segmented status filter ---------- */
 .seg {
@@ -922,7 +983,20 @@ a.sb-me:active { transform: scale(0.98); }
 .seg-btn.on .sd { transform: scale(1.25); }
 /* Пилюля активного сегмента «наливается» из центра — переключение вкладок читается движением. */
 @keyframes seg-on { from { background-color: transparent; transform: scale(0.94); } to { background-color: var(--surface-raised); transform: none; } }
+/* Пресет-переключатель вне группы сегментов: собственная рамка, чтобы не выглядел выпавшей вкладкой. */
+.seg-btn.solo { border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 14px; }
+.seg-btn.solo.on { border-color: var(--accent); }
+/* Служебная группа (кастомные статусы): показывает число, но фильтром не является. */
+.seg-btn.muted { cursor: default; opacity: 0.7; }
 .filter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.list-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+}
 
 /* ---------- Empty states ---------- */
 .empty {
@@ -1060,8 +1134,17 @@ a.sb-me:active { transform: scale(0.98); }
     align-items: center;
 }
 .meta-grid.narrow { grid-template-columns: 100px minmax(0, 1fr); }
+@media (max-width: 1100px) {
+    .meta-grid.narrow { grid-template-columns: minmax(0, 1fr); row-gap: 6px; }
+    .meta-grid.narrow .meta-k { margin-top: 8px; }
+}
 .meta-k { font: var(--fw-semibold) 12.5px var(--font-display); color: var(--text-tertiary); }
 .meta-v { font: var(--fw-semibold) 13.5px var(--font-display); color: #fff; display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Длинное название проекта или ФИО не должны выходить за карточку: сжимаем значение и режем многоточием
+   (полный текст остаётся в title). Чип с ключом проекта не сжимается — он и так короткий. */
+.meta-v > a,
+.meta-v > .val { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta-v > .key-chip { flex-shrink: 0; }
 .meta-v.mono {
     font: var(--fw-medium) 11px var(--font-mono);
     color: var(--text-tertiary);
@@ -1117,6 +1200,9 @@ a.sb-me:active { transform: scale(0.98); }
 }
 .desc-edit::placeholder { color: var(--text-tertiary); }
 .desc-wrap { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+/* Просмотр задачи в слайдере: под описанием идёт лента, поэтому описание не растягивается на всю высоту. */
+.desc-wrap.compact { flex: none; }
+.desc-wrap.compact .desc-box { flex: none; }
 .desc-wrap .desc-box, .desc-wrap .desc-edit { flex: 1; }
 .icon-lnk {
     display: inline-flex;
@@ -1165,7 +1251,16 @@ a.sb-me:active { transform: scale(0.98); }
     letter-spacing: -0.6px;
     padding: 0 0 4px;
 }
-.task-page-side { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; }
+/* Ширина по месту: на узких экранах карточка ужимается, на широких не растягивается сверх меры.
+   min-width: 0 обязателен — иначе flex-элемент не даёт содержимому сжиматься и текст вылезает за рамку. */
+.task-page-side {
+    width: clamp(260px, 26vw, 360px);
+    min-width: 0;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
 .side-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -1518,7 +1613,8 @@ a.task-row { color: inherit; text-decoration: none; }
 .seg-btn:focus-visible,
 .status-sel:focus-visible,
 .sb-item:focus-visible,
-.sb-ws:focus-visible,
+.sb-brand:focus-visible,
+.board-sel:focus-visible,
 .sb-me:focus-visible,
 .topbar-back:focus-visible,
 .topbar-crumbs a:focus-visible,
@@ -1546,6 +1642,9 @@ a.task-row { color: inherit; text-decoration: none; }
     .ds-iconbtn:hover:not(:disabled) { color: var(--accent-hover); }
     .ds-iconbtn.accent:hover:not(:disabled) { background: var(--accent-hover); color: var(--on-accent); }
     .task-row .ds-iconbtn:hover, .drawer-head .ds-iconbtn:hover, .board-card .ds-iconbtn:hover { color: #fff; }
+    .sb-brand:hover { opacity: 0.8; }
+    .board-sel:not(.disabled):hover { background: rgba(255, 255, 255, 0.06); }
+    .board-sel.compact:not(.disabled):hover { border-color: rgba(255, 255, 255, 0.25); }
     .sb-item:hover:not(.active):not(.disabled) { background: rgba(255, 255, 255, 0.05); color: #fff; }
     .board-card:hover { background: var(--surface-raised); border-color: var(--border-strong); box-shadow: 0 14px 30px -18px rgba(0, 0, 0, 0.75); }
     .board-card:hover .key-chip { background: var(--accent-hover); }
@@ -1603,15 +1702,6 @@ a.task-row { color: inherit; text-decoration: none; }
 /* ---------- Markdown editor (MarkdownEditor.razor) ---------- */
 .md-editor { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .md-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.md-tabs { display: flex; gap: 2px; background: rgba(0, 0, 0, 0.18); border-radius: 8px; padding: 2px; }
-.md-tab {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 5px 10px; border-radius: 6px; border: 0; background: transparent;
-    font: var(--fw-semibold) 12px var(--font-display); color: var(--text-secondary); cursor: pointer;
-    transition: background-color 150ms ease, color 150ms ease, transform 160ms var(--ease-out);
-}
-.md-tab:active { transform: scale(0.97); }
-.md-tab.on { background: var(--surface-raised); color: #fff; }
 .md-tools { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
 .md-tool {
     display: inline-flex; align-items: center; justify-content: center;
@@ -1624,26 +1714,25 @@ a.task-row { color: inherit; text-decoration: none; }
 .md-tool:focus-visible { outline: 0; background: rgba(255, 255, 255, 0.1); color: #fff; }
 @media (hover: hover) and (pointer: fine) {
     .md-tool:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
-    .md-tab:hover:not(.on) { color: #fff; }
 }
 .md-sep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
 .md-body { position: relative; }
+/* Контейнер CodeMirror: рамка и фон — здесь, отступы и шрифт текста — в теме редактора (editor/flow-editor.src.js),
+   иначе они задваиваются с внутренними стилями CodeMirror. */
 .md-text {
     width: 100%;
     max-height: 60vh;
-    resize: vertical;
-    field-sizing: content;
+    overflow: auto;
     background: rgba(0, 0, 0, 0.12);
     border: 1px solid var(--accent);
     border-radius: var(--r-lg);
-    padding: 12px 14px;
-    font: var(--fw-medium) 13.5px/1.6 var(--font-text);
     color: #fff;
     outline: 0;
     display: block;
 }
-.md-text::placeholder { color: var(--text-tertiary); }
-.md-text:disabled { opacity: 0.6; }
+/* Пустой редактор не должен схлопываться: min-height приходит инлайном от компонента. */
+.md-text .cm-editor { height: 100%; }
+.md-text .cm-scroller { max-height: 60vh; }
 .md-mention {
     position: absolute; left: 12px; top: calc(100% + 2px);
     z-index: 30; width: 260px; max-height: 240px; overflow: auto;

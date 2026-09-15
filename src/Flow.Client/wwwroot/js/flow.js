@@ -2,6 +2,8 @@
 // фокус, геометрия якорей для поповеров и localStorage. Всё остальное — в Razor/CSS.
 window.flow = (function () {
     let hotkeyRef = null;
+    // Промис загрузки бандла редактора: он один на страницу, грузим по требованию.
+    let editorLoading = null;
     // Куда вернуть фокус после закрытия слоя (дровер, модалка). Стек — слои могут вкладываться.
     const focusStack = [];
 
@@ -48,9 +50,11 @@ window.flow = (function () {
             }
         }
 
-        // Под полем открыт список, которому принадлежат стрелки/Enter/Tab/Esc: @упоминания в
-        // Markdown-редакторе, выдача строки поиска. preventDefault обязан быть синхронным — поэтому
-        // здесь, а .NET-обработчик дальше сам решает, что с клавишей делать.
+        // Под полем открыт список, которому принадлежат стрелки/Enter/Tab/Esc (строка поиска в
+        // сайдбаре). preventDefault обязан быть синхронным — поэтому здесь, а .NET-обработчик дальше
+        // сам решает, что с клавишей делать: декларативный @onkeydown:preventDefault вычисляется
+        // на рендере, то есть на клавишу позже. В Markdown-редакторе свой путь — он отдаёт клавиши
+        // в .NET сам (HandleEditorKey), см. MarkdownEditor.
         if (e.target && e.target.getAttribute && e.target.getAttribute('data-listnav') === '1'
             && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Tab' || e.key === 'Escape')) {
             e.preventDefault();
@@ -68,6 +72,11 @@ window.flow = (function () {
         }
         if (!hotkeyRef) return;
         const editable = isEditable(e.target);
+        // Esc при открытом списке упоминаний принадлежит списку: MarkdownEditor закроет его сам,
+        // а дровер под редактором закрывать рано — это отняло бы недописанный комментарий.
+        // Ввод идёт во вложенный элемент редактора, поэтому флаг ищем на предках, а не на самой цели.
+        if (e.key === 'Escape' && e.target && typeof e.target.closest === 'function'
+            && e.target.closest('[data-mention="1"]')) return;
         // В полях ввода пропускаем только Esc и Ctrl/Cmd+Enter — остальное принадлежит полю.
         if (editable && e.key !== 'Escape' && !((e.ctrlKey || e.metaKey) && e.key === 'Enter')) return;
         const plainLetter = (e.key === 'n' || e.key === 'N' || e.key === 'т' || e.key === 'Т') && !e.ctrlKey && !e.metaKey && !e.altKey;
@@ -188,54 +197,20 @@ window.flow = (function () {
             if (el) el.scrollIntoView({ block: 'nearest' });
         },
 
-        // ---- Markdown-редактор (MarkdownEditor.razor): правки текста в textarea с сохранением каретки. ----
-        // Возвращают новое значение — .NET держит его в состоянии, чтобы после ре-рендера textarea не откатилась.
-        editor: {
-            // Текущее значение и границы выделения.
-            state: function (id) {
-                const el = document.getElementById(id);
-                if (!el) return null;
-                return { value: el.value, start: el.selectionStart, end: el.selectionEnd };
-            },
+        // Бандл редактора (CodeMirror, ~500 КБ) грузим только когда на странице понадобился ввод Markdown:
+        // списки задач и профили открываются без него. Повторные вызовы ждут ту же загрузку.
+        loadEditor: function () {
+            if (window.flowEditor) return Promise.resolve(true);
+            if (editorLoading) return editorLoading;
 
-            // Обернуть выделение (или вставить placeholder): **текст**, `код`, [ссылка](url).
-            wrap: function (id, before, after, placeholder) {
-                const el = document.getElementById(id);
-                if (!el) return null;
-                const s = el.selectionStart, e = el.selectionEnd;
-                const selected = el.value.substring(s, e);
-                const inner = selected.length ? selected : placeholder;
-                el.setRangeText(before + inner + after, s, e, 'end');
-                // Без выделения — ставим каретку внутрь обёртки, чтобы можно было сразу печатать.
-                if (!selected.length) el.setSelectionRange(s + before.length, s + before.length + inner.length);
-                el.focus();
-                return el.value;
-            },
-
-            // Префикс строк выделения: заголовок, цитата, список (ordered — с нумерацией).
-            prefixLines: function (id, prefix, ordered) {
-                const el = document.getElementById(id);
-                if (!el) return null;
-                const v = el.value;
-                const lineStart = v.lastIndexOf('\n', el.selectionStart - 1) + 1;
-                let lineEnd = v.indexOf('\n', el.selectionEnd);
-                if (lineEnd < 0) lineEnd = v.length;
-                const lines = v.substring(lineStart, lineEnd).split('\n');
-                const out = lines.map(function (l, i) { return (ordered ? (i + 1) + '. ' : prefix) + l; }).join('\n');
-                el.setRangeText(out, lineStart, lineEnd, 'select');
-                el.focus();
-                return el.value;
-            },
-
-            // Заменить «@частичное» перед кареткой на «@username ».
-            insertMention: function (id, atPos, username) {
-                const el = document.getElementById(id);
-                if (!el) return null;
-                const caret = el.selectionStart;
-                el.setRangeText('@' + username + ' ', atPos, caret, 'end');
-                el.focus();
-                return el.value;
-            }
+            editorLoading = new Promise(function (resolve) {
+                const script = document.createElement('script');
+                script.src = 'js/flow-editor.js';
+                script.onload = function () { resolve(!!window.flowEditor); };
+                script.onerror = function () { editorLoading = null; resolve(false); };
+                document.head.appendChild(script);
+            });
+            return editorLoading;
         }
     };
 })();

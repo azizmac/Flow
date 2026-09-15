@@ -1,0 +1,48 @@
+@* Фильтр статусов для сводного списка задач. Наборы статусов у проектов разные, поэтому кнопки —
+   по типу статуса (Не начата / В работе / На проверке / Сделана), а не по конкретным статусам проекта.
+   «Другие» появляется, только если в отборе есть задачи в статусах, добавленных в проект вручную. *@
+
+<div class="seg" role="tablist">
+    <button type="button" class="seg-btn @(Value is null ? "on" : "")" role="tab"
+            aria-selected="@((Value is null).ToString().ToLowerInvariant())" @onclick="() => Select(null)">
+        Все <span class="n">@Total</span>
+    </button>
+    @foreach (var type in Types)
+    {
+        <button type="button" class="seg-btn @(Value == type ? "on" : "")" role="tab"
+                aria-selected="@((Value == type).ToString().ToLowerInvariant())" @onclick="() => Select(type)">
+            <span class="sd" style="background:@StatusColors.For(type)"></span>@Name(type) <span class="n">@Count(type)</span>
+        </button>
+    }
+    @if (CustomCount > 0)
+    {
+        <span class="seg-btn muted" title="Задачи в статусах, добавленных в проект вручную">
+            <span class="sd" style="background:@StatusColors.For((StatusType?)null)"></span>Другие <span class="n">@CustomCount</span>
+        </span>
+    }
+</div>
+
+@code {
+    private static readonly StatusType[] Types =
+        [StatusType.NotStarted, StatusType.InProgress, StatusType.InReview, StatusType.Done];
+
+    [Parameter] public IReadOnlyList<StatusTypeCount> Counts { get; set; } = [];
+    [Parameter] public int Total { get; set; }
+    [Parameter] public StatusType? Value { get; set; }
+    [Parameter] public EventCallback<StatusType?> ValueChanged { get; set; }
+
+    private int Count(StatusType type) => Counts.FirstOrDefault(c => c.Type == type)?.Count ?? 0;
+
+    private int CustomCount => Counts.FirstOrDefault(c => c.Type is null)?.Count ?? 0;
+
+    private static string Name(StatusType type) => type switch
+    {
+        StatusType.NotStarted => "Не начата",
+        StatusType.InProgress => "В работе",
+        StatusType.InReview => "На проверке",
+        StatusType.Done => "Сделана",
+        _ => "—"
+    };
+
+    private Task Select(StatusType? type) => ValueChanged.InvokeAsync(type);
+}

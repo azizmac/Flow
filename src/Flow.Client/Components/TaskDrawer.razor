@@ -29,7 +29,16 @@
             <div class="meta-k">Исполнитель</div>
             <div><AssigneeSelect Value="_assigneeId" OnlyUserId="OnlyAssigneeId" OnChange="id => _assigneeId = id" /></div>
             <div class="meta-k">Проект</div>
-            <div class="meta-v"><KeyChip Value="@Board.Key" />@Board.Name</div>
+            <div>
+                @if (Boards.Count > 1)
+                {
+                    <BoardSelect Boards="Boards" Value="Board.Id" ValueChanged="OnBoardChanged" Compact="true" AllowAll="false" />
+                }
+                else
+                {
+                    <div class="meta-v"><KeyChip Value="@Board.Key" /><span class="val" title="@Board.Name">@Board.Name</span></div>
+                }
+            </div>
         </div>
         <div class="desc-wrap">
             <div class="desc-head"><div class="meta-k">Описание</div></div>
@@ -111,11 +120,12 @@ else if (Item is not null)
             <div class="meta-k">Срок</div>
             <div><DueDateField Value="Item.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>
             <div class="meta-k">Проект</div>
-            <div class="meta-v"><KeyChip Value="@Board.Key" />@Board.Name</div>
+            <div class="meta-v"><KeyChip Value="@Board.Key" /><span class="val" title="@Board.Name">@Board.Name</span></div>
             <div class="meta-k">Создана</div>
             <div class="meta-v">@Ru.DateTimeFull(Item.CreatedAt)</div>
         </div>
-        <div class="desc-wrap">
+        @* compact: в просмотре описание занимает высоту по содержимому, иначе оно растянется и отожмёт ленту вниз. *@
+        <div class="desc-wrap compact">
             <div class="desc-head">
                 <div class="meta-k">Описание</div>
                 @if (_editingDesc)
@@ -140,6 +150,7 @@ else if (Item is not null)
                 <MarkdownView Text="@Item.Description" OnClick="OnDescClick" />
             }
         </div>
+        <TaskTimeline @ref="_timeline" TaskItem="Item" Board="Board" OnCommentCountChanged="OnCommentCountChanged" />
         @if (_error is not null)
         {
             <div class="ds-field-error">@_error</div>
@@ -156,6 +167,9 @@ else if (Item is not null)
 
 @code {
     [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    /// <summary>Все проекты — чтобы в форме создания можно было выбрать, куда заводится задача.</summary>
+    [Parameter] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
+    [Parameter] public EventCallback<Guid?> OnBoardChanged { get; set; }
     /// <summary>null — режим создания.</summary>
     [Parameter] public TaskResponse? Item { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
@@ -181,9 +195,11 @@ else if (Item is not null)
     private bool _editingDesc;
     private bool _titleCancelled;
     private Guid? _itemId;
+    private Guid _boardId;
     private DateTime? _savedAt;
     private CancellationTokenSource? _savedCts;
     private IDisposable? _hotkeys;
+    private TaskTimeline? _timeline;
 
     protected override void OnInitialized()
     {
@@ -211,9 +227,18 @@ else if (Item is not null)
                 _description = "";
                 _error = null;
                 _assigneeId = null;
-                _statusId = Board.Statuses.FirstOrDefault(s => s.IsInitial)?.Id ?? Board.Statuses.FirstOrDefault()?.Id ?? Guid.Empty;
+                _boardId = Board.Id;
+                _statusId = InitialStatusId();
                 _focusTitle = true;
             }
+            else if (_boardId != Board.Id)
+            {
+                // Проект сменили прямо в форме: статус принадлежит проекту, чужой Flow.Api отвергнет с 400.
+                // Введённые название и описание при этом сохраняем — их писали не для проекта, а для задачи.
+                _boardId = Board.Id;
+                _statusId = InitialStatusId();
+            }
+
             return;
         }
 
@@ -239,6 +264,9 @@ else if (Item is not null)
             await Browser.FocusAsync("td-title");
         }
     }
+
+    private Guid InitialStatusId() =>
+        Board.Statuses.FirstOrDefault(s => s.IsInitial)?.Id ?? Board.Statuses.FirstOrDefault()?.Id ?? Guid.Empty;
 
     private Task Close() => OnClose.InvokeAsync();
 
@@ -338,8 +366,9 @@ else if (Item is not null)
 
     private async Task Assign(Guid? userId)
     {
+        var before = Item!;
         _busy = true;
-        var result = await Api.AssignTask(Item!.Id, new AssignTaskRequest(userId));
+        var result = await Api.AssignTask(before.Id, new AssignTaskRequest(userId));
         _busy = false;
         if (!result.Ok)
         {
@@ -348,6 +377,7 @@ else if (Item is not null)
         }
 
         await OnUpdated.InvokeAsync(result.Value!);
+        _timeline?.NoteLocalChange(before, result.Value!);
     }
 
     private async Task StartDescEdit()
@@ -362,9 +392,10 @@ else if (Item is not null)
 
     private async Task SetDueDate(DateOnly? dueDate)
     {
+        var before = Item!;
         _busy = true;
         _error = null;
-        var result = await Api.SetDueDate(Item!.Id, new SetTaskDueDateRequest(dueDate));
+        var result = await Api.SetDueDate(before.Id, new SetTaskDueDateRequest(dueDate));
         _busy = false;
         if (!result.Ok)
         {
@@ -373,6 +404,7 @@ else if (Item is not null)
         }
 
         await OnUpdated.InvokeAsync(result.Value!);
+        _timeline?.NoteLocalChange(before, result.Value!);
     }
 
     private Task OnDescClick() => string.IsNullOrWhiteSpace(Item?.Description) ? StartDescEdit() : Task.CompletedTask;
@@ -399,9 +431,10 @@ else if (Item is not null)
 
     private async Task<bool> Patch(UpdateTaskRequest request)
     {
+        var before = Item!;
         _busy = true;
         _error = null;
-        var result = await Api.UpdateTask(Item!.Id, request);
+        var result = await Api.UpdateTask(before.Id, request);
         _busy = false;
 
         if (!result.Ok)
@@ -411,6 +444,7 @@ else if (Item is not null)
         }
 
         await OnUpdated.InvokeAsync(result.Value!);
+        _timeline?.NoteLocalChange(before, result.Value!);
         _ = FlashSaved();
         return true;
     }
@@ -421,6 +455,13 @@ else if (Item is not null)
         if (ok) Toasts.Ok($"Скопировано: {Item.Code}");
         else Toasts.Error("Не удалось скопировать");
     }
+
+    // Комментарий добавлен или удалён в ленте: число показывает строка списка, поэтому отдаём его наверх
+    // тем же путём, что и правки задачи.
+    private Task OnCommentCountChanged(int count) =>
+        Item is null || Item.CommentCount == count
+            ? Task.CompletedTask
+            : OnUpdated.InvokeAsync(Item with { CommentCount = count });
 
     private static string? NullIfEmpty(string s) => string.IsNullOrWhiteSpace(s) ? null : s.TrimEnd();
 
