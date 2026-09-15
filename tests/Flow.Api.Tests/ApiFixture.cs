@@ -43,6 +43,11 @@ public sealed class ApiFixture : IAsyncLifetime
             builder.UseSetting("Auth:BaseUrl", Issuer);
             builder.UseSetting("Auth:Issuer", Issuer);
             builder.UseSetting("Auth:ApiClient:Secret", "unused");
+            // Поиск включён (дефолт приложения), но без фонового воркера и с заведомо недоступным
+            // эмбеддером: тесты проверяют HTTP-поверхность и деградацию, а не качество выдачи,
+            // и не должны зависеть от того, поднят ли llama-server на машине.
+            builder.UseSetting("Search:Indexing:Enabled", "false");
+            builder.UseSetting("Search:Embeddings:QueryEndpoint", "http://localhost:1/v1");
 
             builder.ConfigureTestServices(services =>
             {

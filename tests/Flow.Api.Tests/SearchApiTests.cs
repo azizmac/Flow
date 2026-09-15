@@ -7,36 +7,83 @@ using Xunit;
 namespace Flow.Api.Tests;
 
 /// <summary>
-/// /search/status и /search/reindex при Search:Enabled=false — то есть в состоянии по умолчанию,
-/// в котором приложение и живёт до появления модели эмбеддингов.
+/// HTTP-поверхность поиска: права, коды ответов и деградация при недоступной модели (в фикстуре
+/// эмбеддер указывает в никуда — см. ApiFixture). Качество выдачи проверяют тесты Infrastructure.
 /// </summary>
 [Collection(ApiCollection.Name)]
 public sealed class SearchApiTests(ApiFixture api)
 {
     [Fact]
-    public async Task Status_Requires_Token()
+    public async Task Search_Requires_Token()
     {
         using var anonymous = api.CreateClient();
 
-        using var response = await anonymous.GetAsync("/search/status");
+        using var response = await anonymous.GetAsync("/search?q=что-нибудь");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task Status_Reports_Disabled_Search_Without_Touching_Embedder()
+    public async Task Search_Degrades_To_Text_When_Embedder_Is_Down()
+    {
+        using var client = api.CreateClientAs();
+
+        var response = await client.GetFromJsonAsync<SearchResponse>("/search?q=экспорт");
+
+        // Недоступная модель — не 500: выдача строится по полнотексту и честно помечена degraded.
+        Assert.True(response!.Degraded);
+        Assert.Equal(SearchMode.Text, response.Mode);
+        Assert.NotNull(response.Items);
+    }
+
+    [Fact]
+    public async Task Search_Rejects_Empty_Query()
+    {
+        using var client = api.CreateClientAs();
+
+        using var response = await client.GetAsync("/search?q=%20%20");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Search_Rejects_Unknown_Source_Type()
+    {
+        using var client = api.CreateClientAs();
+
+        using var response = await client.GetAsync("/search?q=экспорт&types=task,sprint");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Search_Is_Available_To_Any_Role()
+    {
+        using var owner = api.CreateClientAs();
+        using var created = await owner.PostAsJsonAsync(
+            "/users",
+            new CreateUserRequest("search.reader", "search.reader@example.com", "A", "B", "correct horse battery", UserRole.Reader));
+
+        var reader = (await created.Content.ReadFromJsonAsync<UserResponse>())!;
+        using var client = api.CreateClientAs(reader.Id);
+
+        using var response = await client.GetAsync("/search?q=экспорт");
+
+        // Читать может любая роль — как и остальные запросы (docs/TZ_user_roles.md).
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Status_Is_Reported_For_Enabled_Search()
     {
         using var owner = api.CreateClientAs();
 
         var status = await owner.GetFromJsonAsync<SearchStatusResponse>("/search/status");
 
-        Assert.False(status!.Enabled);
+        Assert.True(status!.Enabled);
         Assert.False(status.EmbedderAvailable);
         Assert.Equal(512, status.Dimensions);
         Assert.NotEmpty(status.ModelVersion);
-        Assert.Equal(0, status.QueueTotal);
-        Assert.Equal(0, status.ChunksByType.Task);
-        Assert.Null(status.OldestQueuedAt);
     }
 
     [Fact]
@@ -56,13 +103,12 @@ public sealed class SearchApiTests(ApiFixture api)
     }
 
     [Fact]
-    public async Task Reindex_Is_Rejected_While_Search_Is_Disabled()
+    public async Task Reindex_Is_Accepted_For_Owner()
     {
         using var owner = api.CreateClientAs();
 
         using var response = await owner.PostAsJsonAsync("/search/reindex", new ReindexRequest());
 
-        // Выключенный поиск — не 500 и не тихое согласие: Owner получает внятный отказ.
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
     }
 }

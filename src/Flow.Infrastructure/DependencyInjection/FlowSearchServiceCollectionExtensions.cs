@@ -35,6 +35,11 @@ public static class FlowSearchServiceCollectionExtensions
         services.AddScoped<SearchIndexQueue>();
         services.AddScoped<ISearchIndexQueue>(provider => provider.GetRequiredService<SearchIndexQueue>());
         services.AddScoped<ISearchIndexRepository, SearchIndexRepository>();
+        services.AddScoped<ISearchQueryRepository, SearchQueryRepository>();
+
+        // Кэш векторов запросов: пагинация по выдаче идёт тем же текстом (см. MemoryCachedQueryEmbeddings).
+        services.AddMemoryCache();
+        services.AddSingleton<IQueryEmbeddingCache, MemoryCachedQueryEmbeddings>();
         services.AddScoped<SearchSourceReader>();
         services.AddScoped<SearchIndexingRunner>();
 

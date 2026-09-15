@@ -15,6 +15,8 @@ public sealed class SearchOptions
     public SearchEmbeddingsOptions Embeddings { get; set; } = new();
 
     public SearchIndexingOptions Indexing { get; set; } = new();
+
+    public SearchQueryOptions Query { get; set; } = new();
 }
 
 public sealed class SearchEmbeddingsOptions
@@ -50,6 +52,28 @@ public enum EmbeddingProvider
 {
     Http = 0,
     Onnx = 1
+}
+
+/// <summary>Параметры выдачи GET /search.</summary>
+public sealed class SearchQueryOptions
+{
+    /// <summary>Сколько чанков берёт векторная половина до слияния.</summary>
+    public int VectorTopN { get; set; } = 50;
+
+    /// <summary>Сколько чанков берёт полнотекстовая половина до слияния.</summary>
+    public int TextTopN { get; set; } = 50;
+
+    /// <summary>
+    /// k в RRF: score = сумма 1 / (k + позиция). Чем больше k, тем меньше веса у самых первых мест
+    /// и тем сильнее «голос» второй половины. 60 — значение из исходной статьи и дефолт де-факто.
+    /// </summary>
+    public int RrfK { get; set; } = 60;
+
+    /// <summary>Потолок limit в запросе: выше него выдача не имеет смысла, а стоимость растёт.</summary>
+    public int MaxLimit { get; set; } = 50;
+
+    /// <summary>ef_search HNSW в рантайме: больше — полнее обход графа и дороже запрос.</summary>
+    public int HnswEfSearch { get; set; } = 100;
 }
 
 public sealed class SearchIndexingOptions

@@ -80,9 +80,10 @@ services:
       S3__SecretKey: ${MINIO_ROOT_PASSWORD:-flow12345}
       S3__Bucket: ${S3_BUCKET:-flow}
       S3__UseSsl: ${S3_USE_SSL:-false}
-      # Поиск: выключен по умолчанию — без эмбеддера индексировать нечем, а с выключенным флагом
-      # ни воркер, ни очередь не работают и поведение остальных эндпоинтов не меняется.
-      Search__Enabled: ${SEARCH_ENABLED:-false}
+      # Поиск включён по умолчанию: без модели он деградирует в полнотекстовый (GET /search
+      # отвечает degraded: true), а очередь индексации копится до её появления. SEARCH_ENABLED=false
+      # отключает и эндпоинты, и воркер — поведение приложения становится в точности прежним.
+      Search__Enabled: ${SEARCH_ENABLED:-true}
       Search__Indexing__Enabled: ${SEARCH_INDEXING_ENABLED:-true}
       Search__Embeddings__QueryEndpoint: ${EMBEDDINGS_QUERY_ENDPOINT:-http://embeddings:8081/v1}
       Search__Embeddings__IndexingEndpoint: ${EMBEDDINGS_INDEXING_ENDPOINT:-}
