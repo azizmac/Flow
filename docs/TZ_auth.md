@@ -93,7 +93,7 @@ src/Flow.Auth/
   Controllers/AuthorizationController.cs   /connect/authorize, /connect/token, /connect/endsession (passthrough)
   Controllers/AccountsController.cs        admin-API, [Authorize(Policy = "auth:admin")]
   Pages/Account/Login.cshtml(.cs), Logout.cshtml(.cs)
-  wwwroot/css/auth.css             копия DRESSY-токенов
+  wwwroot/css/auth.css             копия токенов клиента
   appsettings.json
 ```
 

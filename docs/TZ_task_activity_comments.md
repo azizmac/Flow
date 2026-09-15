@@ -185,7 +185,7 @@ Actor — `IActorAccessor.Require()`. Ошибки — общая схема `{ 
 - **`@`-автодополнение**: при вводе `@` + ≥1 символа — `Popover` от каретки со списком из
   `FlowApi.SearchUsers(q, 6)` (debounce 150 мс, `Avatar` + имя + `@username`), ↑/↓/Enter/Tab/Esc.
   Выбор вставляет `@username `.
-- Стили — `tokens.css`/`app.css`, иконки — `DressyIcons` (добавить `bold`, `italic`, `strikethrough`,
+- Стили — `tokens.css`/`app.css`, иконки — `FlowIcons` (добавить `bold`, `italic`, `strikethrough`,
   `code`, `quote`, `list`, `list-ordered`, `check-square`, `heading`, `eye`, `message`, `history`, `calendar`).
 - Замещает `<textarea id="tp-desc">` в `TaskPage` (описание) и в `TaskDrawer`, если там есть редактирование описания.
 

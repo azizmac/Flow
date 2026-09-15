@@ -1,4 +1,4 @@
-/* Страница входа Flow.Auth. Копия нужных DRESSY-токенов из Flow.Client/wwwroot/css/tokens.css —
+/* Страница входа Flow.Auth. Копия нужных токенов из Flow.Client/wwwroot/css/tokens.css —
    сервисы не ссылаются друг на друга, поэтому палитра продублирована. Менять вместе с клиентом. */
 
 :root {
@@ -33,6 +33,7 @@
     --accent-hover: #FFCB40;
     --accent-pressed: #E8A900;
     --on-accent: #0C3B2E;
+    --brand-blue: #2451D6;
     --danger: #E2604F;
 
     --text-primary: #FFFFFF;
@@ -80,15 +81,15 @@ html, body {
 }
 
 .login-brand { display: flex; align-items: center; gap: var(--space-2); }
+/* Знак Flow: верхняя доля наследует color, нижняя — фирменный синий.
+   Копия из Flow.Client/Components/BrandMark.razor — сервисы не ссылаются друг на друга. */
 .login-mark {
     width: 30px; height: 30px;
-    display: grid; place-items: center;
-    border-radius: 8px;
-    background: var(--accent);
-    color: var(--on-accent);
-    font-weight: var(--fw-black);
-    font-size: 16px;
+    display: block;
+    flex: none;
+    color: #F2F2EF;
 }
+.login-mark svg { width: 100%; height: 100%; display: block; }
 .login-name { font-weight: var(--fw-semibold); font-size: 16px; letter-spacing: var(--tracking-tight); }
 
 .login-title {
