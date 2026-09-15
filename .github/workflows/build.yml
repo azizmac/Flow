@@ -44,12 +44,13 @@ jobs:
           dotnet test tests/Flow.Application.Tests -c Release --no-build \
             --logger "trx;LogFileName=application.trx" --results-directory TestResults
 
-      # Category=Model исключается: эти тесты требуют поднятой модели эмбеддингов
-      # (llama-server) и запускаются локально при смене модели, размерности или инструкции.
+      # Category=Model и Category=Golden исключаются: первым нужна поднятая модель эмбеддингов
+      # (llama-server), вторым — ещё и тестовая база разработчика. Запускаются локально при смене
+      # модели, размерности, инструкции или правил чанкинга.
       - name: Integration tests (Infrastructure, Testcontainers/Postgres)
         run: |
           dotnet test tests/Flow.Infrastructure.Tests -c Release --no-build \
-            --filter "Category!=Model" \
+            --filter "Category!=Model&Category!=Golden" \
             --logger "trx;LogFileName=infrastructure.trx" --results-directory TestResults
 
       - name: Integration tests (Flow.Auth, WebApplicationFactory + Testcontainers/Postgres)

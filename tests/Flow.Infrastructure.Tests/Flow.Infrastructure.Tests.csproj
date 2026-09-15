@@ -17,6 +17,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Набор запросов для замера качества выдачи: читается тестом из каталога сборки. -->
+        <Content Include="GoldenSet\golden-set.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\..\src\Flow.Application\Flow.Application.csproj" />
         <ProjectReference Include="..\..\src\Flow.Infrastructure\Flow.Infrastructure.csproj" />
         <!-- FakeEmbeddingGenerator: интеграционные тесты индексации модель не тянут. -->
