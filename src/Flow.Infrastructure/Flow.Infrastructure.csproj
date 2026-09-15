@@ -25,6 +25,9 @@
         <!-- IAccountService → Flow.Auth по HTTP (IHttpClientFactory) и биндинг секции Auth. -->
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
         <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
+        <!-- Текст из вложений для индексации (Search/Extraction): PDF и документы Office. -->
+        <PackageReference Include="PdfPig" Version="0.1.16" />
+        <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
         <!-- BackgroundService для воркера индексации (Search/SearchIndexingWorker). -->
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">

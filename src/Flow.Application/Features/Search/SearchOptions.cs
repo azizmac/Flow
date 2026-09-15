@@ -92,4 +92,10 @@ public sealed class SearchIndexingOptions
     public int ChunkTokens { get; set; } = 512;
 
     public int ChunkOverlap { get; set; } = 64;
+
+    /// <summary>
+    /// Потолок текста, извлечённого из вложения. Договор на 300 страниц дал бы сотни чанков и
+    /// столько же обращений к модели; найтись он должен и по началу.
+    /// </summary>
+    public int MaxDocumentChars { get; set; } = 200_000;
 }

@@ -1,9 +1,11 @@
 using Flow.Application.Abstractions;
 using Flow.Application.Features.Search;
 using Flow.Infrastructure.Search;
+using Flow.Infrastructure.Search.Extraction;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Flow.Infrastructure.DependencyInjection;
@@ -40,6 +42,22 @@ public static class FlowSearchServiceCollectionExtensions
         // Кэш векторов запросов: пагинация по выдаче идёт тем же текстом (см. MemoryCachedQueryEmbeddings).
         services.AddMemoryCache();
         services.AddSingleton<IQueryEmbeddingCache, MemoryCachedQueryEmbeddings>();
+        // Извлечение текста из вложений. Вызывать его пока некому — вложений в домене нет
+        // (нужно их ТЗ), но слой готов и проверен тестами: подключение — одна ветка в SearchSourceReader.
+        // ITextExtractor снаружи один — композитный; форматные регистрируются своими типами,
+        // иначе композит попал бы в собственный список и вызвал сам себя.
+        services.AddSingleton<PlainTextExtractor>();
+        services.AddSingleton<PdfTextExtractor>();
+        services.AddSingleton<OpenXmlTextExtractor>();
+        services.AddSingleton<ITextExtractor>(provider => new CompositeTextExtractor(
+            [
+                provider.GetRequiredService<PlainTextExtractor>(),
+                provider.GetRequiredService<PdfTextExtractor>(),
+                provider.GetRequiredService<OpenXmlTextExtractor>()
+            ],
+            provider.GetRequiredService<SearchOptions>(),
+            provider.GetRequiredService<ILogger<CompositeTextExtractor>>()));
+
         services.AddScoped<SearchSourceReader>();
         services.AddScoped<SearchIndexingRunner>();
 

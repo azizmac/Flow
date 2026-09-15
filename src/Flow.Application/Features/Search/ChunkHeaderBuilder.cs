@@ -24,6 +24,9 @@ public static class ChunkHeaderBuilder
         return fullName.Length == 0 ? $"@{username}" : $"@{username} · {fullName}";
     }
 
+    /// <summary>Вложение: <c>PROJ-142 · договор-2026.pdf</c>; имя файла ищут не реже, чем содержимое.</summary>
+    public static string ForAttachment(string taskCode, string fileName) => $"{taskCode} · {fileName}";
+
     /// <summary>Что реально уходит в эмбеддер: шапка, перевод строки, текст чанка.</summary>
     public static string Apply(string header, string content) =>
         header.Length == 0 ? content : $"{header}\n{content}";
