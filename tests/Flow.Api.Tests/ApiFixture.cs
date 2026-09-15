@@ -33,6 +33,8 @@ public sealed class ApiFixture : IAsyncLifetime
 
     public FakeAccountService Accounts { get; } = new();
 
+    public InMemoryFileStorage Storage { get; } = new();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -52,6 +54,9 @@ public sealed class ApiFixture : IAsyncLifetime
             builder.ConfigureTestServices(services =>
             {
                 services.AddSingleton<IAccountService>(Accounts);
+                // Вложения кладутся в память: поднимать MinIO ради проверки кодов ответа незачем,
+                // сам S3-клиент проверяется отдельным интеграционным тестом.
+                services.AddSingleton<IFileStorage>(Storage);
 
                 // Без discovery: проверяем подпись локальным ключом, issuer и audience — как у настоящего Flow.Auth.
                 services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>

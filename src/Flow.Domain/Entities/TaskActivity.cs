@@ -74,6 +74,16 @@ public sealed class TaskActivity
     public static TaskActivity CommentDeleted(Guid taskId, Guid actorId, Guid commentId) =>
         new(taskId, actorId, TaskActivityType.CommentDeleted, commentId.ToString(), null);
 
+    /// <summary>
+    /// Вложение приложено. В NewValue — имя файла, в OldValue — его id: запись журнала переживает
+    /// удаление файла, и без сохранённого имени показать в ленте было бы нечего.
+    /// </summary>
+    public static TaskActivity AttachmentAdded(Guid taskId, Guid actorId, Guid attachmentId, string fileName) =>
+        new(taskId, actorId, TaskActivityType.AttachmentAdded, attachmentId.ToString(), fileName);
+
+    public static TaskActivity AttachmentRemoved(Guid taskId, Guid actorId, Guid attachmentId, string fileName) =>
+        new(taskId, actorId, TaskActivityType.AttachmentRemoved, attachmentId.ToString(), fileName);
+
     private static string? FormatDate(DateOnly? date) =>
         date?.ToString(DateFormat, CultureInfo.InvariantCulture);
 }

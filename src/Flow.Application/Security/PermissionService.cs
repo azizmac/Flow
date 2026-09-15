@@ -73,6 +73,13 @@ internal sealed class PermissionService : IPermissionService
         }
     }
 
+    public void EnsureCanAttach(User actor) =>
+        Require(actor.Role >= UserRole.Member, "Reader не может прикладывать файлы.");
+
+    public void EnsureCanDeleteAttachment(User actor, Attachment attachment) =>
+        Require(attachment.UploadedById == actor.Id || actor.Role >= UserRole.Admin,
+            "Удалять чужие вложения могут Admin и Owner.");
+
     public void EnsureCanViewSearchDiagnostics(User actor) =>
         Require(actor.Role >= UserRole.Admin, "Состояние поискового индекса доступно Admin и Owner.");
 

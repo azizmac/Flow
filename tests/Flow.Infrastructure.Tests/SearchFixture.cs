@@ -29,6 +29,8 @@ public sealed class SearchFixture : IAsyncLifetime
 
     public FakeEmbeddingGenerator Embedder { get; } = new();
 
+    public InMemoryFileStorage Storage { get; } = new();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -52,6 +54,8 @@ public sealed class SearchFixture : IAsyncLifetime
         services.AddFlowInfrastructure(configuration);
         services.AddFlowApplication();
         services.AddSingleton<IAccountService, AlwaysSucceedingAccountService>();
+        // Вложения кладём в память: S3-клиент проверяется отдельным тестом против MinIO.
+        services.AddSingleton<IFileStorage>(Storage);
         _services = services.BuildServiceProvider();
 
         await using var scope = _services.CreateAsyncScope();

@@ -1,5 +1,6 @@
 using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
+using Flow.Application.Features.Attachments;
 using Flow.Application.Features.Search;
 using Flow.Application.Tests.Fakes;
 using Flow.Domain.Entities;
@@ -12,6 +13,16 @@ namespace Flow.Application.Tests;
 /// Собирает реальный DI-контейнер с AddFlowApplication() (тот же вызов, что и в Flow.Api/Program.cs) поверх
 /// фейковых репозиториев — тесты идут через настоящий IMediator, а не напрямую дёргают internal-хендлеры.
 /// </summary>
+public sealed record AttachmentTestContext(
+    IMediator Mediator,
+    FakeBoardRepository Boards,
+    FakeTaskItemRepository Tasks,
+    FakeUserRepository Users,
+    FakeTaskActivityRepository Activities,
+    FakeAttachmentRepository Attachments,
+    InMemoryFileStorage Storage,
+    AttachmentOptions Options);
+
 public sealed record SearchTestContext(
     IMediator Mediator,
     SearchOptions Options,
@@ -53,6 +64,13 @@ public static class TestMediatorFactory
         return (all.Mediator, all.SearchOptions, all.SearchIndex, all.Embeddings);
     }
 
+    /// <summary>Плюс вложения: репозиторий, хранилище и лимиты.</summary>
+    public static AttachmentTestContext CreateAttachmentContext()
+    {
+        var all = Build();
+        return new AttachmentTestContext(all.Mediator, all.Boards, all.Tasks, all.Users, all.Activities, all.Attachments, all.Storage, all.AttachmentOptions);
+    }
+
     /// <summary>
     /// Всё, что нужно тестам умного поиска: фейки репозиториев для сидирования проектов, задач
     /// и людей — плюс критерии, с которыми хендлер пришёл в индекс. Кортеж на семь элементов
@@ -71,7 +89,7 @@ public static class TestMediatorFactory
         return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Accounts);
     }
 
-    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings) Build()
+    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings, FakeAttachmentRepository Attachments, InMemoryFileStorage Storage, AttachmentOptions AttachmentOptions) Build()
     {
         var boards = new FakeBoardRepository();
         var tasks = new FakeTaskItemRepository();
@@ -81,6 +99,9 @@ public static class TestMediatorFactory
         var activities = new FakeTaskActivityRepository();
         var searchQueue = new FakeSearchIndexQueue();
         var searchOptions = new SearchOptions { Enabled = true };
+        var attachments = new FakeAttachmentRepository();
+        var storage = new InMemoryFileStorage();
+        var attachmentOptions = new AttachmentOptions();
         var searchIndex = new FakeSearchQueryRepository();
         var embedder = new FakeEmbeddingGenerator();
         var embeddings = new FakeQueryEmbeddingCache(embedder);
@@ -97,6 +118,9 @@ public static class TestMediatorFactory
         services.AddSingleton<IAccountService>(accounts);
         services.AddSingleton<ITaskCommentRepository>(comments);
         services.AddSingleton<ITaskActivityRepository>(activities);
+        services.AddSingleton<IAttachmentRepository>(attachments);
+        services.AddSingleton<IFileStorage>(storage);
+        services.AddSingleton(attachmentOptions);
         services.AddSingleton<ISearchIndexQueue>(searchQueue);
         services.AddSingleton<ISearchIndexRepository>(new FakeSearchIndexRepository());
         services.AddSingleton<ISearchQueryRepository>(searchIndex);
@@ -108,6 +132,6 @@ public static class TestMediatorFactory
         services.AddFlowApplication();
 
         var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
-        return (mediator, boards, tasks, users, accounts, comments, activities, searchQueue, searchOptions, searchIndex, embeddings);
+        return (mediator, boards, tasks, users, accounts, comments, activities, searchQueue, searchOptions, searchIndex, embeddings, attachments, storage, attachmentOptions);
     }
 }

@@ -1,4 +1,5 @@
 using Flow.Application.Abstractions;
+using Flow.Application.Tests.Fakes;
 using Flow.Application.DependencyInjection;
 using Flow.Application.Features.Bootstrap;
 using Flow.Infrastructure.DependencyInjection;
@@ -26,6 +27,9 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     private ServiceProvider _services = null!;
 
+    /// <summary>Хранилище вложений в памяти — чтобы фикстуре не требовался MinIO.</summary>
+    public InMemoryFileStorage Storage { get; } = new();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -43,6 +47,8 @@ public sealed class PostgresFixture : IAsyncLifetime
         services.AddFlowApplication();
         // В Flow.Auth эти тесты не ходят: учётные записи всегда «создаются» успешно.
         services.AddSingleton<IAccountService, AlwaysSucceedingAccountService>();
+        // Вложения кладём в память: S3-клиент проверяется отдельным тестом против MinIO.
+        services.AddSingleton<IFileStorage>(Storage);
         _services = services.BuildServiceProvider();
 
         await using var scope = _services.CreateAsyncScope();

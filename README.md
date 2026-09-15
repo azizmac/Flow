@@ -20,6 +20,7 @@ The longer-term goal is an AI assistant inside the tracker: grounded in the team
 - **Roles and permissions.** `Reader → Member → Developer → Admin → Owner`; the permission matrix is enforced on the server, and the client hides actions the current user cannot perform. A "last Owner" rule prevents locking the instance out of administration.
 - **Task timeline.** Markdown comments with `@mentions` (a GitHub-style editor with preview and toolbar) and a change log: title, description, status, assignee, due date, deleted comments. Due dates with overdue highlighting.
 - **Authentication.** A separate `Flow.Auth` service: ASP.NET Core Identity with BCrypt and OpenIddict (authorization code + PKCE, refresh, client credentials). The client signs in over OIDC; the API acts as a resource server validating Bearer JWTs. The initial password must be changed at first sign-in.
+- **Attachments.** Files on a task: stored in S3-compatible storage, size and type limits, downloads only over an authorised request. API only for now — the UI and drag & drop come next.
 - **Search.** Hybrid vector and full-text search over tasks, comments, projects and people on pgvector: it finds by meaning, not by substring. A sidebar box with live suggestions and a results page with filters; the index is updated in the same transaction as the edit.
 - **Infrastructure.** PostgreSQL 16, EF Core, migrations applied on API startup. Build, tests and image publishing run in GitHub Actions.
 
@@ -219,6 +220,7 @@ Project documentation is written in Russian.
 - [`docs/TZ_auth.md`](docs/TZ_auth.md) — authentication and Flow.Auth
 - [`docs/TZ_infra_data_split.md`](docs/TZ_infra_data_split.md) — splitting the database and S3 into a data stack
 - [`docs/TZ_task_activity_comments.md`](docs/TZ_task_activity_comments.md) — comments, change log, Markdown editor, due dates
+- [`docs/TZ_attachments.md`](docs/TZ_attachments.md) — attachments: storage, drag & drop, search by content
 - [`docs/TZ_search_vector.md`](docs/TZ_search_vector.md) — vector and smart search: model, storage, indexing, stages
 - [`docs/TZ_search_stage1-3.md`](docs/TZ_search_stage1-3.md) — index schema, embedder and indexing (stages 1–3)
 - [`docs/Struktura_board_task_status.md`](docs/Struktura_board_task_status.md) — domain model structure
