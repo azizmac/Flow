@@ -139,6 +139,7 @@
     private sealed record Item(DateTime At, TaskCommentResponse? Comment, List<TaskActivityResponse>? Group);
 
     private Guid _loadedId;
+    private CancellationTokenSource? _loadCts;
     private bool _loading = true;
     private string? _error;
     private bool _busy;
@@ -161,20 +162,58 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_loadedId != TaskItem.Id)
-        {
-            _loadedId = TaskItem.Id;
-            await Load();
-        }
+        if (_loadedId == TaskItem.Id)
+            return;
+
+        // Лента предыдущей задачи не должна оставаться на экране, пока грузится новая. Черновик тоже её:
+        // в слайдере задачи листают стрелками, и недописанный комментарий уехал бы в соседнюю задачу.
+        var first = _loadedId == Guid.Empty;
+        _loadedId = TaskItem.Id;
+        _comments = [];
+        _activity = [];
+        _draft = "";
+        _editingId = null;
+        _editText = "";
+        _deleting = null;
+        _highlightId = null;
+        _loading = true;
+
+        // В слайдере задачи листают стрелками: без паузы каждая промежуточная задача успевает
+        // отправить пару запросов, ответы которых уже никому не нужны.
+        await Load(first ? TimeSpan.Zero : TimeSpan.FromMilliseconds(200));
     }
 
-    public async Task Load()
+    public Task Load() => Load(TimeSpan.Zero);
+
+    private async Task Load(TimeSpan delay)
     {
+        _loadCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _loadCts = cts;
+
+        if (delay > TimeSpan.Zero)
+        {
+            try
+            {
+                await Task.Delay(delay, cts.Token);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
+        }
+
+        var id = TaskItem.Id;
         _loading = true;
         _error = null;
-        var comments = Api.GetComments(TaskItem.Id);
-        var activity = Api.GetActivity(TaskItem.Id);
+        var comments = Api.GetComments(id);
+        var activity = Api.GetActivity(id);
         await Task.WhenAll(comments, activity);
+
+        // Пока ходили в API, человек мог уйти на другую задачу — чужой ответ не показываем.
+        if (cts.IsCancellationRequested || id != TaskItem.Id)
+            return;
+
         _loading = false;
         if (!comments.Result.Ok || !activity.Result.Ok)
         {
@@ -355,5 +394,9 @@
         await OnCommentCountChanged.InvokeAsync(_comments.Count);
     }
 
-    public void Dispose() => Users.Changed -= OnUsersChanged;
+    public void Dispose()
+    {
+        Users.Changed -= OnUsersChanged;
+        _loadCts?.Cancel();
+    }
 }

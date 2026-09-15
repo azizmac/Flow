@@ -1,4 +1,4 @@
-@* Drawer-nav 240px по Sidebar.dc.html. «Проекты» → /boards; «Задачи» → последний открытый проект (или /boards);
+@* Drawer-nav 240px по Sidebar.dc.html. «Проекты» → /boards; «Задачи» → /tasks (все проекты);
    «Люди» → /users. Дашборды/Настройки — в API ещё нет: помечены «скоро» и не притворяются кликабельными.
    Футер — текущий пользователь: claim sub из токена Flow.Auth → AppState.CurrentUserId, профиль — GET /users/me;
    кнопка «Выйти» → authentication/logout (endsession в Flow.Auth). *@
@@ -10,14 +10,16 @@
 @inject AuthenticationStateProvider AuthState
 
 <nav class="sb">
-    <div class="sb-brand"><BrandMark Size="34" /><div class="sb-word">FLOW</div></div>
+    <a class="sb-brand" href="boards" title="К проектам" aria-label="Flow — к проектам"><BrandMark Size="34" /><div class="sb-word">FLOW</div></a>
 
-    <div class="sb-ws" title="Пока одно рабочее пространство">
+    @* Шеврон обещает выпадающий список, которого ещё нет: помечаем блок как «скоро», чтобы клик по нему не выглядел сломанным. *@
+    <div class="sb-ws disabled" aria-disabled="true" title="Рабочие пространства — в разработке">
         <div>
             <div class="sb-ws-name">Flow</div>
             <div class="sb-ws-sub">Workspace</div>
         </div>
-        <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.4)" />
+        <span class="sb-soon">скоро</span>
+        <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.25)" />
     </div>
 
     <div class="sb-section">Рабочее пространство</div>
@@ -61,12 +63,15 @@
 
     private bool IsBoards => Path is "" or "boards";
 
-    private bool IsTasks => Path.StartsWith("boards/", StringComparison.OrdinalIgnoreCase)
+    private bool IsTasks => Path is "tasks"
+                            || Path.StartsWith("boards/", StringComparison.OrdinalIgnoreCase)
                             || Path.StartsWith("tasks/", StringComparison.OrdinalIgnoreCase);
 
     private bool IsUsers => Path is "users" || Path.StartsWith("users/", StringComparison.OrdinalIgnoreCase);
 
-    private string TasksHref => State.LastBoardId is { } id ? $"boards/{id}" : "boards";
+    // Раньше пункт вёл в последний открытый проект; теперь это отдельный экран со всеми задачами,
+    // а проект выбирается селектором в его топбаре.
+    private const string TasksHref = "tasks";
 
     private UserResponse? Me => Users.Find(State.CurrentUserId);
 

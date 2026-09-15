@@ -5,6 +5,8 @@ using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskListQuery;
+using Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
+using Flow.Shared.Contracts.Boards;
 using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Tasks;
 using MediatR;
@@ -44,6 +46,29 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     {
         var tasks = await mediator.Send(new TaskListQuery(boardId, assigneeId), cancellationToken);
         return Ok(tasks);
+    }
+
+    /// <summary>
+    /// Сводный список задач: без boardId — по всем проектам, с boardId — по одному.
+    /// Страница отдаётся вместе со счётчиками по типам статусов и курсором следующей страницы.
+    /// </summary>
+    [HttpGet("tasks")]
+    public async Task<IActionResult> SearchTasks(
+        [FromQuery] Guid? boardId,
+        [FromQuery] Guid? assigneeId,
+        [FromQuery] bool? unassigned,
+        [FromQuery] Guid? statusId,
+        [FromQuery] StatusType? statusType,
+        [FromQuery] string? q,
+        [FromQuery] int? limit,
+        [FromQuery] string? cursor,
+        CancellationToken cancellationToken)
+    {
+        var response = await mediator.Send(
+            new TaskSearchQuery(boardId, assigneeId, unassigned == true, statusId, statusType, q, limit, cursor),
+            cancellationToken);
+
+        return Ok(response);
     }
 
     [HttpGet("tasks/{id:guid}")]
