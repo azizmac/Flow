@@ -67,6 +67,9 @@ window.flow = (function () {
         }
         if (!hotkeyRef) return;
         const editable = isEditable(e.target);
+        // Esc при открытом списке упоминаний принадлежит списку: MarkdownEditor закроет его сам,
+        // а дровер под редактором закрывать рано — это отняло бы недописанный комментарий.
+        if (e.key === 'Escape' && e.target && e.target.dataset && e.target.dataset.mention === '1') return;
         // В полях ввода пропускаем только Esc и Ctrl/Cmd+Enter — остальное принадлежит полю.
         if (editable && e.key !== 'Escape' && !((e.ctrlKey || e.metaKey) && e.key === 'Enter')) return;
         const plainLetter = (e.key === 'n' || e.key === 'N' || e.key === 'т' || e.key === 'Т') && !e.ctrlKey && !e.metaKey && !e.altKey;

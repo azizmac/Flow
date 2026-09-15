@@ -950,6 +950,9 @@ a.sb-me:active { transform: scale(0.98); }
 }
 .desc-edit::placeholder { color: var(--text-tertiary); }
 .desc-wrap { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+/* Просмотр задачи в слайдере: под описанием идёт лента, поэтому описание не растягивается на всю высоту. */
+.desc-wrap.compact { flex: none; }
+.desc-wrap.compact .desc-box { flex: none; }
 .desc-wrap .desc-box, .desc-wrap .desc-edit { flex: 1; }
 .icon-lnk {
     display: inline-flex;
