@@ -344,7 +344,15 @@ input, textarea { font-family: inherit; }
     box-shadow: var(--shadow-sidebar);
 }
 /* color задаёт верхнюю долю знака (BrandMark рисует её currentColor) — на тёмном сайдбаре светлую. */
-.sb-brand { display: flex; align-items: center; gap: 10px; padding: 0 22px 26px; color: #F2F2EF; }
+.sb-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 22px 26px;
+    color: #F2F2EF;
+    text-decoration: none;
+    transition: opacity 160ms var(--ease-out);
+}
 .brand-mark { display: block; flex-shrink: 0; }
 .sb-word { font: var(--fw-black) 17px/1 var(--font-display); color: #fff; letter-spacing: -0.3px; }
 .sb-ws {
@@ -355,9 +363,13 @@ input, textarea { font-family: inherit; }
     padding: 10px 12px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: var(--r-md);
+    gap: 8px;
     /* Переключать пока нечего — не изображаем кликабельность (см. title в Sidebar.razor). */
     cursor: default;
 }
+/* Раздел ещё не сделан: тот же приглушённый вид, что у «Дашбордов» и «Настроек». */
+.sb-ws.disabled { opacity: 0.55; }
+.sb-ws .sb-soon { margin-left: auto; }
 .sb-ws-name { font: var(--fw-bold) 12.5px var(--font-display); color: #fff; }
 .sb-ws-sub { font: var(--fw-medium) 10.5px var(--font-text); color: rgba(255, 255, 255, 0.45); }
 .sb-section {
@@ -872,8 +884,17 @@ a.sb-me:active { transform: scale(0.98); }
     align-items: center;
 }
 .meta-grid.narrow { grid-template-columns: 100px minmax(0, 1fr); }
+@media (max-width: 1100px) {
+    .meta-grid.narrow { grid-template-columns: minmax(0, 1fr); row-gap: 6px; }
+    .meta-grid.narrow .meta-k { margin-top: 8px; }
+}
 .meta-k { font: var(--fw-semibold) 12.5px var(--font-display); color: var(--text-tertiary); }
 .meta-v { font: var(--fw-semibold) 13.5px var(--font-display); color: #fff; display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Длинное название проекта или ФИО не должны выходить за карточку: сжимаем значение и режем многоточием
+   (полный текст остаётся в title). Чип с ключом проекта не сжимается — он и так короткий. */
+.meta-v > a,
+.meta-v > .val { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta-v > .key-chip { flex-shrink: 0; }
 .meta-v.mono {
     font: var(--fw-medium) 11px var(--font-mono);
     color: var(--text-tertiary);
@@ -977,7 +998,16 @@ a.sb-me:active { transform: scale(0.98); }
     letter-spacing: -0.6px;
     padding: 0 0 4px;
 }
-.task-page-side { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; }
+/* Ширина по месту: на узких экранах карточка ужимается, на широких не растягивается сверх меры.
+   min-width: 0 обязателен — иначе flex-элемент не даёт содержимому сжиматься и текст вылезает за рамку. */
+.task-page-side {
+    width: clamp(260px, 26vw, 360px);
+    min-width: 0;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
 .side-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -1330,7 +1360,7 @@ a.task-row { color: inherit; text-decoration: none; }
 .seg-btn:focus-visible,
 .status-sel:focus-visible,
 .sb-item:focus-visible,
-.sb-ws:focus-visible,
+.sb-brand:focus-visible,
 .sb-me:focus-visible,
 .topbar-back:focus-visible,
 .topbar-crumbs a:focus-visible,
@@ -1358,6 +1388,7 @@ a.task-row { color: inherit; text-decoration: none; }
     .ds-iconbtn:hover:not(:disabled) { color: var(--accent-hover); }
     .ds-iconbtn.accent:hover:not(:disabled) { background: var(--accent-hover); color: var(--on-accent); }
     .task-row .ds-iconbtn:hover, .drawer-head .ds-iconbtn:hover, .board-card .ds-iconbtn:hover { color: #fff; }
+    .sb-brand:hover { opacity: 0.8; }
     .sb-item:hover:not(.active):not(.disabled) { background: rgba(255, 255, 255, 0.05); color: #fff; }
     .board-card:hover { background: var(--surface-raised); border-color: var(--border-strong); box-shadow: 0 14px 30px -18px rgba(0, 0, 0, 0.75); }
     .board-card:hover .key-chip { background: var(--accent-hover); }

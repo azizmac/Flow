@@ -10,14 +10,16 @@
 @inject AuthenticationStateProvider AuthState
 
 <nav class="sb">
-    <div class="sb-brand"><BrandMark Size="34" /><div class="sb-word">FLOW</div></div>
+    <a class="sb-brand" href="boards" title="К проектам" aria-label="Flow — к проектам"><BrandMark Size="34" /><div class="sb-word">FLOW</div></a>
 
-    <div class="sb-ws" title="Пока одно рабочее пространство">
+    @* Шеврон обещает выпадающий список, которого ещё нет: помечаем блок как «скоро», чтобы клик по нему не выглядел сломанным. *@
+    <div class="sb-ws disabled" aria-disabled="true" title="Рабочие пространства — в разработке">
         <div>
             <div class="sb-ws-name">Flow</div>
             <div class="sb-ws-sub">Workspace</div>
         </div>
-        <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.4)" />
+        <span class="sb-soon">скоро</span>
+        <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.25)" />
     </div>
 
     <div class="sb-section">Рабочее пространство</div>

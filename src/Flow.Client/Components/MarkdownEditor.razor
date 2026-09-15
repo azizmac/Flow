@@ -157,15 +157,18 @@
         }
 
         var query = text[(at + 1)..caret];
-        if (query.Length == 0 || query.Any(char.IsWhiteSpace) || query.Length > 32)
+        if (query.Any(char.IsWhiteSpace) || query.Length > 32)
         {
             CloseMention();
             return;
         }
 
+        // Ждём справочник, а не запускаем загрузку в фон: иначе первый же «@» до её конца получает пустой Filter,
+        // меню закрывается и само не откроется — DetectMention вызывается только на новый ввод.
         if (!Users.IsLoaded)
-            _ = Users.EnsureLoadedAsync();
+            await Users.EnsureLoadedAsync();
 
+        // Пустой запрос — это «@» без букв: показываем первых активных, как в Slack и GitHub, а не прячем список.
         var items = Users.Filter(query, 6);
         if (items.Count == 0) { CloseMention(); return; }
 

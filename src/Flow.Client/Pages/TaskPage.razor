@@ -133,7 +133,7 @@ else if (_task is not null && _board is not null)
                     <div class="meta-k">Срок</div>
                     <div><DueDateField Value="_task.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>
                     <div class="meta-k">Проект</div>
-                    <div class="meta-v"><KeyChip Value="@_board.Key" /><a href="@BackHref" style="color:#fff;">@_board.Name</a></div>
+                    <div class="meta-v"><KeyChip Value="@_board.Key" /><a href="@BackHref" style="color:#fff;" title="@_board.Name">@_board.Name</a></div>
                     <div class="meta-k">Создана</div>
                     <div class="meta-v">@Ru.DateTimeFull(_task.CreatedAt)</div>
                     <div class="meta-k">ID</div>

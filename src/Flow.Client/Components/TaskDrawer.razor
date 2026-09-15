@@ -27,7 +27,7 @@
             <div class="meta-k">Исполнитель</div>
             <div><AssigneeSelect Value="_assigneeId" OnlyUserId="OnlyAssigneeId" OnChange="id => _assigneeId = id" /></div>
             <div class="meta-k">Проект</div>
-            <div class="meta-v"><KeyChip Value="@Board.Key" />@Board.Name</div>
+            <div class="meta-v"><KeyChip Value="@Board.Key" /><span class="val" title="@Board.Name">@Board.Name</span></div>
         </div>
         <div class="desc-wrap">
             <div class="desc-head"><div class="meta-k">Описание</div></div>
@@ -109,7 +109,7 @@ else if (Item is not null)
             <div class="meta-k">Срок</div>
             <div><DueDateField Value="Item.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>
             <div class="meta-k">Проект</div>
-            <div class="meta-v"><KeyChip Value="@Board.Key" />@Board.Name</div>
+            <div class="meta-v"><KeyChip Value="@Board.Key" /><span class="val" title="@Board.Name">@Board.Name</span></div>
             <div class="meta-k">Создана</div>
             <div class="meta-v">@Ru.DateTimeFull(Item.CreatedAt)</div>
         </div>
