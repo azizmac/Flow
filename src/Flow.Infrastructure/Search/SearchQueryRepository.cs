@@ -71,7 +71,8 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                 row.Snippet,
                 row.Score,
                 row.TaskCode,
-                row.UpdatedAt))
+                row.UpdatedAt,
+                row.ParentId))
             .ToArray();
 
         return new SearchPage(items, rows.Count == 0 ? 0 : (int)rows[0].Total);
@@ -151,6 +152,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                    b.score::double precision AS "Score",
                    COALESCE(ti."Code", ct."Code") AS "TaskCode",
                    b."SourceUpdatedAt" AS "UpdatedAt",
+                   cm."TaskId" AS "ParentId",
                    count(*) OVER () AS "Total"
             FROM best b
             LEFT JOIN "TaskItems" ti ON b."SourceType" = 1 AND ti."Id" = b."SourceId"
@@ -210,6 +212,9 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
         public string? TaskCode { get; init; }
 
         public DateTime UpdatedAt { get; init; }
+
+        /// <summary>Задача комментария; у остальных типов null.</summary>
+        public Guid? ParentId { get; init; }
 
         /// <summary>Одинаковый во всех строках: count(*) OVER () до LIMIT.</summary>
         public long Total { get; init; }

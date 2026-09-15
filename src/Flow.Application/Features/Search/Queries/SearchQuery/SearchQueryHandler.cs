@@ -74,7 +74,7 @@ internal sealed partial class SearchQueryHandler(
 
         var items = page.Items
             .Select(hit => new SearchResultItem(
-                hit.SourceType, hit.SourceId, hit.BoardId, hit.Title, hit.Snippet, hit.Score, hit.TaskCode, hit.UpdatedAt))
+                hit.SourceType, hit.SourceId, hit.BoardId, hit.Title, hit.Snippet, hit.Score, hit.TaskCode, hit.UpdatedAt, hit.ParentId))
             .ToArray();
 
         return new SearchResponse(

@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text;
 using Flow.Shared.Contracts.Boards;
+using Flow.Shared.Contracts.Search;
 using Flow.Shared.Contracts.Tasks;
 using Flow.Shared.Contracts.Users;
 using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
@@ -84,6 +86,38 @@ public sealed class FlowApi(HttpClient http)
 
     public Task<ApiResult<IReadOnlyList<TaskActivityResponse>>> GetActivity(Guid taskId, CancellationToken ct = default) =>
         Get<IReadOnlyList<TaskActivityResponse>>($"tasks/{taskId}/activity", ct);
+
+    // ---- поиск (SearchController) ----
+
+    /// <summary>
+    /// Гибридный поиск. types = null — все типы. Отмена обязательна на стороне вызывающего:
+    /// строка поиска шлёт новый запрос на каждый ввод и должна гасить предыдущий.
+    /// 404 — поиск выключен на сервере (Search:Enabled=false).
+    /// </summary>
+    public Task<ApiResult<SearchResponse>> Search(
+        string query,
+        IReadOnlyCollection<SearchSourceType>? types = null,
+        Guid? boardId = null,
+        bool includeArchived = false,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken ct = default)
+    {
+        var url = new StringBuilder("search?q=").Append(Uri.EscapeDataString(query))
+            .Append("&limit=").Append(limit)
+            .Append("&offset=").Append(offset);
+
+        if (types is { Count: > 0 })
+            url.Append("&types=").Append(string.Join(',', types));
+
+        if (boardId is { } id)
+            url.Append("&boardId=").Append(id);
+
+        if (includeArchived)
+            url.Append("&includeArchived=true");
+
+        return Get<SearchResponse>(url.ToString(), ct);
+    }
 
     // ---- пользователи (UsersController) ----
 

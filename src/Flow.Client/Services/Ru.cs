@@ -113,6 +113,9 @@ public static partial class Ru
 
     public static string Comments(int n) => $"{n} {Plural(n, "комментарий", "комментария", "комментариев")}";
 
+    /// <summary>«3 результата» — счётчик найденного в поиске.</summary>
+    public static string Results(int n) => $"{n} {Plural(n, "результат", "результата", "результатов")}";
+
     /// <summary>«6 сен 2026, 14:20».</summary>
     public static string DateTimeFull(DateTime utc)
     {

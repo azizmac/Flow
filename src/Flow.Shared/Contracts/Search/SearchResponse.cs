@@ -20,6 +20,8 @@ public sealed record SearchResponse(
 /// <param name="Snippet">Фрагмент найденного чанка; совпадения обёрнуты в &lt;mark&gt;.</param>
 /// <param name="Score">Оценка RRF — сравнима только внутри одной выдачи.</param>
 /// <param name="TaskCode">Код задачи (PROJ-142) у задач и комментариев; у проектов и людей null.</param>
+/// <param name="ParentId">Владелец источника: у комментария — его задача. Нужен, чтобы результат
+/// было куда открыть: сам комментарий отдельной страницы не имеет. У остальных типов null.</param>
 public sealed record SearchResultItem(
     SearchSourceType SourceType,
     Guid SourceId,
@@ -28,4 +30,5 @@ public sealed record SearchResultItem(
     string Snippet,
     double Score,
     string? TaskCode,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    Guid? ParentId);

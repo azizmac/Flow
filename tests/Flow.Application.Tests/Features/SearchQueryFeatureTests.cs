@@ -145,7 +145,7 @@ public class SearchQueryFeatureTests
         var boardId = Guid.NewGuid();
         var updatedAt = new DateTime(2026, 9, 15, 12, 0, 0, DateTimeKind.Utc);
         index.Page = new SearchPage(
-            [new SearchHit(SearchSourceType.Task, taskId, boardId, "Падает экспорт", "<mark>экспорт</mark> падает", 0.032, "FLW-1", updatedAt)],
+            [new SearchHit(SearchSourceType.Task, taskId, boardId, "Падает экспорт", "<mark>экспорт</mark> падает", 0.032, "FLW-1", updatedAt, null)],
             Total: 1);
 
         var response = await mediator.Send(Query(), CancellationToken.None);

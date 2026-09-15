@@ -123,10 +123,11 @@ public class SearchQueryTests(SearchFixture fixture)
         var response = await SearchAsync("синхронизация остатков", board.Id, SearchMode.Text);
 
         var item = Assert.Single(response!.Items, i => i.SourceType == SearchSourceType.Comment);
-        // У комментария в выдаче — название и код его задачи: иначе результат не на что повесить.
+        // У комментария в выдаче — название, код и id его задачи: иначе результат некуда открыть.
         Assert.Equal("Интеграция с 1С", item.Title);
         Assert.Equal(task.Code, item.TaskCode);
         Assert.Equal(board.Id, item.BoardId);
+        Assert.Equal(task.Id, item.ParentId);
     }
 
     [Fact]

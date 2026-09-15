@@ -1,4 +1,4 @@
-@* Drawer-nav 240px по Sidebar.dc.html. «Проекты» → /boards; «Задачи» → последний открытый проект (или /boards);
+@* Drawer-nav 240px по Sidebar.dc.html. Строка поиска — GlobalSearch (выдача на /search). «Проекты» → /boards; «Задачи» → последний открытый проект (или /boards);
    «Люди» → /users. Дашборды/Настройки — в API ещё нет: помечены «скоро» и не притворяются кликабельными.
    Футер — текущий пользователь: claim sub из токена Flow.Auth → AppState.CurrentUserId, профиль — GET /users/me;
    кнопка «Выйти» → authentication/logout (endsession в Flow.Auth). *@
@@ -19,6 +19,8 @@
         </div>
         <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.4)" />
     </div>
+
+    <GlobalSearch />
 
     <div class="sb-section">Рабочее пространство</div>
 

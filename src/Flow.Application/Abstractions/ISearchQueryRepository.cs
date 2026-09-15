@@ -32,6 +32,7 @@ public sealed record SearchCriteria(
 
 public sealed record SearchPage(IReadOnlyList<SearchHit> Items, int Total);
 
+/// <param name="ParentId">Задача комментария: сам комментарий открыть негде, открывают его задачу.</param>
 public sealed record SearchHit(
     SearchSourceType SourceType,
     Guid SourceId,
@@ -40,4 +41,5 @@ public sealed record SearchHit(
     string Snippet,
     double Score,
     string? TaskCode,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    Guid? ParentId);

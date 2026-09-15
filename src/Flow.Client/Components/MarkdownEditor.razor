@@ -1,6 +1,6 @@
 @* Markdown-редактор как в GitHub: вкладки «Написать / Предпросмотр», тулбар (заголовок, жирный, курсив,
    зачёркнутый, код, цитата, списки, чек-лист, ссылка), хоткеи Ctrl B / I / K, Ctrl Enter → OnSubmit,
-   Esc → OnCancel, автодополнение @username из UserDirectory (↑↓ Enter Tab Esc — перехват в flow.js по data-mention).
+   Esc → OnCancel, автодополнение @username из UserDirectory (↑↓ Enter Tab Esc — перехват в flow.js по data-listnav).
    Правки текста делает flow.editor.* прямо в textarea (сохраняет каретку), возвращая новое значение в Value. *@
 @implements IDisposable
 @inject BrowserInterop Browser
@@ -39,7 +39,7 @@
     {
         <div class="md-body">
             <textarea id="@Id" class="md-text" style="@($"min-height:{MinHeight}px;")" placeholder="@Placeholder"
-                      value="@Value" disabled="@Busy" spellcheck="true" data-mention="@(_mentionOpen ? "1" : null)"
+                      value="@Value" disabled="@Busy" spellcheck="true" data-listnav="@(_mentionOpen ? "1" : null)"
                       aria-autocomplete="@(_mentionOpen ? "list" : null)"
                       @oninput="OnInput" @onkeydown="OnKeyDown" @onblur="OnBlur"></textarea>
             @if (_mentionOpen && _mentionItems.Count > 0)

@@ -1,0 +1,47 @@
+@* Фильтр выдачи по проекту: пилюля-триггер + поповер со списком проектов. По образцу AssigneeFilter. *@
+
+<div class="status-sel @(Value is null ? "" : "on")" id="@_id" @onclick="() => _open = !_open" @onclick:stopPropagation title="Фильтр по проекту">
+    @if (Current is { } board)
+    {
+        <span class="code">@board.Key</span><span class="lbl">@board.Name</span>
+    }
+    else
+    {
+        <Icon Name="grid" Size="14" Style="color:rgba(255,255,255,0.6);margin:0;" /><span class="lbl">Все проекты</span>
+    }
+    <Icon Name="chevrons" Size="12" />
+</div>
+
+@if (_open)
+{
+    <Popover AnchorId="@_id" Align="left" Width="260" OnClose="() => _open = false">
+        <button type="button" class="pop-item @(Value is null ? "cur" : "")" @onclick="() => Select(null)">
+            <Icon Name="grid" Size="15" />Все проекты
+        </button>
+        @foreach (var board in Boards)
+        {
+            <button type="button" class="pop-item @(Value == board.Id ? "cur" : "")" @onclick="() => Select(board.Id)">
+                <span class="code">@board.Key</span>
+                <span class="pop-user"><span class="pop-user-name">@board.Name</span></span>
+            </button>
+        }
+    </Popover>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
+    [Parameter] public Guid? Value { get; set; }
+    [Parameter] public EventCallback<Guid?> ValueChanged { get; set; }
+
+    private readonly string _id = "bf-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _open;
+
+    private BoardResponse? Current => Boards.FirstOrDefault(board => board.Id == Value);
+
+    private async Task Select(Guid? value)
+    {
+        _open = false;
+        if (value != Value)
+            await ValueChanged.InvokeAsync(value);
+    }
+}

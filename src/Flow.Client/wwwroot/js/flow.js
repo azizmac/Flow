@@ -48,9 +48,10 @@ window.flow = (function () {
             }
         }
 
-        // Открыт список @упоминаний в Markdown-редакторе: стрелки/Enter/Tab/Esc принадлежат списку,
-        // а не textarea. preventDefault обязан быть синхронным — поэтому здесь, .NET-обработчик дальше сам решает.
-        if (e.target && e.target.getAttribute && e.target.getAttribute('data-mention') === '1'
+        // Под полем открыт список, которому принадлежат стрелки/Enter/Tab/Esc: @упоминания в
+        // Markdown-редакторе, выдача строки поиска. preventDefault обязан быть синхронным — поэтому
+        // здесь, а .NET-обработчик дальше сам решает, что с клавишей делать.
+        if (e.target && e.target.getAttribute && e.target.getAttribute('data-listnav') === '1'
             && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Tab' || e.key === 'Escape')) {
             e.preventDefault();
             return;

@@ -1,0 +1,244 @@
+@* Строка поиска в сайдбаре: ввод с задержкой 300 мс, предыдущий запрос отменяется (иначе ответы
+   обгоняют друг друга и в выдаче мелькает старое), дропдаун с группами по типу источника.
+   ↑/↓ ходят по результатам, Enter открывает выбранный (или всю выдачу), Esc закрывает, а на пустом
+   дропдауне — очищает поле. Полная выдача с фильтрами — на /search. *@
+@implements IDisposable
+@inject FlowApi Api
+@inject NavigationManager Nav
+
+<div class="sb-search-wrap">
+    <label class="sb-search @(_open ? "open" : "")">
+        <Icon Name="search" Size="15" />
+        @* data-listnav: пока список открыт, стрелки и Enter принадлежат ему — preventDefault делает
+           flow.js синхронно, .NET-обработчик так не успевает (см. MarkdownEditor и flow.js). *@
+        <input id="@_inputId" placeholder="Поиск по задачам…" value="@_query" autocomplete="off" spellcheck="false"
+               aria-label="Поиск" aria-expanded="@_open" role="combobox" aria-controls="@_popId"
+               data-listnav="@(_open ? "1" : null)"
+               @oninput="OnInput" @onkeydown="OnKeyDown" @onfocus="OnFocus" />
+        @if (_query.Length > 0)
+        {
+            <button type="button" class="search-clear" title="Очистить" aria-label="Очистить поиск" @onclick="Clear">
+                <Icon Name="close-simple" Size="11" />
+            </button>
+        }
+    </label>
+
+    @if (_open)
+    {
+        <div class="gs-scrim" @onclick="Close"></div>
+        <div id="@_popId" class="gs-pop" role="listbox">
+            @if (_loading)
+            {
+                <div class="gs-note">Ищем…</div>
+            }
+            else if (_error is not null)
+            {
+                <div class="gs-note">@_error</div>
+            }
+            else if (_items.Count == 0)
+            {
+                <div class="gs-note">Ничего не нашлось по «@_lastQuery»</div>
+            }
+            else
+            {
+                @if (_degraded)
+                {
+                    <div class="gs-note warn">Модель поиска недоступна — ищем по словам</div>
+                }
+
+                @foreach (var group in Groups)
+                {
+                    <div class="gs-group">@SearchPresentation.GroupLabel(group.Key)</div>
+                    @foreach (var item in group)
+                    {
+                        var index = _items.IndexOf(item);
+                        <a class="gs-item @(index == _active ? "on" : "")" role="option" aria-selected="@(index == _active)"
+                           href="@SearchPresentation.Href(item)" @onclick="() => Open(item)" @onclick:preventDefault
+                           @onmouseenter="() => _active = index">
+                            <Icon Name="@SearchPresentation.TypeIcon(item.SourceType)" Size="14" />
+                            <div class="gs-body">
+                                <div class="gs-title">
+                                    @if (item.TaskCode is { Length: > 0 } taskCode)
+                                    {
+                                        <span class="code">@taskCode</span>
+                                    }
+                                    <span>@item.Title</span>
+                                </div>
+                                <div class="gs-snippet">@SearchPresentation.Highlight(item.Snippet)</div>
+                            </div>
+                        </a>
+                    }
+                }
+
+                <button type="button" class="gs-all @(_active == _items.Count ? "on" : "")" @onclick="OpenAll"
+                        @onmouseenter="() => _active = _items.Count">
+                    Показать все результаты
+                    <Icon Name="arrow-left" Size="12" Style="transform:rotate(180deg)" />
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Меньше двух символов искать бессмысленно: выдача будет из всего подряд.</summary>
+    private const int MinQuery = 2;
+
+    private const int DebounceMs = 300;
+
+    private const int Limit = 7;
+
+    private static readonly SearchSourceType[] GroupOrder =
+        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User];
+
+    private readonly string _inputId = "gs-" + Guid.NewGuid().ToString("N")[..8];
+    private readonly string _popId = "gsp-" + Guid.NewGuid().ToString("N")[..8];
+
+    private string _query = "";
+    private string _lastQuery = "";
+    private List<SearchResultItem> _items = [];
+    private bool _open;
+    private bool _loading;
+    private bool _degraded;
+    private string? _error;
+    private int _active = -1;
+    private CancellationTokenSource? _cts;
+
+    private IEnumerable<IGrouping<SearchSourceType, SearchResultItem>> Groups =>
+        _items.GroupBy(item => item.SourceType).OrderBy(group => Array.IndexOf(GroupOrder, group.Key));
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        _query = e.Value?.ToString() ?? "";
+        await RunAsync();
+    }
+
+    private async Task RunAsync()
+    {
+        // Отменяем и задержку, и уже улетевший запрос: без этого ответ на «эксп» мог бы прийти
+        // после ответа на «экспорт» и перезаписать выдачу.
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        var query = _query.Trim();
+        if (query.Length < MinQuery)
+        {
+            _items = [];
+            _open = false;
+            _loading = false;
+            _error = null;
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(DebounceMs, ct);
+
+            _open = true;
+            _loading = true;
+            _error = null;
+            StateHasChanged();
+
+            var result = await Api.Search(query, limit: Limit, ct: ct);
+            if (ct.IsCancellationRequested)
+                return;
+
+            _lastQuery = query;
+            _loading = false;
+            _active = -1;
+
+            if (result.Ok)
+            {
+                _items = [.. result.Value!.Items];
+                _degraded = result.Value.Degraded;
+            }
+            else
+            {
+                _items = [];
+                // 404 — поиск выключен на сервере: так и говорим, а не «ничего не найдено».
+                _error = result.NotFound ? "Поиск выключен на сервере." : result.Error;
+            }
+
+            StateHasChanged();
+        }
+        catch (OperationCanceledException)
+        {
+            // Набрали следующий символ — этот запрос уже не нужен.
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown" when _open:
+                _active = _active + 1 > _items.Count ? 0 : _active + 1;
+                break;
+
+            case "ArrowUp" when _open:
+                _active = _active - 1 < 0 ? _items.Count : _active - 1;
+                break;
+
+            case "Enter":
+                if (_open && _active >= 0 && _active < _items.Count)
+                    Open(_items[_active]);
+                else if (_query.Trim().Length >= MinQuery)
+                    OpenAll();
+                break;
+
+            case "Escape":
+                if (_open)
+                    Close();
+                else
+                    await ClearAsync();
+                break;
+        }
+    }
+
+    private void OnFocus()
+    {
+        if (_items.Count > 0 && _query.Trim().Length >= MinQuery)
+            _open = true;
+    }
+
+    private void Open(SearchResultItem item)
+    {
+        if (SearchPresentation.Href(item) is not { } href)
+            return;
+
+        Close();
+        Nav.NavigateTo(href);
+    }
+
+    private void OpenAll()
+    {
+        var query = _query.Trim();
+        if (query.Length < MinQuery)
+            return;
+
+        Close();
+        Nav.NavigateTo($"search?q={Uri.EscapeDataString(query)}");
+    }
+
+    private void Close()
+    {
+        _open = false;
+        _active = -1;
+    }
+
+    private Task Clear() => ClearAsync();
+
+    private async Task ClearAsync()
+    {
+        _query = "";
+        await RunAsync();
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

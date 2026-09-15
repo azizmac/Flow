@@ -20,7 +20,7 @@ The longer-term goal is an AI assistant inside the tracker: grounded in the team
 - **Roles and permissions.** `Reader → Member → Developer → Admin → Owner`; the permission matrix is enforced on the server, and the client hides actions the current user cannot perform. A "last Owner" rule prevents locking the instance out of administration.
 - **Task timeline.** Markdown comments with `@mentions` (a GitHub-style editor with preview and toolbar) and a change log: title, description, status, assignee, due date, deleted comments. Due dates with overdue highlighting.
 - **Authentication.** A separate `Flow.Auth` service: ASP.NET Core Identity with BCrypt and OpenIddict (authorization code + PKCE, refresh, client credentials). The client signs in over OIDC; the API acts as a resource server validating Bearer JWTs. The initial password must be changed at first sign-in.
-- **Search.** Hybrid vector and full-text search over tasks, comments, projects and people on pgvector: it finds by meaning, not by substring. The index is updated in the same transaction as the edit. API only for now — the search box in the UI is the next step.
+- **Search.** Hybrid vector and full-text search over tasks, comments, projects and people on pgvector: it finds by meaning, not by substring. A sidebar box with live suggestions and a results page with filters; the index is updated in the same transaction as the edit.
 - **Infrastructure.** PostgreSQL 16, EF Core, migrations applied on API startup. Build, tests and image publishing run in GitHub Actions.
 
 ![Tasks of a project](docs/images/board.png)
@@ -38,7 +38,7 @@ Done:
 - [x] Mandatory initial password change
 - [x] Whole stack in Docker with one command, CI building and publishing images
 - [x] Comments, change log and Markdown editor on a task, due dates
-- [x] Vector search: pgvector index, Qwen3 embedder, hybrid ranking with RRF (stages 1-4 of `docs/TZ_search_vector.md`)
+- [x] Vector search: pgvector index, Qwen3 embedder, hybrid ranking with RRF and search in the UI (stages 1-5 of `docs/TZ_search_vector.md`)
 
 Next — the `Flow.AI` subsystem ([#5](https://github.com/azizmac/Flow/issues/5), [#1](https://github.com/azizmac/Flow/issues/1)):
 
@@ -150,7 +150,8 @@ Search parameters: `types` (`task,comment,board,user`), `boardId`, `includeArchi
 default), `mode` (`hybrid`, `semantic`, `text` — for debugging relevance), `limit` and `offset`. With the model
 unavailable the request still succeeds: the full-text half answers and the response is flagged `degraded: true`.
 
-There is no search box in the client yet — that is the next stage; for now search is available over the API.
+In the UI search is a box in the sidebar (suggestions as you type, grouped by type) and a `/search` page
+with filters, match highlighting and pagination.
 
 ### Coming from a single-stack checkout
 

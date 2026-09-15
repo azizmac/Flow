@@ -360,6 +360,155 @@ input, textarea { font-family: inherit; }
 }
 .sb-ws-name { font: var(--fw-bold) 12.5px var(--font-display); color: #fff; }
 .sb-ws-sub { font: var(--fw-medium) 10.5px var(--font-text); color: rgba(255, 255, 255, 0.45); }
+/* ---------- Поиск: строка в сайдбаре ---------- */
+/* Обёртка — якорь дропдауна. Он шире сайдбара и ложится поверх контента, поэтому позиционируется
+   абсолютно, а не участвует в потоке колонки. */
+.sb-search-wrap { position: relative; margin: 0 14px 14px; }
+.sb-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    color: rgba(255, 255, 255, 0.45);
+    transition: border-color 150ms ease, background-color 150ms ease;
+}
+.sb-search:focus-within, .sb-search.open { background: rgba(255, 255, 255, 0.08); border-color: var(--accent); }
+.sb-search input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: #fff;
+    font: var(--fw-medium) 12.5px var(--font-text);
+}
+.sb-search input::placeholder { color: rgba(255, 255, 255, 0.4); }
+.sb-search:focus-within .ds-icon:first-child { color: var(--accent); }
+
+.gs-scrim { position: fixed; inset: 0; z-index: 40; }
+.gs-pop {
+    position: absolute;
+    z-index: 41;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 380px;
+    max-height: 60vh;
+    overflow: auto;
+    padding: 6px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-popover);
+    animation: gs-in 160ms var(--ease-out);
+}
+@keyframes gs-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.gs-note { padding: 10px 12px; font: var(--fw-medium) 12.5px var(--font-text); color: var(--text-tertiary); }
+.gs-note.warn { color: var(--accent); }
+.gs-group {
+    padding: 8px 12px 4px;
+    font: var(--fw-bold) 10px var(--font-display);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+.gs-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--r-md);
+    color: var(--text-secondary);
+    text-decoration: none;
+    cursor: pointer;
+}
+.gs-item.on { background: var(--surface); color: #fff; }
+.gs-item .ds-icon { margin-top: 2px; color: var(--text-tertiary); }
+.gs-body { min-width: 0; flex: 1; }
+.gs-title { display: flex; align-items: center; gap: 6px; font: var(--fw-semibold) 13px var(--font-display); color: #fff; }
+.gs-title span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-snippet {
+    font: var(--fw-medium) 11.5px var(--font-text);
+    color: var(--text-tertiary);
+    /* Фрагмент из ts_headline — две строки максимум, дальше многоточие. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.gs-all {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 4px;
+    padding: 9px;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0 0 var(--r-md) var(--r-md);
+    background: transparent;
+    color: var(--accent);
+    font: var(--fw-semibold) 12px var(--font-display);
+    cursor: pointer;
+}
+.gs-all.on { background: var(--surface); }
+
+/* ---------- Поиск: страница выдачи ---------- */
+.sr-list { display: flex; flex-direction: column; }
+.sr-row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: start;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    color: inherit;
+    text-decoration: none;
+    transition: background-color 140ms ease;
+}
+.sr-row:last-child { border-bottom: 0; }
+.sr-row:hover { background: var(--surface-raised); }
+.sr-row.flat { pointer-events: none; }
+.sr-type {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--r-md);
+    background: var(--surface-raised);
+    color: var(--text-tertiary);
+}
+.sr-body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sr-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sr-name { font: var(--fw-semibold) 14px var(--font-display); color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-kind {
+    flex: none;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+    font: var(--fw-medium) 10.5px var(--font-text);
+    color: var(--text-tertiary);
+}
+.sr-snippet {
+    font: var(--fw-medium) 12.5px/1.5 var(--font-text);
+    color: var(--text-secondary);
+    /* ts_headline отдаёт до двух фрагментов — строку выдачи они раздувают, поэтому режем по двум строкам. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.sr-date { font: var(--fw-medium) 11.5px var(--font-text); color: var(--text-tertiary); white-space: nowrap; }
+.meta-line.warn { color: var(--accent); }
+
+/* Подсветка совпадений из ts_headline — единственный тег, который мы разворачиваем из фрагмента. */
+mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px; padding: 0 2px; }
+
 .sb-section {
     font: var(--fw-bold) 10px var(--font-display);
     letter-spacing: 0.08em;
