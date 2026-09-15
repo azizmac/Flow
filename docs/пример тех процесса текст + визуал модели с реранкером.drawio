@@ -1,0 +1,275 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Страница-1" id="H3F0QnIlRpbu8_8stM4p">
+    <mxGraphModel dx="2020" dy="1120" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="sec1" parent="1" style="rounded=0;html=1;whiteSpace=wrap;fillColor=#F7F9FB;strokeColor=#B0BEC5;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;fontSize=13;fontColor=#37474F;" value="&lt;b&gt;ИНДЕКСАЦИЯ&lt;/b&gt; — один раз при сохранении задачи и вложений (Flow.Worker)" vertex="1">
+          <mxGeometry height="470" width="1560" x="20" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sec2" parent="1" style="rounded=0;html=1;whiteSpace=wrap;fillColor=#F7F9FB;strokeColor=#B0BEC5;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;fontSize=13;fontColor=#37474F;" value="&lt;b&gt;ПОИСК&lt;/b&gt; — на каждый запрос" vertex="1">
+          <mxGeometry height="500" width="1560" x="20" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="task" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#E3F2FD;strokeColor=#1976D2;fontSize=11;" value="&lt;b&gt;Задача PROJ-142&lt;/b&gt;&lt;br&gt;«Падает экспорт отчёта в PDF»&lt;br&gt;название + описание" vertex="1">
+          <mxGeometry height="65" width="215" x="50" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="comments" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#E3F2FD;strokeColor=#1976D2;fontSize=11;" value="3 комментария&lt;br&gt;(обсуждение + стектрейс)" vertex="1">
+          <mxGeometry height="50" width="215" x="50" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="pdf" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#FFF3E0;strokeColor=#EF6C00;fontSize=11;" value="Вложение 1&lt;br&gt;&lt;b&gt;export-spec.pdf&lt;/b&gt; · 14 страниц" vertex="1">
+          <mxGeometry height="50" width="215" x="50" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="png" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#F3E5F5;strokeColor=#7B1FA2;fontSize=11;" value="Вложение 2&lt;br&gt;&lt;b&gt;error-screen.png&lt;/b&gt; · скриншот ошибки" vertex="1">
+          <mxGeometry height="50" width="215" x="50" y="315" as="geometry" />
+        </mxCell>
+        <mxCell id="queue" parent="1" style="rounded=0;html=1;whiteSpace=wrap;fillColor=#ECEFF1;strokeColor=#546E7A;fontSize=11;" value="&lt;b&gt;SearchIndexQueue&lt;/b&gt;&lt;br&gt;Priority 0 — текст задачи&lt;br&gt;Priority 2 — вложения&lt;br&gt;&lt;i&gt;в той же SaveChangesAsync&lt;/i&gt;" vertex="1">
+          <mxGeometry height="95" width="180" x="315" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="worker" parent="1" style="rounded=0;html=1;whiteSpace=wrap;fillColor=#ECEFF1;strokeColor=#546E7A;fontSize=11;" value="&lt;b&gt;Flow.Worker&lt;/b&gt;&lt;br&gt;извлечение текста,&lt;br&gt;чанкинг, батчи по 32&lt;br&gt;&lt;i&gt;2–4 реплики&lt;/i&gt;" vertex="1">
+          <mxGeometry height="95" width="175" x="545" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="chunk_text" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#E3F2FD;strokeColor=#1976D2;fontSize=11;" value="&lt;b&gt;TextChunker&lt;/b&gt;&lt;br&gt;512 токенов, overlap 64&lt;br&gt;шапка «[PROJ-142] …» к каждому&lt;br&gt;→ &lt;b&gt;5 чанков&lt;/b&gt; (задача + комментарии)" vertex="1">
+          <mxGeometry height="75" width="225" x="770" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="chunk_pdf" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#FFF3E0;strokeColor=#EF6C00;fontSize=11;" value="&lt;b&gt;PdfPig&lt;/b&gt;: текст 14 страниц&lt;br&gt;→ чанкинг → &lt;b&gt;21 чанк&lt;/b&gt;&lt;br&gt;&lt;i&gt;дубли по ContentHash не считаются заново&lt;/i&gt;" vertex="1">
+          <mxGeometry height="70" width="225" x="770" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="img" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#F3E5F5;strokeColor=#7B1FA2;fontSize=11;" value="Текст извлечь нечем — скриншот UI.&lt;br&gt;Идёт &lt;b&gt;как изображение&lt;/b&gt;, ресайз ≤ 1 Мпикс&lt;br&gt;≈ 1200 visual-токенов" vertex="1">
+          <mxGeometry height="70" width="225" x="770" y="315" as="geometry" />
+        </mxCell>
+        <mxCell id="m_text" parent="1" style="rounded=0;html=1;whiteSpace=wrap;fillColor=#BBDEFB;strokeColor=#1565C0;fontSize=11;fontStyle=0" value="&lt;b&gt;Qwen3-Embedding-0.6B&lt;/b&gt;&lt;br&gt;pooling последнего токена + L2&lt;br&gt;→ halfvec(512)&lt;br&gt;&lt;i&gt;26 векторов&lt;/i&gt;" vertex="1">
+          <mxGeometry height="85" width="200" x="1050" y="135" as="geometry" />
+        </mxCell>
+        <mxCell id="m_vl" parent="1" style="rounded=0;html=1;whiteSpace=wrap;fillColor=#E1BEE7;strokeColor=#6A1B9A;fontSize=11;" value="&lt;b&gt;Qwen3-VL-Embedding-2B&lt;/b&gt;&lt;br&gt;изображение → вектор&lt;br&gt;→ halfvec(512), MRL от 2048&lt;br&gt;&lt;i&gt;1 вектор, но ≈ 9 текстовых по цене&lt;/i&gt;" vertex="1">
+          <mxGeometry height="85" width="200" x="1050" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="store_text" parent="1" style="shape=cylinder3;boundedLbl=1;backgroundOutline=1;size=12;html=1;whiteSpace=wrap;fillColor=#CFD8DC;strokeColor=#455A64;fontSize=11;" value="&lt;b&gt;SearchChunks · текстовая партиция&lt;/b&gt;&lt;br&gt;26 × halfvec(512) + tsvector&lt;br&gt;HNSW cosine + GIN&lt;br&gt;ModelVersion: &lt;i&gt;qwen3-emb-0.6b:512:…&lt;/i&gt;" vertex="1">
+          <mxGeometry height="105" width="250" x="1300" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="store_vl" parent="1" style="shape=cylinder3;boundedLbl=1;backgroundOutline=1;size=12;html=1;whiteSpace=wrap;fillColor=#CFD8DC;strokeColor=#455A64;fontSize=11;" value="&lt;b&gt;SearchChunks · визуальная партиция&lt;/b&gt;&lt;br&gt;1 × halfvec(512), свой HNSW&lt;br&gt;ModelVersion: &lt;i&gt;qwen3-vl-2b:512:…&lt;/i&gt;&lt;br&gt;&lt;b&gt;другое векторное пространство&lt;/b&gt;" vertex="1">
+          <mxGeometry height="105" width="250" x="1300" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="task" style="strokeColor=#1976D2;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="queue">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="405" y="123" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="comments" style="strokeColor=#1976D2;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="queue">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="290" y="200" />
+              <mxPoint x="290" y="223" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="pdf" style="strokeColor=#EF6C00;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="queue">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="290" y="270" />
+              <mxPoint x="290" y="223" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="png" style="strokeColor=#7B1FA2;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="queue">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="405" y="340" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="queue" style="strokeColor=#546E7A;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="worker">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="worker" style="strokeColor=#1976D2;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="chunk_text">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="633" y="118" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="worker" style="strokeColor=#EF6C00;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="chunk_pdf">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="745" y="223" />
+              <mxPoint x="745" y="235" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="worker" style="strokeColor=#7B1FA2;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="img">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="633" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="chunk_text" style="strokeColor=#1565C0;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="m_text" value="текст">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1150" y="118" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="chunk_pdf" style="strokeColor=#1565C0;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="m_text" value="текст из PDF — та же модель">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="883" y="178" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="img" style="strokeColor=#6A1B9A;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="m_vl" value="пиксели">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1023" y="350" />
+              <mxPoint x="1023" y="353" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="m_text" style="strokeColor=#455A64;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="store_text">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="m_vl" style="strokeColor=#455A64;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="store_vl">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="q" parent="1" style="ellipse;html=1;whiteSpace=wrap;fillColor=#FFFDE7;strokeColor=#F9A825;fontSize=11;" value="&lt;b&gt;Запрос пользователя&lt;/b&gt;&lt;br&gt;«падает экспорт в пдф»" vertex="1">
+          <mxGeometry height="80" width="200" x="50" y="660" as="geometry" />
+        </mxCell>
+        <mxCell id="b_text" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#E3F2FD;strokeColor=#1976D2;fontSize=11;" value="Эмбеддинг запроса&lt;br&gt;&lt;b&gt;0.6B&lt;/b&gt; + Instruct-префикс&lt;br&gt;&lt;i&gt;3–8 мс, кэш → 0&lt;/i&gt;" vertex="1">
+          <mxGeometry height="70" width="195" x="310" y="575" as="geometry" />
+        </mxCell>
+        <mxCell id="b_fts" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#E8F5E9;strokeColor=#2E7D32;fontSize=11;" value="websearch_to_tsquery(&#39;russian&#39;)&lt;br&gt;&lt;i&gt;без инференса&lt;/i&gt;" vertex="1">
+          <mxGeometry height="60" width="195" x="310" y="670" as="geometry" />
+        </mxCell>
+        <mxCell id="b_vl" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#F3E5F5;strokeColor=#7B1FA2;fontSize=11;" value="Эмбеддинг того же запроса&lt;br&gt;&lt;b&gt;VL-2B&lt;/b&gt; — в пространство картинок&lt;br&gt;&lt;i&gt;+10–20 мс, только если включено&lt;/i&gt;" vertex="1">
+          <mxGeometry height="70" width="195" x="310" y="760" as="geometry" />
+        </mxCell>
+        <mxCell id="s_text" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#BBDEFB;strokeColor=#1565C0;fontSize=11;" value="&lt;b&gt;HNSW&lt;/b&gt; · текстовая партиция&lt;br&gt;top-50 · &lt;i&gt;3–35 мс&lt;/i&gt;" vertex="1">
+          <mxGeometry height="70" width="190" x="565" y="575" as="geometry" />
+        </mxCell>
+        <mxCell id="s_fts" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#C8E6C9;strokeColor=#2E7D32;fontSize=11;" value="&lt;b&gt;GIN&lt;/b&gt; · tsvector, ts_rank_cd&lt;br&gt;top-50 · &lt;i&gt;20–250 мс&lt;/i&gt;&lt;br&gt;ловит точные «PROJ-142», «PDF»" vertex="1">
+          <mxGeometry height="76" width="190" x="565" y="662" as="geometry" />
+        </mxCell>
+        <mxCell id="s_vl" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#E1BEE7;strokeColor=#6A1B9A;fontSize=11;" value="&lt;b&gt;HNSW&lt;/b&gt; · визуальная партиция&lt;br&gt;top-20 · &lt;i&gt;3–8 мс&lt;/i&gt;" vertex="1">
+          <mxGeometry height="70" width="190" x="565" y="760" as="geometry" />
+        </mxCell>
+        <mxCell id="rrf" parent="1" style="rounded=0;html=1;whiteSpace=wrap;fillColor=#FFECB3;strokeColor=#FF8F00;fontSize=11;" value="&lt;b&gt;RRF · k = 60&lt;/b&gt;&lt;br&gt;складывает &lt;b&gt;ранги&lt;/b&gt;, а не оценки —&lt;br&gt;поэтому три разнородные ветки&lt;br&gt;сливаются без общей шкалы&lt;br&gt;свёртка чанков в источники&lt;br&gt;→ &lt;b&gt;top-25 кандидатов&lt;/b&gt;" vertex="1">
+          <mxGeometry height="130" width="205" x="815" y="625" as="geometry" />
+        </mxCell>
+        <mxCell id="note_before" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=none;strokeColor=#FF8F00;dashed=1;fontSize=10;align=left;spacingLeft=6;fontColor=#E65100;" value="Отбор честный, но грубый:&lt;br&gt;&lt;b&gt;PROJ-142 стоит 7-й&lt;/b&gt; — в 40 проектах&lt;br&gt;полно задач, где «экспорт» просто упомянут&lt;br&gt;(«добавить экспорт в CSV» и т. п.)" vertex="1">
+          <mxGeometry height="80" width="245" x="795" y="840" as="geometry" />
+        </mxCell>
+        <mxCell id="rerank" parent="1" style="rounded=0;html=1;whiteSpace=wrap;fillColor=#FFCDD2;strokeColor=#C62828;fontSize=11;" value="&lt;b&gt;Qwen3-Reranker-0.6B&lt;/b&gt; (cross-encoder)&lt;br&gt;&lt;br&gt;пара «запрос + текст чанка» подаётся&lt;br&gt;&lt;b&gt;целиком, одним входом&lt;/b&gt; → score&lt;br&gt;&lt;br&gt;25 пар ≈ 15 тыс. токенов&lt;br&gt;&lt;i&gt;0.4–0.9 с на GPU&lt;/i&gt;" vertex="1">
+          <mxGeometry height="150" width="230" x="1085" y="615" as="geometry" />
+        </mxCell>
+        <mxCell id="note_after" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=none;strokeColor=#C62828;dashed=1;fontSize=10;align=left;spacingLeft=6;fontColor=#B71C1C;" value="Видит запрос и документ вместе,&lt;br&gt;поэтому отличает &lt;b&gt;«падает при экспорте»&lt;/b&gt;&lt;br&gt;от «добавить экспорт» и от «экспорт&lt;br&gt;обсуждали в комментарии»" vertex="1">
+          <mxGeometry height="80" width="230" x="1085" y="840" as="geometry" />
+        </mxCell>
+        <mxCell id="out" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#E8F5E9;strokeColor=#1B5E20;fontSize=11;align=left;spacingLeft=8;" value="&lt;b&gt;Выдача top-10&lt;/b&gt;&lt;br&gt;&lt;br&gt;1. &lt;b&gt;PROJ-142&lt;/b&gt; «Падает экспорт отчёта в PDF»&lt;br&gt;2. &lt;b&gt;error-screen.png&lt;/b&gt; — нашла VL-ветка,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;текста в скриншоте нет&lt;br&gt;3. Комментарий со стектрейсом&lt;br&gt;4. export-spec.pdf, стр. 9&lt;br&gt;…" vertex="1">
+          <mxGeometry height="150" width="200" x="1360" y="615" as="geometry" />
+        </mxCell>
+        <mxCell id="f1" edge="1" parent="1" source="q" style="strokeColor=#F9A825;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b_text" value="эмбеддится дважды">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="150" y="610" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f2" edge="1" parent="1" source="q" style="strokeColor=#2E7D32;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b_fts">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f3" edge="1" parent="1" source="q" style="strokeColor=#7B1FA2;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b_vl">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="150" y="795" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f4" edge="1" parent="1" source="b_text" style="strokeColor=#1565C0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="s_text">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f5" edge="1" parent="1" source="b_fts" style="strokeColor=#2E7D32;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="s_fts">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f6" edge="1" parent="1" source="b_vl" style="strokeColor=#6A1B9A;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="s_vl">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f7" edge="1" parent="1" source="s_text" style="strokeColor=#1565C0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="rrf">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="799" y="610" />
+              <mxPoint x="799" y="690" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f8" edge="1" parent="1" source="s_fts" style="strokeColor=#2E7D32;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="rrf">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="771" y="700" />
+              <mxPoint x="771" y="690" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f9" edge="1" parent="1" source="s_vl" style="strokeColor=#6A1B9A;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="rrf">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="918" y="795" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f10" edge="1" parent="1" source="rrf" style="strokeColor=#FF8F00;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="rerank" value="ступень 1: recall">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f11" edge="1" parent="1" source="rerank" style="strokeColor=#C62828;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="out" value="ступень 2: precision">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f12" edge="1" parent="1" source="rrf" style="strokeColor=#FF8F00;dashed=1;endArrow=none;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="note_before">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f13" edge="1" parent="1" source="rerank" style="strokeColor=#C62828;dashed=1;endArrow=none;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="note_after">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="link1" edge="1" parent="1" source="store_text" style="strokeColor=#90A4AE;dashed=1;fontSize=10;fontColor=#607D8B;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="s_text" value="читает при поиске">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1275" y="178" />
+              <mxPoint x="1275" y="485" />
+              <mxPoint x="660" y="485" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="link2" edge="1" parent="1" source="store_vl" style="strokeColor=#90A4AE;dashed=1;fontSize=10;fontColor=#607D8B;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="s_vl" value="читает при поиске">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1425" y="510" />
+              <mxPoint x="785" y="510" />
+              <mxPoint x="785" y="795" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

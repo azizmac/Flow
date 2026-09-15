@@ -354,6 +354,7 @@ else if (_user is not null)
     private bool _savingLink;
 
     // задачи
+    private const int TasksPageSize = 100;
     private List<(BoardResponse Board, TaskResponse Task)>? _tasks;
     private bool _tasksLoading;
 
@@ -450,27 +451,50 @@ else if (_user is not null)
     private void SetTab(string tab) =>
         Nav.NavigateTo(Nav.GetUriWithQueryParameter("tab", tab == "profile" ? null : tab), replace: true);
 
+    /// <summary>
+    /// Задачи пользователя — одним GET /tasks?assigneeId=; проекты нужны строкам ради ключа, названия и статусов.
+    /// На вкладке нет «показать ещё» и счётчик равен длине списка, поэтому остаток страниц дочитываем курсором.
+    /// </summary>
     private async Task LoadTasks()
     {
         if (_user is null) return;
         _tasksLoading = true;
-        var boards = await Api.GetBoards();
+
+        var boardsCall = Api.GetBoards();
+        var tasksCall = Api.SearchTasks(assigneeId: _user.Id, limit: TasksPageSize);
+        await Task.WhenAll(boardsCall, tasksCall);
+        var boards = await boardsCall;
+        var page = await tasksCall;
+
         var list = new List<(BoardResponse, TaskResponse)>();
-        if (boards.Ok)
+        if (!boards.Ok || !page.Ok)
         {
-            // GET /boards/{id}/tasks?assigneeId= по каждому проекту — проектов немного, зато без нового эндпоинта.
-            var calls = boards.Value!.Select(b => (b, Api.GetTasks(b.Id, _user.Id))).ToList();
-            await Task.WhenAll(calls.Select(c => c.Item2));
-            foreach (var (b, t) in calls)
-                if (t.Result.Ok)
-                    list.AddRange(t.Result.Value!.Select(x => (b, x)));
+            Toasts.Error(boards.Error ?? page.Error ?? "Не удалось загрузить задачи");
         }
         else
         {
-            Toasts.Error(boards.Error ?? "Не удалось загрузить задачи");
+            var items = page.Value!.Items.ToList();
+            for (var cursor = page.Value.NextCursor; cursor is not null;)
+            {
+                var more = await Api.SearchTasks(assigneeId: _user.Id, limit: TasksPageSize, cursor: cursor);
+                if (!more.Ok)
+                {
+                    Toasts.Error(more.Error ?? "Не удалось загрузить задачи");
+                    break;
+                }
+
+                items.AddRange(more.Value!.Items);
+                cursor = more.Value.NextCursor;
+            }
+
+            // Задачи приходят уже в порядке «сначала новые», сортировать повторно нечего.
+            var byId = boards.Value!.ToDictionary(b => b.Id);
+            foreach (var task in items)
+                if (byId.TryGetValue(task.BoardId, out var board))
+                    list.Add((board, task));
         }
 
-        _tasks = list.OrderByDescending(x => x.Item2.CreatedAt).ToList();
+        _tasks = list;
         _tasksLoading = false;
     }
 
