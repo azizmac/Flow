@@ -100,6 +100,15 @@ services:
       - models-data:/models
     ports:
       - "${EMBEDDINGS_BIND:-127.0.0.1}:${EMBEDDINGS_PORT:-8081}:8081"
+    # Свой healthcheck: встроенный в образ стучится на 8080, а сервер поднят на 8081 —
+    # без переопределения контейнер вечно «unhealthy» при исправно работающей модели.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      # Веса грузятся с диска: на холодном старте первая проба не должна считаться провалом.
+      start_period: 60s
     networks:
       - flow-network
 
