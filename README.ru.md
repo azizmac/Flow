@@ -20,7 +20,8 @@ Flow решает задачу командного учёта работы: п�
 - **Роли и права.** `Reader → Member → Developer → Admin → Owner`; матрица прав проверяется на сервере, клиент скрывает недоступные действия. Правило «последнего Owner» защищает от потери администратора.
 - **Лента задачи.** Комментарии в Markdown с `@упоминаниями` (редактор с предпросмотром и тулбаром, как в GitHub), журнал изменений: название, описание, статус, исполнитель, срок, удалённые комментарии. Срок задачи с подсветкой просрочки.
 - **Аутентификация.** Отдельный сервис `Flow.Auth`: ASP.NET Core Identity + BCrypt, OpenIddict (authorization code + PKCE, refresh, client credentials). Клиент входит через OIDC, API работает как resource server с Bearer JWT. Начальный пароль обязателен к смене при первом входе.
-- **Инфраструктура.** PostgreSQL 16, EF Core, миграции применяются при старте API. Сборка, тесты и публикация образов — в GitHub Actions.
+- **Индекс поиска (фундамент).** Postgres поднимается из образа `pgvector/pgvector:pg16`, а задачи, комментарии, проекты и люди режутся на чанки и складываются в `SearchChunks` (`halfvec(512)` + HNSW и генерируемый `tsvector` для лексического плеча). Векторы считает сайдкар `llama-server` за абстракцией `IEmbeddingGenerator`. По умолчанию всё выключено (`Search:Enabled=false`): самого `GET /search` ещё нет, есть только `GET /search/status` и `POST /search/reindex`.
+- **Инфраструктура.** PostgreSQL 16 с pgvector, EF Core, миграции применяются при старте API. Сборка, тесты и публикация образов — в GitHub Actions.
 
 ![Задачи проекта](docs/images/board.png)
 
@@ -37,6 +38,7 @@ Flow решает задачу командного учёта работы: п�
 - [x] Обязательная смена начального пароля
 - [x] Запуск всего стека одной командой в Docker, CI со сборкой образов
 - [x] Комментарии, журнал изменений и Markdown-редактор в задаче, срок задачи
+- [x] Фундамент векторного поиска: схема, абстракция эмбеддера, воркер индексации (этапы 1–3)
 
 Дальше — подсистема `Flow.AI` ([#5](https://github.com/azizmac/Flow/issues/5), [#1](https://github.com/azizmac/Flow/issues/1)):
 
@@ -100,8 +102,27 @@ docker compose up -d --build                     # приложение
 | Пересобрать приложение с нуля, данные сохранить | `docker compose down -v && docker compose up -d` |
 | Остановить данные (тома остаются) | `docker compose -f docker-compose.data.yml down` |
 | Осознанно удалить данные | `docker compose -f docker-compose.data.yml down`, затем `docker volume rm flow-postgres-data flow-minio-data` |
+| Поднять сайдкар эмбеддингов | `docker compose -f docker-compose.data.yml --profile ai up -d` |
 
 Чтобы данные лежали на конкретном диске, создайте тома командой `DATA_ROOT=/mnt/flow sh docker/data/init-env.sh`. Чтобы работать с managed-PostgreSQL или внешним S3, укажите `POSTGRES_HOST` и `S3_ENDPOINT` в `.env` — стек данных тогда не нужен вовсе.
+
+### Поиск
+
+В репозитории поиск выключен: `SEARCH_ENABLED=false`, а сайдкар эмбеддингов спрятан за профилем `ai` — модель не скачивается, пока её не попросят. Включение:
+
+```bash
+docker compose -f docker-compose.data.yml --profile ai up -d   # llama-server с Qwen3-Embedding-0.6B
+SEARCH_ENABLED=true docker compose up -d                       # или то же самое в .env
+```
+
+Веса модели лежат во внешнем томе `flow-models-data` (`MODELS_ROOT` кладёт их на нужный диск), поэтому перезапуск ничего не перекачивает.
+
+Наружу пока торчат две служебные ручки — они для оператора, а не для пользователя:
+
+- `GET /search/status` (Admin и Owner) — включён ли поиск, отвечает ли эмбеддер прямо сейчас, версия модели и размерность, размер очереди, сколько записей в ней застряло, сколько чанков лежит по каждому типу источника.
+- `POST /search/reindex` (Owner) — ставит в очередь всё (или `{ "types": [...], "boardId": ... }`) и отвечает `202`. Живые правки всё это время обрабатываются раньше.
+
+Сама индексация — `BackgroundService` внутри API: каждая правка текста ставит источник в очередь той же транзакцией, а воркер превращает его в чанки и векторы. С выключенным поиском очередь не пополняется вовсе.
 
 ### Бэкапы
 
@@ -173,6 +194,7 @@ docker compose up -d
 - [`docs/TZ_auth.md`](docs/TZ_auth.md) — аутентификация и Flow.Auth
 - [`docs/TZ_infra_data_split.md`](docs/TZ_infra_data_split.md) — вынос БД и S3 в отдельный стек данных
 - [`docs/TZ_task_activity_comments.md`](docs/TZ_task_activity_comments.md) — комментарии, журнал изменений, Markdown-редактор, срок задачи
+- [`docs/TZ_search_stage1-3.md`](docs/TZ_search_stage1-3.md) — векторный поиск: схема, эмбеддер, индексация (этапы 1–3)
 - [`docs/Struktura_board_task_status.md`](docs/Struktura_board_task_status.md) — структура доменной модели
 - [`docs/Sravnenie_DbContext_podhodov.md`](docs/Sravnenie_DbContext_podhodov.md) — сравнение подходов к DbContext
 

@@ -22,6 +22,13 @@ public static class TestMediatorFactory
         return (mediator, boards, tasks, users);
     }
 
+    /// <summary>Плюс фейк очереди поиска — для тестов, которые проверяют постановку на переиндексацию.</summary>
+    public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeTaskCommentRepository Comments, FakeSearchIndexQueue SearchIndex) CreateWithSearch()
+    {
+        var all = Build();
+        return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Comments, all.SearchIndex);
+    }
+
     /// <summary>Плюс фейки ленты — для тестов активности и комментариев.</summary>
     public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities) CreateWithTimeline()
     {
@@ -36,7 +43,7 @@ public static class TestMediatorFactory
         return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Accounts);
     }
 
-    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities) Build()
+    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchIndex) Build()
     {
         var boards = new FakeBoardRepository();
         var tasks = new FakeTaskItemRepository();
@@ -44,6 +51,7 @@ public static class TestMediatorFactory
         var accounts = new FakeAccountService();
         var comments = new FakeTaskCommentRepository();
         var activities = new FakeTaskActivityRepository();
+        var searchIndex = new FakeSearchIndexQueue();
 
         var owner = User.CreateWithId(OwnerId, "owner", "owner@example.com", "Owner", "Flow");
         owner.ChangeRole(UserRole.Owner);
@@ -57,10 +65,15 @@ public static class TestMediatorFactory
         services.AddSingleton<IAccountService>(accounts);
         services.AddSingleton<ITaskCommentRepository>(comments);
         services.AddSingleton<ITaskActivityRepository>(activities);
+        services.AddSingleton<ISearchIndexQueue>(searchIndex);
+        // Поиск в этих тестах выключен: проверяются права и постановка в очередь, а не выдача.
+        services.AddSingleton(new SearchOptions());
+        services.AddSingleton<ISearchIndexStore>(new FakeSearchIndexStore());
+        services.AddSingleton<IEmbeddingGenerator>(new StubEmbeddingGenerator());
         services.AddSingleton<IUnitOfWork>(new FakeUnitOfWork());
         services.AddFlowApplication();
 
         var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
-        return (mediator, boards, tasks, users, accounts, comments, activities);
+        return (mediator, boards, tasks, users, accounts, comments, activities, searchIndex);
     }
 }

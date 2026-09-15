@@ -5,7 +5,7 @@ using MediatR;
 namespace Flow.Application.Features.Users.Commands.UserActivateCommand;
 
 /// <summary>Зеркало деактивации: сначала снять блокировку входа в Flow.Auth, потом статус в Users.</summary>
-internal sealed class UserActivateCommandHandler(IUserRepository users, ActorResolver actors, IPermissionService permissions, IAccountService accounts, IUnitOfWork unitOfWork)
+internal sealed class UserActivateCommandHandler(IUserRepository users, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IAccountService accounts, IUnitOfWork unitOfWork)
     : IRequestHandler<UserActivateCommand, UserUpdateResult>
 {
     public async Task<UserUpdateResult> Handle(UserActivateCommand request, CancellationToken cancellationToken)
@@ -24,6 +24,7 @@ internal sealed class UserActivateCommandHandler(IUserRepository users, ActorRes
         await accounts.EnableAsync(user.Id, cancellationToken);
 
         user.Activate();
+        searchIndex.Enqueue(SearchSourceType.User, user.Id, boardId: null, SearchIndexOperation.Upsert);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return UserUpdateResult.Success(user.ToResponse());

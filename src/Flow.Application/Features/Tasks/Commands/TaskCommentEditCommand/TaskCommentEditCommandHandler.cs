@@ -8,7 +8,9 @@ namespace Flow.Application.Features.Tasks.Commands.TaskCommentEditCommand;
 
 internal sealed class TaskCommentEditCommandHandler(
     ITaskCommentRepository comments,
+    ITaskItemRepository tasks,
     MentionResolver mentions,
+    ISearchIndexQueue searchIndex,
     ActorResolver actors,
     IPermissionService permissions,
     IUnitOfWork unitOfWork)
@@ -25,8 +27,14 @@ internal sealed class TaskCommentEditCommandHandler(
         permissions.EnsureCanEditComment(actor, comment);
 
         var mentioned = await mentions.ResolveAsync(request.Body, cancellationToken);
+
+        // Домен сам говорит, изменилось ли тело: то же самое тело — ни SaveChanges, ни переиндексации.
         if (comment.Edit(request.Body, mentioned))
+        {
+            var task = await tasks.GetByIdAsync(comment.TaskId, cancellationToken);
+            searchIndex.Enqueue(SearchSourceType.Comment, comment.Id, task?.BoardId, SearchIndexOperation.Upsert);
             await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         return TaskCommentResult.Success(comment.ToResponse());
     }

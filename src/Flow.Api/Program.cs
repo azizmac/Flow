@@ -11,6 +11,9 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddFlowInfrastructure(builder.Configuration);
+// Поиск (docs/TZ_search_stage1-3.md): секция "Search". По умолчанию Search:Enabled=false — ни воркера,
+// ни походов к эмбеддеру. Вызов идемпотентный: AddFlowInfrastructure зовёт его же.
+builder.Services.AddFlowSearch(builder.Configuration);
 builder.Services.AddFlowApplication();
 builder.Services.AddControllers(options => options.Filters.Add<ApiExceptionFilter>());
 

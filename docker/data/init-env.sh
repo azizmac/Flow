@@ -4,11 +4,13 @@
 #
 #   sh docker/data/init-env.sh
 #   DATA_ROOT=/mnt/flow sh docker/data/init-env.sh   # данные на своём каталоге вместо томов Docker
+#   MODELS_ROOT=/mnt/models sh docker/data/init-env.sh  # веса моделей отдельно от остальных данных
 set -eu
 
 NETWORK=flow-network
 PG_VOLUME=flow-postgres-data
 S3_VOLUME=flow-minio-data
+MODELS_VOLUME=flow-models-data
 DATA_ROOT=${DATA_ROOT:-}
 
 if docker network inspect "$NETWORK" >/dev/null 2>&1; then
@@ -28,7 +30,7 @@ create_volume() {
         return
     fi
 
-    if [ -n "$DATA_ROOT" ]; then
+    if [ -n "$path" ]; then
         mkdir -p "$path"
         docker volume create \
             --driver local \
@@ -43,8 +45,12 @@ create_volume() {
     fi
 }
 
-create_volume "$PG_VOLUME" "$DATA_ROOT/postgres"
-create_volume "$S3_VOLUME" "$DATA_ROOT/minio"
+# Пустой путь — обычный том Docker; непустой — том с bind на этот каталог.
+create_volume "$PG_VOLUME" "${DATA_ROOT:+$DATA_ROOT/postgres}"
+create_volume "$S3_VOLUME" "${DATA_ROOT:+$DATA_ROOT/minio}"
+# Веса моделей эмбеддингов (профиль ai). Том создаётся всегда, даже если профиль не поднимают:
+# compose с --profile ai падает на отсутствующем внешнем томе. MODELS_ROOT уводит веса на свой диск.
+create_volume "$MODELS_VOLUME" "${MODELS_ROOT:-${DATA_ROOT:+$DATA_ROOT/models}}"
 
 echo
 echo "Готово. Дальше:"

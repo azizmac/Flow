@@ -7,7 +7,7 @@ using MediatR;
 namespace Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 
 /// <summary>Бросает ArgumentException, если Name/Key не проходят валидацию (см. Board.Create).</summary>
-internal sealed class BoardCreateCommandHandler(IBoardRepository boards, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class BoardCreateCommandHandler(IBoardRepository boards, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
     : IRequestHandler<BoardCreateCommand, BoardCreateResult>
 {
     public async Task<BoardCreateResult> Handle(BoardCreateCommand request, CancellationToken cancellationToken)
@@ -22,6 +22,7 @@ internal sealed class BoardCreateCommandHandler(IBoardRepository boards, ActorRe
             return BoardCreateResult.KeyTaken(board.Key);
 
         boards.Add(board);
+        searchIndex.Enqueue(SearchSourceType.Board, board.Id, board.Id, SearchIndexOperation.Upsert);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Только что созданная доска задач не имеет — счётчик известен без запроса.

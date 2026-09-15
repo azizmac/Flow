@@ -17,7 +17,7 @@ public sealed class RoleMigrationTests : IAsyncLifetime
 {
     private const string PreviousMigration = "20260909071433_AddTaskAssignee";
 
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:pg16").Build();
 
     public Task InitializeAsync() => _container.StartAsync();
 

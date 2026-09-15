@@ -11,7 +11,9 @@ name: flow-data
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector/pgvector — тот же postgres:16, в который доложено расширение vector (halfvec, HNSW).
+    # Данные и тома не меняются: обновление образа на существующем томе безопасно.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-flow}
@@ -80,7 +82,8 @@ services:
   # Разовый бэкап тем же контейнером и тем же скриптом:
   #   docker compose -f docker-compose.data.yml --profile backup run --rm backup /scripts/backup.sh
   backup:
-    image: postgres:16-alpine
+    # Тот же образ, что у postgres: pg_dump должен быть ровно той же мажорной версии.
+    image: pgvector/pgvector:pg16
     profiles: ["backup"]
     restart: unless-stopped
     depends_on:
@@ -106,6 +109,34 @@ services:
     networks:
       - flow-network
 
+  # Сайдкар эмбеддингов для поиска (docs/TZ_search_stage1-3.md). Под профилем ai — по умолчанию не
+  # поднимается: поиск в репозитории выключен (Search:Enabled=false), а модель весит сотни мегабайт.
+  #   docker compose -f docker-compose.data.yml --profile ai up -d
+  # Живёт в стеке данных, а не приложения: как и БД, это состояние (веса модели), которое переживает
+  # пересборку сервисов и может быть вынесено на отдельную машину с GPU.
+  embeddings:
+    # Тег стоит зафиксировать под свою машину: сборки llama.cpp различаются набором инструкций CPU.
+    image: ${EMBEDDINGS_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    profiles: ["ai"]
+    restart: unless-stopped
+    environment:
+      # Веса кладутся в том, а не в слой образа: перезапуск не тянет модель заново.
+      HF_HOME: /models
+    command: >
+      --hf-repo ${EMBEDDINGS_HF_REPO:-Qwen/Qwen3-Embedding-0.6B-GGUF}
+      --hf-file ${EMBEDDINGS_HF_FILE:-Qwen3-Embedding-0.6B-Q8_0.gguf}
+      --alias ${EMBEDDINGS_MODEL:-Qwen3-Embedding-0.6B}
+      --embedding --pooling last
+      --ctx-size 2048
+      --host 0.0.0.0 --port 8080
+    volumes:
+      - models-data:/models
+    ports:
+      # Наружу нужен разве что для отладки — по умолчанию только с самой машины.
+      - "${EMBEDDINGS_BIND:-127.0.0.1}:${EMBEDDINGS_PORT:-8090}:8080"
+    networks:
+      - flow-network
+
 networks:
   # Общая сеть обоих стеков, создаётся docker/data/init-env.sh.
   flow-network:
@@ -119,4 +150,8 @@ volumes:
     external: true
   minio-data:
     name: flow-minio-data
+    external: true
+  # Веса моделей: том внешний по той же причине, что и данные, — переживает любой down -v.
+  models-data:
+    name: flow-models-data
     external: true

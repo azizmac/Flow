@@ -10,6 +10,8 @@ using Flow.Application.Features.Users.Commands.UserChangePasswordCommand;
 using Flow.Application.Features.Users.Commands.UserChangeRoleCommand;
 using Flow.Application.Features.Users.Commands.UserCreateCommand;
 using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
+using Flow.Application.Features.Search.Commands.ReindexCommand;
+using Flow.Application.Features.Search.Queries.SearchStatusQuery;
 using Flow.Application.Features.Users.Commands.UserUpdateProfileCommand;
 using Flow.Application.Tests.Fakes;
 using Flow.Domain.Entities;
@@ -325,5 +327,33 @@ public class PermissionTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             mediator.Send(new UserDeactivateCommand(Owner, second), CancellationToken.None));
+    }
+
+    // ---- поиск (ТЗ поиска, этапы 2.3 и 3.4) ----
+
+    [Fact]
+    public async Task Search_Status_Requires_Admin()
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var developer = AddUser(users, UserRole.Developer, "dev");
+        var admin = AddUser(users, UserRole.Admin, "admin");
+
+        await Forbidden(() => mediator.Send(new SearchStatusQuery(developer), CancellationToken.None));
+
+        var status = await mediator.Send(new SearchStatusQuery(admin), CancellationToken.None);
+        Assert.False(status.Enabled);
+    }
+
+    [Fact]
+    public async Task Reindex_Requires_Owner()
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var admin = AddUser(users, UserRole.Admin, "admin");
+
+        await Forbidden(() => mediator.Send(new ReindexCommand(admin), CancellationToken.None));
+
+        // Owner право имеет, но при Search:Enabled=false наполнять очередь нечем — это 400, а не 403.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            mediator.Send(new ReindexCommand(Owner), CancellationToken.None));
     }
 }

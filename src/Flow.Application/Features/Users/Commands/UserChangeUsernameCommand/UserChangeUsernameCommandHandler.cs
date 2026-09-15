@@ -4,7 +4,7 @@ using MediatR;
 
 namespace Flow.Application.Features.Users.Commands.UserChangeUsernameCommand;
 
-internal sealed class UserChangeUsernameCommandHandler(IUserRepository users, ActorResolver actors, IPermissionService permissions, IAccountService accounts, IUnitOfWork unitOfWork)
+internal sealed class UserChangeUsernameCommandHandler(IUserRepository users, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IAccountService accounts, IUnitOfWork unitOfWork)
     : IRequestHandler<UserChangeUsernameCommand, UserUpdateResult>
 {
     public async Task<UserUpdateResult> Handle(UserChangeUsernameCommand request, CancellationToken cancellationToken)
@@ -39,6 +39,7 @@ internal sealed class UserChangeUsernameCommandHandler(IUserRepository users, Ac
             return UserUpdateResult.UsernameTaken(candidate);
 
         user.ChangeUsername(candidate);
+        searchIndex.Enqueue(SearchSourceType.User, user.Id, boardId: null, SearchIndexOperation.Upsert);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return UserUpdateResult.Success(user.ToResponse());

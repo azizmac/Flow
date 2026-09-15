@@ -27,7 +27,7 @@ public sealed class ApiFixture : IAsyncLifetime
     private static readonly SymmetricSecurityKey SigningKey =
         new(Encoding.UTF8.GetBytes("flow-api-tests-signing-key-must-be-at-least-32-bytes"));
 
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:pg16").Build();
 
     public WebApplicationFactory<Program> Factory { get; private set; } = null!;
 

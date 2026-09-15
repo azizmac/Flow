@@ -7,7 +7,7 @@ using MediatR;
 namespace Flow.Application.Features.Boards.Commands.BoardRenameCommand;
 
 /// <summary>Бросает ArgumentException при пустом названии (см. Board.Rename).</summary>
-internal sealed class BoardRenameCommandHandler(IBoardRepository boards, ITaskItemRepository tasks, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class BoardRenameCommandHandler(IBoardRepository boards, ITaskItemRepository tasks, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
     : IRequestHandler<BoardRenameCommand, BoardResponse?>
 {
     public async Task<BoardResponse?> Handle(BoardRenameCommand request, CancellationToken cancellationToken)
@@ -19,6 +19,7 @@ internal sealed class BoardRenameCommandHandler(IBoardRepository boards, ITaskIt
             return null;
 
         board.Rename(request.Name);
+        searchIndex.Enqueue(SearchSourceType.Board, board.Id, board.Id, SearchIndexOperation.Upsert);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var counts = await tasks.CountByBoardIdsAsync([board.Id], cancellationToken);

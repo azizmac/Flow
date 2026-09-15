@@ -13,6 +13,8 @@
         <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
         <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+        <!-- Воркер индексации пишет в ILogger: тесты собирают его руками и передают логгер из DI. -->
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
         <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
     </ItemGroup>
 

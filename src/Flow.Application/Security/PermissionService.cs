@@ -58,6 +58,12 @@ internal sealed class PermissionService : IPermissionService
     public void EnsureCanDeactivate(User actor) =>
         Require(actor.Role == UserRole.Owner, "Деактивировать и активировать людей может только Owner.");
 
+    public void EnsureCanViewSearchDiagnostics(User actor) =>
+        Require(actor.Role >= UserRole.Admin, "Смотреть состояние поиска могут Admin и Owner.");
+
+    public void EnsureCanReindex(User actor) =>
+        Require(actor.Role == UserRole.Owner, "Запускать переиндексацию может только Owner.");
+
     public void EnsureCanChangeRole(User actor, User target, UserRole newRole)
     {
         Require(actor.Role >= UserRole.Admin, "Менять роли могут Admin и Owner.");

@@ -7,7 +7,9 @@ namespace Flow.Application.Features.Tasks.Commands.TaskCommentDeleteCommand;
 
 internal sealed class TaskCommentDeleteCommandHandler(
     ITaskCommentRepository comments,
+    ITaskItemRepository tasks,
     ITaskActivityRepository activities,
+    ISearchIndexQueue searchIndex,
     ActorResolver actors,
     IPermissionService permissions,
     IUnitOfWork unitOfWork)
@@ -23,8 +25,11 @@ internal sealed class TaskCommentDeleteCommandHandler(
 
         permissions.EnsureCanDeleteComment(actor, comment);
 
+        var task = await tasks.GetByIdAsync(comment.TaskId, cancellationToken);
+
         comments.Remove(comment);
         activities.Add(TaskActivity.CommentDeleted(comment.TaskId, actor.Id, comment.Id));
+        searchIndex.Enqueue(SearchSourceType.Comment, comment.Id, task?.BoardId, SearchIndexOperation.Delete);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return true;

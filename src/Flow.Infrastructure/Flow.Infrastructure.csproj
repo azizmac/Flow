@@ -13,13 +13,23 @@
 
     <ItemGroup>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+        <!-- pgvector: тип halfvec(512) и HNSW живут в базе, здесь — маппинг Pgvector.HalfVector на Npgsql. -->
+        <PackageReference Include="Pgvector" Version="0.3.2" />
+        <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
         <!-- IAccountService → Flow.Auth по HTTP (IHttpClientFactory) и биндинг секции Auth. -->
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
         <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
+        <!-- BackgroundService для SearchIndexingWorker: отдельного Flow.Worker в этой ветке нет. -->
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Сущности индекса и воркер — internal; интеграционные тесты проверяют их напрямую. -->
+        <InternalsVisibleTo Include="Flow.Infrastructure.Tests" />
     </ItemGroup>
 
 </Project>

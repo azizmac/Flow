@@ -20,7 +20,8 @@ The longer-term goal is an AI assistant inside the tracker: grounded in the team
 - **Roles and permissions.** `Reader → Member → Developer → Admin → Owner`; the permission matrix is enforced on the server, and the client hides actions the current user cannot perform. A "last Owner" rule prevents locking the instance out of administration.
 - **Task timeline.** Markdown comments with `@mentions` (a GitHub-style editor with preview and toolbar) and a change log: title, description, status, assignee, due date, deleted comments. Due dates with overdue highlighting.
 - **Authentication.** A separate `Flow.Auth` service: ASP.NET Core Identity with BCrypt and OpenIddict (authorization code + PKCE, refresh, client credentials). The client signs in over OIDC; the API acts as a resource server validating Bearer JWTs. The initial password must be changed at first sign-in.
-- **Infrastructure.** PostgreSQL 16, EF Core, migrations applied on API startup. Build, tests and image publishing run in GitHub Actions.
+- **Search index (groundwork).** PostgreSQL now runs the `pgvector/pgvector:pg16` image, and tasks, comments, projects and people are chunked, embedded and stored in `SearchChunks` (`halfvec(512)` + HNSW, plus a generated `tsvector` for the lexical half). Embeddings come from a `llama-server` sidecar behind `IEmbeddingGenerator`. Turned off by default (`Search:Enabled=false`) — there is no `GET /search` yet, only `GET /search/status` and `POST /search/reindex`.
+- **Infrastructure.** PostgreSQL 16 with pgvector, EF Core, migrations applied on API startup. Build, tests and image publishing run in GitHub Actions.
 
 ![Tasks of a project](docs/images/board.png)
 
@@ -37,6 +38,7 @@ Done:
 - [x] Mandatory initial password change
 - [x] Whole stack in Docker with one command, CI building and publishing images
 - [x] Comments, change log and Markdown editor on a task, due dates
+- [x] Vector search groundwork: schema, embedder abstraction, indexing worker (stages 1–3)
 
 Next — the `Flow.AI` subsystem ([#5](https://github.com/azizmac/Flow/issues/5), [#1](https://github.com/azizmac/Flow/issues/1)):
 
@@ -100,8 +102,27 @@ Data lives in its own Compose project (`docker-compose.data.yml`, project `flow-
 | Reset the application, keep the data | `docker compose down -v && docker compose up -d` |
 | Stop the data stack (data stays) | `docker compose -f docker-compose.data.yml down` |
 | Delete the data, deliberately | `docker compose -f docker-compose.data.yml down` then `docker volume rm flow-postgres-data flow-minio-data` |
+| Start the embeddings sidecar | `docker compose -f docker-compose.data.yml --profile ai up -d` |
 
 To keep the data somewhere specific, create the volumes with `DATA_ROOT=/mnt/flow sh docker/data/init-env.sh`. To use a managed PostgreSQL or an external S3, point `POSTGRES_HOST` and `S3_ENDPOINT` at them in `.env` and skip `docker-compose.data.yml` entirely.
+
+### Search
+
+Search is off in the repository: `SEARCH_ENABLED=false`, and the embeddings sidecar sits behind the `ai` profile, so nothing downloads a model unless you ask for it. To turn it on:
+
+```bash
+docker compose -f docker-compose.data.yml --profile ai up -d   # llama-server with Qwen3-Embedding-0.6B
+SEARCH_ENABLED=true docker compose up -d                       # or set it in .env
+```
+
+The model weights land in the external `flow-models-data` volume (`MODELS_ROOT` puts them on a path of your choosing), so restarts do not re-download them.
+
+Two endpoints exist so far, both for operators rather than end users:
+
+- `GET /search/status` (Admin and Owner) — whether search is on, whether the embedder answers right now, the model version and dimensions, queue size, how many queue entries are stuck, and how many chunks are indexed per source type.
+- `POST /search/reindex` (Owner) — queues everything (or `{ "types": [...], "boardId": ... }`) for re-indexing and answers `202`. Live edits always get processed first.
+
+Indexing itself is a `BackgroundService` inside the API: every write that changes text queues its source in the same transaction, and the worker turns it into chunks and vectors. With search off the queue is never written to at all.
 
 ### Backups
 
@@ -177,6 +198,7 @@ Project documentation is written in Russian.
 - [`docs/TZ_auth.md`](docs/TZ_auth.md) — authentication and Flow.Auth
 - [`docs/TZ_infra_data_split.md`](docs/TZ_infra_data_split.md) — splitting the database and S3 into a data stack
 - [`docs/TZ_task_activity_comments.md`](docs/TZ_task_activity_comments.md) — comments, change log, Markdown editor, due dates
+- [`docs/TZ_search_stage1-3.md`](docs/TZ_search_stage1-3.md) — vector search: schema, embedder, indexing (stages 1–3)
 - [`docs/Struktura_board_task_status.md`](docs/Struktura_board_task_status.md) — domain model structure
 - [`docs/Sravnenie_DbContext_podhodov.md`](docs/Sravnenie_DbContext_podhodov.md) — DbContext approaches compared
 

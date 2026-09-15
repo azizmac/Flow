@@ -45,6 +45,12 @@ public interface IPermissionService
     /// <summary>Деактивировать и активировать — только Owner.</summary>
     void EnsureCanDeactivate(User actor);
 
+    /// <summary>Смотреть диагностику поиска (GET /search/status) — Admin и Owner.</summary>
+    void EnsureCanViewSearchDiagnostics(User actor);
+
+    /// <summary>Запустить массовую переиндексацию (POST /search/reindex) — только Owner: это нагрузка на всю систему.</summary>
+    void EnsureCanReindex(User actor);
+
     /// <summary>
     /// Сменить роль: Admin+; новая роль не выше своей; повысить себя нельзя; Admin — только цели ниже Admin и на роли ниже Admin.
     /// Проверка «последний Owner» — в хендлере (нужен репозиторий).

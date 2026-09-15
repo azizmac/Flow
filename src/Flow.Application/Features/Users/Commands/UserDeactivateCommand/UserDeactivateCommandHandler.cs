@@ -9,7 +9,7 @@ namespace Flow.Application.Features.Users.Commands.UserDeactivateCommand;
 /// Сначала блокировка входа в Flow.Auth (иначе деактивированный продолжит входить и обновлять токены),
 /// потом статус в Users. Если Flow.Auth недоступен — AuthUnavailableException, статус не меняется.
 /// </summary>
-internal sealed class UserDeactivateCommandHandler(IUserRepository users, ActorResolver actors, IPermissionService permissions, IAccountService accounts, IUnitOfWork unitOfWork)
+internal sealed class UserDeactivateCommandHandler(IUserRepository users, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IAccountService accounts, IUnitOfWork unitOfWork)
     : IRequestHandler<UserDeactivateCommand, UserUpdateResult>
 {
     public async Task<UserUpdateResult> Handle(UserDeactivateCommand request, CancellationToken cancellationToken)
@@ -32,6 +32,8 @@ internal sealed class UserDeactivateCommandHandler(IUserRepository users, ActorR
         await accounts.DisableAsync(user.Id, cancellationToken);
 
         user.Deactivate();
+        // Ушедшего убираем из индекса: в поиске людей ему больше не место. История назначений остаётся.
+        searchIndex.Enqueue(SearchSourceType.User, user.Id, boardId: null, SearchIndexOperation.Delete);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return UserUpdateResult.Success(user.ToResponse());

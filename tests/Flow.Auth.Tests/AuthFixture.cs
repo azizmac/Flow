@@ -20,7 +20,7 @@ public sealed class AuthFixture : IAsyncLifetime
     public const string ClientRedirectUri = "http://localhost:5016/authentication/login-callback";
     public static readonly Guid BootstrapId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:pg16").Build();
 
     public WebApplicationFactory<Program> Factory { get; private set; } = null!;
 
