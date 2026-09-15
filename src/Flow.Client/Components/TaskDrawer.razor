@@ -27,7 +27,16 @@
             <div class="meta-k">Исполнитель</div>
             <div><AssigneeSelect Value="_assigneeId" OnlyUserId="OnlyAssigneeId" OnChange="id => _assigneeId = id" /></div>
             <div class="meta-k">Проект</div>
-            <div class="meta-v"><KeyChip Value="@Board.Key" /><span class="val" title="@Board.Name">@Board.Name</span></div>
+            <div>
+                @if (Boards.Count > 1)
+                {
+                    <BoardSelect Boards="Boards" Value="Board.Id" ValueChanged="OnBoardChanged" Compact="true" AllowAll="false" />
+                }
+                else
+                {
+                    <div class="meta-v"><KeyChip Value="@Board.Key" /><span class="val" title="@Board.Name">@Board.Name</span></div>
+                }
+            </div>
         </div>
         <div class="desc-wrap">
             <div class="desc-head"><div class="meta-k">Описание</div></div>
@@ -156,6 +165,9 @@ else if (Item is not null)
 
 @code {
     [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    /// <summary>Все проекты — чтобы в форме создания можно было выбрать, куда заводится задача.</summary>
+    [Parameter] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
+    [Parameter] public EventCallback<Guid?> OnBoardChanged { get; set; }
     /// <summary>null — режим создания.</summary>
     [Parameter] public TaskResponse? Item { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
@@ -181,6 +193,7 @@ else if (Item is not null)
     private bool _editingDesc;
     private bool _titleCancelled;
     private Guid? _itemId;
+    private Guid _boardId;
     private DateTime? _savedAt;
     private CancellationTokenSource? _savedCts;
     private IDisposable? _hotkeys;
@@ -212,9 +225,18 @@ else if (Item is not null)
                 _description = "";
                 _error = null;
                 _assigneeId = null;
-                _statusId = Board.Statuses.FirstOrDefault(s => s.IsInitial)?.Id ?? Board.Statuses.FirstOrDefault()?.Id ?? Guid.Empty;
+                _boardId = Board.Id;
+                _statusId = InitialStatusId();
                 _focusTitle = true;
             }
+            else if (_boardId != Board.Id)
+            {
+                // Проект сменили прямо в форме: статус принадлежит проекту, чужой Flow.Api отвергнет с 400.
+                // Введённые название и описание при этом сохраняем — их писали не для проекта, а для задачи.
+                _boardId = Board.Id;
+                _statusId = InitialStatusId();
+            }
+
             return;
         }
 
@@ -240,6 +262,9 @@ else if (Item is not null)
             await Browser.FocusAsync("td-title");
         }
     }
+
+    private Guid InitialStatusId() =>
+        Board.Statuses.FirstOrDefault(s => s.IsInitial)?.Id ?? Board.Statuses.FirstOrDefault()?.Id ?? Guid.Empty;
 
     private Task Close() => OnClose.InvokeAsync();
 

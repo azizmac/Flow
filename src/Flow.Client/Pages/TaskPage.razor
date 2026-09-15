@@ -203,7 +203,7 @@ else if (_task is not null && _board is not null)
 
     private bool IsDone => _board?.Statuses.FirstOrDefault(s => s.Id == _task?.StatusId)?.IsFinal == true;
 
-    private string BackHref => _task is null ? "boards" : $"boards/{_task.BoardId}";
+    private string BackHref => _task is null ? "tasks" : $"tasks?board={_task.BoardId}";
 
     private Task OnTitleActivate(KeyboardEventArgs e) =>
         e.Key is "Enter" or " " ? StartTitleEdit() : Task.CompletedTask;
@@ -410,7 +410,7 @@ else if (_task is not null && _board is not null)
         }
 
         Toasts.Ok($"Задача {t.Code} удалена");
-        Nav.NavigateTo($"boards/{t.BoardId}");
+        Nav.NavigateTo($"tasks?board={t.BoardId}");
     }
 
     private async Task CopyCode()

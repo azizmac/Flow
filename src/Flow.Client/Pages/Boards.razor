@@ -144,7 +144,7 @@
     private void Open(BoardResponse b)
     {
         State.SetLastBoard(b.Id);
-        Nav.NavigateTo($"boards/{b.Id}");
+        Nav.NavigateTo($"tasks?board={b.Id}");
     }
 
     private void OnCreated(BoardResponse b)
