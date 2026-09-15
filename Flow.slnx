@@ -15,7 +15,6 @@
     <File Path=".dockerignore" />
     <File Path="docker/client/nginx.conf" />
     <File Path="docker/client/entrypoint.sh" />
-    <File Path="docker/postgres/init.sql" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Flow.Domain.Tests/Flow.Domain.Tests.csproj" />

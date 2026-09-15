@@ -15,7 +15,7 @@ namespace Flow.Auth.Controllers;
 /// <summary>
 /// Эндпоинты OpenIddict в passthrough-режиме: OpenIddict валидирует запрос (client_id, redirect_uri, PKCE, код),
 /// а здесь решается, кто входит и какие claims попадут в токены. Роль и статус workspace сюда намеренно не
-/// попадают — их Flow.Api читает из своей БД на каждую команду (см. docs/TZ_auth.md).
+/// попадают — ядро читает их из Users на каждую команду (см. docs/TZ_modular_monolith.md).
 /// </summary>
 [AllowAnonymous]
 public sealed class AuthorizationController(

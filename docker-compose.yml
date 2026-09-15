@@ -11,7 +11,7 @@
 # и не поднимать docker-compose.data.yml вовсе.
 
 # Базовый пользователь (Owner) при первом запуске: Auth-модуль создаёт учётную запись, Flow.Api — профиль
-# с тем же Id. См. docs/TZ_auth.md, секция Bootstrap. Пароль после первого входа лучше сменить в профиле.
+# с тем же Id. См. docs/TZ_modular_monolith.md. Пароль после первого входа нужно сменить.
 x-bootstrap: &bootstrap
   Bootstrap__Enabled: ${BOOTSTRAP_ENABLED:-true}
   Bootstrap__Id: ${BOOTSTRAP_ID:-11111111-1111-1111-1111-111111111111}

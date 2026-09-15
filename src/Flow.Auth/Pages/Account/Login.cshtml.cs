@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace Flow.Auth.Pages.Account;
 
 /// <summary>
-/// Единственная страница сервиса: логин (username или email) + пароль. Сюда редиректит cookie-схема
+/// Страница Auth-модуля: логин (username или email) + пароль. Сюда редиректит cookie-схема
 /// из /connect/authorize; после входа — обратно на ReturnUrl (тот же authorize), дальше OpenIddict выдаёт код.
 /// Что именно неверно — логин или пароль — не сообщаем.
 /// </summary>

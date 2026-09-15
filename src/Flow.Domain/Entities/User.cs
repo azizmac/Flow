@@ -96,8 +96,8 @@ public sealed partial class User
         => new(username, email, firstName, lastName);
 
     /// <summary>
-    /// Профиль с заранее известным Id — для базового пользователя, чью учётную запись с тем же Id создаёт Flow.Auth
-    /// (см. docs/TZ_auth.md). В остальных случаях Id генерирует <see cref="Create"/>.
+    /// Профиль с заранее известным Id — для базового пользователя, чью учётную запись с тем же Id создаёт Auth-модуль
+    /// (см. docs/TZ_modular_monolith.md). В остальных случаях Id генерирует <see cref="Create"/>.
     /// </summary>
     public static User CreateWithId(Guid id, string username, string email, string firstName, string lastName)
     {
