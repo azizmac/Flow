@@ -125,6 +125,7 @@ internal sealed class SearchSourceReader(FlowDbContext db, SearchOptions options
                 attachment.FileName,
                 attachment.ContentType,
                 attachment.StorageKey,
+                attachment.SizeBytes,
                 attachment.UploadedAt,
                 attachment.BoardId,
                 TaskCode = task.Code,
@@ -147,7 +148,38 @@ internal sealed class SearchSourceReader(FlowDbContext db, SearchOptions options
         var content = string.IsNullOrWhiteSpace(text) ? found.FileName : $"{found.FileName}\n\n{text}";
         var header = ChunkHeaderBuilder.ForAttachment(found.TaskCode.Value, found.FileName);
 
-        return new SourceSnapshot(found.BoardId, isClosed, found.UploadedAt, BuildChunks(header, content));
+        // Картинка идёт во вторую, визуальную половину индекса — параллельно текстовой, а не вместо неё:
+        // по имени файла скриншот тоже должен находиться.
+        var image = await ReadImageAsync(found.StorageKey, found.ContentType, found.SizeBytes, cancellationToken);
+
+        return new SourceSnapshot(found.BoardId, isClosed, found.UploadedAt, BuildChunks(header, content), image);
+    }
+
+    /// <summary>
+    /// Байты картинки для визуальной модели. SVG не берём: это документ с разметкой, а не растр,
+    /// и модели он бесполезен. Крупные файлы пропускаем — прогон дорогой, а смысла в 20-мегабайтном
+    /// кадре не больше, чем в его уменьшенной копии.
+    /// </summary>
+    private async Task<SourceImage?> ReadImageAsync(string storageKey, string contentType, long sizeBytes, CancellationToken cancellationToken)
+    {
+        var vision = options.Embeddings.Vision;
+
+        if (!vision.Enabled
+            || !contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+            || contentType.Equals("image/svg+xml", StringComparison.OrdinalIgnoreCase)
+            || sizeBytes > vision.MaxBytes)
+        {
+            return null;
+        }
+
+        await using var content = await storage.OpenReadAsync(storageKey, cancellationToken);
+        if (content is null)
+            return null;
+
+        using var buffer = new MemoryStream();
+        await content.CopyToAsync(buffer, cancellationToken);
+
+        return new SourceImage(buffer.ToArray(), contentType);
     }
 
     private async Task<string> ExtractAsync(string storageKey, string fileName, string contentType, CancellationToken cancellationToken)
@@ -180,4 +212,14 @@ internal sealed class SearchSourceReader(FlowDbContext db, SearchOptions options
 internal sealed record SourceChunk(int Index, string Content, string EmbeddingInput);
 
 /// <param name="SourceUpdatedAt">Момент версии источника, с которой сняты чанки.</param>
-internal sealed record SourceSnapshot(Guid? BoardId, bool IsClosed, DateTime SourceUpdatedAt, IReadOnlyList<SourceChunk> Chunks);
+/// <param name="Image">Картинка вложения для визуальной половины индекса; null — индексировать нечего
+/// (не картинка, визуальная модель выключена или файл крупнее лимита).</param>
+internal sealed record SourceSnapshot(
+    Guid? BoardId,
+    bool IsClosed,
+    DateTime SourceUpdatedAt,
+    IReadOnlyList<SourceChunk> Chunks,
+    SourceImage? Image = null);
+
+/// <param name="Content">Байты файла — уходят в визуальную модель как есть, масштабирует она сама.</param>
+internal sealed record SourceImage(byte[] Content, string ContentType);

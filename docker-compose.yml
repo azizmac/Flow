@@ -93,6 +93,10 @@ services:
       Search__Rerank__Enabled: ${RERANK_ENABLED:-false}
       Search__Rerank__Endpoint: ${RERANK_ENDPOINT:-http://reranker:8082/v1}
       Search__Rerank__Model: ${RERANKER_MODEL:-bge-reranker-v2-m3}
+      # Визуальная половина: тоже выключена по умолчанию и тоже требует GPU.
+      Search__Embeddings__Vision__Enabled: ${VISION_ENABLED:-false}
+      Search__Embeddings__Vision__Endpoint: ${VISION_ENDPOINT:-http://embeddings-vl:8083/v1}
+      Search__Embeddings__Vision__Model: ${VISION_MODEL:-Qwen3-VL-Embedding-2B}
     ports:
       - "${API_PORT:-8080}:8080"
     networks:

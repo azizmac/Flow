@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using Flow.Application.Abstractions;
 using Flow.Application.Features.Search;
@@ -21,6 +21,7 @@ internal sealed class SearchIndexingRunner(
     FlowDbContext db,
     SearchSourceReader sources,
     IEmbeddingGenerator embedder,
+    IVisionEmbeddingGenerator vision,
     SearchOptions options,
     ILogger<SearchIndexingRunner> logger)
 {
@@ -101,6 +102,72 @@ internal sealed class SearchIndexingRunner(
         }
 
         await UpsertChunksAsync(request.SourceType, request.SourceId, snapshot, cancellationToken);
+        await UpsertVisualChunkAsync(request.SourceType, request.SourceId, snapshot, cancellationToken);
+    }
+
+    /// <summary>
+    /// Визуальный чанк вложения — отдельная строка со своей ModelVersion: вектор картинки лежит
+    /// в другом пространстве и сравнивать его с текстовыми нельзя. Текстовый upsert его не трогает
+    /// (он фильтрует по своей версии), поэтому у картинки в индексе два представления сразу:
+    /// имя файла текстом и содержимое кадра вектором.
+    ///
+    /// Содержимое чанка — имя файла: оно же уходит в подсветку и в заголовок выдачи, а вектор
+    /// считается не по нему, а по самой картинке.
+    /// </summary>
+    private async Task UpsertVisualChunkAsync(
+        SearchSourceType sourceType,
+        Guid sourceId,
+        SourceSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        var modelVersion = vision.ModelVersion;
+
+        var existing = await db.SearchChunks
+            .Where(c => c.SourceType == sourceType && c.SourceId == sourceId && c.ModelVersion == modelVersion)
+            .ToListAsync(cancellationToken);
+
+        if (snapshot.Image is not { } image || !vision.IsConfigured)
+        {
+            // Картинку удалили, заменили на документ или визуальную половину выключили — старый вектор
+            // в индексе оставлять нельзя, он продолжит находиться.
+            db.SearchChunks.RemoveRange(existing);
+            if (existing.Count > 0)
+                await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        var hash = SHA256.HashData(image.Content);
+        var chunk = existing.FirstOrDefault();
+
+        // Та же картинка — вектор уже посчитан: прогон визуальной модели дороже текстовой на порядок.
+        if (chunk is not null && chunk.ContentHash.AsSpan().SequenceEqual(hash))
+        {
+            chunk.IsClosed = snapshot.IsClosed;
+            chunk.BoardId = snapshot.BoardId;
+            chunk.SourceUpdatedAt = snapshot.SourceUpdatedAt;
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        var embedding = await vision.EmbedImageAsync(image.Content, image.ContentType, cancellationToken);
+
+        chunk ??= db.SearchChunks.Add(new SearchChunk
+        {
+            SourceType = sourceType,
+            SourceId = sourceId,
+            ChunkIndex = 0,
+            ModelVersion = modelVersion
+        }).Entity;
+
+        chunk.BoardId = snapshot.BoardId;
+        chunk.Content = snapshot.Chunks.Count > 0 ? snapshot.Chunks[0].Content : string.Empty;
+        chunk.ContentHash = hash;
+        chunk.IsClosed = snapshot.IsClosed;
+        chunk.SourceUpdatedAt = snapshot.SourceUpdatedAt;
+        chunk.IndexedAt = DateTime.UtcNow;
+        chunk.Embedding = ToHalfVector(embedding);
+
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
@@ -109,6 +176,8 @@ internal sealed class SearchIndexingRunner(
     /// </summary>
     private async Task DeleteChunksAsync(SearchSourceType sourceType, Guid sourceId, CancellationToken cancellationToken)
     {
+        // Без фильтра по версии модели: у источника могут быть и текстовые чанки, и визуальный,
+        // и при удалении должны уйти оба.
         await db.SearchChunks
             .Where(c => c.SourceType == sourceType && c.SourceId == sourceId)
             .ExecuteDeleteAsync(cancellationToken);

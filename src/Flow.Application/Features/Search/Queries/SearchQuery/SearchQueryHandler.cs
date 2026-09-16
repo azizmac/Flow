@@ -10,6 +10,7 @@ namespace Flow.Application.Features.Search.Queries.SearchQuery;
 internal sealed class SearchQueryHandler(
     ISearchQueryRepository index,
     IQueryEmbeddingCache queryEmbeddings,
+    IVisionEmbeddingGenerator vision,
     IReranker reranker,
     IBoardRepository boards,
     ITaskItemRepository tasks,
@@ -52,6 +53,16 @@ internal sealed class SearchQueryHandler(
         float[]? embedding = null;
         var degraded = false;
 
+        // Визуальная половина — тот же запрос в пространстве картинок. Запускается до текстовой и
+        // ожидается после: это другая модель на своём сервисе, ждать их по очереди незачем.
+        // Без вложений в типах она бессмысленна — визуальные чанки есть только у них.
+        var visionTask = vision.IsConfigured
+                         && request.Mode != SearchMode.Text
+                         && resolved.Text.Length > 0
+                         && resolved.Types.Contains(SearchSourceType.Attachment)
+            ? vision.EmbedQueryAsync(resolved.Text, cancellationToken)
+            : null;
+
         // Векторная половина нужна во всех режимах, кроме Text, и только когда есть что эмбеддить.
         if (request.Mode != SearchMode.Text && resolved.Text.Length > 0)
         {
@@ -66,6 +77,8 @@ internal sealed class SearchQueryHandler(
                 degraded = true;
             }
         }
+
+        var visionEmbedding = await AwaitVisionAsync(visionTask);
 
         var useText = resolved.Text.Length > 0 && (request.Mode != SearchMode.Semantic || embedding is null);
 
@@ -100,7 +113,8 @@ internal sealed class SearchQueryHandler(
             AssigneeId: resolved.AssigneeId,
             StatusIds: resolved.StatusIds,
             OverdueOnly: intent.Overdue,
-            UpdatedSince: resolved.UpdatedSince);
+            UpdatedSince: resolved.UpdatedSince,
+            VisionQueryEmbedding: visionEmbedding);
 
         var page = await index.SearchAsync(criteria, cancellationToken);
 
@@ -126,6 +140,26 @@ internal sealed class SearchQueryHandler(
         }
 
         return Respond(items, total, degraded, mode, intent, resolved, direct, started, reranked);
+    }
+
+    /// <summary>
+    /// Вектор запроса в визуальном пространстве. Недоступная модель картинок не ломает поиск:
+    /// выпадает только визуальная половина, текстовая отдаёт выдачу как обычно.
+    /// </summary>
+    private static async Task<float[]?> AwaitVisionAsync(Task<float[]>? task)
+    {
+        if (task is null)
+            return null;
+
+        try
+        {
+            return await task;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Логирует сторона, которая ходила в модель (HttpVisionEmbeddingGenerator).
+            return null;
+        }
     }
 
     /// <summary>

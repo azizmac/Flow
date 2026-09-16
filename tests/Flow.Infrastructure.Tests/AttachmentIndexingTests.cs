@@ -47,9 +47,12 @@ public class AttachmentIndexingTests(SearchFixture fixture)
     private Task<Guid> UploadTextAsync(Guid taskId, string fileName, string text) =>
         UploadAsync(taskId, fileName, Encoding.UTF8.GetBytes(text));
 
+    /// <summary>Текстовые чанки вложения: у картинки рядом лежит ещё и визуальный, он проверяется отдельно.</summary>
     private Task<List<ChunkRow>> ChunksAsync(Guid attachmentId) =>
         fixture.QueryAsync(db => db.SearchChunks
-            .Where(c => c.SourceType == SearchSourceType.Attachment && c.SourceId == attachmentId)
+            .Where(c => c.SourceType == SearchSourceType.Attachment
+                        && c.SourceId == attachmentId
+                        && c.ModelVersion != fixture.Vision.ModelVersion)
             .OrderBy(c => c.ChunkIndex)
             .Select(c => new ChunkRow(c.Content, c.IsClosed, c.BoardId))
             .ToListAsync());
@@ -164,6 +167,62 @@ public class AttachmentIndexingTests(SearchFixture fixture)
 
         Assert.Equal(1, enqueued);
         Assert.NotEmpty(await ChunksAsync(attachmentId));
+    }
+
+    [Fact]
+    public async Task Image_Gets_A_Second_Chunk_In_The_Visual_Space()
+    {
+        var (_, task) = await CreateTaskAsync();
+        var before = fixture.Vision.ImageCalls;
+        var attachmentId = await UploadAsync(task.Id, "скриншот ошибки.png", Png);
+
+        await fixture.DrainIndexingAsync();
+
+        var chunks = await fixture.QueryAsync(db => db.SearchChunks
+            .Where(c => c.SourceType == SearchSourceType.Attachment && c.SourceId == attachmentId)
+            .Select(c => new { c.ModelVersion, c.Content })
+            .ToListAsync());
+
+        // Два представления одного файла: имя текстовой моделью и сам кадр визуальной. Версии разные —
+        // это разные векторные пространства, и каждая половина поиска ищет только среди своих.
+        Assert.Equal(2, chunks.Count);
+        Assert.Contains(chunks, c => c.ModelVersion == fixture.Vision.ModelVersion);
+        Assert.Contains(chunks, c => c.ModelVersion != fixture.Vision.ModelVersion);
+        Assert.All(chunks, c => Assert.Equal("скриншот ошибки.png", c.Content));
+        Assert.Equal(before + 1, fixture.Vision.ImageCalls);
+    }
+
+    [Fact]
+    public async Task Unchanged_Image_Is_Not_Embedded_Twice()
+    {
+        var (board, task) = await CreateTaskAsync();
+        await UploadAsync(task.Id, "макет.png", Png);
+        await fixture.DrainIndexingAsync();
+        var before = fixture.Vision.ImageCalls;
+
+        await fixture.SendAsync(new ReindexCommand(Owner, [SearchSourceType.Attachment], board.Id));
+        await fixture.DrainIndexingAsync();
+
+        // Прогон картинки дороже текстового на порядок — переиндексация не должна платить за него дважды.
+        Assert.Equal(before, fixture.Vision.ImageCalls);
+    }
+
+    [Fact]
+    public async Task Document_Does_Not_Reach_The_Image_Model()
+    {
+        var (_, task) = await CreateTaskAsync();
+        var before = fixture.Vision.ImageCalls;
+        var attachmentId = await UploadTextAsync(task.Id, "договор.txt", "Текст договора поставки.");
+
+        await fixture.DrainIndexingAsync();
+
+        var versions = await fixture.QueryAsync(db => db.SearchChunks
+            .Where(c => c.SourceType == SearchSourceType.Attachment && c.SourceId == attachmentId)
+            .Select(c => c.ModelVersion)
+            .ToListAsync());
+
+        Assert.DoesNotContain(fixture.Vision.ModelVersion, versions);
+        Assert.Equal(before, fixture.Vision.ImageCalls);
     }
 
     private sealed record ChunkRow(string Content, bool IsClosed, Guid? BoardId);

@@ -21,6 +21,8 @@ public interface ISearchQueryRepository
 
 /// <param name="Query">Нормализованная строка запроса — уходит в websearch_to_tsquery и в подсветку.</param>
 /// <param name="QueryEmbedding">Вектор запроса; null — векторная половина не выполняется (режим Text или деградация).</param>
+/// <param name="VisionQueryEmbedding">Тот же запрос в визуальном пространстве; null — визуальная половина
+/// выключена или модель не ответила. Ищет среди чанков картинок и сливается в тот же RRF.</param>
 /// <param name="UseText">Выполнять ли полнотекстовую половину (в режиме Semantic — нет).</param>
 /// <param name="Types">Типы источников; пусто — все.</param>
 /// <param name="IncludeArchived">Включать ли задачи в финальном статусе.</param>
@@ -43,7 +45,8 @@ public sealed record SearchCriteria(
     Guid? AssigneeId = null,
     IReadOnlyCollection<Guid>? StatusIds = null,
     bool OverdueOnly = false,
-    DateTime? UpdatedSince = null)
+    DateTime? UpdatedSince = null,
+    float[]? VisionQueryEmbedding = null)
 {
     /// <summary>
     /// Есть ли фильтры, которых нет в чанке: исполнитель, статус, срок. Они живут в TaskItems,

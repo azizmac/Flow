@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
 using Flow.Application.Features.Bootstrap;
 using Flow.Application.Tests.Fakes;
@@ -31,6 +31,9 @@ public sealed class SearchFixture : IAsyncLifetime
 
     public InMemoryFileStorage Storage { get; } = new();
 
+    /// <summary>Визуальная модель тоже фейковая: проверяется индексация картинок, а не качество модели.</summary>
+    public FakeVisionEmbeddingGenerator Vision { get; } = new() { IsConfigured = true };
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -43,7 +46,8 @@ public sealed class SearchFixture : IAsyncLifetime
                 ["Search:Indexing:Enabled"] = "false",
                 ["Search:Indexing:BatchSize"] = "32",
                 ["Search:Indexing:MaxAttempts"] = "3",
-                ["Search:Embeddings:QueryEndpoint"] = "http://localhost:1/v1"
+                ["Search:Embeddings:QueryEndpoint"] = "http://localhost:1/v1",
+                ["Search:Embeddings:Vision:Enabled"] = "true"
             })
             .Build();
 
@@ -51,6 +55,7 @@ public sealed class SearchFixture : IAsyncLifetime
         services.AddLogging();
         // До AddFlowInfrastructure: там эмбеддер регистрируется через TryAdd, и фейк остаётся за нами.
         services.AddSingleton<IEmbeddingGenerator>(Embedder);
+        services.AddSingleton<IVisionEmbeddingGenerator>(Vision);
         services.AddFlowInfrastructure(configuration);
         services.AddFlowApplication();
         services.AddSingleton<IAccountService, AlwaysSucceedingAccountService>();

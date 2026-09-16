@@ -16,7 +16,7 @@ namespace Flow.Infrastructure.Search;
 /// параллельных: так это один заход в базу и одно соединение из пула, а обе половины и без того
 /// укладываются в десятки миллисекунд на своих индексах.
 /// </summary>
-internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerator embedder, SearchOptions options)
+internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerator embedder, IVisionEmbeddingGenerator vision, SearchOptions options)
     : ISearchQueryRepository
 {
     /// <summary>
@@ -47,11 +47,12 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
     public async Task<SearchPage> SearchAsync(SearchCriteria criteria, CancellationToken cancellationToken)
     {
         var useVector = criteria.QueryEmbedding is not null;
-        var sql = BuildSql(useVector, criteria.UseText, criteria.HasTaskFilters);
+        var useVision = criteria.VisionQueryEmbedding is not null;
+        var sql = BuildSql(useVector, criteria.UseText, criteria.HasTaskFilters, useVision);
         var parameters = BuildParameters(criteria);
 
         List<SearchRow> rows;
-        if (useVector)
+        if (useVector || useVision)
         {
             // ef_search и iterative_scan — сессионные настройки pgvector, поэтому нужна транзакция
             // с SET LOCAL. iterative_scan обязателен из-за фильтров: без него HNSW отдаёт свои N
@@ -74,7 +75,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
         return new SearchPage(rows.Select(ToHit).ToArray(), rows.Count == 0 ? 0 : (int)rows[0].Total);
     }
 
-    private static string BuildSql(bool useVector, bool useText, bool taskFilters)
+    private static string BuildSql(bool useVector, bool useText, bool taskFilters, bool useVision)
     {
         var sql = new StringBuilder();
         var halves = new List<string>();
@@ -85,6 +86,9 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             : "\"SearchChunks\" c";
 
         var filter = taskFilters ? CommonFilter + "\n    " + TaskFilter : CommonFilter;
+        // Визуальная половина ищет среди чанков своей модели: это другое векторное пространство,
+        // и отделено оно единственным признаком — версией модели в чанке.
+        var visionFilter = filter.Replace("@model", "@visionModel");
 
         sql.Append("WITH ");
 
@@ -108,9 +112,32 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             halves.Add("SELECT \"Id\" AS id, 1.0 / (@rrfK + rank) AS score FROM vector_hits");
         }
 
-        if (useText)
+        if (useVision)
         {
             if (useVector)
+                sql.Append(",\n");
+
+            // Та же механика, что у текстовой векторной половины, но в другом пространстве и по своей
+            // версии модели: в выдачу попадают картинки, похожие на запрос по смыслу кадра.
+            sql.Append(
+                $"""
+                 vision_hits AS (
+                     SELECT v."Id", row_number() OVER (ORDER BY v.distance) AS rank
+                     FROM (
+                         SELECT c."Id", c."Embedding" <=> @visionQuery AS distance
+                         FROM {source}
+                         WHERE {visionFilter}
+                         ORDER BY c."Embedding" <=> @visionQuery
+                         LIMIT @vectorTopN
+                     ) v
+                 )
+                 """);
+            halves.Add("SELECT \"Id\" AS id, 1.0 / (@rrfK + rank) AS score FROM vision_hits");
+        }
+
+        if (useText)
+        {
+            if (useVector || useVision)
                 sql.Append(",\n");
 
             sql.Append(
@@ -224,6 +251,12 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
 
         if (criteria.QueryEmbedding is { } embedding)
             parameters.Add(new NpgsqlParameter("query", new HalfVector(embedding.Select(value => (Half)value).ToArray())));
+
+        if (criteria.VisionQueryEmbedding is { } visionEmbedding)
+        {
+            parameters.Add(new NpgsqlParameter("visionQuery", new HalfVector(visionEmbedding.Select(value => (Half)value).ToArray())));
+            parameters.Add(new NpgsqlParameter("visionModel", vision.ModelVersion));
+        }
 
         if (criteria.UseText)
             parameters.Add(new NpgsqlParameter("textTopN", criteria.TextTopN));

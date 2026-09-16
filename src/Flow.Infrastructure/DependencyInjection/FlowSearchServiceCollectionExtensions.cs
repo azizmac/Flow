@@ -61,6 +61,7 @@ public static class FlowSearchServiceCollectionExtensions
         services.AddScoped<SearchIndexingRunner>();
 
         AddEmbeddingGenerator(services, options);
+        AddVisionEmbeddingGenerator(services, options);
         AddReranker(services, options);
 
         // Воркер не стартует при выключенном поиске: поведение приложения остаётся прежним до байта.
@@ -68,6 +69,20 @@ public static class FlowSearchServiceCollectionExtensions
             services.AddHostedService<SearchIndexingWorker>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Визуальная модель: своё пространство, своя версия, свой сервис (vLLM). Клиент регистрируется
+    /// всегда, а включает половину флаг Search:Embeddings:Vision:Enabled вместе с адресом.
+    /// </summary>
+    private static void AddVisionEmbeddingGenerator(IServiceCollection services, SearchOptions options)
+    {
+        var vision = options.Embeddings.Vision;
+
+        services.AddHttpClient(HttpVisionEmbeddingGenerator.HttpClientName, client =>
+            Configure(client, Normalize(vision.Endpoint), TimeSpan.FromSeconds(Math.Max(1, vision.TimeoutSeconds)), vision.ApiKey));
+
+        services.TryAddSingleton<IVisionEmbeddingGenerator, HttpVisionEmbeddingGenerator>();
     }
 
     /// <summary>

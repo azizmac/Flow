@@ -32,7 +32,8 @@ public sealed record SearchTestContext(
     FakeBoardRepository Boards,
     FakeTaskItemRepository Tasks,
     FakeUserRepository Users,
-    FakeReranker Reranker);
+    FakeReranker Reranker,
+    FakeVisionEmbeddingGenerator Vision);
 
 public static class TestMediatorFactory
 {
@@ -81,7 +82,7 @@ public static class TestMediatorFactory
     public static SearchTestContext CreateSearchContext()
     {
         var all = Build();
-        return new SearchTestContext(all.Mediator, all.SearchOptions, all.SearchIndex, all.Embeddings, all.Boards, all.Tasks, all.Users, all.Reranker);
+        return new SearchTestContext(all.Mediator, all.SearchOptions, all.SearchIndex, all.Embeddings, all.Boards, all.Tasks, all.Users, all.Reranker, all.Vision);
     }
 
     /// <summary>То же, плюс FakeAccountService — для тестов, которым важно, что ушло в Flow.Auth.</summary>
@@ -91,7 +92,7 @@ public static class TestMediatorFactory
         return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Accounts);
     }
 
-    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings, FakeAttachmentRepository Attachments, InMemoryFileStorage Storage, AttachmentOptions AttachmentOptions, FakeReranker Reranker) Build()
+    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings, FakeAttachmentRepository Attachments, InMemoryFileStorage Storage, AttachmentOptions AttachmentOptions, FakeReranker Reranker, FakeVisionEmbeddingGenerator Vision) Build()
     {
         var boards = new FakeBoardRepository();
         var tasks = new FakeTaskItemRepository();
@@ -106,6 +107,7 @@ public static class TestMediatorFactory
         var attachmentOptions = new AttachmentOptions();
         var searchIndex = new FakeSearchQueryRepository();
         var reranker = new FakeReranker();
+        var visionEmbedder = new FakeVisionEmbeddingGenerator();
         var embedder = new FakeEmbeddingGenerator();
         var embeddings = new FakeQueryEmbeddingCache(embedder);
 
@@ -129,6 +131,7 @@ public static class TestMediatorFactory
         services.AddSingleton<ISearchQueryRepository>(searchIndex);
         services.AddSingleton<IQueryEmbeddingCache>(embeddings);
         services.AddSingleton<IReranker>(reranker);
+        services.AddSingleton<IVisionEmbeddingGenerator>(visionEmbedder);
         services.AddSingleton<IEmbeddingGenerator>(embedder);
         // Поиск включён: иначе /search/reindex отвечал бы «выключено» раньше проверки прав.
         services.AddSingleton(searchOptions);
@@ -136,6 +139,6 @@ public static class TestMediatorFactory
         services.AddFlowApplication();
 
         var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
-        return (mediator, boards, tasks, users, accounts, comments, activities, searchQueue, searchOptions, searchIndex, embeddings, attachments, storage, attachmentOptions, reranker);
+        return (mediator, boards, tasks, users, accounts, comments, activities, searchQueue, searchOptions, searchIndex, embeddings, attachments, storage, attachmentOptions, reranker, visionEmbedder);
     }
 }

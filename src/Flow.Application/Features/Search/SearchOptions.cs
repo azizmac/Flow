@@ -87,6 +87,40 @@ public sealed class SearchEmbeddingsOptions
 
     /// <summary>Таймаут запросов поиска; у индексации свой, 60 с.</summary>
     public int TimeoutSeconds { get; set; } = 5;
+
+    public SearchVisionOptions Vision { get; set; } = new();
+}
+
+/// <summary>
+/// Визуальные эмбеддинги картинок (docs/TZ_search_vector.md, «Мультимодальность»). Своя модель,
+/// своё векторное пространство и своя ModelVersion: смешивать их с текстовыми нельзя, поэтому
+/// каждая половина запроса ищет только среди своих чанков.
+/// </summary>
+public sealed class SearchVisionOptions
+{
+    /// <summary>Выключено по умолчанию: нужна отдельная модель на GPU, без неё картинки индексируются именем файла.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Адрес vLLM без /embeddings на конце: http://embeddings-vl:8083/v1.</summary>
+    public string Endpoint { get; set; } = string.Empty;
+
+    public string Model { get; set; } = "Qwen3-VL-Embedding-2B";
+
+    public string? ApiKey { get; set; }
+
+    /// <summary>MRL-урезание с нативных 2048. Должно совпадать с размерностью текстовой половины — колонка одна.</summary>
+    public int Dimensions { get; set; } = 512;
+
+    /// <summary>
+    /// Потолок картинки, которая уходит в модель. В ТЗ стоит ограничение по пикселям, но ресайз
+    /// потребовал бы графической библиотеки на нашей стороне, а препроцессор модели и так масштабирует
+    /// вход сам. Ограничение по размеру файла решает ту же задачу — не гнать в модель многомегабайтный
+    /// кадр — и ничего не стоит.
+    /// </summary>
+    public long MaxBytes { get; set; } = 8L * 1024 * 1024;
+
+    /// <summary>Индексация ждёт дольше поиска: прогон картинки дороже прогона строки.</summary>
+    public int TimeoutSeconds { get; set; } = 30;
 }
 
 public enum EmbeddingProvider
