@@ -31,14 +31,29 @@ internal sealed class HttpReranker(IHttpClientFactory factory, SearchOptions opt
             return [];
 
         var client = factory.CreateClient(HttpClientName);
-        using var response = await client.PostAsJsonAsync(
-            "rerank",
-            new RerankRequest(_options.Model, query, documents),
-            cancellationToken);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.PostAsJsonAsync(
+                "rerank",
+                new RerankRequest(_options.Model, query, documents),
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Application гасит провал ступени и оставляет гибридный порядок, поэтому единственное
+            // место, где видно причину, — здесь. Без лога «Точнее» молча не работало бы.
+            logger.LogWarning(ex, "Реранкер {Endpoint} недоступен.", _options.Endpoint);
+            throw;
+        }
+
+        using var _ = response;
 
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning("Реранкер ответил {Status}: {Body}", (int)response.StatusCode, Shorten(body));
             throw new HttpRequestException(
                 $"Реранкер ответил {(int)response.StatusCode}: {Shorten(body)}", null, response.StatusCode);
         }

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
 using Flow.Application.Features.Search.Queries.SearchQuery;
@@ -21,6 +21,8 @@ namespace Flow.Infrastructure.Tests;
 /// docker compose -f docker-compose.data.yml --profile ai up -d embeddings
 /// FLOW_GOLDEN_SET=1 dotnet test tests/Flow.Infrastructure.Tests --filter "Category=Golden"
 /// </code>
+/// С FLOW_GOLDEN_RERANK=1 тот же набор прогоняется через вторую ступень (нужен сервис reranker
+/// из профиля ai) — так сравниваются числа «до» и «после» на одних и тех же запросах.
 /// Без FLOW_GOLDEN_SET=1 ничего не проверяет: набор привязан к тестовой базе разработчика,
 /// и в обычном прогоне <c>dotnet test Flow.slnx</c> ему делать нечего.
 /// </summary>
@@ -42,7 +44,10 @@ public class GoldenSetTests(ITestOutputHelper output)
 
         var goldenSet = Load();
 
-        await using var services = Build();
+        // Вторая ступень меряется тем же набором и теми же метриками: иначе «стало лучше» проверить нечем.
+        var rerank = Environment.GetEnvironmentVariable("FLOW_GOLDEN_RERANK") == "1";
+
+        await using var services = Build(rerank);
         await using (var probe = services.CreateAsyncScope())
         {
             if (!await probe.ServiceProvider.GetRequiredService<IEmbeddingGenerator>().IsAvailableAsync(CancellationToken.None))
@@ -56,6 +61,7 @@ public class GoldenSetTests(ITestOutputHelper output)
         double mrrSum = 0;
         var misses = new List<string>();
 
+        output.WriteLine(rerank ? "режим: гибрид + реранкер" : "режим: гибрид");
         output.WriteLine($"{"recall",-7}{"MRR",-7}запрос");
         output.WriteLine(new string('-', 78));
 
@@ -63,7 +69,10 @@ public class GoldenSetTests(ITestOutputHelper output)
         {
             await using var scope = services.CreateAsyncScope();
             var response = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(
-                new SearchQuery(Owner, entry.Query, null, null, IncludeArchived: true, SearchMode.Hybrid, TopN, 0));
+                new SearchQuery(Owner, entry.Query, null, null, IncludeArchived: true, SearchMode.Hybrid, TopN, 0, Rerank: rerank));
+
+            if (rerank && response is { Reranked: false })
+                throw new InvalidOperationException($"Реранкер не отработал на «{entry.Query}» — поднимите сервис (профиль ai) или снимите FLOW_GOLDEN_RERANK.");
 
             // Комментарий засчитывается за свою задачу: человек искал задачу, а нашёлся её обсуждение —
             // это попадание, а не промах.
@@ -121,7 +130,7 @@ public class GoldenSetTests(ITestOutputHelper output)
     /// Тот же путь, что и в приложении: реальная база, реальная модель, тот же хендлер поиска.
     /// Мерить качество на фейках бессмысленно — они не про смысл.
     /// </summary>
-    private static ServiceProvider Build()
+    private static ServiceProvider Build(bool rerank = false)
     {
         var connection = Environment.GetEnvironmentVariable("FLOW_GOLDEN_POSTGRES")
             ?? "Host=localhost;Port=5433;Database=flow;Username=flow;Password=flow";
@@ -136,7 +145,12 @@ public class GoldenSetTests(ITestOutputHelper output)
                 ["Search:Indexing:Enabled"] = "false",
                 ["Search:Embeddings:QueryEndpoint"] = endpoint,
                 ["Search:Embeddings:Model"] = Environment.GetEnvironmentVariable("FLOW_TEST_EMBEDDINGS_MODEL") ?? "Qwen3-Embedding-0.6B",
-                ["Search:Embeddings:TimeoutSeconds"] = "30"
+                ["Search:Embeddings:TimeoutSeconds"] = "30",
+                ["Search:Rerank:Enabled"] = rerank ? "true" : "false",
+                ["Search:Rerank:Endpoint"] = Environment.GetEnvironmentVariable("FLOW_TEST_RERANK_ENDPOINT") ?? "http://localhost:8082/v1",
+                ["Search:Rerank:Model"] = Environment.GetEnvironmentVariable("FLOW_TEST_RERANK_MODEL") ?? "bge-reranker-v2-m3",
+                ["Search:Rerank:TopN"] = Environment.GetEnvironmentVariable("FLOW_TEST_RERANK_TOPN") ?? "25",
+                ["Search:Rerank:TimeoutSeconds"] = "60"
             })
             .Build();
 

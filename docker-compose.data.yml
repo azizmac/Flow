@@ -122,10 +122,14 @@ services:
     image: ${RERANKER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
     profiles: ["ai"]
     restart: unless-stopped
-    # --reranking включает /rerank и требует пулинг rank: модель отдаёт оценку пары, а не вектор.
+    # Модель не из ТЗ: там назван Qwen3-Reranker-0.6B, но это causal LM без классификационной головы —
+    # llama.cpp честно пишет «model default pooling_type is [-1]» и считает оценки по последнему токену,
+    # то есть ранжирует мусором (проверено: правильный документ получал оценку на три порядка ниже
+    # постороннего). Режим --reranking рассчитан на cross-encoder с головой, каким и является
+    # bge-reranker-v2-m3: многоязычный, сильный на русском, того же размера.
     command: >
-      --model /models/${RERANKER_MODEL_FILE:-Qwen3-Reranker-0.6B-Q8_0.gguf}
-      --alias ${RERANKER_MODEL:-Qwen3-Reranker-0.6B}
+      --model /models/${RERANKER_MODEL_FILE:-bge-reranker-v2-m3-Q8_0.gguf}
+      --alias ${RERANKER_MODEL:-bge-reranker-v2-m3}
       --reranking --pooling rank
       --ctx-size 8192 --batch-size 8192 --ubatch-size 8192
       --gpu-layers ${RERANKER_GPU_LAYERS:-99}

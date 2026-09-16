@@ -138,6 +138,17 @@ SEARCH_ENABLED=true docker compose up -d                        # API with index
 If the model runs on another machine (a GPU box, say), skip the `ai` profile and point
 `EMBEDDINGS_QUERY_ENDPOINT` and `EMBEDDINGS_INDEXING_ENDPOINT` at it.
 
+The second ranking stage — a reranker — is off by default and needs a GPU: the `bge-reranker-v2-m3`
+cross-encoder reorders the first page, telling "export crashes" apart from "add CSV export". Turn it on
+together with the service and the "Точнее" toggle on the search page:
+
+```bash
+docker compose -f docker-compose.data.yml --profile ai up -d reranker   # :8082, needs a GPU
+RERANK_ENABLED=true docker compose up -d api
+```
+
+The first request after the service starts is slower than the rest — the model is warming up.
+
 After that the index fills itself: every edit of a task, comment, project or person is queued in the same
 transaction as the edit, and a background worker computes the vectors. Endpoints:
 

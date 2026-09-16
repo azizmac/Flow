@@ -1,4 +1,4 @@
-# Стек приложения: auth, api, client. Данные (PostgreSQL и S3) живут в отдельном стеке —
+﻿# Стек приложения: auth, api, client. Данные (PostgreSQL и S3) живут в отдельном стеке —
 # docker-compose.data.yml, проект flow-data. Здесь нет ни одного тома с данными проекта, поэтому
 # `docker compose down -v` безопасен: он уносит только ключи и сертификаты Flow.Auth, которые
 # пересоздаются при следующем старте. См. docs/TZ_infra_data_split.md.
@@ -92,7 +92,7 @@ services:
       # в секундный. RERANK_ENABLED=true включает кнопку «Точнее» в интерфейсе.
       Search__Rerank__Enabled: ${RERANK_ENABLED:-false}
       Search__Rerank__Endpoint: ${RERANK_ENDPOINT:-http://reranker:8082/v1}
-      Search__Rerank__Model: ${RERANKER_MODEL:-Qwen3-Reranker-0.6B}
+      Search__Rerank__Model: ${RERANKER_MODEL:-bge-reranker-v2-m3}
     ports:
       - "${API_PORT:-8080}:8080"
     networks:
