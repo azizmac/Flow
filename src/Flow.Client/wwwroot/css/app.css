@@ -1932,6 +1932,10 @@ a.task-row { color: inherit; text-decoration: none; }
     text-decoration: none;
     font: var(--fw-semibold) 12px var(--font-display);
     vertical-align: baseline;
+    /* В узкой колонке (слайдер) имя иначе переносится по слогам прямо внутри чипа. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .md-att-file::before {
     content: "";
