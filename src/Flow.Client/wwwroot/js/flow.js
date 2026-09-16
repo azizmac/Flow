@@ -1,4 +1,4 @@
-// Минимальный JS-мост для Flow.Client: глобальные хоткеи, буфер обмена,
+﻿// Минимальный JS-мост для Flow.Client: глобальные хоткеи, буфер обмена,
 // фокус, геометрия якорей для поповеров и localStorage. Всё остальное — в Razor/CSS.
 window.flow = (function () {
     let hotkeyRef = null;
@@ -6,14 +6,6 @@ window.flow = (function () {
     let editorLoading = null;
     // Куда вернуть фокус после закрытия слоя (дровер, модалка). Стек — слои могут вкладываться.
     const focusStack = [];
-
-    const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]),' +
-        ' select:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-    function visibleFocusable(root) {
-        return Array.prototype.slice.call(root.querySelectorAll(FOCUSABLE))
-            .filter(function (el) { return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement; });
-    }
 
     // Зоны приёма файлов: id зоны → { off: снять обработчики, clear: погасить подсветку } (см. attachZone).
     const dropZones = new Map();
@@ -73,11 +65,6 @@ window.flow = (function () {
         if (!e.relatedTarget) clearZones();
     }, true);
 
-    // Открытый модальный слой: поповер обрабатывает Tab сам, поэтому здесь только дровер и модалка.
-    function openLayer() {
-        return document.querySelector('.modal') || document.querySelector('.drawer.in');
-    }
-
     function isEditable(el) {
         if (!el) return false;
         const tag = (el.tagName || '').toLowerCase();
@@ -89,25 +76,6 @@ window.flow = (function () {
     const MENU_KEYS = { ArrowDown: 'next', ArrowUp: 'prev', Home: 'first', End: 'last' };
 
     document.addEventListener('keydown', function (e) {
-        // Tab не должен выводить фокус за пределы открытого дровера/модалки.
-        if (e.key === 'Tab') {
-            const layer = openLayer();
-            const inPop = e.target && e.target.closest && e.target.closest('.pop');
-            if (layer && !inPop) {
-                const items = visibleFocusable(layer);
-                if (!items.length) {
-                    e.preventDefault();
-                } else if (!layer.contains(e.target)) {
-                    e.preventDefault();
-                    items[e.shiftKey ? items.length - 1 : 0].focus();
-                } else {
-                    const at = items.indexOf(e.target);
-                    if (!e.shiftKey && at === items.length - 1) { e.preventDefault(); items[0].focus(); }
-                    else if (e.shiftKey && at === 0) { e.preventDefault(); items[items.length - 1].focus(); }
-                }
-            }
-        }
-
         // Под полем открыт список, которому принадлежат стрелки/Enter/Tab/Esc (строка поиска в
         // сайдбаре). preventDefault обязан быть синхронным — поэтому здесь, а .NET-обработчик дальше
         // сам решает, что с клавишей делать: декларативный @onkeydown:preventDefault вычисляется
@@ -181,14 +149,6 @@ window.flow = (function () {
         popFocus: function () {
             const el = focusStack.pop();
             if (el && el.isConnected && typeof el.focus === 'function') el.focus();
-        },
-
-        // Первый фокусируемый элемент внутри контейнера — автофокус при открытии слоя.
-        focusFirstIn: function (selector) {
-            const box = document.querySelector(selector);
-            if (!box) return;
-            const items = visibleFocusable(box);
-            if (items.length) items[0].focus();
         },
 
         focus: function (id, select) {

@@ -1,4 +1,4 @@
-# ТЗ: перевод Flow.Client на MudBlazor
+﻿# ТЗ: перевод Flow.Client на MudBlazor
 
 Статус: **согласовано, этап 1 выполнен**. Ветка `claude/frontend-framework-refactor-609e08`.
 
@@ -138,14 +138,14 @@ MudBlazor рендерит обычный DOM и держит JavaScript на м
 
 ## 3. Слои: меню, диалоги, слайдер, тосты
 
-| Удаляем | Берём | Что чинится |
+| Что было | Стало | Состояние |
 |---|---|---|
-| `Popover.razor` (135 строк + JS) | `MudPopover` | пересчёт позиции при скролле и ресайзе, переворот при нехватке места, общий слой |
-| `RowMenu.razor`, `UserMenu.razor` | `MudMenu` | клавиатура, закрытие, ARIA |
-| `ConfirmDialog`, `CreateBoardDialog`, `CreateUserDialog` | `MudDialog` + `IDialogService` | стек диалогов, Esc, фокус-ловушка, возврат фокуса |
-| `Toast.razor` + `ToastService` | `ISnackbar` | очередь, таймеры, доступность |
-| `Drawer.razor` | `MudDrawer` (`Anchor.Right`, `Variant.Temporary`) | жизненный цикл анимации без `Task.Delay` |
-| фокус-код в `flow.js` (`focusStack`, `visibleFocusable`, `menuFocus`, `rect`) | внутренности MudBlazor, `MudFocusTrap` | ~40% файла уходит |
+| `RowMenu.razor`, `UserMenu.razor` | `MudMenu` | сделано. Открытие через `@bind-Open` (строка кликабельна, кнопке нужен свой обработчик со `StopPropagation`); фокус остаётся на кнопке — перехватчик клавиш Mud слушает активатор, и перевод фокуса внутрь поповера ломает стрелки |
+| `ConfirmDialog`, `CreateBoardDialog`, `CreateUserDialog` | `MudDialog` (декларативный, не `IDialogService`) | сделано. Страницы по-прежнему монтируют диалог условием — контракт не менялся. Фокус в первое поле ставим сами с паузой 50 мс: диалог уходит в портал провайдера и на кадр нашего рендера полей ещё нет |
+| `Toast.razor` + `ToastService` | `ISnackbar` | сделано. Сервис остался фасадом (70 вызовов по коду), внутри — снекбар библиотеки |
+| `Drawer.razor` | `MudFocusTrap` + своя панель | сделано **запасным вариантом из рисков**: `MudDrawer` затемняет весь экран, включая сайдбар, а у Flow слайдер накрывает только контент. От библиотеки взята фокус-ловушка, панель и её анимация остались своими |
+| фокус-код в `flow.js` | внутренности MudBlazor | сделано частично: ушли `focusStack`-обход, Tab-ловушка, `focusFirstIn`, `visibleFocusable` — **260 строк из 638**. `menuFocus` и `rect` живут, пока на них держатся селекты (этап 4) |
+| `Popover.razor` (135 строк + JS) | `MudPopover` | **перенесено на этап 4**: поповер остался только у селектов и карточки человека, и уходит вместе с ними одним куском |
 
 Из `BrowserInterop` удаляются `RectAsync`, `MenuFocusAsync`, `PushFocusAsync`, `PopFocusAsync`,
 `FocusFirstInAsync`. Остаются `CopyAsync`, `FocusAsync`, `Storage*`, `Editor*`, `AttachZone*`,

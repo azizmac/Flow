@@ -1,4 +1,4 @@
-using Microsoft.JSInterop;
+﻿using Microsoft.JSInterop;
 
 namespace Flow.Client.Services;
 
@@ -99,19 +99,6 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
-    /// <summary>Ставит фокус на первый интерактивный элемент внутри контейнера (CSS-селектор).</summary>
-    public async Task FocusFirstInAsync(string selector)
-    {
-        try
-        {
-            await js.InvokeVoidAsync("flow.focusFirstIn", selector);
-        }
-        catch (JSException)
-        {
-        }
-    }
-
-    /// <summary>Двигает фокус по пунктам меню внутри контейнера: first | last | next | prev.</summary>
     public async Task MenuFocusAsync(string containerId, string mode)
     {
         try
