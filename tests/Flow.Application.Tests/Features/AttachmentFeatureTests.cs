@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Attachments.Commands.AttachmentDeleteCommand;
 using Flow.Application.Features.Attachments.Commands.AttachmentUploadCommand;
@@ -8,8 +8,10 @@ using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Application.Abstractions;
 using Flow.Application.Tests.Fakes;
 using Flow.Domain.Entities;
+using Flow.Shared.Contracts.Search;
 using Flow.Shared.Contracts.Tasks;
 using Xunit;
 using TaskActivityType = Flow.Domain.Entities.TaskActivityType;
@@ -321,6 +323,50 @@ public class AttachmentFeatureTests
         await context.Storage.DeleteAsync(attachment.StorageKey, CancellationToken.None);
 
         Assert.Null(await context.Mediator.Send(new AttachmentContentQuery(uploaded.Id), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Upload_Puts_Attachment_Into_The_Search_Queue()
+    {
+        var context = TestMediatorFactory.CreateAttachmentContext();
+        var task = await CreateTaskAsync(context);
+
+        var uploaded = (await UploadAsync(context, task.Id, "требования.pdf")).Response!;
+
+        // Содержимое достанет воркер: хендлер не читает файл второй раз и не ждёт модель.
+        var queued = Assert.Single(context.SearchIndex.For(SearchSourceType.Attachment, uploaded.Id));
+        Assert.Equal(SearchIndexOperation.Upsert, queued.Operation);
+        Assert.Equal(task.BoardId, queued.BoardId);
+    }
+
+    [Fact]
+    public async Task Deleting_Attachment_Puts_Delete_Into_The_Search_Queue()
+    {
+        var context = TestMediatorFactory.CreateAttachmentContext();
+        var task = await CreateTaskAsync(context);
+        var uploaded = (await UploadAsync(context, task.Id, "черновик.docx")).Response!;
+        context.SearchIndex.Clear();
+
+        await context.Mediator.Send(new AttachmentDeleteCommand(Owner, uploaded.Id), CancellationToken.None);
+
+        var queued = Assert.Single(context.SearchIndex.For(SearchSourceType.Attachment, uploaded.Id));
+        Assert.Equal(SearchIndexOperation.Delete, queued.Operation);
+    }
+
+    [Fact]
+    public async Task Deleting_Task_Puts_Delete_For_Every_Attachment()
+    {
+        var context = TestMediatorFactory.CreateAttachmentContext();
+        var task = await CreateTaskAsync(context);
+        var first = (await UploadAsync(context, task.Id, "первый.txt", Encoding.UTF8.GetBytes("1"))).Response!;
+        var second = (await UploadAsync(context, task.Id, "второй.txt", Encoding.UTF8.GetBytes("2"))).Response!;
+        context.SearchIndex.Clear();
+
+        await context.Mediator.Send(new TaskDeleteCommand(Owner, task.Id), CancellationToken.None);
+
+        // Строки уйдут каскадом БД, но чанки привязаны к Id вложений — записи нужны на каждое.
+        Assert.Equal(SearchIndexOperation.Delete, Assert.Single(context.SearchIndex.For(SearchSourceType.Attachment, first.Id)).Operation);
+        Assert.Equal(SearchIndexOperation.Delete, Assert.Single(context.SearchIndex.For(SearchSourceType.Attachment, second.Id)).Operation);
     }
 
     [Fact]

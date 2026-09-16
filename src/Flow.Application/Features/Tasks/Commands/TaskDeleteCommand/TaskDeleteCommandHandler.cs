@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Search;
@@ -25,14 +25,16 @@ internal sealed class TaskDeleteCommandHandler(ITaskItemRepository tasks, ITaskC
 
         searchIndex.Enqueue(SearchSourceType.Task, task.Id, task.BoardId, SearchIndexOperation.Delete);
 
-        // Строки вложений тоже уйдут каскадом, а объекты в хранилище — нет: их удаляем сами.
-        // Проверяем список, чтобы не ходить в S3 при удалении задачи без файлов (таких большинство).
-        var hasAttachments = (await attachments.GetByTaskIdAsync(task.Id, cancellationToken)).Count > 0;
+        // Строки вложений уйдут каскадом, а чанки индекса привязаны к своим Id — список нужен до удаления.
+        // Он же отвечает на вопрос, идти ли в хранилище: у задачи без файлов там делать нечего.
+        var attached = await attachments.GetByTaskIdAsync(task.Id, cancellationToken);
+        foreach (var attachment in attached)
+            searchIndex.Enqueue(SearchSourceType.Attachment, attachment.Id, task.BoardId, SearchIndexOperation.Delete);
 
         tasks.Remove(task);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        if (hasAttachments)
+        if (attached.Count > 0)
         {
             try
             {

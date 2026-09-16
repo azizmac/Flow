@@ -1,7 +1,8 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
+using Flow.Shared.Contracts.Search;
 using MediatR;
 
 namespace Flow.Application.Features.Attachments.Commands.AttachmentUploadCommand;
@@ -16,6 +17,7 @@ internal sealed class AttachmentUploadCommandHandler(
     IAttachmentRepository attachments,
     ITaskActivityRepository activities,
     IFileStorage storage,
+    ISearchIndexQueue searchIndex,
     AttachmentOptions options,
     ActorResolver actors,
     IPermissionService permissions,
@@ -56,8 +58,9 @@ internal sealed class AttachmentUploadCommandHandler(
             attachments.Add(attachment);
             activities.Add(TaskActivity.AttachmentAdded(task.Id, actor.Id, attachment.Id, attachment.FileName));
 
-            // В очередь индексации вложение пока не ставится: читать его поисковый воркер научится
-            // на этапе 4 (docs/TZ_attachments.md), иначе очередь копила бы ошибки на неизвестном типе.
+            // Очередь индексации пишется той же транзакцией: содержимое файла воркер вытащит сам,
+            // здесь незачем ни читать его второй раз, ни ждать модель.
+            searchIndex.Enqueue(SearchSourceType.Attachment, attachment.Id, attachment.BoardId, SearchIndexOperation.Upsert);
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
         catch

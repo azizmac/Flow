@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Flow.Application.Abstractions;
 using Flow.Application.Features.Search;
 using Flow.Infrastructure.Persistence;
@@ -166,15 +166,15 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             SELECT b."SourceType" AS "SourceType",
                    b."SourceId" AS "SourceId",
                    b."BoardId" AS "BoardId",
-                   COALESCE(ti."Title", ct."Title", bd."Name",
+                   COALESCE(ti."Title", ct."Title", bd."Name", at."FileName",
                             NULLIF(btrim(COALESCE(u."FirstName", '') || ' ' || COALESCE(u."LastName", '')), ''),
                             u."Username", '') AS "Title",
                    ts_headline('russian', b."Content", websearch_to_tsquery('russian', @text),
                                'MaxFragments=2, MinWords=5, MaxWords=20, StartSel=<mark>, StopSel=</mark>') AS "Snippet",
                    b.score::double precision AS "Score",
-                   COALESCE(ti."Code", ct."Code") AS "TaskCode",
+                   COALESCE(ti."Code", ct."Code", att."Code") AS "TaskCode",
                    b."SourceUpdatedAt" AS "UpdatedAt",
-                   cm."TaskId" AS "ParentId",
+                   COALESCE(cm."TaskId", at."TaskId") AS "ParentId",
                    count(*) OVER () AS "Total"
             FROM best b
             LEFT JOIN "TaskItems" ti ON b."SourceType" = 1 AND ti."Id" = b."SourceId"
@@ -182,6 +182,8 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             LEFT JOIN "TaskItems" ct ON ct."Id" = cm."TaskId"
             LEFT JOIN "Boards" bd ON b."SourceType" = 3 AND bd."Id" = b."SourceId"
             LEFT JOIN "Users" u ON b."SourceType" = 4 AND u."Id" = b."SourceId"
+            LEFT JOIN "Attachments" at ON b."SourceType" = 5 AND at."Id" = b."SourceId"
+            LEFT JOIN "TaskItems" att ON att."Id" = at."TaskId"
             WHERE b."SourceType" <> 4 OR u."Status" <> 2
             ORDER BY b.score DESC, b."SourceUpdatedAt" DESC
             LIMIT @limit OFFSET @offset

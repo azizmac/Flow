@@ -1,4 +1,4 @@
-@* Строка поиска в сайдбаре: ввод с задержкой 300 мс, предыдущий запрос отменяется (иначе ответы
+﻿@* Строка поиска в сайдбаре: ввод с задержкой 300 мс, предыдущий запрос отменяется (иначе ответы
    обгоняют друг друга и в выдаче мелькает старое), дропдаун с группами по типу источника.
    ↑/↓ ходят по результатам, Enter открывает выбранный (или всю выдачу), Esc закрывает, а на пустом
    дропдауне — очищает поле. Полная выдача с фильтрами — на /search. *@
@@ -99,7 +99,7 @@
     private const int Limit = 7;
 
     private static readonly SearchSourceType[] GroupOrder =
-        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User];
+        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Attachment, SearchSourceType.Board, SearchSourceType.User];
 
     private readonly string _inputId = "gs-" + Guid.NewGuid().ToString("N")[..8];
     private readonly string _popId = "gsp-" + Guid.NewGuid().ToString("N")[..8];

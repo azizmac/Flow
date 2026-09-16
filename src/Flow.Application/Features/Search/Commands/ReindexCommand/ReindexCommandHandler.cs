@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Shared.Contracts.Search;
 using MediatR;
@@ -19,14 +19,7 @@ internal sealed class ReindexCommandHandler(
         if (!options.Enabled)
             throw new InvalidOperationException("Поиск выключен (Search:Enabled=false) — переиндексировать нечего.");
 
-        var types = request.Types ?? [];
-        foreach (var type in types)
-        {
-            if (type is SearchSourceType.Attachment)
-                throw new ArgumentException("Вложения пока не индексируются.", nameof(request.Types));
-        }
-
         // Постановка в очередь — не сама индексация: чанки построит воркер, эндпоинт отвечает 202.
-        return await index.EnqueueAllAsync(types, request.BoardId, cancellationToken);
+        return await index.EnqueueAllAsync(request.Types ?? [], request.BoardId, cancellationToken);
     }
 }

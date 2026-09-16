@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using Flow.Shared.Contracts.Search;
 using Microsoft.AspNetCore.Components;
 
@@ -23,6 +23,7 @@ public static class SearchPresentation
         SearchSourceType.Comment => "Комментарий",
         SearchSourceType.Board => "Проект",
         SearchSourceType.User => "Человек",
+        SearchSourceType.Attachment => "Файл",
         _ => "Источник"
     };
 
@@ -33,6 +34,7 @@ public static class SearchPresentation
         SearchSourceType.Comment => "Комментарии",
         SearchSourceType.Board => "Проекты",
         SearchSourceType.User => "Люди",
+        SearchSourceType.Attachment => "Файлы",
         _ => "Источники"
     };
 
@@ -42,6 +44,7 @@ public static class SearchPresentation
         SearchSourceType.Comment => "message",
         SearchSourceType.Board => "grid",
         SearchSourceType.User => "user",
+        SearchSourceType.Attachment => "file",
         _ => "file"
     };
 
@@ -55,6 +58,8 @@ public static class SearchPresentation
         SearchSourceType.Comment => item.ParentId is { } taskId ? $"tasks/{taskId}" : null,
         SearchSourceType.Board => $"boards/{item.SourceId}",
         SearchSourceType.User => $"users/{item.SourceId}",
+        // У файла своей страницы нет — открывается задача, к которой он приложен.
+        SearchSourceType.Attachment => item.ParentId is { } ownerTaskId ? $"tasks/{ownerTaskId}" : null,
         _ => null
     };
 }

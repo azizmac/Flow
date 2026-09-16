@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Infrastructure.Persistence;
 using Flow.Shared.Contracts.Search;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +19,7 @@ internal sealed class SearchIndexRepository(FlowDbContext db) : ISearchIndexRepo
     private const int ReindexPriority = 1;
 
     private static readonly SearchSourceType[] AllTypes =
-        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User];
+        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User, SearchSourceType.Attachment];
 
     public async Task<SearchIndexStatistics> GetStatisticsAsync(string modelVersion, int maxAttempts, CancellationToken cancellationToken)
     {
@@ -120,6 +120,12 @@ internal sealed class SearchIndexRepository(FlowDbContext db) : ISearchIndexRepo
             """
             SELECT b."Id" AS "SourceId", b."Id" AS "BoardId" FROM "Boards" b
             WHERE @boardId::uuid IS NULL OR b."Id" = @boardId
+            """,
+
+        SearchSourceType.Attachment =>
+            """
+            SELECT a."Id" AS "SourceId", a."BoardId" AS "BoardId" FROM "Attachments" a
+            WHERE @boardId::uuid IS NULL OR a."BoardId" = @boardId
             """,
 
         // Люди к проекту не привязаны: при фильтре по проекту их не переиндексируют.

@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
 using Flow.Application.Features.Attachments;
 using Flow.Application.Features.Search;
@@ -21,6 +21,7 @@ public sealed record AttachmentTestContext(
     FakeTaskActivityRepository Activities,
     FakeAttachmentRepository Attachments,
     InMemoryFileStorage Storage,
+    FakeSearchIndexQueue SearchIndex,
     AttachmentOptions Options);
 
 public sealed record SearchTestContext(
@@ -68,7 +69,7 @@ public static class TestMediatorFactory
     public static AttachmentTestContext CreateAttachmentContext()
     {
         var all = Build();
-        return new AttachmentTestContext(all.Mediator, all.Boards, all.Tasks, all.Users, all.Activities, all.Attachments, all.Storage, all.AttachmentOptions);
+        return new AttachmentTestContext(all.Mediator, all.Boards, all.Tasks, all.Users, all.Activities, all.Attachments, all.Storage, all.SearchQueue, all.AttachmentOptions);
     }
 
     /// <summary>

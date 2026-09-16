@@ -1,6 +1,7 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
+using Flow.Shared.Contracts.Search;
 using MediatR;
 
 namespace Flow.Application.Features.Attachments.Commands.AttachmentDeleteCommand;
@@ -13,6 +14,7 @@ internal sealed class AttachmentDeleteCommandHandler(
     IAttachmentRepository attachments,
     ITaskActivityRepository activities,
     IFileStorage storage,
+    ISearchIndexQueue searchIndex,
     ActorResolver actors,
     IPermissionService permissions,
     IUnitOfWork unitOfWork)
@@ -30,6 +32,7 @@ internal sealed class AttachmentDeleteCommandHandler(
 
         attachments.Remove(attachment);
         activities.Add(TaskActivity.AttachmentRemoved(attachment.TaskId, actor.Id, attachment.Id, attachment.FileName));
+        searchIndex.Enqueue(SearchSourceType.Attachment, attachment.Id, attachment.BoardId, SearchIndexOperation.Delete);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         try

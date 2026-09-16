@@ -1,3 +1,4 @@
+﻿using Flow.Application.Abstractions;
 using Flow.Application.Features.Search;
 using Flow.Infrastructure.Persistence;
 using Flow.Shared.Contracts.Search;
@@ -10,7 +11,7 @@ namespace Flow.Infrastructure.Search;
 /// с контекстной шапкой для эмбеддера. Шапка в БД не дублируется — подсветка и полнотекстовый поиск
 /// идут по Content, контекст нужен только вектору.
 /// </summary>
-internal sealed class SearchSourceReader(FlowDbContext db, SearchOptions options)
+internal sealed class SearchSourceReader(FlowDbContext db, SearchOptions options, IFileStorage storage, ITextExtractor extractor)
 {
     /// <summary>null — источника больше нет (удалён, пока запись ждала в очереди): чанки просто убираются.</summary>
     public Task<SourceSnapshot?> ReadAsync(SearchSourceType sourceType, Guid sourceId, CancellationToken cancellationToken) =>
@@ -20,7 +21,7 @@ internal sealed class SearchSourceReader(FlowDbContext db, SearchOptions options
             SearchSourceType.Comment => ReadCommentAsync(sourceId, cancellationToken),
             SearchSourceType.Board => ReadBoardAsync(sourceId, cancellationToken),
             SearchSourceType.User => ReadUserAsync(sourceId, cancellationToken),
-            // Вложения появятся вместе с ТЗ вложений (этапы 7–8) — до тех пор их никто не ставит в очередь.
+            SearchSourceType.Attachment => ReadAttachmentAsync(sourceId, cancellationToken),
             _ => throw new NotSupportedException($"Источник {sourceType} пока не индексируется.")
         };
 
@@ -106,6 +107,61 @@ internal sealed class SearchSourceReader(FlowDbContext db, SearchOptions options
 
         // У человека доски нет: он находится в общем поиске, а не внутри проекта.
         return new SourceSnapshot(BoardId: null, IsClosed: false, user.CreatedAt, BuildChunks(header, text));
+    }
+
+    /// <summary>
+    /// Вложение: текст достаётся из файла в хранилище. Если текста нет — скан без распознаваемого слоя,
+    /// картинка, битый или защищённый паролем файл, — вложение всё равно попадает в индекс одним чанком
+    /// с именем файла: «договор-2026.pdf» ищут не реже, чем то, что внутри.
+    /// </summary>
+    private async Task<SourceSnapshot?> ReadAttachmentAsync(Guid attachmentId, CancellationToken cancellationToken)
+    {
+        var found = await (
+            from attachment in db.Attachments.AsNoTracking()
+            join task in db.TaskItems.AsNoTracking() on attachment.TaskId equals task.Id
+            where attachment.Id == attachmentId
+            select new
+            {
+                attachment.FileName,
+                attachment.ContentType,
+                attachment.StorageKey,
+                attachment.UploadedAt,
+                attachment.BoardId,
+                TaskCode = task.Code,
+                task.StatusId
+            }).FirstOrDefaultAsync(cancellationToken);
+
+        if (found is null)
+            return null;
+
+        // Закрытость наследуется от задачи-владельца: иначе фильтр «без архива» врал бы на её файлах.
+        var isClosed = await db.Statuses.AsNoTracking()
+            .Where(s => s.Id == found.StatusId)
+            .Select(s => s.IsFinal)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var text = await ExtractAsync(found.StorageKey, found.FileName, found.ContentType, cancellationToken);
+
+        // Имя файла идёт первой строкой содержимого, а не только в шапке: шапка уходит в вектор,
+        // а полнотекстовая ветка ищет по Content — без этого файл не найти по точному имени.
+        var content = string.IsNullOrWhiteSpace(text) ? found.FileName : $"{found.FileName}\n\n{text}";
+        var header = ChunkHeaderBuilder.ForAttachment(found.TaskCode.Value, found.FileName);
+
+        return new SourceSnapshot(found.BoardId, isClosed, found.UploadedAt, BuildChunks(header, content));
+    }
+
+    private async Task<string> ExtractAsync(string storageKey, string fileName, string contentType, CancellationToken cancellationToken)
+    {
+        if (!extractor.CanExtract(fileName, contentType))
+            return string.Empty;
+
+        // Объекта может не быть: строка есть, а файл пропал (сбой загрузки, чистка бакета руками).
+        await using var content = await storage.OpenReadAsync(storageKey, cancellationToken);
+        if (content is null)
+            return string.Empty;
+
+        // Исключения формата гасит CompositeTextExtractor: из-за одного битого файла очередь не встаёт.
+        return await extractor.ExtractAsync(content, fileName, contentType, cancellationToken);
     }
 
     private IReadOnlyList<SourceChunk> BuildChunks(string header, string? text)
