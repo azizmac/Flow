@@ -314,4 +314,101 @@ a.mud-link:hover {
 .ucard-anchor.block {
     display: block;
 }
-/* ---------- Таблица задач (этап 5) ---------- */
+/* ---------- Таблица задач ----------
+   Список задач — MudDataGrid (сортировка по колонкам и страницы приходят от библиотеки).
+   Раньше это была сетка из div'ов (.list-cols), теперь настоящая таблица, поэтому ширины колонок
+   задаются по порядку ячеек, а вид строки остаётся прежним (.task-row в app.css). */
+.flow-grid.panel {
+    padding: 0;
+}
+
+.flow-grid .mud-table-container {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+.flow-grid .mud-table-root {
+    background: transparent;
+    table-layout: fixed;
+    width: 100%;
+}
+
+/* Шапка: те же мелкие прописные, что были у .list-head. */
+.flow-grid .mud-table-head th {
+    padding: 12px 20px;
+    background: transparent;
+    border-bottom: 1px solid var(--border);
+    font: var(--fw-bold) 10.5px var(--font-display);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.flow-grid .mud-table-head th .mud-button-root {
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+}
+
+/* Активная сортировка подсвечивается акцентом — иначе непонятно, по какой колонке список упорядочен. */
+.flow-grid .mud-table-head th .mud-table-sort-label.mud-direction-asc,
+.flow-grid .mud-table-head th .mud-table-sort-label.mud-direction-desc {
+    color: var(--accent);
+}
+
+.flow-grid .mud-table-body td {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    color: var(--text-primary);
+}
+
+.flow-grid .mud-table-body tr:last-child td {
+    border-bottom: none;
+}
+
+/* Ширины колонок: код · задача · кто · статус · создана · меню — как в прежней сетке. */
+.flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: 92px; }
+.flow-grid th:nth-child(3), .flow-grid td:nth-child(3) { width: 56px; }
+.flow-grid th:nth-child(4), .flow-grid td:nth-child(4) { width: 170px; }
+.flow-grid th:nth-child(5), .flow-grid td:nth-child(5) { width: 110px; }
+.flow-grid th:nth-child(6), .flow-grid td:nth-child(6) { width: 44px; }
+
+/* Строка: hover, выбранная и подсветка новой — прежние правила .task-row из app.css,
+   здесь только гасим фон таблицы Material. */
+.flow-grid .mud-table-body tr.task-row {
+    background: transparent;
+    cursor: pointer;
+}
+
+.flow-grid .mud-table-body tr.task-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.flow-grid .mud-table-body tr.task-row.sel {
+    background: var(--accent-soft);
+}
+
+.flow-grid .mud-table-body tr.task-row.done .task-title {
+    color: var(--text-tertiary);
+}
+
+/* Пагинация: тёмная полоса под списком вместо прежней кнопки «показать ещё». */
+.flow-grid .mud-table-pagination {
+    border-top: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    font: var(--fw-medium) 12px var(--font-text);
+}
+
+.flow-grid .mud-table-pagination .mud-select-input .mud-input-root {
+    font: var(--fw-medium) 12px var(--font-text);
+    color: var(--text-secondary);
+}
+
+/* Пустой список и индикатор загрузки занимают всю ширину таблицы. */
+.flow-grid .mud-table-body .empty {
+    padding: 40px 20px;
+}

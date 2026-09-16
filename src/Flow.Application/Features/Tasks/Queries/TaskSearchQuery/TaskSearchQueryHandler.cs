@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Tasks;
@@ -27,7 +27,10 @@ internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCom
             request.Query,
             beforeCreatedAt,
             beforeId,
-            limit);
+            limit,
+            request.Offset is { } offset ? Math.Max(0, offset) : null,
+            request.Sort,
+            request.Descending);
 
         var items = await tasks.SearchAsync(filter, cancellationToken);
         var counted = await tasks.CountAsync(filter, cancellationToken);
@@ -36,12 +39,14 @@ internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCom
         var counts = await comments.CountByTaskIdsAsync(items.Select(t => t.Id).ToList(), cancellationToken);
 
         // Страница заполнилась целиком — возможно, есть ещё; неполная страница всегда последняя.
-        var last = items.Count == limit ? items[^1] : null;
+        // В offset-режиме курсор не отдаём: листает таблица номерами страниц, и смешивать два способа нельзя.
+        var last = request.Offset is null && items.Count == limit ? items[^1] : null;
 
         return new TaskListResponse(
             items.Select(t => t.ToResponse(counts.GetValueOrDefault(t.Id))).ToList(),
             last is null ? null : EncodeCursor(last.CreatedAt, last.Id),
             counted.Total,
+            counted.Matched,
             counted.ByType.Select(x => new StatusTypeCount((Shared.Contracts.Boards.StatusType?)x.Type, x.Count)).ToList(),
             counted.ByStatus.Select(x => new StatusCount(x.StatusId, x.Count)).ToList());
     }

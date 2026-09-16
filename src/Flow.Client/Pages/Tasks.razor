@@ -1,4 +1,4 @@
-@* Экран «Задачи» (GET /tasks): плоский список задач по всем проектам или по одному — проект выбирается
+﻿@* Экран «Задачи» (GET /tasks): плоский список задач по всем проектам или по одному — проект выбирается
    селектором в топбаре и живёт в query (?board=). Фильтры (?status= внутри проекта, ?type= в сводном режиме,
    ?who= — id, "none" — без исполнителя) и поиск считает сервер, страница грузится порциями по курсору.
    Слайдер создания (N) и слайдер задачи (?task=) — как раньше.
@@ -88,58 +88,119 @@
             </div>
         </div>
 
-        <div class="panel">
-            <div class="list-cols list-head"><div>Код</div><div>Задача</div><div>Кто</div><div>Статус</div><div>Создана</div><div></div></div>
-            <div class="panel-rows rows-in">
-                @if (_tasks.Count == 0)
-                {
-                    <div class="empty">
-                        @if (HasFilters)
-                        {
-                            <div class="empty-title">Ничего не найдено</div>
-                            <button type="button" class="icon-lnk" @onclick="ResetFilters">Сбросить фильтры</button>
-                        }
-                        else if (CurrentBoard is { } empty)
-                        {
-                            <div class="empty-title">Пока нет задач</div>
-                            <div>Создайте первую — код будет <span class="code accent">@empty.Key-@empty.NextTaskNumber</span></div>
-                            @if (CanCreateTask)
+        <MudDataGrid @ref="_grid" T="TaskResponse" ServerData="LoadTasks" Class="flow-grid panel"
+                     Dense="true" Hover="true" Elevation="0" SortMode="SortMode.Single" RowsPerPage="PageSize"
+                     RowClass="task-row" RowClassFunc="RowClass" RowClick="@(args => OpenTask(args.Item))" Loading="_loading">
+            <Columns>
+                <PropertyColumn T="TaskResponse" TProperty="string" Property="t => t.Code" Title="Код" CellClass="code">
+                    <CellTemplate>
+                        @* Якорь строки: по нему листаются задачи стрелками и подсвечивается новая. *@
+                        <span id="@TaskAnchorId(context.Item.Id)">@context.Item.Code</span>
+                    </CellTemplate>
+                </PropertyColumn>
+
+                <PropertyColumn T="TaskResponse" TProperty="string" Property="t => t.Title" Title="Задача" CellClass="task-cell-title">
+                    <CellTemplate>
+                        <div class="task-title">
+                            @if (_renamingId == context.Item.Id)
                             {
-                                <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate">Создать первую</DsButton>
+                                <input id="@RenameInputId" value="@_renameTaskValue" maxlength="500"
+                                       @oninput="e => _renameTaskValue = e.Value?.ToString() ?? string.Empty"
+                                       @onkeydown="OnTaskRenameKey" @onblur="CommitTaskRename"
+                                       @onclick:stopPropagation />
                             }
+                            else
+                            {
+                                @context.Item.Title
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(context.Item.Description))
+                        {
+                            <div class="task-desc">@Ru.PlainFirstLine(context.Item.Description)</div>
+                        }
+                        @if (context.Item.DueDate is not null || context.Item.CommentCount > 0)
+                        {
+                            <div class="task-meta-chips">
+                                @if (context.Item.DueDate is { } d)
+                                {
+                                    <DueChip Value="d" IsDone="IsDone(context.Item)" />
+                                }
+                                @if (context.Item.CommentCount > 0)
+                                {
+                                    <span class="count-chip" title="@Ru.Comments(context.Item.CommentCount)"><Icon Name="message" Size="12" />@context.Item.CommentCount</span>
+                                }
+                            </div>
+                        }
+                    </CellTemplate>
+                </PropertyColumn>
+
+                <PropertyColumn T="TaskResponse" TProperty="Guid?" Property="t => t.AssigneeId" Title="Кто">
+                    <CellTemplate>
+                        <AssigneeSelect Compact="true" Value="context.Item.AssigneeId" Disabled="!Permissions.CanAssign(Me, context.Item)"
+                                        OnlyUserId="OnlyAssigneeId" OnChange="id => AssignTask((context.Item, id))" />
+                    </CellTemplate>
+                </PropertyColumn>
+
+                <PropertyColumn T="TaskResponse" TProperty="Guid" Property="t => t.StatusId" Title="Статус">
+                    <CellTemplate>
+                        @if (Permissions.CanEditTask(Me, context.Item))
+                        {
+                            <StatusSelect Statuses="StatusesFor(context.Item)" Value="context.Item.StatusId"
+                                          OnChange="id => ChangeStatus((context.Item, id))" />
                         }
                         else
                         {
-                            <div class="empty-title">Задач нет ни в одном проекте</div>
-                            @if (CanCreateTask && _boards.Count > 0)
-                            {
-                                <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate">Создать первую</DsButton>
-                            }
+                            var st = StatusesFor(context.Item).FirstOrDefault(x => x.Id == context.Item.StatusId);
+                            <span class="status-pill" @onclick:stopPropagation><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span>
                         }
-                    </div>
-                }
-                else
-                {
-                    @foreach (var t in _tasks)
+                    </CellTemplate>
+                </PropertyColumn>
+
+                <PropertyColumn T="TaskResponse" TProperty="DateTime" Property="t => t.CreatedAt" Title="Создана" CellClass="task-date">
+                    <CellTemplate>
+                        <span title="@Ru.DateTimeFull(context.Item.CreatedAt)">@Ru.DateShort(context.Item.CreatedAt)</span>
+                    </CellTemplate>
+                </PropertyColumn>
+
+                <TemplateColumn T="TaskResponse" Sortable="false" Filterable="false" CellClass="task-cell-menu">
+                    <CellTemplate>
+                        <RowMenu OnOpen="() => OpenTask(context.Item)" ShowRename="Permissions.CanEditTask(Me, context.Item)"
+                                 ShowDelete="Permissions.CanEditTask(Me, context.Item)"
+                                 OnRename="() => StartTaskRename(context.Item)" OnCopy="() => CopyCode(context.Item)"
+                                 OnDelete="() => AskDeleteTask(context.Item)" />
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <NoRecordsContent>
+                <div class="empty">
+                    @if (HasFilters)
                     {
-                        <TaskRow @key="t.Id" Item="t" Statuses="StatusesFor(t)"
-                                 CanEdit="Permissions.CanEditTask(Me, t)" CanAssign="Permissions.CanAssign(Me, t)" OnlyAssigneeId="OnlyAssigneeId"
-                                 Selected="TaskId == t.Id" Flash="_flashId == t.Id"
-                                 OnOpen="OpenTask" OnStatusChange="ChangeStatus" OnAssign="AssignTask" OnRename="RenameTask"
-                                 OnCopy="CopyCode" OnDelete="AskDeleteTask" />
+                        <div class="empty-title">Ничего не найдено</div>
+                        <button type="button" class="icon-lnk" @onclick="ResetFilters">Сбросить фильтры</button>
                     }
-                    @if (_nextCursor is not null)
+                    else if (CurrentBoard is { } empty)
                     {
-                        <div class="list-more">
-                            <DsButton Variant="secondary" Size="sm" OnClick="LoadMore" Busy="_loadingMore">
-                                Показать ещё
-                            </DsButton>
-                            <span class="meta-line">показано @_tasks.Count из @_total</span>
-                        </div>
+                        <div class="empty-title">Пока нет задач</div>
+                        <div>Создайте первую — код будет <span class="code accent">@empty.Key-@empty.NextTaskNumber</span></div>
+                        @if (CanCreateTask)
+                        {
+                            <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate">Создать первую</DsButton>
+                        }
                     }
-                }
-            </div>
-        </div>
+                    else
+                    {
+                        <div class="empty-title">Задач нет ни в одном проекте</div>
+                        @if (CanCreateTask && _boards.Count > 0)
+                        {
+                            <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate">Создать первую</DsButton>
+                        }
+                    }
+                </div>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudDataGridPager T="TaskResponse" RowsPerPageString="Задач на странице" InfoFormat="{first_item}–{last_item} из {all_items}" />
+            </PagerContent>
+        </MudDataGrid>
     }
 </div>
 
@@ -180,15 +241,14 @@
     /// <summary>Фильтр по исполнителю: Guid пользователя или "none" — без исполнителя.</summary>
     [SupplyParameterFromQuery(Name = "who")] public string? Who { get; set; }
 
+    private MudDataGrid<TaskResponse>? _grid;
     private List<BoardResponse> _boards = [];
     private bool _boardsLoading = true;
     private List<TaskResponse> _tasks = [];
     private IReadOnlyList<StatusTypeCount> _countsByType = [];
     private Dictionary<Guid, int> _countsByStatus = new();
     private int _total;
-    private string? _nextCursor;
     private bool _loading = true;
-    private bool _loadingMore;
     private bool _notFound;
     private string? _loadError;
     private string _search = "";
@@ -201,6 +261,9 @@
     private bool _renaming;
     private string _renameValue = "";
     private bool _renameCancelled;
+    private Guid? _renamingId;
+    private string _renameTaskValue = "";
+    private bool _renameTaskCancelled;
     private IDisposable? _hotkeys;
 
     private BoardResponse? CurrentBoard => _boards.FirstOrDefault(b => b.Id == BoardId);
@@ -281,9 +344,9 @@
             _ = Users.EnsureLoadedAsync();
     }
 
+    /// <summary>Перезапрашивает первую страницу: фильтры и поиск считает сервер.</summary>
     private async Task Load()
     {
-        _loading = true;
         _notFound = BoardId is { } id && _boards.Count > 0 && _boards.All(b => b.Id != id);
         _loadError = null;
 
@@ -293,52 +356,120 @@
             return;
         }
 
-        var result = await Api.SearchTasks(
-            BoardId, AssigneeFilterId, Who == "none", StatusId, BoardId is null ? TypeFilter : null, _search, PageSize);
+        if (_grid is null)
+            return;
 
+        await _grid.ReloadServerData();
+    }
+
+    /// <summary>
+    /// Источник данных таблицы. Сортировку и страницу задаёт сама таблица (GridState), остальное — фильтры
+    /// экрана. TotalItems берём из Matched: Total считается без фильтра статуса — он нужен счётчикам
+    /// сегментов, а не пагинации, иначе таблица нарисовала бы лишние страницы.
+    /// </summary>
+    private async Task<GridData<TaskResponse>> LoadTasks(GridState<TaskResponse> state, CancellationToken cancellationToken)
+    {
+        if (_notFound)
+            return new GridData<TaskResponse> { Items = [], TotalItems = 0 };
+
+        var sort = state.SortDefinitions.FirstOrDefault();
+        var field = SortField(sort?.SortBy);
+        // Без явной сортировки список идёт как раньше — новые сверху.
+        var descending = sort?.Descending ?? field == TaskSortField.Created;
+
+        _loading = true;
+        var result = await Api.SearchTasks(
+            BoardId, AssigneeFilterId, Who == "none", StatusId, BoardId is null ? TypeFilter : null, _search,
+            limit: state.PageSize, offset: state.Page * state.PageSize, sort: field, descending: descending,
+            ct: cancellationToken);
         _loading = false;
+
         if (!result.Ok)
         {
             _loadError = result.Error;
-            return;
+            _tasks = [];
+            return new GridData<TaskResponse> { Items = [], TotalItems = 0 };
         }
 
-        Apply(result.Value!, append: false);
-
-        if (BoardId is { } boardId)
-            State.SetLastBoard(boardId);
-    }
-
-    private async Task LoadMore()
-    {
-        if (_nextCursor is null || _loadingMore)
-            return;
-
-        _loadingMore = true;
-        var result = await Api.SearchTasks(
-            BoardId, AssigneeFilterId, Who == "none", StatusId, BoardId is null ? TypeFilter : null, _search, PageSize, _nextCursor);
-        _loadingMore = false;
-
-        if (!result.Ok)
-        {
-            Toasts.Error(result.Error ?? "Не удалось загрузить ещё задачи");
-            return;
-        }
-
-        Apply(result.Value!, append: true);
-    }
-
-    private void Apply(TaskListResponse page, bool append)
-    {
-        if (append)
-            _tasks.AddRange(page.Items);
-        else
-            _tasks = page.Items.ToList();
-
-        _nextCursor = page.NextCursor;
+        var page = result.Value!;
+        // Копия страницы нужна слайдеру и хоткеям: они ходят по текущему списку.
+        _tasks = page.Items.ToList();
         _total = page.Total;
         _countsByType = page.ByType;
         _countsByStatus = page.ByStatus.ToDictionary(c => c.StatusId, c => c.Count);
+
+        if (BoardId is { } boardId)
+            State.SetLastBoard(boardId);
+
+        return new GridData<TaskResponse> { Items = page.Items, TotalItems = page.Matched };
+    }
+
+    /// <summary>Имя свойства из колонки таблицы → поле сортировки API.</summary>
+    private static TaskSortField SortField(string? sortBy) => sortBy switch
+    {
+        nameof(TaskResponse.Code) => TaskSortField.Code,
+        nameof(TaskResponse.Title) => TaskSortField.Title,
+        nameof(TaskResponse.StatusId) => TaskSortField.Status,
+        nameof(TaskResponse.AssigneeId) => TaskSortField.Assignee,
+        nameof(TaskResponse.DueDate) => TaskSortField.Due,
+        _ => TaskSortField.Created
+    };
+
+    private string RowClass(TaskResponse task, int _)
+    {
+        var classes = new List<string>();
+        if (IsDone(task)) classes.Add("done");
+        if (TaskId == task.Id) classes.Add("sel");
+        if (_flashId == task.Id) classes.Add("flash");
+        return string.Join(' ', classes);
+    }
+
+    private bool IsDone(TaskResponse task) =>
+        StatusesFor(task).FirstOrDefault(s => s.Id == task.StatusId)?.IsFinal == true;
+
+    /// <summary>Якорь строки для прокрутки: id ставится в ячейке кода.</summary>
+    public static string TaskAnchorId(Guid id) => "task-" + id.ToString("N");
+
+    // ---- переименование прямо в строке ----
+
+    private const string RenameInputId = "task-rename";
+
+    private async Task StartTaskRename(TaskResponse task)
+    {
+        _renamingId = task.Id;
+        _renameTaskValue = task.Title;
+        _renameTaskCancelled = false;
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync(RenameInputId, select: true);
+    }
+
+    private async Task OnTaskRenameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CommitTaskRename();
+        }
+        else if (e.Key == "Escape")
+        {
+            _renameTaskCancelled = true;
+            _renamingId = null;
+        }
+    }
+
+    private async Task CommitTaskRename()
+    {
+        if (_renamingId is not { } id || _renameTaskCancelled)
+            return;
+
+        var task = _tasks.FirstOrDefault(t => t.Id == id);
+        _renamingId = null;
+
+        var title = _renameTaskValue.Trim();
+        if (task is null || title.Length == 0 || title == task.Title)
+            return;
+
+        await RenameTask((task, title));
     }
 
     private Guid? AssigneeFilterId => Guid.TryParse(Who, out var who) ? who : null;
@@ -470,7 +601,7 @@
             return;
 
         OpenTask(_tasks[next]);
-        await Browser.ScrollIntoViewAsync(TaskRow.ElementIdFor(_tasks[next].Id));
+        await Browser.ScrollIntoViewAsync(TaskAnchorId(_tasks[next].Id));
     }
 
     // ---- задачи ----
@@ -506,7 +637,7 @@
     {
         _flashId = id;
         StateHasChanged();
-        await Browser.ScrollIntoViewAsync(TaskRow.ElementIdFor(id));
+        await Browser.ScrollIntoViewAsync(TaskAnchorId(id));
         await Task.Delay(1500);
         if (_flashId == id)
         {

@@ -69,6 +69,9 @@ public sealed class FlowApi(HttpClient http)
         string? query = null,
         int? limit = null,
         string? cursor = null,
+        int? offset = null,
+        TaskSortField? sort = null,
+        bool descending = false,
         CancellationToken ct = default)
     {
         var parameters = new List<string>();
@@ -80,6 +83,12 @@ public sealed class FlowApi(HttpClient http)
         if (!string.IsNullOrWhiteSpace(query)) parameters.Add($"q={Uri.EscapeDataString(query.Trim())}");
         if (limit is { } l) parameters.Add($"limit={l}");
         if (!string.IsNullOrWhiteSpace(cursor)) parameters.Add($"cursor={Uri.EscapeDataString(cursor)}");
+        if (offset is { } o) parameters.Add($"offset={o}");
+        if (sort is { } srt)
+        {
+            parameters.Add($"sort={srt}");
+            parameters.Add($"dir={(descending ? "desc" : "asc")}");
+        }
 
         return Get<TaskListResponse>(parameters.Count == 0 ? "tasks" : $"tasks?{string.Join('&', parameters)}", ct);
     }
