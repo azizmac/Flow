@@ -119,6 +119,12 @@ public sealed class SearchVisionOptions
     /// </summary>
     public long MaxBytes { get; set; } = 8L * 1024 * 1024;
 
+    /// <summary>
+    /// Сколько первых страниц скана уходит в визуальный индекс. Каждая — отдельный прогон модели
+    /// и отдельная строка, поэтому не весь документ: у договора на тридцать страниц ищут по первым.
+    /// </summary>
+    public int MaxPdfPages { get; set; } = 3;
+
     /// <summary>Индексация ждёт дольше поиска: прогон картинки дороже прогона строки.</summary>
     public int TimeoutSeconds { get; set; } = 30;
 }

@@ -1,6 +1,7 @@
 ﻿using Flow.Application.Abstractions;
 using Flow.Application.Features.Search;
 using Flow.Infrastructure.Persistence;
+using Flow.Infrastructure.Search.Extraction;
 using Flow.Shared.Contracts.Search;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,7 +12,12 @@ namespace Flow.Infrastructure.Search;
 /// с контекстной шапкой для эмбеддера. Шапка в БД не дублируется — подсветка и полнотекстовый поиск
 /// идут по Content, контекст нужен только вектору.
 /// </summary>
-internal sealed class SearchSourceReader(FlowDbContext db, SearchOptions options, IFileStorage storage, ITextExtractor extractor)
+internal sealed class SearchSourceReader(
+    FlowDbContext db,
+    SearchOptions options,
+    IFileStorage storage,
+    ITextExtractor extractor,
+    PdfPageImageExtractor pdfPages)
 {
     /// <summary>null — источника больше нет (удалён, пока запись ждала в очереди): чанки просто убираются.</summary>
     public Task<SourceSnapshot?> ReadAsync(SearchSourceType sourceType, Guid sourceId, CancellationToken cancellationToken) =>
@@ -148,38 +154,55 @@ internal sealed class SearchSourceReader(FlowDbContext db, SearchOptions options
         var content = string.IsNullOrWhiteSpace(text) ? found.FileName : $"{found.FileName}\n\n{text}";
         var header = ChunkHeaderBuilder.ForAttachment(found.TaskCode.Value, found.FileName);
 
-        // Картинка идёт во вторую, визуальную половину индекса — параллельно текстовой, а не вместо неё:
+        // Кадры идут во вторую, визуальную половину индекса — параллельно текстовой, а не вместо неё:
         // по имени файла скриншот тоже должен находиться.
-        var image = await ReadImageAsync(found.StorageKey, found.ContentType, found.SizeBytes, cancellationToken);
+        var images = await ReadImagesAsync(found.StorageKey, found.FileName, found.ContentType, found.SizeBytes, text, cancellationToken);
 
-        return new SourceSnapshot(found.BoardId, isClosed, found.UploadedAt, BuildChunks(header, content), image);
+        return new SourceSnapshot(found.BoardId, isClosed, found.UploadedAt, BuildChunks(header, content), images);
     }
 
     /// <summary>
-    /// Байты картинки для визуальной модели. SVG не берём: это документ с разметкой, а не растр,
-    /// и модели он бесполезен. Крупные файлы пропускаем — прогон дорогой, а смысла в 20-мегабайтном
-    /// кадре не больше, чем в его уменьшенной копии.
+    /// Кадры для визуальной модели: сама картинка либо страницы скана. Скан — это PDF, из которого
+    /// не извлёкся текст: там, где текст есть, визуальная ветка не нужна и только тратила бы прогоны.
+    /// SVG не берём — это разметка, а не растр. Крупные файлы пропускаем: прогон дорогой, а смысла
+    /// в двадцатимегабайтном кадре не больше, чем в его уменьшенной копии.
     /// </summary>
-    private async Task<SourceImage?> ReadImageAsync(string storageKey, string contentType, long sizeBytes, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<SourceImage>> ReadImagesAsync(
+        string storageKey,
+        string fileName,
+        string contentType,
+        long sizeBytes,
+        string extractedText,
+        CancellationToken cancellationToken)
     {
         var vision = options.Embeddings.Vision;
+        if (!vision.Enabled || sizeBytes > vision.MaxBytes)
+            return [];
 
-        if (!vision.Enabled
-            || !contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
-            || contentType.Equals("image/svg+xml", StringComparison.OrdinalIgnoreCase)
-            || sizeBytes > vision.MaxBytes)
-        {
-            return null;
-        }
+        var isImage = contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                      && !contentType.Equals("image/svg+xml", StringComparison.OrdinalIgnoreCase);
+        var isScan = string.IsNullOrWhiteSpace(extractedText) && PdfPageImageExtractor.IsPdf(fileName, contentType);
+
+        if (!isImage && !isScan)
+            return [];
 
         await using var content = await storage.OpenReadAsync(storageKey, cancellationToken);
         if (content is null)
-            return null;
+            return [];
 
-        using var buffer = new MemoryStream();
-        await content.CopyToAsync(buffer, cancellationToken);
+        if (isImage)
+        {
+            using var buffer = new MemoryStream();
+            await content.CopyToAsync(buffer, cancellationToken);
+            return [new SourceImage(buffer.ToArray(), contentType, fileName)];
+        }
 
-        return new SourceImage(buffer.ToArray(), contentType);
+        var pages = await pdfPages.ExtractAsync(content, fileName, cancellationToken);
+
+        // Номер страницы виден в выдаче: у скана на несколько листов иначе непонятно, какой нашёлся.
+        return pages
+            .Select(page => new SourceImage(page.Content, page.ContentType, $"{fileName}, стр. {page.Number}"))
+            .ToArray();
     }
 
     private async Task<string> ExtractAsync(string storageKey, string fileName, string contentType, CancellationToken cancellationToken)
@@ -212,14 +235,15 @@ internal sealed class SearchSourceReader(FlowDbContext db, SearchOptions options
 internal sealed record SourceChunk(int Index, string Content, string EmbeddingInput);
 
 /// <param name="SourceUpdatedAt">Момент версии источника, с которой сняты чанки.</param>
-/// <param name="Image">Картинка вложения для визуальной половины индекса; null — индексировать нечего
-/// (не картинка, визуальная модель выключена или файл крупнее лимита).</param>
+/// <param name="Images">Кадры вложения для визуальной половины индекса: сама картинка либо страницы
+/// скана. Пусто — индексировать нечего (не картинка и не скан, модель выключена или файл велик).</param>
 internal sealed record SourceSnapshot(
     Guid? BoardId,
     bool IsClosed,
     DateTime SourceUpdatedAt,
     IReadOnlyList<SourceChunk> Chunks,
-    SourceImage? Image = null);
+    IReadOnlyList<SourceImage>? Images = null);
 
-/// <param name="Content">Байты файла — уходят в визуальную модель как есть, масштабирует она сама.</param>
-internal sealed record SourceImage(byte[] Content, string ContentType);
+/// <param name="Content">Байты кадра — уходят в визуальную модель как есть, масштабирует она сама.</param>
+/// <param name="Label">Что показать в выдаче: имя файла, а для скана — имя со страницей.</param>
+internal sealed record SourceImage(byte[] Content, string ContentType, string Label);

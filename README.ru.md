@@ -159,6 +159,9 @@ docker compose -f docker-compose.data.yml --profile ai up -d embeddings-vl   # :
 VISION_ENABLED=true docker compose up -d api
 ```
 
+Сканы тоже попадают в визуальный индекс: PDF, из которого не извлёкся текст, индексируется страницами
+(по умолчанию первыми тремя), и такой договор находится по описанию того, что на листе.
+
 Модель подаётся vLLM, а не llama.cpp: у второго эндпоинт эмбеддингов картинки игнорирует.
 Под Docker Desktop сервису нужен `VLLM_WSL2_ENABLE_PIN_MEMORY=1` — он уже прописан в compose.
 

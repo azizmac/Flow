@@ -57,6 +57,9 @@ public static class FlowSearchServiceCollectionExtensions
             provider.GetRequiredService<SearchOptions>(),
             provider.GetRequiredService<ILogger<CompositeTextExtractor>>()));
 
+        // Страницы сканов для визуальной половины: тем же PdfPig, что и текст.
+        services.AddSingleton<PdfPageImageExtractor>();
+
         services.AddScoped<SearchSourceReader>();
         services.AddScoped<SearchIndexingRunner>();
 

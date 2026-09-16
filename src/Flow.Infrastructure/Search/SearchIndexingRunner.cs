@@ -102,19 +102,20 @@ internal sealed class SearchIndexingRunner(
         }
 
         await UpsertChunksAsync(request.SourceType, request.SourceId, snapshot, cancellationToken);
-        await UpsertVisualChunkAsync(request.SourceType, request.SourceId, snapshot, cancellationToken);
+        await UpsertVisualChunksAsync(request.SourceType, request.SourceId, snapshot, cancellationToken);
     }
 
     /// <summary>
-    /// Визуальный чанк вложения — отдельная строка со своей ModelVersion: вектор картинки лежит
-    /// в другом пространстве и сравнивать его с текстовыми нельзя. Текстовый upsert его не трогает
+    /// Визуальные чанки вложения — отдельные строки со своей ModelVersion: вектор кадра лежит
+    /// в другом пространстве и сравнивать его с текстовыми нельзя. Текстовый upsert их не трогает
     /// (он фильтрует по своей версии), поэтому у картинки в индексе два представления сразу:
     /// имя файла текстом и содержимое кадра вектором.
     ///
-    /// Содержимое чанка — имя файла: оно же уходит в подсветку и в заголовок выдачи, а вектор
-    /// считается не по нему, а по самой картинке.
+    /// Кадров бывает несколько: у скана это первые страницы, каждая своим чанком со своим номером.
+    /// Содержимое чанка — подпись кадра (имя файла, у скана со страницей): она уходит в заголовок
+    /// выдачи, а вектор считается не по ней, а по самому кадру.
     /// </summary>
-    private async Task UpsertVisualChunkAsync(
+    private async Task UpsertVisualChunksAsync(
         SearchSourceType sourceType,
         Guid sourceId,
         SourceSnapshot snapshot,
@@ -126,48 +127,65 @@ internal sealed class SearchIndexingRunner(
             .Where(c => c.SourceType == sourceType && c.SourceId == sourceId && c.ModelVersion == modelVersion)
             .ToListAsync(cancellationToken);
 
-        if (snapshot.Image is not { } image || !vision.IsConfigured)
+        var images = vision.IsConfigured ? snapshot.Images ?? [] : [];
+
+        if (images.Count == 0)
         {
-            // Картинку удалили, заменили на документ или визуальную половину выключили — старый вектор
-            // в индексе оставлять нельзя, он продолжит находиться.
+            // Кадр удалили, заменили на документ с текстом или визуальную половину выключили — старые
+            // векторы в индексе оставлять нельзя, они продолжат находиться.
             db.SearchChunks.RemoveRange(existing);
             if (existing.Count > 0)
                 await db.SaveChangesAsync(cancellationToken);
             return;
         }
 
-        var hash = SHA256.HashData(image.Content);
-        var chunk = existing.FirstOrDefault();
+        var changed = false;
 
-        // Та же картинка — вектор уже посчитан: прогон визуальной модели дороже текстовой на порядок.
-        if (chunk is not null && chunk.ContentHash.AsSpan().SequenceEqual(hash))
+        for (var index = 0; index < images.Count; index++)
         {
-            chunk.IsClosed = snapshot.IsClosed;
+            var image = images[index];
+            var hash = SHA256.HashData(image.Content);
+            var chunk = existing.FirstOrDefault(c => c.ChunkIndex == index);
+
+            // Тот же кадр — вектор уже посчитан: прогон визуальной модели дороже текстовой на порядок.
+            if (chunk is not null && chunk.ContentHash.AsSpan().SequenceEqual(hash))
+            {
+                chunk.IsClosed = snapshot.IsClosed;
+                chunk.BoardId = snapshot.BoardId;
+                chunk.SourceUpdatedAt = snapshot.SourceUpdatedAt;
+                changed = true;
+                continue;
+            }
+
+            var embedding = await vision.EmbedImageAsync(image.Content, image.ContentType, cancellationToken);
+
+            chunk ??= db.SearchChunks.Add(new SearchChunk
+            {
+                SourceType = sourceType,
+                SourceId = sourceId,
+                ChunkIndex = index,
+                ModelVersion = modelVersion
+            }).Entity;
+
             chunk.BoardId = snapshot.BoardId;
+            chunk.Content = image.Label;
+            chunk.ContentHash = hash;
+            chunk.IsClosed = snapshot.IsClosed;
             chunk.SourceUpdatedAt = snapshot.SourceUpdatedAt;
-            await db.SaveChangesAsync(cancellationToken);
-            return;
+            chunk.IndexedAt = DateTime.UtcNow;
+            chunk.Embedding = ToHalfVector(embedding);
+            changed = true;
         }
 
-        var embedding = await vision.EmbedImageAsync(image.Content, image.ContentType, cancellationToken);
-
-        chunk ??= db.SearchChunks.Add(new SearchChunk
+        // Страниц стало меньше (файл заменили) — лишние чанки убираем, иначе поиск найдёт исчезнувшую.
+        foreach (var extra in existing.Where(c => c.ChunkIndex >= images.Count))
         {
-            SourceType = sourceType,
-            SourceId = sourceId,
-            ChunkIndex = 0,
-            ModelVersion = modelVersion
-        }).Entity;
+            db.SearchChunks.Remove(extra);
+            changed = true;
+        }
 
-        chunk.BoardId = snapshot.BoardId;
-        chunk.Content = snapshot.Chunks.Count > 0 ? snapshot.Chunks[0].Content : string.Empty;
-        chunk.ContentHash = hash;
-        chunk.IsClosed = snapshot.IsClosed;
-        chunk.SourceUpdatedAt = snapshot.SourceUpdatedAt;
-        chunk.IndexedAt = DateTime.UtcNow;
-        chunk.Embedding = ToHalfVector(embedding);
-
-        await db.SaveChangesAsync(cancellationToken);
+        if (changed)
+            await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>

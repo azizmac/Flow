@@ -11,6 +11,10 @@ using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
 using Flow.Shared.Contracts.Tasks;
 using Microsoft.EntityFrameworkCore;
+using UglyToad.PdfPig.Content;
+using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.Fonts.Standard14Fonts;
+using UglyToad.PdfPig.Writer;
 using Xunit;
 
 namespace Flow.Infrastructure.Tests;
@@ -27,6 +31,10 @@ public class AttachmentIndexingTests(SearchFixture fixture)
 
     /// <summary>Заголовок PNG: настоящей картинки не нужно — важно, что извлекать из неё нечего.</summary>
     private static readonly byte[] Png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4];
+
+    /// <summary>Настоящая картинка 8×8: её вставляют в страницы «скана», и PdfPig должен достать её обратно.</summary>
+    private static readonly byte[] TinyPng = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGM4oaGBFTEMLQkAgl1GAWqNFmsAAAAASUVORK5CYII=");
 
     private static int _keySuffix;
 
@@ -224,6 +232,91 @@ public class AttachmentIndexingTests(SearchFixture fixture)
         Assert.DoesNotContain(fixture.Vision.ModelVersion, versions);
         Assert.Equal(before, fixture.Vision.ImageCalls);
     }
+
+    /// <summary>
+    /// Скан: PDF без текстового слоя, страницы которого — вставленные картинки. Строится тем же PdfPig,
+    /// что и читается, поэтому тест не зависит от внешнего файла.
+    /// </summary>
+    private static byte[] ScanPdf(int pages)
+    {
+        var builder = new PdfDocumentBuilder();
+
+        for (var i = 0; i < pages; i++)
+        {
+            var page = builder.AddPage(PageSize.A4);
+            page.AddPng(TinyPng, new PdfRectangle(50, 50, 500, 700));
+        }
+
+        return builder.Build();
+    }
+
+    /// <summary>
+    /// PDF с текстовым слоем: в визуальную ветку такой попадать не должен. Текст латиницей —
+    /// у встроенных шрифтов PDF кириллицы нет, а для этой проверки язык безразличен.
+    /// </summary>
+    private static byte[] TextPdf(string text)
+    {
+        var builder = new PdfDocumentBuilder();
+        var font = builder.AddStandard14Font(Standard14Font.Helvetica);
+        var page = builder.AddPage(PageSize.A4);
+        page.AddText(text, 12, new PdfPoint(50, 700), font);
+
+        return builder.Build();
+    }
+
+    [Fact]
+    public async Task Scan_Is_Indexed_Page_By_Page()
+    {
+        var (_, task) = await CreateTaskAsync();
+        var before = fixture.Vision.ImageCalls;
+        var attachmentId = await UploadAsync(task.Id, "скан договора.pdf", ScanPdf(pages: 2));
+
+        await fixture.DrainIndexingAsync();
+
+        var visual = await VisualChunksAsync(attachmentId);
+
+        // Текста в скане нет, поэтому в визуальный индекс уходят страницы — по чанку на каждую,
+        // с номером в подписи: иначе в выдаче непонятно, какой лист нашёлся.
+        Assert.Equal(["скан договора.pdf, стр. 1", "скан договора.pdf, стр. 2"], visual);
+        Assert.Equal(before + 2, fixture.Vision.ImageCalls);
+    }
+
+    [Fact]
+    public async Task Pdf_With_Text_Does_Not_Reach_The_Image_Model()
+    {
+        var (_, task) = await CreateTaskAsync();
+        var before = fixture.Vision.ImageCalls;
+        var attachmentId = await UploadAsync(task.Id, "договор.pdf", TextPdf("Delivery terms and payment schedule"));
+
+        await fixture.DrainIndexingAsync();
+
+        // У документа с текстовым слоем есть что индексировать словами: прогон картинки был бы тратой.
+        Assert.Empty(await VisualChunksAsync(attachmentId));
+        Assert.Equal(before, fixture.Vision.ImageCalls);
+        Assert.Contains("payment schedule", Assert.Single(await ChunksAsync(attachmentId)).Content);
+    }
+
+    [Fact]
+    public async Task Scan_Longer_Than_The_Limit_Is_Cut()
+    {
+        var (_, task) = await CreateTaskAsync();
+        var attachmentId = await UploadAsync(task.Id, "толстый скан.pdf", ScanPdf(pages: 5));
+
+        await fixture.DrainIndexingAsync();
+
+        // Каждая страница — отдельный прогон модели и отдельная строка: у договора на тридцать листов
+        // ищут по первым, а не платят за весь документ.
+        Assert.Equal(3, (await VisualChunksAsync(attachmentId)).Count);
+    }
+
+    private Task<List<string>> VisualChunksAsync(Guid attachmentId) =>
+        fixture.QueryAsync(db => db.SearchChunks
+            .Where(c => c.SourceType == SearchSourceType.Attachment
+                        && c.SourceId == attachmentId
+                        && c.ModelVersion == fixture.Vision.ModelVersion)
+            .OrderBy(c => c.ChunkIndex)
+            .Select(c => c.Content)
+            .ToListAsync());
 
     private sealed record ChunkRow(string Content, bool IsClosed, Guid? BoardId);
 }

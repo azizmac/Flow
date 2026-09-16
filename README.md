@@ -159,6 +159,9 @@ docker compose -f docker-compose.data.yml --profile ai up -d embeddings-vl   # :
 VISION_ENABLED=true docker compose up -d api
 ```
 
+Scans go into the visual index too: a PDF with no extractable text is indexed page by page (the first
+three by default), so a scanned contract is found by a description of what is on the sheet.
+
 The model is served by vLLM rather than llama.cpp: the latter ignores images on its embeddings
 endpoint. Under Docker Desktop the service needs `VLLM_WSL2_ENABLE_PIN_MEMORY=1`, already set in compose.
 
