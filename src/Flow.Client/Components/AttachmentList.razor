@@ -55,7 +55,7 @@
                 }
                 @if (CanDelete(item))
                 {
-                    <button type="button" class="icon-lnk danger" title="Удалить" @onclick="() => _deleting = item">
+                    <button type="button" class="icon-lnk danger" title="Удалить" @onclick="() => StartDelete(item)">
                         <Icon Name="trash" Size="13" />
                     </button>
                 }
@@ -66,9 +66,7 @@
 
 @if (_deleting is not null)
 {
-    <ConfirmDialog Title="Удалить файл?"
-                   Text="@($"«{_deleting.FileName}» будет удалён без возможности восстановления.")"
-                   OnConfirm="ConfirmDelete" OnCancel="() => _deleting = null" />
+    <ConfirmDialog Title="Удалить файл?" Text="@DeleteWarning" OnConfirm="ConfirmDelete" OnCancel="() => _deleting = null" />
 }
 
 @code {
@@ -93,6 +91,12 @@
     private Guid _loadedTaskId;
     private Guid? _downloading;
     private AttachmentResponse? _deleting;
+    private bool _deletingIsMentioned;
+
+    private string DeleteWarning => _deleting is null
+        ? string.Empty
+        : $"«{_deleting.FileName}» будет удалён без возможности восстановления."
+          + (_deletingIsMentioned ? " Файл упомянут в тексте — ссылка на него перестанет работать." : string.Empty);
 
     private UserResponse? Me => Users.Find(State.CurrentUserId);
 
@@ -201,6 +205,35 @@
 
         if (!await Browser.SaveFileAsync(item.FileName, content.Value!.ContentType, content.Value.Bytes))
             Toasts.Error("Браузер не дал сохранить файл");
+    }
+
+    /// <summary>
+    /// Перед удалением смотрим, не ссылается ли на файл описание или комментарий: чужие тексты мы
+    /// не правим (ТЗ), поэтому единственное, что остаётся, — предупредить. Проверка по требованию,
+    /// а не заранее: тексты нужны один раз и только тому, кто действительно нажал «удалить».
+    /// </summary>
+    private async Task StartDelete(AttachmentResponse item)
+    {
+        _deleting = item;
+        _deletingIsMentioned = false;
+        StateHasChanged();
+
+        var mention = $"attachment:{item.Id}";
+
+        var task = await Api.GetTask(TaskId);
+        if (task.Ok && task.Value!.Description?.Contains(mention, StringComparison.OrdinalIgnoreCase) == true)
+        {
+            _deletingIsMentioned = true;
+            StateHasChanged();
+            return;
+        }
+
+        var comments = await Api.GetComments(TaskId);
+        if (comments.Ok && comments.Value!.Any(c => c.Body.Contains(mention, StringComparison.OrdinalIgnoreCase)))
+        {
+            _deletingIsMentioned = true;
+            StateHasChanged();
+        }
     }
 
     private async Task ConfirmDelete()
