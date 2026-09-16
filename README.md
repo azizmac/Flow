@@ -122,48 +122,73 @@ docker compose -f docker-compose.data.yml --profile backup run --rm backup \
 
 ### Search: index and embeddings
 
-Hybrid search over tasks, comments, projects and people (`docs/TZ_search_vector.md`): vectors plus full text,
-merged with RRF. On by default; `SEARCH_ENABLED=false` restores the previous behaviour. Postgres runs the
-`pgvector/pgvector:pg16` image (same data, same volumes); the `vector` extension is installed by a migration.
+Hybrid search over tasks, comments, projects, people and the contents of attachments
+(`docs/TZ_search_vector.md`): vectors plus full text, merged with RRF, with highlighting. Postgres runs
+the `pgvector/pgvector:pg16` image (same data, same volumes); the `vector` extension comes with a migration.
 
-Turning it on needs an embedding model. It lives in the data stack under the `ai` profile — a `llama-server`
-sidecar with `Qwen3-Embedding-0.6B`; weights go into the external `flow-models-data` volume (file name from
-`EMBEDDINGS_MODEL_FILE`, volume location from `MODELS_ROOT`):
+Three models, each a separate service of the `ai` profile in the data stack:
+
+| Model | What it adds | Port | Hardware |
+|---|---|---|---|
+| `Qwen3-Embedding-0.6B` (llama.cpp) | search by meaning rather than by substring | 8081 | CPU is enough |
+| `bge-reranker-v2-m3` (llama.cpp CUDA) | the second ranking stage, the "Точнее" toggle | 8082 | needs a GPU |
+| `Qwen3-VL-Embedding-2B` (vLLM) | search over images and scans, no OCR | 8083 | needs a GPU |
+
+From scratch on a new machine:
 
 ```bash
-docker compose -f docker-compose.data.yml --profile ai up -d   # embedder on :8081
-SEARCH_ENABLED=true docker compose up -d                        # API with indexing on
+sh docker/data/init-env.sh                                      # network and volumes, once
+docker compose -f docker-compose.data.yml up -d                 # data
+sh docker/data/pull-models.sh                                   # embedder and reranker weights, ~1.2 GB
+docker compose -f docker-compose.data.yml --profile ai up -d    # the models
+cp .env.example .env                                            # then set the flags, see below
+docker compose up -d --build                                    # the application
 ```
 
-If the model runs on another machine (a GPU box, say), skip the `ai` profile and point
+The same steps on Windows, via `init-env.ps1` and `pull-models.ps1`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File docker/data/init-env.ps1
+powershell -ExecutionPolicy Bypass -File docker/data/pull-models.ps1
+```
+
+Weights are the only thing that does not ship with the images: `pull-models.sh` puts two GGUF files into
+the `flow-models-data` volume (names must match `EMBEDDINGS_MODEL_FILE` and `RERANKER_MODEL_FILE`), skips
+what is already there and re-downloads with `--force`. The third model needs no download: vLLM pulls
+`Qwen/Qwen3-VL-Embedding-2B` itself on first start into `/models/hf` — another 4 GB or so, and a few
+minutes before the first answer. `MODELS_ROOT` picks the volume location: weights usually live away from
+the data, since they are not backed up and get reused between installations.
+
+Flags belong in `.env`, not in a command prefix: a prefix lasts for one run, and `docker compose up -d`
+recreates the `api` container — the setting silently falls back to its default.
+
+| Flag | Default | What it turns off |
+|---|---|---|
+| `SEARCH_ENABLED` | `true` | search entirely: no endpoints, no queue, no worker |
+| `EMBEDDINGS_ENABLED` | `true` | **smart search**: no vectors, no images, no reranker — words only |
+| `VISION_ENABLED` | `false` | the visual half (images and scans) |
+| `RERANK_ENABLED` | `false` | the second stage and the "Точнее" toggle |
+
+After the first start the index has to be filled once — `POST /search/reindex` as Owner; after that it
+maintains itself.
+
+No GPU: leave `VISION_ENABLED` and `RERANK_ENABLED` at `false` and pull the embedder only
+(`sh docker/data/pull-models.sh embeddings`) — search stays hybrid, just without images and the second
+stage. No models at all: `EMBEDDINGS_ENABLED=false` — search works by words, indexing keeps writing chunks
+without vectors, and once a model shows up Flow.Api queues those sources on startup and the vectors fill
+in. If the model runs on another machine, skip the `ai` profile entirely and point
 `EMBEDDINGS_QUERY_ENDPOINT` and `EMBEDDINGS_INDEXING_ENDPOINT` at it.
 
-The second ranking stage — a reranker — is off by default and needs a GPU: the `bge-reranker-v2-m3`
-cross-encoder reorders the first page, telling "export crashes" apart from "add CSV export". Turn it on
-together with the service and the "Точнее" toggle on the search page:
+The second stage tells "export crashes" apart from "add CSV export": a cross-encoder reorders the first
+page of results, adding about a second to the request. The first request after the service starts is
+slower than the rest — the model is warming up.
 
-```bash
-docker compose -f docker-compose.data.yml --profile ai up -d reranker   # :8082, needs a GPU
-RERANK_ENABLED=true docker compose up -d api
-```
-
-The first request after the service starts is slower than the rest — the model is warming up.
-
-Visual search over images is behind a flag and needs the GPU too: `Qwen3-VL-Embedding-2B` puts the
-frame and the query text into one space, so a screenshot is found by a description of what is on it,
-without OCR. An image gets a second chunk in the index under its own model version, and a query
-searches both halves at once:
-
-```bash
-docker compose -f docker-compose.data.yml --profile ai up -d embeddings-vl   # :8083, needs a GPU
-VISION_ENABLED=true docker compose up -d api
-```
-
-Scans go into the visual index too: a PDF with no extractable text is indexed page by page (the first
-three by default), so a scanned contract is found by a description of what is on the sheet.
-
-The model is served by vLLM rather than llama.cpp: the latter ignores images on its embeddings
-endpoint. Under Docker Desktop the service needs `VLLM_WSL2_ENABLE_PIN_MEMORY=1`, already set in compose.
+The visual half puts the frame and the query text into one space, so a screenshot is found by a
+description of what is on it, without OCR. An image gets a second chunk under its own model version, and a
+query searches both halves at once. Scans go there too: a PDF with no extractable text is indexed page by
+page (the first three by default). The model is served by vLLM rather than llama.cpp: the latter ignores
+images on its embeddings endpoint. Under Docker Desktop the service needs `VLLM_WSL2_ENABLE_PIN_MEMORY=1`,
+already set in compose.
 
 After that the index fills itself: every edit of a task, comment, project or person is queued in the same
 transaction as the edit, and a background worker computes the vectors. Endpoints:

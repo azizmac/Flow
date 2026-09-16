@@ -55,4 +55,5 @@ create_volume "$MODELS_VOLUME" "${MODELS_ROOT:-${DATA_ROOT:+$DATA_ROOT/models}}"
 echo
 echo "Готово. Дальше:"
 echo "  docker compose -f docker-compose.data.yml up -d"
+echo "  sh docker/data/pull-models.sh                      # веса моделей поиска (профиль ai)"
 echo "  docker compose up -d --build"
