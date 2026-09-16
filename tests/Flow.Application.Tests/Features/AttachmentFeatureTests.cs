@@ -1,11 +1,13 @@
-using System.Text;
+﻿using System.Text;
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Attachments.Commands.AttachmentDeleteCommand;
 using Flow.Application.Features.Attachments.Commands.AttachmentUploadCommand;
 using Flow.Application.Features.Attachments.Queries.AttachmentContentQuery;
 using Flow.Application.Features.Attachments.Queries.AttachmentListQuery;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
+using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Application.Tests.Fakes;
 using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Tasks;
@@ -319,5 +321,50 @@ public class AttachmentFeatureTests
         await context.Storage.DeleteAsync(attachment.StorageKey, CancellationToken.None);
 
         Assert.Null(await context.Mediator.Send(new AttachmentContentQuery(uploaded.Id), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Deleting_Task_Takes_Its_Objects_With_It()
+    {
+        var context = TestMediatorFactory.CreateAttachmentContext();
+        var task = await CreateTaskAsync(context);
+        await UploadAsync(context, task.Id, "смета.xlsx", Encoding.UTF8.GetBytes("1"));
+        await UploadAsync(context, task.Id, "договор.pdf", Encoding.UTF8.GetBytes("2"));
+
+        await context.Mediator.Send(new TaskDeleteCommand(Owner, task.Id), CancellationToken.None);
+
+        // Строки уносит каскад БД, объекты — хендлер: иначе бакет копил бы файлы удалённых задач.
+        Assert.Empty(context.Storage.Objects);
+        Assert.Equal([$"attachments/{task.BoardId}/{task.Id}/"], context.Storage.PrefixDeletes);
+    }
+
+    [Fact]
+    public async Task Deleting_Task_Without_Attachments_Does_Not_Touch_Storage()
+    {
+        var context = TestMediatorFactory.CreateAttachmentContext();
+        var task = await CreateTaskAsync(context);
+
+        await context.Mediator.Send(new TaskDeleteCommand(Owner, task.Id), CancellationToken.None);
+
+        // Задач без файлов большинство: лишний поход в хранилище на каждом удалении не нужен.
+        Assert.Empty(context.Storage.PrefixDeletes);
+    }
+
+    [Fact]
+    public async Task Deleting_Board_Takes_Objects_Of_All_Its_Tasks()
+    {
+        var context = TestMediatorFactory.CreateAttachmentContext();
+        var board = (await context.Mediator.Send(new BoardCreateCommand(Owner, "Flow", "FLW"), CancellationToken.None)).Response!;
+        context.Tasks.RegisterBoardStatuses((await context.Boards.GetByIdAsync(board.Id, CancellationToken.None))!);
+        var first = (await context.Mediator.Send(new TaskCreateCommand(Owner, board.Id, "Первая", null, null), CancellationToken.None))!;
+        var second = (await context.Mediator.Send(new TaskCreateCommand(Owner, board.Id, "Вторая", null, null), CancellationToken.None))!;
+        await UploadAsync(context, first.Id, "первый.txt", Encoding.UTF8.GetBytes("1"));
+        await UploadAsync(context, second.Id, "второй.txt", Encoding.UTF8.GetBytes("2"));
+
+        await context.Mediator.Send(new BoardDeleteCommand(Owner, board.Id), CancellationToken.None);
+
+        // Один префикс на весь проект: перебирать его задачи ради удаления файлов незачем.
+        Assert.Empty(context.Storage.Objects);
+        Assert.Equal([$"attachments/{board.Id}/"], context.Storage.PrefixDeletes);
     }
 }

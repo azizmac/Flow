@@ -1,4 +1,4 @@
-using Flow.Domain.Entities;
+﻿using Flow.Domain.Entities;
 using Xunit;
 
 namespace Flow.Domain.Tests;
@@ -21,6 +21,20 @@ public class AttachmentTests
         // Имя файла в ключ не попадает: кириллица, пробелы и «../» сделали бы ключ ненадёжным.
         Assert.Equal($"attachments/{boardId}/{taskId}/{attachment.Id}.pdf", attachment.StorageKey);
         Assert.Equal("Отчёт за квартал.pdf", attachment.FileName);
+    }
+
+    [Fact]
+    public void Prefixes_Should_MatchTheKey()
+    {
+        var taskId = Guid.NewGuid();
+        var boardId = Guid.NewGuid();
+
+        var attachment = Attachment.Create(taskId, boardId, "макет.pdf", "application/pdf", 10, Hash, Guid.NewGuid());
+
+        // По этим префиксам удаляются объекты при удалении задачи и проекта: разойдись они с ключом —
+        // каскад молча оставлял бы файлы в бакете.
+        Assert.StartsWith(Attachment.BoardPrefix(boardId), attachment.StorageKey);
+        Assert.StartsWith(Attachment.TaskPrefix(boardId, taskId), attachment.StorageKey);
     }
 
     [Fact]

@@ -37,6 +37,9 @@ public sealed class InMemoryFileStorage : IFileStorage
 
     public IReadOnlyDictionary<string, byte[]> Objects => _objects;
 
+    /// <summary>Префиксы, по которым просили удалить: каскад должен ходить в хранилище только когда есть что уносить.</summary>
+    public List<string> PrefixDeletes { get; } = [];
+
     /// <summary>Выставить, чтобы проверить откат: объект в бакете есть, а строки не будет.</summary>
     public bool FailOnPut { get; set; }
 
@@ -61,6 +64,8 @@ public sealed class InMemoryFileStorage : IFileStorage
 
     public Task DeleteByPrefixAsync(string prefix, CancellationToken cancellationToken)
     {
+        PrefixDeletes.Add(prefix);
+
         foreach (var key in _objects.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)).ToList())
             _objects.Remove(key);
 

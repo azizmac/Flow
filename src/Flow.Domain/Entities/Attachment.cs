@@ -89,11 +89,17 @@ public sealed class Attachment
     /// сводится к удалению префикса. Имя файла в ключ не попадает — кириллица, пробелы и «../» в нём
     /// сделали бы ключ ненадёжным.
     /// </summary>
-    private static string BuildKey(Guid boardId, Guid taskId, Guid id, string fileName)
-    {
-        var extension = Extension(fileName);
-        return $"attachments/{boardId}/{taskId}/{id}{extension}";
-    }
+    private static string BuildKey(Guid boardId, Guid taskId, Guid id, string fileName) =>
+        TaskPrefix(boardId, taskId) + id + Extension(fileName);
+
+    /// <summary>Все файлы проекта: по этому префиксу объекты уходят, когда удаляют проект целиком.</summary>
+    public static string BoardPrefix(Guid boardId) => $"attachments/{boardId}/";
+
+    /// <summary>
+    /// Все файлы задачи. Каскад по префиксу, а не по списку ключей: заодно уносит мусор от загрузок,
+    /// у которых объект доехал, а транзакция не прошла.
+    /// </summary>
+    public static string TaskPrefix(Guid boardId, Guid taskId) => $"{BoardPrefix(boardId)}{taskId}/";
 
     /// <summary>Расширение из имени: не длиннее 16 символов и только буквы с цифрами, иначе ключ не получает его вовсе.</summary>
     private static string Extension(string fileName)

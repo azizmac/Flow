@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Flow.Application.Features.Attachments.Commands.AttachmentUploadCommand;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
@@ -55,7 +55,7 @@ public class AttachmentPersistenceTests(PostgresFixture fixture)
     [Fact]
     public async Task Deleting_Task_Cascades_To_Attachments()
     {
-        var (_, task) = await CreateTaskAsync();
+        var (boardId, task) = await CreateTaskAsync();
         await UploadAsync(task.Id, "первый.txt", "1");
         await UploadAsync(task.Id, "второй.txt", "2");
 
@@ -63,6 +63,8 @@ public class AttachmentPersistenceTests(PostgresFixture fixture)
 
         var left = await fixture.QueryAsync(db => db.Attachments.CountAsync(a => a.TaskId == task.Id));
         Assert.Equal(0, left);
+        // Каскад БД уносит строки, объекты удаляет хендлер — иначе файлы пережили бы свою задачу.
+        Assert.DoesNotContain(fixture.Storage.Objects.Keys, key => key.StartsWith($"attachments/{boardId}/{task.Id}/", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -75,6 +77,7 @@ public class AttachmentPersistenceTests(PostgresFixture fixture)
 
         var left = await fixture.QueryAsync(db => db.Attachments.CountAsync(a => a.BoardId == boardId));
         Assert.Equal(0, left);
+        Assert.DoesNotContain(fixture.Storage.Objects.Keys, key => key.StartsWith($"attachments/{boardId}/", StringComparison.Ordinal));
     }
 
     [Fact]
