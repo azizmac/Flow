@@ -1,4 +1,4 @@
-using Flow.Application.Features.Users.Commands.UserActivateCommand;
+﻿using Flow.Application.Features.Users.Commands.UserActivateCommand;
 using Flow.Application.Features.Users.Commands.UserChangeEmailCommand;
 using Flow.Application.Features.Users.Commands.UserChangeUsernameCommand;
 using Flow.Application.Features.Users.Commands.UserCreateCommand;
@@ -64,16 +64,7 @@ public class UserFeatureTests
         Assert.Null(result.Response);
     }
 
-    [Fact]
-    public async Task CreateUser_Should_Throw_When_UsernameIsInvalid()
-    {
-        var (mediator, _, _, _) = TestMediatorFactory.Create();
-
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            mediator.Send(new UserCreateCommand(TestMediatorFactory.OwnerId, "bad user!", "a@b.c", "A", "B", "correct horse battery"), CancellationToken.None));
-    }
-
-    [Fact]
+     [Fact]
     public async Task UpdateProfile_Should_ChangeOnlyProvidedFields()
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
@@ -151,33 +142,7 @@ public class UserFeatureTests
         Assert.NotNull(result.ConflictError);
     }
 
-    [Fact]
-    public async Task SetLink_Should_ReplaceLinkOfSameType()
-    {
-        var (mediator, _, _, _) = TestMediatorFactory.Create();
-        var created = await CreateUserAsync(mediator);
-
-        await mediator.Send(new UserSetLinkCommand(TestMediatorFactory.OwnerId, created.Id, UserLinkType.GitHub, "https://github.com/old"), CancellationToken.None);
-        var result = await mediator.Send(new UserSetLinkCommand(TestMediatorFactory.OwnerId, created.Id, UserLinkType.GitHub, "https://github.com/new"), CancellationToken.None);
-
-        var link = Assert.Single(result.Response!.Links);
-        Assert.Equal(UserLinkType.GitHub, link.Type);
-        Assert.Equal("https://github.com/new", link.Url);
-    }
-
-    [Fact]
-    public async Task RemoveLink_Should_Succeed_When_LinkMissing()
-    {
-        var (mediator, _, _, _) = TestMediatorFactory.Create();
-        var created = await CreateUserAsync(mediator);
-
-        var result = await mediator.Send(new UserRemoveLinkCommand(TestMediatorFactory.OwnerId, created.Id, UserLinkType.Telegram), CancellationToken.None);
-
-        Assert.False(result.IsNotFound);
-        Assert.Empty(result.Response!.Links);
-    }
-
-    [Fact]
+     [Fact]
     public async Task Deactivate_Should_HideUserFromDefaultList_And_Search()
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();

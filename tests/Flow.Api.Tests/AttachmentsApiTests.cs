@@ -104,40 +104,27 @@ public sealed class AttachmentsApiTests(ApiFixture api)
         Assert.Equal("attachment", inlineHtml.Content.Headers.ContentDisposition!.DispositionType);
     }
 
+    /// <summary>
+    /// Отказы хендлера в кодах HTTP. Сами правила — лимиты, дубли, запрещённые расширения — проверяются
+    /// на фейках в Flow.Application.Tests; здесь важно только то, чего там нет: во что они превращаются
+    /// на проводе.
+    /// </summary>
     [Fact]
-    public async Task Duplicate_Is_Conflict()
+    public async Task Rejections_Map_To_Status_Codes()
     {
         using var client = api.CreateClientAs();
         var task = await CreateTaskAsync(client);
         var bytes = Encoding.UTF8.GetBytes("одинаковое содержимое");
 
         using var first = await UploadAsync(client, task.Id, bytes, "первый.txt");
-        using var second = await UploadAsync(client, task.Id, bytes, "второй.txt");
+        using var duplicate = await UploadAsync(client, task.Id, bytes, "второй.txt");
+        using var blocked = await UploadAsync(client, task.Id, [1, 2, 3], "установщик.exe");
+        using var empty = await UploadAsync(client, task.Id, [], "пустой.txt");
 
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
-    }
-
-    [Fact]
-    public async Task Blocked_Extension_Is_Bad_Request()
-    {
-        using var client = api.CreateClientAs();
-        var task = await CreateTaskAsync(client);
-
-        using var response = await UploadAsync(client, task.Id, [1, 2, 3], "установщик.exe");
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task Empty_File_Is_Bad_Request()
-    {
-        using var client = api.CreateClientAs();
-        var task = await CreateTaskAsync(client);
-
-        using var response = await UploadAsync(client, task.Id, [], "пустой.txt");
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
     }
 
     [Fact]

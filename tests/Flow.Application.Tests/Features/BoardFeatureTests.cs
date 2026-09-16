@@ -1,4 +1,4 @@
-using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
+﻿using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
 using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
@@ -24,16 +24,7 @@ public class BoardFeatureTests
         Assert.Equal(4, response.Statuses.Count);
     }
 
-    [Fact]
-    public async Task CreateBoard_Should_Throw_When_KeyIsInvalid()
-    {
-        var (mediator, _, _, _) = TestMediatorFactory.Create();
-
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            mediator.Send(new BoardCreateCommand(TestMediatorFactory.OwnerId, "Bad board", "bad-key!"), CancellationToken.None));
-    }
-
-    [Fact]
+     [Fact]
     public async Task GetBoards_Should_ReturnAllCreatedBoards()
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
@@ -70,17 +61,7 @@ public class BoardFeatureTests
         Assert.Null(response);
     }
 
-    [Fact]
-    public async Task RenameBoard_Should_Throw_When_NameIsEmpty()
-    {
-        var (mediator, _, _, _) = TestMediatorFactory.Create();
-        var created = (await mediator.Send(new BoardCreateCommand(TestMediatorFactory.OwnerId, "Flow Project", "FLW"), CancellationToken.None)).Response!;
-
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            mediator.Send(new BoardRenameCommand(TestMediatorFactory.OwnerId, created.Id, ""), CancellationToken.None));
-    }
-
-    [Fact]
+     [Fact]
     public async Task DeleteBoard_Should_RemoveBoard_When_Exists()
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();

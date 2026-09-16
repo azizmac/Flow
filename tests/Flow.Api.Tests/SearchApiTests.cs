@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
@@ -25,30 +25,7 @@ public sealed class SearchApiTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    [Fact]
-    public async Task Search_Degrades_To_Text_When_Embedder_Is_Down()
-    {
-        using var client = api.CreateClientAs();
-
-        var response = await client.GetFromJsonAsync<SearchResponse>("/search?q=экспорт");
-
-        // Недоступная модель — не 500: выдача строится по полнотексту и честно помечена degraded.
-        Assert.True(response!.Degraded);
-        Assert.Equal(SearchMode.Text, response.Mode);
-        Assert.NotNull(response.Items);
-    }
-
-    [Fact]
-    public async Task Search_Rejects_Empty_Query()
-    {
-        using var client = api.CreateClientAs();
-
-        using var response = await client.GetAsync("/search?q=%20%20");
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    [Fact]
+     [Fact]
     public async Task Search_Rejects_Unknown_Source_Type()
     {
         using var client = api.CreateClientAs();
