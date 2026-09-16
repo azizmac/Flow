@@ -49,6 +49,12 @@ window.flow = (function () {
         return !!types && Array.prototype.indexOf.call(types, 'Files') >= 0;
     }
 
+    // Файл, брошенный мимо зоны приёма, браузер открывает вместо страницы — а вместе с ней теряется
+    // и недописанный комментарий. Отменяем такое перетаскивание: зоны свои события уже разобрали.
+    // Перетаскивание текста (выделение внутри редактора) не трогаем — там нет Files.
+    document.addEventListener('dragover', function (e) { if (draggingFiles(e)) e.preventDefault(); });
+    document.addEventListener('drop', function (e) { if (draggingFiles(e)) e.preventDefault(); });
+
     // Открытый модальный слой: поповер обрабатывает Tab сам, поэтому здесь только дровер и модалка.
     function openLayer() {
         return document.querySelector('.modal') || document.querySelector('.drawer.in');
