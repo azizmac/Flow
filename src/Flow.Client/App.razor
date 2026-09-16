@@ -1,6 +1,13 @@
 @* Все страницы закрыты ([Authorize] в _Imports.razor), кроме /authentication/{action}. Без сессии — на вход в Flow.Auth.
    Authorizing/NotAuthorized AuthorizeRouteView сам оборачивает в DefaultLayout (MainLayout), поэтому Sidebar там
    показывается только для аутентифицированных (AuthorizeView в MainLayout). *@
+@* Провайдеры MudBlazor поднимаются выше роутера: слои (поповеры, диалоги, снекбары) не должны
+   пересоздаваться при переходе между страницами. Тема всегда тёмная — светлой палитры у Flow нет. *@
+<MudThemeProvider Theme="@FlowTheme.Instance" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider CloseOnEscapeKey="true" />
+<MudSnackbarProvider />
+
 <CascadingAuthenticationState>
     <Router AppAssembly="@typeof(App).Assembly">
         <Found Context="routeData">

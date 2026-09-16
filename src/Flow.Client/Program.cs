@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using MudBlazor.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -38,6 +39,9 @@ builder.Services.AddScoped(sp => new FlowAuthorizationMessageHandler(
 builder.Services.AddHttpClient("FlowApi", client => client.BaseAddress = new Uri(apiBaseUrl))
     .AddHttpMessageHandler<FlowAuthorizationMessageHandler>();
 builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("FlowApi"));
+
+// UI-кит: поповеры, диалоги, снекбары, MudDataGrid. Тема — Services/FlowTheme.cs, провайдеры — App.razor.
+builder.Services.AddMudServices();
 
 builder.Services.AddScoped<FlowApi>();
 builder.Services.AddScoped<UserDirectory>();
