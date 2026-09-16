@@ -45,11 +45,9 @@
 </div>
 
 <div class="content no-scroll">
-    @if (_loading)
-    {
-        <Skeleton Kind="rows" Count="5" />
-    }
-    else if (_notFound)
+    @* Ветки «загрузка» здесь нет намеренно: данные запрашивает сама таблица (ServerData), и пока её нет
+       в разметке, запрос не начнётся. Состояние загрузки показывает сам грид (Loading + LoadingContent). *@
+    @if (_notFound)
     {
         <div class="empty">
             <div class="empty-title">Проект не найден</div>
@@ -88,18 +86,28 @@
             </div>
         </div>
 
+        @* Страницу и размер страницы, как и сортировку, ведём сами: встроенные переключатели таблицы в
+           серверном режиме меняют только подписи пейджера, а повторный запрос не делают. *@
         <MudDataGrid @ref="_grid" T="TaskResponse" ServerData="LoadTasks" Class="flow-grid panel"
-                     Dense="true" Hover="true" Elevation="0" SortMode="SortMode.Single" RowsPerPage="PageSize"
+                     Dense="true" Hover="true" Elevation="0" SortMode="SortMode.None"
+                     CurrentPage="_page" CurrentPageChanged="OnPageChanged"
+                     RowsPerPage="_pageSize" RowsPerPageChanged="OnPageSizeChanged"
                      RowClass="task-row" RowClassFunc="RowClass" RowClick="@(args => OpenTask(args.Item))" Loading="_loading">
             <Columns>
-                <PropertyColumn T="TaskResponse" TProperty="string" Property="t => t.Code" Title="Код" CellClass="code">
+                <PropertyColumn T="TaskResponse" TProperty="string" Property="t => t.Code" Title="Код" CellClass="code" Sortable="false">
+                    <HeaderTemplate>
+                        <SortHeader Field="TaskSortField.Code" Current="_sortField" Descending="_sortDescending" OnSort="SortBy">Код</SortHeader>
+                    </HeaderTemplate>
                     <CellTemplate>
                         @* Якорь строки: по нему листаются задачи стрелками и подсвечивается новая. *@
                         <span id="@TaskAnchorId(context.Item.Id)">@context.Item.Code</span>
                     </CellTemplate>
                 </PropertyColumn>
 
-                <PropertyColumn T="TaskResponse" TProperty="string" Property="t => t.Title" Title="Задача" CellClass="task-cell-title">
+                <PropertyColumn T="TaskResponse" TProperty="string" Property="t => t.Title" Title="Задача" CellClass="task-cell-title" Sortable="false">
+                    <HeaderTemplate>
+                        <SortHeader Field="TaskSortField.Title" Current="_sortField" Descending="_sortDescending" OnSort="SortBy">Задача</SortHeader>
+                    </HeaderTemplate>
                     <CellTemplate>
                         <div class="task-title">
                             @if (_renamingId == context.Item.Id)
@@ -134,14 +142,20 @@
                     </CellTemplate>
                 </PropertyColumn>
 
-                <PropertyColumn T="TaskResponse" TProperty="Guid?" Property="t => t.AssigneeId" Title="Кто">
+                <PropertyColumn T="TaskResponse" TProperty="Guid?" Property="t => t.AssigneeId" Title="Кто" Sortable="false">
+                    <HeaderTemplate>
+                        <SortHeader Field="TaskSortField.Assignee" Current="_sortField" Descending="_sortDescending" OnSort="SortBy">Кто</SortHeader>
+                    </HeaderTemplate>
                     <CellTemplate>
                         <AssigneeSelect Compact="true" Value="context.Item.AssigneeId" Disabled="!Permissions.CanAssign(Me, context.Item)"
                                         OnlyUserId="OnlyAssigneeId" OnChange="id => AssignTask((context.Item, id))" />
                     </CellTemplate>
                 </PropertyColumn>
 
-                <PropertyColumn T="TaskResponse" TProperty="Guid" Property="t => t.StatusId" Title="Статус">
+                <PropertyColumn T="TaskResponse" TProperty="Guid" Property="t => t.StatusId" Title="Статус" Sortable="false">
+                    <HeaderTemplate>
+                        <SortHeader Field="TaskSortField.Status" Current="_sortField" Descending="_sortDescending" OnSort="SortBy">Статус</SortHeader>
+                    </HeaderTemplate>
                     <CellTemplate>
                         @if (Permissions.CanEditTask(Me, context.Item))
                         {
@@ -156,7 +170,10 @@
                     </CellTemplate>
                 </PropertyColumn>
 
-                <PropertyColumn T="TaskResponse" TProperty="DateTime" Property="t => t.CreatedAt" Title="Создана" CellClass="task-date">
+                <PropertyColumn T="TaskResponse" TProperty="DateTime" Property="t => t.CreatedAt" Title="Создана" CellClass="task-date" Sortable="false">
+                    <HeaderTemplate>
+                        <SortHeader Field="TaskSortField.Created" Current="_sortField" Descending="_sortDescending" OnSort="SortBy">Создана</SortHeader>
+                    </HeaderTemplate>
                     <CellTemplate>
                         <span title="@Ru.DateTimeFull(context.Item.CreatedAt)">@Ru.DateShort(context.Item.CreatedAt)</span>
                     </CellTemplate>
@@ -171,6 +188,9 @@
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>
+            <LoadingContent>
+                <Skeleton Kind="rows" Count="5" />
+            </LoadingContent>
             <NoRecordsContent>
                 <div class="empty">
                     @if (HasFilters)
@@ -242,6 +262,10 @@
     [SupplyParameterFromQuery(Name = "who")] public string? Who { get; set; }
 
     private MudDataGrid<TaskResponse>? _grid;
+    private TaskSortField _sortField = TaskSortField.Created;
+    private bool _sortDescending = true;
+    private int _page;
+    private int _pageSize = PageSize;
     private List<BoardResponse> _boards = [];
     private bool _boardsLoading = true;
     private List<TaskResponse> _tasks = [];
@@ -356,6 +380,10 @@
             return;
         }
 
+        // Первый заход: таблица ещё не смонтирована и запросит данные сама, когда появится.
+        // Фильтры сменились — показываем первую страницу отбора.
+        _page = 0;
+
         if (_grid is null)
             return;
 
@@ -372,15 +400,10 @@
         if (_notFound)
             return new GridData<TaskResponse> { Items = [], TotalItems = 0 };
 
-        var sort = state.SortDefinitions.FirstOrDefault();
-        var field = SortField(sort?.SortBy);
-        // Без явной сортировки список идёт как раньше — новые сверху.
-        var descending = sort?.Descending ?? field == TaskSortField.Created;
-
         _loading = true;
         var result = await Api.SearchTasks(
             BoardId, AssigneeFilterId, Who == "none", StatusId, BoardId is null ? TypeFilter : null, _search,
-            limit: state.PageSize, offset: state.Page * state.PageSize, sort: field, descending: descending,
+            limit: _pageSize, offset: _page * _pageSize, sort: _sortField, descending: _sortDescending,
             ct: cancellationToken);
         _loading = false;
 
@@ -404,16 +427,47 @@
         return new GridData<TaskResponse> { Items = page.Items, TotalItems = page.Matched };
     }
 
-    /// <summary>Имя свойства из колонки таблицы → поле сортировки API.</summary>
-    private static TaskSortField SortField(string? sortBy) => sortBy switch
+    /// <summary>
+    /// Клик по заголовку колонки. Сортировку ведём сами, а не встроенным механизмом таблицы: в серверном
+    /// режиме её переключатель меняет только вид заголовка и повторного запроса не делает, поэтому колонки
+    /// объявлены Sortable="false", а заголовки — свои (Components/SortHeader.razor).
+    /// Первый клик по колонке — по возрастанию (по дате — от новых), повторный разворачивает.
+    /// </summary>
+    private async Task SortBy(TaskSortField field)
     {
-        nameof(TaskResponse.Code) => TaskSortField.Code,
-        nameof(TaskResponse.Title) => TaskSortField.Title,
-        nameof(TaskResponse.StatusId) => TaskSortField.Status,
-        nameof(TaskResponse.AssigneeId) => TaskSortField.Assignee,
-        nameof(TaskResponse.DueDate) => TaskSortField.Due,
-        _ => TaskSortField.Created
-    };
+        if (_sortField == field)
+        {
+            _sortDescending = !_sortDescending;
+        }
+        else
+        {
+            _sortField = field;
+            _sortDescending = field == TaskSortField.Created;
+        }
+
+        // Порядок сменился — первая страница нового порядка, иначе остались бы на «странице 3» другого списка.
+        _page = 0;
+        await Reload();
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _page = page;
+        await Reload();
+    }
+
+    private async Task OnPageSizeChanged(int size)
+    {
+        _pageSize = size;
+        _page = 0;
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        if (_grid is not null)
+            await _grid.ReloadServerData();
+    }
 
     private string RowClass(TaskResponse task, int _)
     {

@@ -59,8 +59,10 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
 
         IOrderedQueryable<TaskItem> ordered = filter.Sort switch
         {
-            TaskSortField.Code => Order(query, t => db.Boards.Where(b => b.Id == t.BoardId).Select(b => b.Key).FirstOrDefault(), desc)
-                .ThenBy(t => t.CreatedAt),
+            // Внутри проекта разворачиваем и номера: при обратной сортировке ожидается WEB-9, WEB-8, …
+            TaskSortField.Code => Order(
+                Order(query, t => db.Boards.Where(b => b.Id == t.BoardId).Select(b => b.Key).FirstOrDefault(), desc),
+                t => t.CreatedAt, desc),
             TaskSortField.Title => Order(query, t => t.Title, desc),
             TaskSortField.Status => Order(query, t => db.Statuses.Where(s => s.Id == t.StatusId).Select(s => s.SortOrder).FirstOrDefault(), desc),
             // Без исполнителя — в конец при любом направлении: пустые строки иначе всплывали бы наверх.

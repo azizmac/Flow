@@ -352,10 +352,38 @@ a.mud-link:hover {
     text-transform: inherit;
 }
 
-/* Активная сортировка подсвечивается акцентом — иначе непонятно, по какой колонке список упорядочен. */
-.flow-grid .mud-table-head th .mud-table-sort-label.mud-direction-asc,
-.flow-grid .mud-table-head th .mud-table-sort-label.mud-direction-desc {
+/* Заголовок-сортировщик — свой (Components/SortHeader.razor): стрелка справа, активная колонка акцентом. */
+.flow-grid .sort-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    user-select: none;
+    color: inherit;
+    transition: color 120ms ease;
+}
+
+.flow-grid .sort-header:hover {
+    color: var(--text-secondary);
+}
+
+.flow-grid .sort-header.on {
     color: var(--accent);
+}
+
+/* Стрелка появляется только у активной колонки и разворачивается по направлению. */
+.flow-grid .sort-header .sort-arrow {
+    opacity: 0;
+    transition: opacity 120ms ease, transform 160ms var(--ease-out);
+}
+
+.flow-grid .sort-header:hover .sort-arrow,
+.flow-grid .sort-header.on .sort-arrow {
+    opacity: 1;
+}
+
+.flow-grid .sort-header .sort-arrow.up {
+    transform: rotate(180deg);
 }
 
 .flow-grid .mud-table-body td {
