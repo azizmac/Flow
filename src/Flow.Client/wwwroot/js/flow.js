@@ -15,8 +15,17 @@ window.flow = (function () {
             .filter(function (el) { return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement; });
     }
 
-    // Зоны приёма файлов: id зоны → функция снятия обработчиков (см. attachZone).
+    // Зоны приёма файлов: id зоны → { off: снять обработчики, clear: погасить подсветку } (см. attachZone).
     const dropZones = new Map();
+
+    // Перетаскивание кончилось — гасим подсветку у всех зон сразу. По одной нельзя: вложенная зона
+    // (редактор внутри карточки) забирает drop себе и останавливает всплытие, и внешняя иначе
+    // так и осталась бы в рамке «Отпустите файлы».
+    function clearZones() {
+        dropZones.forEach(function (zone) {
+            try { zone.clear(); } catch (_) { }
+        });
+    }
 
     // Файлы из перетаскивания или буфера кладём в скрытый <input type="file"> и будим change:
     // до DataTransfer.files из Blazor WASM не дотянуться, InputFile умеет читать только свой input.
@@ -54,6 +63,15 @@ window.flow = (function () {
     // Перетаскивание текста (выделение внутри редактора) не трогаем — там нет Files.
     document.addEventListener('dragover', function (e) { if (draggingFiles(e)) e.preventDefault(); });
     document.addEventListener('drop', function (e) { if (draggingFiles(e)) e.preventDefault(); });
+
+    // Перехват, а не всплытие: обработчик зоны вызывает stopPropagation, и до документа событие
+    // не дошло бы. Сюда же попадает бросок мимо зон и уход перетаскивания за пределы окна.
+    document.addEventListener('drop', clearZones, true);
+    document.addEventListener('dragend', clearZones, true);
+    document.addEventListener('dragleave', function (e) {
+        // relatedTarget пуст только когда курсор ушёл из окна целиком, а не на соседний элемент.
+        if (!e.relatedTarget) clearZones();
+    }, true);
 
     // Открытый модальный слой: поповер обрабатывает Tab сам, поэтому здесь только дровер и модалка.
     function openLayer() {
@@ -314,23 +332,24 @@ window.flow = (function () {
             zone.addEventListener('drop', onDrop);
             if (acceptPaste) zone.addEventListener('paste', onPaste);
 
-            dropZones.set(zoneId, function () {
+            const off = function () {
                 zone.removeEventListener('dragenter', onEnter);
                 zone.removeEventListener('dragover', onOver);
                 zone.removeEventListener('dragleave', onLeave);
                 zone.removeEventListener('drop', onDrop);
                 if (acceptPaste) zone.removeEventListener('paste', onPaste);
                 clear();
-            });
+            };
 
+            dropZones.set(zoneId, { off: off, clear: clear });
             return true;
         },
 
         detachZone: function (zoneId) {
-            const off = dropZones.get(zoneId);
-            if (!off) return;
+            const zone = dropZones.get(zoneId);
+            if (!zone) return;
             dropZones.delete(zoneId);
-            try { off(); } catch (_) { }
+            try { zone.off(); } catch (_) { }
         },
 
         // Оживление ссылок на вложения в отрендеренном Markdown: картинке подставляется blob, ссылка
