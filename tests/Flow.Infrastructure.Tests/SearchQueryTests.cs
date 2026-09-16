@@ -1,4 +1,4 @@
-using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
+﻿using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Search.Queries.SearchQuery;
 using Flow.Application.Features.Search.Queries.SimilarTasksQuery;
 using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
@@ -174,9 +174,13 @@ public class SearchQueryTests(SearchFixture fixture)
 
         var open = await SearchAsync("дирижабли", board.Id, SearchMode.Text);
         var archived = await SearchAsync("дирижабли", board.Id, SearchMode.Text, includeArchived: true);
+        // Прямое попадание по коду минует индекс: там закрытость читается из статуса задачи, а не из чанка.
+        var byCode = await SearchAsync(task.Code!);
 
         Assert.DoesNotContain(open!.Items, item => item.SourceId == task.Id);
-        Assert.Contains(archived!.Items, item => item.SourceId == task.Id);
+        // Пометка «архив» в клиенте: без неё закрытая задача в выдаче неотличима от живой.
+        Assert.True(Assert.Single(archived!.Items, item => item.SourceId == task.Id).IsClosed);
+        Assert.True(Assert.Single(byCode!.Items).IsClosed);
     }
 
     [Fact]

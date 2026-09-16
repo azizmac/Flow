@@ -186,7 +186,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             ,
             best AS (
                 SELECT DISTINCT ON (c."SourceType", c."SourceId")
-                       c."SourceType", c."SourceId", c."BoardId", c."Content", c."SourceUpdatedAt", m.score
+                       c."SourceType", c."SourceId", c."BoardId", c."Content", c."SourceUpdatedAt", c."IsClosed", m.score
                 FROM merged m JOIN "SearchChunks" c ON c."Id" = m.id
                 ORDER BY c."SourceType", c."SourceId", m.score DESC
             )
@@ -203,6 +203,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                    b."SourceUpdatedAt" AS "UpdatedAt",
                    COALESCE(cm."TaskId", at."TaskId") AS "ParentId",
                    b."Content" AS "Content",
+                   b."IsClosed" AS "IsClosed",
                    count(*) OVER () AS "Total"
             FROM best b
             LEFT JOIN "TaskItems" ti ON b."SourceType" = 1 AND ti."Id" = b."SourceId"
@@ -230,7 +231,8 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             row.TaskCode,
             row.UpdatedAt,
             row.ParentId,
-            row.Content);
+            row.Content,
+            row.IsClosed);
 
     private NpgsqlParameter[] BuildParameters(SearchCriteria criteria)
     {
@@ -332,6 +334,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                    b."SourceUpdatedAt" AS "UpdatedAt",
                    NULL::uuid AS "ParentId",
                    b."Content" AS "Content",
+                   false AS "IsClosed",
                    count(*) OVER () AS "Total"
             FROM best b JOIN "TaskItems" ti ON ti."Id" = b."SourceId"
             ORDER BY b.distance
@@ -368,6 +371,9 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
 
         /// <summary>Лучший чанк источника: уходит в реранкер, наружу не отдаётся.</summary>
         public string Content { get; init; } = string.Empty;
+
+        /// <summary>Задача (или задача-владелец) в финальном статусе — пометка «архив» в выдаче.</summary>
+        public bool IsClosed { get; init; }
 
         /// <summary>Одинаковый во всех строках: count(*) OVER () до LIMIT.</summary>
         public long Total { get; init; }

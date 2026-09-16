@@ -36,6 +36,9 @@ public sealed record SearchIntentResponse(string Text, IReadOnlyList<string> Fil
 /// <param name="TaskCode">Код задачи (PROJ-142) у задач и комментариев; у проектов и людей null.</param>
 /// <param name="ParentId">Владелец источника: у комментария — его задача. Нужен, чтобы результат
 /// было куда открыть: сам комментарий отдельной страницы не имеет. У остальных типов null.</param>
+/// <param name="IsClosed">Источник из задачи в финальном статусе — свой или задачи-владельца (комментарий,
+/// файл). Клиент помечает такие результаты «архивом»: подсказки в строке поиска показывают их всегда,
+/// и без пометки закрытая задача выглядела бы как открытая.</param>
 public sealed record SearchResultItem(
     SearchSourceType SourceType,
     Guid SourceId,
@@ -45,4 +48,5 @@ public sealed record SearchResultItem(
     double Score,
     string? TaskCode,
     DateTime UpdatedAt,
-    Guid? ParentId);
+    Guid? ParentId,
+    bool IsClosed = false);

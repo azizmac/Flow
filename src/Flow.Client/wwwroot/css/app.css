@@ -1,4 +1,4 @@
-/* ════════════════════════════════════════════════════════════════════
+﻿/* ════════════════════════════════════════════════════════════════════
    Flow — app shell + компоненты.
    Источник: Flow MVP.dc.html / Sidebar.dc.html + Profile.dc.html (Claude Design handoff, артефакт «Flow CRM»)
    + базовые контролы (Button, IconButton, Input, Tag) в CSS-виде.
@@ -475,7 +475,18 @@ input, textarea { font-family: inherit; }
 .gs-item .ds-icon { margin-top: 2px; color: var(--text-tertiary); }
 .gs-body { min-width: 0; flex: 1; }
 .gs-title { display: flex; align-items: center; gap: 6px; font: var(--fw-semibold) 13px var(--font-display); color: #fff; }
-.gs-title span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-title .gs-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Результат из задачи в финальном статусе. Подсказки в строке поиска показывают такие всегда —
+   без пометки закрытая задача в выдаче неотличима от живой. */
+.archived-chip {
+    flex: none;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+    color: var(--text-tertiary);
+    font: var(--fw-medium) 10.5px var(--font-text);
+    white-space: nowrap;
+}
 .gs-snippet {
     font: var(--fw-medium) 11.5px var(--font-text);
     color: var(--text-tertiary);

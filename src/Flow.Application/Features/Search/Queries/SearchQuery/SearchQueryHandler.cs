@@ -43,7 +43,7 @@ internal sealed class SearchQueryHandler(
 
         // Код задачи в строке — это не поиск, а прямое попадание: задача идёт первой в выдаче,
         // а клиент может открыть её сразу.
-        var direct = resolved.Task is { } found ? ToItem(found) : null;
+        var direct = resolved.Task is { } found ? ToItem(found, resolved.TaskIsClosed) : null;
 
         // «PROJ-142» и больше ничего: искать нечего, отдаём только саму задачу.
         if (resolved.Text.Length == 0 && !HasSearchableFilters(resolved))
@@ -237,6 +237,11 @@ internal sealed class SearchQueryHandler(
         IReadOnlyCollection<Guid> statusIds = [];
         TaskItem? task = null;
 
+        // Проекты со статусами нужны трём разным веткам ниже, а запрос один и тот же: их единицы,
+        // но дёргать его трижды незачем — и незачем вовсе, когда ни одна ветка не сработала.
+        IReadOnlyList<Board>? allBoards = null;
+        async Task<IReadOnlyList<Board>> BoardsAsync() => allBoards ??= await boards.GetAllAsync(cancellationToken);
+
         if (intent.AssigneeUsername is { } username)
         {
             var user = await users.GetByUsernameAsync(username, cancellationToken);
@@ -255,8 +260,7 @@ internal sealed class SearchQueryHandler(
 
         if (intent.BoardKey is not null || intent.StatusName is not null)
         {
-            // Проекты со статусами — один запрос: их единицы, а названия статусов настраиваются на доске.
-            var all = await boards.GetAllAsync(cancellationToken);
+            var all = await BoardsAsync();
 
             if (intent.BoardKey is { } key)
             {
@@ -285,6 +289,10 @@ internal sealed class SearchQueryHandler(
             }
         }
 
+        // Прямое попадание по коду минует индекс, а значит и флаг закрытости из чанка: финальность
+        // статуса читается здесь, иначе закрытая задача приезжала бы в выдачу без пометки «архив».
+        var taskIsClosed = task is not null && await IsFinalAsync(task, BoardsAsync);
+
         // Исполнитель, статус и срок есть только у задач: проект «просроченным» не бывает.
         IReadOnlyCollection<SearchSourceType> types =
             intent.Overdue || assigneeId is not null || statusIds.Count > 0
@@ -298,8 +306,15 @@ internal sealed class SearchQueryHandler(
             assigneeId,
             statusIds,
             intent.Period is { } period ? DateTime.UtcNow - period : null,
-            task);
+            task,
+            taskIsClosed);
     }
+
+    private static async Task<bool> IsFinalAsync(TaskItem task, Func<Task<IReadOnlyList<Board>>> boards) =>
+        (await boards())
+            .FirstOrDefault(board => board.Id == task.BoardId)?
+            .Statuses.FirstOrDefault(status => status.Id == task.StatusId)?
+            .IsFinal ?? false;
 
     /// <summary>Есть ли что отбирать, кроме прямого попадания по коду задачи.</summary>
     private static bool HasSearchableFilters(ResolvedIntent resolved) =>
@@ -345,10 +360,11 @@ internal sealed class SearchQueryHandler(
     private static string Append(string text, string value) => text.Length == 0 ? value : $"{text} {value}";
 
     private static SearchResultItem ToItem(SearchHit hit) =>
-        new(hit.SourceType, hit.SourceId, hit.BoardId, hit.Title, hit.Snippet, hit.Score, hit.TaskCode, hit.UpdatedAt, hit.ParentId);
+        new(hit.SourceType, hit.SourceId, hit.BoardId, hit.Title, hit.Snippet, hit.Score, hit.TaskCode, hit.UpdatedAt,
+            hit.ParentId, hit.IsClosed);
 
     /// <summary>Прямое попадание собирается из самой задачи: в индексе её может ещё не быть.</summary>
-    private static SearchResultItem ToItem(TaskItem task) =>
+    private static SearchResultItem ToItem(TaskItem task, bool isClosed) =>
         new(SearchSourceType.Task,
             task.Id,
             task.BoardId,
@@ -359,7 +375,8 @@ internal sealed class SearchQueryHandler(
             Score: 1,
             task.Code.Value,
             task.CreatedAt,
-            ParentId: null);
+            ParentId: null,
+            IsClosed: isClosed);
 
     private sealed record ResolvedIntent(
         string Text,
@@ -368,5 +385,6 @@ internal sealed class SearchQueryHandler(
         Guid? AssigneeId,
         IReadOnlyCollection<Guid> StatusIds,
         DateTime? UpdatedSince,
-        TaskItem? Task);
+        TaskItem? Task,
+        bool TaskIsClosed = false);
 }

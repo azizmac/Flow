@@ -60,6 +60,7 @@ public sealed record SearchPage(IReadOnlyList<SearchHit> Items, int Total);
 /// <param name="ParentId">Задача комментария: сам комментарий открыть негде, открывают его задачу.</param>
 /// <param name="Content">Лучший чанк источника без подсветки — то, что читает реранкер. Наружу не уходит:
 /// клиенту показывается Snippet с &lt;mark&gt;, а модели нужен чистый текст.</param>
+/// <param name="IsClosed">Флаг чанка: задача в финальном статусе. Уходит наружу пометкой «архив».</param>
 public sealed record SearchHit(
     SearchSourceType SourceType,
     Guid SourceId,
@@ -70,4 +71,5 @@ public sealed record SearchHit(
     string? TaskCode,
     DateTime UpdatedAt,
     Guid? ParentId,
-    string Content = "");
+    string Content = "",
+    bool IsClosed = false);

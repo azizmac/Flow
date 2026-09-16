@@ -116,6 +116,10 @@
                                     {
                                         <span class="sr-kind">@SearchPresentation.TypeLabel(item.SourceType).ToLowerInvariant()</span>
                                     }
+                                    @if (item.IsClosed)
+                                    {
+                                        <span class="archived-chip" title="Задача в финальном статусе">архив</span>
+                                    }
                                 </div>
                                 <div class="sr-snippet">@SearchPresentation.Highlight(item.Snippet)</div>
                             </div>

@@ -72,7 +72,11 @@
                                     {
                                         <span class="code">@taskCode</span>
                                     }
-                                    <span>@item.Title</span>
+                                    <span class="gs-name">@item.Title</span>
+                                    @if (item.IsClosed)
+                                    {
+                                        <span class="archived-chip" title="Задача в финальном статусе">архив</span>
+                                    }
                                 </div>
                                 <div class="gs-snippet">@SearchPresentation.Highlight(item.Snippet)</div>
                             </div>
@@ -152,7 +156,9 @@
             _error = null;
             StateHasChanged();
 
-            var result = await Api.Search(query, limit: Limit, ct: ct);
+            // Закрытые задачи и их файлы подсказки показывают наравне с живыми, но с пометкой:
+            // иначе «не нашлось» означало бы «задачу закрыли», а человек ищет именно её.
+            var result = await Api.Search(query, includeArchived: true, limit: Limit, ct: ct);
             if (ct.IsCancellationRequested)
                 return;
 
