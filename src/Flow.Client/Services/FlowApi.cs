@@ -1,14 +1,20 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text;
+using Flow.Shared.Contracts.Attachments;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
 using Flow.Shared.Contracts.Tasks;
 using Flow.Shared.Contracts.Users;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 
 namespace Flow.Client.Services;
+
+/// <summary>Файл вложения, приехавший в браузер: байты и тип, который определил сервер.</summary>
+public sealed record AttachmentContent(byte[] Bytes, string ContentType);
 
 /// <summary>Результат вызова API: либо значение, либо человекочитаемая ошибка (тело { message } от 400/409).</summary>
 public sealed record ApiResult<T>(T? Value, string? Error, HttpStatusCode Status)
@@ -114,6 +120,77 @@ public sealed class FlowApi(HttpClient http)
 
     public Task<ApiResult<IReadOnlyList<TaskActivityResponse>>> GetActivity(Guid taskId, CancellationToken ct = default) =>
         Get<IReadOnlyList<TaskActivityResponse>>($"tasks/{taskId}/activity", ct);
+
+    // ---- Вложения (AttachmentsController, docs/TZ_attachments.md) ----
+
+    public Task<ApiResult<IReadOnlyList<AttachmentResponse>>> GetAttachments(Guid taskId, CancellationToken ct = default) =>
+        Get<IReadOnlyList<AttachmentResponse>>($"tasks/{taskId}/attachments", ct);
+
+    /// <summary>
+    /// multipart/form-data, поле file. maxBytes ограничивает чтение файла в браузере — выше него
+    /// поток оборвётся исключением, поэтому вызывающий отсекает крупные файлы до загрузки.
+    /// 409 — такой файл уже приложен, 400 — лимиты и запрещённый тип, 403 — Reader.
+    /// </summary>
+    public async Task<ApiResult<AttachmentResponse>> UploadAttachment(Guid taskId, IBrowserFile file, long maxBytes, CancellationToken ct = default)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            await using var stream = file.OpenReadStream(maxBytes, ct);
+            var part = new StreamContent(stream);
+            // Тип от браузера — только подсказка: настоящий определит сервер по расширению и сигнатуре.
+            part.Headers.ContentType = new MediaTypeHeaderValue(
+                string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
+            content.Add(part, "file", file.Name);
+
+            using var response = await http.PostAsync($"tasks/{taskId}/attachments", content, ct);
+            return await Read<AttachmentResponse>(response, ct);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+            return ApiResult<AttachmentResponse>.Fail(LoginRequired, HttpStatusCode.Unauthorized);
+        }
+        catch (HttpRequestException ex)
+        {
+            return ApiResult<AttachmentResponse>.Fail(NetworkError(ex), 0);
+        }
+        catch (IOException)
+        {
+            // Файл оказался больше maxBytes: браузер обрывает чтение потока, запрос уже не спасти.
+            return ApiResult<AttachmentResponse>.Fail("Файл больше допустимого размера.", 0);
+        }
+    }
+
+    /// <summary>
+    /// Содержимое вложения байтами. И скачивание, и превью идут так: ни тег img, ни обычная ссылка
+    /// не носят Bearer, а публичных ссылок у файлов нет.
+    /// </summary>
+    public async Task<ApiResult<AttachmentContent>> DownloadAttachment(Guid id, CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await http.GetAsync($"attachments/{id}/content", ct);
+            if (!response.IsSuccessStatusCode)
+                return ApiResult<AttachmentContent>.Fail(await ReadError(response, ct), response.StatusCode);
+
+            var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+            var type = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+            return ApiResult<AttachmentContent>.Success(new AttachmentContent(bytes, type), response.StatusCode);
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+            return ApiResult<AttachmentContent>.Fail(LoginRequired, HttpStatusCode.Unauthorized);
+        }
+        catch (HttpRequestException ex)
+        {
+            return ApiResult<AttachmentContent>.Fail(NetworkError(ex), 0);
+        }
+    }
+
+    public Task<ApiResult<bool>> DeleteAttachment(Guid id, CancellationToken ct = default) =>
+        Delete($"attachments/{id}", ct);
 
     // ---- поиск (SearchController) ----
 

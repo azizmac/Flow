@@ -1,0 +1,202 @@
+@* Вложения задачи: список, загрузка, превью, скачивание и удаление (docs/TZ_attachments.md, этап 2).
+
+   И картинки, и скачивание идут через .NET: файл отдаётся только по токену, а тег img и <a href>
+   Bearer не носят. Байты приезжают в браузер и превращаются в blob:-URL, который освобождается
+   при уходе со страницы — иначе вкладка течёт на задаче с десятком снимков. *@
+@implements IAsyncDisposable
+@inject FlowApi Api
+@inject BrowserInterop Browser
+@inject ToastService Toasts
+@inject UserDirectory Users
+@inject AppState State
+
+@if (_items.Count > 0 || CanAttach)
+{
+    <div class="att-block">
+        <div class="att-head">
+            <div class="section-title">Вложения@(_items.Count > 0 ? $" · {_items.Count}" : "")</div>
+            @if (CanAttach)
+            {
+                <AttachmentUpload TaskId="TaskId" InputId="@_inputId" OnUploaded="OnUploaded" />
+            }
+        </div>
+
+        @foreach (var item in _items)
+        {
+            <div class="att-row">
+                @if (_previews.TryGetValue(item.Id, out var preview))
+                {
+                    <img class="att-thumb" src="@preview" alt="@item.FileName" />
+                }
+                else
+                {
+                    <span class="att-ico"><Icon Name="@(item.IsImage ? "eye" : "file")" Size="15" /></span>
+                }
+                <div class="att-main">
+                    <button type="button" class="att-name" title="Скачать @item.FileName" @onclick="() => Download(item)">@item.FileName</button>
+                    <div class="att-sub">
+                        <span>@Ru.FileSize(item.SizeBytes)</span>
+                        <span>·</span>
+                        <UserName Id="@item.UploadedById" />
+                        <span>·</span>
+                        <span title="@Ru.DateTimeFull(item.UploadedAt)">@Ru.Ago(item.UploadedAt)</span>
+                    </div>
+                </div>
+                @if (_downloading == item.Id)
+                {
+                    <span class="ds-spin" aria-label="Скачиваем"></span>
+                }
+                else
+                {
+                    <button type="button" class="icon-lnk" title="Скачать" @onclick="() => Download(item)">
+                        <Icon Name="arrow-left" Size="13" Style="transform:rotate(-90deg);" />
+                    </button>
+                }
+                @if (CanDelete(item))
+                {
+                    <button type="button" class="icon-lnk danger" title="Удалить" @onclick="() => _deleting = item">
+                        <Icon Name="trash" Size="13" />
+                    </button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@if (_deleting is not null)
+{
+    <ConfirmDialog Title="Удалить файл?"
+                   Text="@($"«{_deleting.FileName}» будет удалён без возможности восстановления.")"
+                   OnConfirm="ConfirmDelete" OnCancel="() => _deleting = null" />
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid TaskId { get; set; }
+
+    /// <summary>
+    /// Превью тянет файл целиком: другого способа нет, ссылки на вложение без токена не существует.
+    /// Поэтому снимок на 20 МБ показывается иконкой — ради картинки 40×40 такую загрузку не затевают.
+    /// </summary>
+    private const long PreviewMaxBytes = 4L * 1024 * 1024;
+
+    private readonly string _inputId = "att-" + Guid.NewGuid().ToString("N")[..8];
+    private readonly Dictionary<Guid, string> _previews = [];
+
+    private List<AttachmentResponse> _items = [];
+    private Guid _loadedTaskId;
+    private Guid? _downloading;
+    private AttachmentResponse? _deleting;
+
+    private UserResponse? Me => Users.Find(State.CurrentUserId);
+
+    private bool CanAttach => Permissions.CanAttach(Me);
+
+    private bool CanDelete(AttachmentResponse item) => Permissions.CanDeleteAttachment(Me, item);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedTaskId == TaskId)
+            return;
+
+        _loadedTaskId = TaskId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await ForgetPreviewsAsync();
+        _items = [];
+
+        var result = await Api.GetAttachments(TaskId);
+        if (!result.Ok)
+        {
+            // Список вложений не главное на экране: молча пустой блок лучше тоста поверх задачи.
+            return;
+        }
+
+        _items = [.. result.Value!];
+        StateHasChanged();
+
+        if (!Users.IsLoaded)
+            _ = Users.EnsureLoadedAsync();
+
+        foreach (var item in _items)
+            await LoadPreviewAsync(item);
+    }
+
+    private async Task LoadPreviewAsync(AttachmentResponse item)
+    {
+        if (!item.IsImage || item.SizeBytes > PreviewMaxBytes || _previews.ContainsKey(item.Id))
+            return;
+
+        var content = await Api.DownloadAttachment(item.Id);
+        if (!content.Ok)
+            return;
+
+        var url = await Browser.BlobUrlAsync(content.Value!.ContentType, content.Value.Bytes);
+        if (url is null)
+            return;
+
+        _previews[item.Id] = url;
+        StateHasChanged();
+    }
+
+    private async Task OnUploaded(AttachmentResponse item)
+    {
+        _items = [.. _items, item];
+        StateHasChanged();
+        await LoadPreviewAsync(item);
+    }
+
+    private async Task Download(AttachmentResponse item)
+    {
+        if (_downloading is not null)
+            return;
+
+        _downloading = item.Id;
+        var content = await Api.DownloadAttachment(item.Id);
+        _downloading = null;
+
+        if (!content.Ok)
+        {
+            Toasts.Error(content.Error ?? "Не удалось скачать файл");
+            return;
+        }
+
+        if (!await Browser.SaveFileAsync(item.FileName, content.Value!.ContentType, content.Value.Bytes))
+            Toasts.Error("Браузер не дал сохранить файл");
+    }
+
+    private async Task ConfirmDelete()
+    {
+        var item = _deleting!;
+        var result = await Api.DeleteAttachment(item.Id);
+        _deleting = null;
+
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось удалить файл");
+            return;
+        }
+
+        _items = [.. _items.Where(a => a.Id != item.Id)];
+        await ForgetPreviewAsync(item.Id);
+        Toasts.Ok($"Файл {item.FileName} удалён");
+    }
+
+    private async Task ForgetPreviewAsync(Guid id)
+    {
+        if (_previews.Remove(id, out var url))
+            await Browser.RevokeBlobUrlAsync(url);
+    }
+
+    private async Task ForgetPreviewsAsync()
+    {
+        foreach (var url in _previews.Values)
+            await Browser.RevokeBlobUrlAsync(url);
+
+        _previews.Clear();
+    }
+
+    public async ValueTask DisposeAsync() => await ForgetPreviewsAsync();
+}

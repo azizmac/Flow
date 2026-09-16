@@ -1,0 +1,193 @@
+﻿@* Загрузка файлов в задачу: выбор кнопкой и очередь (docs/TZ_attachments.md, этап 2).
+   Файлы уходят по три параллельно, ошибка по одному не отменяет остальные — рядом с ним появляется
+   текст ответа сервера, соседи продолжают грузиться.
+
+   Процента у полосы нет намеренно: браузер не отдаёт прогресс отправки тела (fetch умеет потоковый
+   запрос только по HTTP/2 с duplex, чего у нас нет), и любая цифра была бы выдумкой. Полоса
+   неопределённая, зато честная: она означает «файл в полёте», и его можно отменить. *@
+@implements IDisposable
+@inject FlowApi Api
+@inject BrowserInterop Browser
+
+<div class="att-upload">
+    @* Скрытый input, кнопка — label: в третьем этапе в этот же input будет складывать файлы drop-зона. *@
+    <InputFile id="@InputId" class="att-file" multiple OnChange="OnPicked" disabled="@Disabled" />
+    <label class="ds-btn secondary sm att-pick @(Disabled ? "off" : "")" for="@InputId">
+        <Icon Name="add-file" Size="16" />Прикрепить файл
+    </label>
+
+    @if (_pickError is not null)
+    {
+        <div class="att-q-error">@_pickError</div>
+    }
+
+    @if (_queue.Count > 0)
+    {
+        <div class="att-queue">
+            @foreach (var upload in _queue)
+            {
+                <div class="att-q-row @(upload.Error is null ? "" : "bad")">
+                    <div class="att-q-main">
+                        <div class="att-q-name" title="@upload.Name">@upload.Name</div>
+                        @if (upload.Error is null)
+                        {
+                            <div class="att-q-bar"><span></span></div>
+                        }
+                        else
+                        {
+                            <div class="att-q-error">@upload.Error</div>
+                        }
+                    </div>
+                    <span class="att-q-size">@Ru.FileSize(upload.Size)</span>
+                    <button type="button" class="icon-lnk" title="@(upload.Error is null ? "Отменить" : "Убрать")"
+                            @onclick="() => Drop(upload)">
+                        <Icon Name="close" Size="12" />
+                    </button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid TaskId { get; set; }
+
+    /// <summary>Файл загружен — список выше добавляет его к себе, не перезапрашивая весь список.</summary>
+    [Parameter] public EventCallback<AttachmentResponse> OnUploaded { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Id скрытого input: по нему drop-зона третьего этапа кладёт в него брошенные файлы.</summary>
+    [Parameter] public string InputId { get; set; } = "att-file";
+
+    /// <summary>
+    /// Зеркало Attachments:MaxFileBytes. Сервер проверяет сам и отвечает 400 — здесь это только чтобы
+    /// не гнать в сеть заведомо неподъёмный файл; при расхождении настроек победит ответ сервера.
+    /// </summary>
+    public const long MaxFileBytes = 25L * 1024 * 1024;
+
+    /// <summary>Больше трёх сразу нет смысла: браузер всё равно ставит запросы в очередь.</summary>
+    private const int MaxParallel = 3;
+
+    /// <summary>Потолок на один выбор в диалоге; лимит на задачу (20 файлов) проверяет сервер.</summary>
+    private const int MaxPerPick = 20;
+
+    private readonly List<Upload> _queue = [];
+    private readonly SemaphoreSlim _slots = new(MaxParallel, MaxParallel);
+
+    private string? _pickError;
+
+    private async Task OnPicked(InputFileChangeEventArgs e)
+    {
+        List<Upload> uploads;
+        try
+        {
+            uploads = e.GetMultipleFiles(MaxPerPick).Select(file => new Upload(file)).ToList();
+            _pickError = null;
+        }
+        catch (InvalidOperationException)
+        {
+            // Выбрали больше файлов, чем берём за раз: молча взять первые было бы хуже — часть пропала бы.
+            _pickError = $"За раз можно выбрать не больше {MaxPerPick} файлов";
+            return;
+        }
+        finally
+        {
+            // Тот же файл второй раз (после ошибки) браузер не отдаст, пока выбор не очищен.
+            await Browser.ResetFileInputAsync(InputId);
+        }
+
+        _queue.AddRange(uploads);
+        StateHasChanged();
+
+        await Task.WhenAll(uploads.Select(SendAsync));
+    }
+
+    private async Task SendAsync(Upload upload)
+    {
+        if (upload.Size > MaxFileBytes)
+        {
+            upload.Error = $"Больше {Ru.FileSize(MaxFileBytes)}";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await _slots.WaitAsync();
+        try
+        {
+            // Пока файл ждал очереди, его могли снять крестиком.
+            if (upload.Token.IsCancellationRequested)
+                return;
+
+            var result = await Api.UploadAttachment(TaskId, upload.File, MaxFileBytes, upload.Token);
+            if (result.Ok)
+            {
+                _queue.Remove(upload);
+                await OnUploaded.InvokeAsync(result.Value!);
+            }
+            else
+            {
+                // Строка остаётся с текстом ответа («такой файл уже приложен», «формат запрещён»),
+                // пока её не уберут крестиком: иначе ошибка мелькнёт и пропадёт.
+                upload.Error = result.Error ?? "Не удалось загрузить";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _queue.Remove(upload);
+        }
+        finally
+        {
+            _slots.Release();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void Drop(Upload upload)
+    {
+        upload.Cancel();
+        if (upload.Error is not null)
+            _queue.Remove(upload);
+    }
+
+    /// <summary>Строка очереди: файл, отмена и текст ошибки, если сервер не принял.</summary>
+    private sealed class Upload(IBrowserFile file)
+    {
+        private readonly CancellationTokenSource _cts = new();
+
+        public IBrowserFile File { get; } = file;
+
+        public string Name { get; } = file.Name;
+
+        public long Size { get; } = file.Size;
+
+        public string? Error { get; set; }
+
+        public CancellationToken Token => _cts.Token;
+
+        public void Cancel()
+        {
+            try
+            {
+                _cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        public void Dispose() => _cts.Dispose();
+    }
+
+    public void Dispose()
+    {
+        // Уход со страницы посреди загрузки: недокачанные файлы отменяем, иначе запросы доживут до конца.
+        foreach (var upload in _queue)
+        {
+            upload.Cancel();
+            upload.Dispose();
+        }
+
+        _slots.Dispose();
+    }
+}

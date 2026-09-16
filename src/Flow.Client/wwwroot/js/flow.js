@@ -197,6 +197,48 @@ window.flow = (function () {
             if (el) el.scrollIntoView({ block: 'nearest' });
         },
 
+        // ---- Вложения ----
+        // Файлы приезжают сюда байтами из .NET (byte[] → Uint8Array), а не по ссылке: публичных
+        // ссылок у вложений нет, а тег img и <a href> не носят Bearer-токен. Blob живёт до
+        // revokeBlobUrl — за превью следит компонент списка, иначе вкладка течёт на длинной ленте.
+        blobUrl: function (contentType, bytes) {
+            try {
+                return URL.createObjectURL(new Blob([bytes], { type: contentType || 'application/octet-stream' }));
+            } catch (_) {
+                return null;
+            }
+        },
+
+        revokeBlobUrl: function (url) {
+            try { if (url) URL.revokeObjectURL(url); } catch (_) { }
+        },
+
+        // После разбора выбора input нужно очистить: браузер не шлёт change, если выбрали тот же файл,
+        // и повторить загрузку после ошибки было бы нельзя.
+        resetFileInput: function (id) {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        },
+
+        saveFile: function (name, contentType, bytes) {
+            let url = null;
+            try {
+                url = URL.createObjectURL(new Blob([bytes], { type: contentType || 'application/octet-stream' }));
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = name || 'file';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } catch (_) {
+                return false;
+            }
+            // Освобождаем с задержкой: браузер начинает запись файла уже после возврата из обработчика,
+            // и отозванный сразу blob обрывает скачивание.
+            setTimeout(function () { URL.revokeObjectURL(url); }, 20000);
+            return true;
+        },
+
         // Бандл редактора (CodeMirror, ~500 КБ) грузим только когда на странице понадобился ввод Markdown:
         // списки задач и профили открываются без него. Повторные вызовы ждут ту же загрузку.
         loadEditor: function () {

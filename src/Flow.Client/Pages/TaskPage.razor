@@ -102,6 +102,7 @@ else if (_task is not null && _board is not null)
                     <MarkdownView Text="@_task.Description" Class="big" OnClick="OnDescClick" />
                 }
             </div>
+            <AttachmentList TaskId="_task.Id" />
             <TaskTimeline @ref="_timeline" TaskItem="_task" Board="_board" OnCommentCountChanged="OnCommentCountChanged" />
         </div>
 

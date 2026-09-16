@@ -246,6 +246,57 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
+    // ---- Вложения: байты из .NET превращаются в blob, потому что прямой ссылки на файл нет. ----
+
+    /// <summary>blob:-URL для превью картинки. null — браузер не дал создать объект. Освобождать через RevokeBlobUrlAsync.</summary>
+    public async Task<string?> BlobUrlAsync(string contentType, byte[] bytes)
+    {
+        try
+        {
+            return await js.InvokeAsync<string?>("flow.blobUrl", contentType, bytes);
+        }
+        catch (JSException)
+        {
+            return null;
+        }
+    }
+
+    public async Task RevokeBlobUrlAsync(string url)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flow.revokeBlobUrl", url);
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    /// <summary>Очищает выбор в input type=file — иначе тот же файл второй раз не выберешь.</summary>
+    public async Task ResetFileInputAsync(string elementId)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flow.resetFileInput", elementId);
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    /// <summary>Отдаёт файл браузеру на скачивание. false — заблокировано (например, всплывающие окна).</summary>
+    public async Task<bool> SaveFileAsync(string fileName, string contentType, byte[] bytes)
+    {
+        try
+        {
+            return await js.InvokeAsync<bool>("flow.saveFile", fileName, contentType, bytes);
+        }
+        catch (JSException)
+        {
+            return false;
+        }
+    }
+
     public async Task ScrollIntoViewAsync(string elementId)
     {
         try

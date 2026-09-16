@@ -1,3 +1,4 @@
+﻿using Flow.Shared.Contracts.Attachments;
 using Flow.Shared.Contracts.Tasks;
 using Flow.Shared.Contracts.Users;
 
@@ -33,6 +34,13 @@ public static class Permissions
 
     public static bool CanDeleteComment(UserResponse? me, TaskCommentResponse comment) =>
         me is not null && (comment.AuthorId == me.Id || me.Role >= UserRole.Admin);
+
+    /// <summary>Прикладывать файлы — Member+; скачивать может любая роль (docs/TZ_attachments.md).</summary>
+    public static bool CanAttach(UserResponse? me) => me?.Role >= UserRole.Member;
+
+    /// <summary>Свой файл — автор, чужой — Admin+.</summary>
+    public static bool CanDeleteAttachment(UserResponse? me, AttachmentResponse attachment) =>
+        me is not null && (attachment.UploadedById == me.Id || me.Role >= UserRole.Admin);
 
     public static bool CanEditProfile(UserResponse? me, UserResponse target) =>
         me is not null && (me.Id == target.Id || me.Role >= UserRole.Admin);

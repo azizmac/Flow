@@ -1,4 +1,4 @@
-<picture>
+﻿<picture>
   <source media="(prefers-color-scheme: dark)" srcset="src/Flow.Client/wwwroot/brand/logo-inverse.svg">
   <img src="src/Flow.Client/wwwroot/brand/logo.svg" alt="Flow" height="44">
 </picture>
@@ -20,7 +20,7 @@ The longer-term goal is an AI assistant inside the tracker: grounded in the team
 - **Roles and permissions.** `Reader → Member → Developer → Admin → Owner`; the permission matrix is enforced on the server, and the client hides actions the current user cannot perform. A "last Owner" rule prevents locking the instance out of administration.
 - **Task timeline.** Markdown comments with `@mentions` (a GitHub-style editor with preview and toolbar) and a change log: title, description, status, assignee, due date, deleted comments. Due dates with overdue highlighting.
 - **Authentication.** A separate `Flow.Auth` service: ASP.NET Core Identity with BCrypt and OpenIddict (authorization code + PKCE, refresh, client credentials). The client signs in over OIDC; the API acts as a resource server validating Bearer JWTs. The initial password must be changed at first sign-in.
-- **Attachments.** Files on a task: stored in S3-compatible storage, size and type limits, downloads only over an authorised request. API only for now — the UI and drag & drop come next.
+- **Attachments.** Files on a task: stored in S3-compatible storage, size and type limits, downloads only over an authorised request. Listing, upload, image previews and deletion live in the task card and the drawer; drag & drop comes next.
 - **Search.** Hybrid vector and full-text search over tasks, comments, projects and people on pgvector: it finds by meaning, not by substring. A sidebar box with live suggestions and a results page with filters; the index is updated in the same transaction as the edit.
 - **Infrastructure.** PostgreSQL 16, EF Core, migrations applied on API startup. Build, tests and image publishing run in GitHub Actions.
 

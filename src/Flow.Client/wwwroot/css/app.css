@@ -1697,6 +1697,7 @@ a.task-row { color: inherit; text-decoration: none; }
     .search-clear, .ds-field-error { animation: none; }
     .ds-field.error .ds-field-row { animation: none; }
     .ds-field-row::after { transition: none; }
+    .att-q-bar span { animation: none; width: 100%; opacity: 0.6; }
 }
 
 /* ---------- Markdown editor (MarkdownEditor.razor) ---------- */
@@ -1800,3 +1801,87 @@ a.task-row { color: inherit; text-decoration: none; }
 }
 .due-edit input[type="date"]:focus { border-color: var(--accent); }
 .sk-line { height: 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); }
+
+/* ---------- Вложения (docs/TZ_attachments.md) ---------- */
+.att-block { display: flex; flex-direction: column; gap: 8px; }
+.att-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.att-upload { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 0; }
+/* Input не display:none: скрытый так элемент выпадает из табуляции, и кнопка перестаёт открываться с клавиатуры. */
+.att-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.att-pick { cursor: pointer; }
+.att-pick.off { background: var(--surface-raised); color: var(--text-disabled); pointer-events: none; }
+.att-file:focus-visible + .att-pick { outline: 2px solid var(--accent); outline-offset: 2px; }
+.att-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px;
+    margin: 0 -8px;
+    border-radius: var(--r-md);
+    transition: background-color 140ms ease;
+}
+.att-row:hover { background: var(--surface-raised); }
+.att-thumb, .att-ico {
+    flex: none;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--r-sm);
+    background: var(--surface-raised);
+}
+.att-thumb { object-fit: cover; }
+.att-ico { display: inline-flex; align-items: center; justify-content: center; color: var(--text-tertiary); }
+.att-row:hover .att-ico { background: rgba(0, 0, 0, 0.18); }
+.att-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.att-name {
+    max-width: 100%;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    color: #fff;
+    font: var(--fw-medium) 13px var(--font-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.att-name:hover { color: var(--accent); }
+.att-sub {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+    font: var(--fw-medium) 11.5px var(--font-text);
+    color: var(--text-tertiary);
+}
+.att-sub .tl-name { font: inherit; color: var(--text-tertiary); }
+.att-sub .tl-name:hover { color: var(--text-secondary); }
+
+/* Очередь загрузки */
+.att-queue { display: flex; flex-direction: column; gap: 8px; width: 100%; min-width: 220px; }
+.att-q-row { display: flex; align-items: center; gap: 10px; }
+.att-q-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.att-q-name {
+    font: var(--fw-medium) 12px var(--font-text);
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.att-q-row.bad .att-q-name { color: #fff; }
+/* Полоса без процента: браузер не сообщает, сколько тела уже ушло (см. AttachmentUpload). */
+.att-q-bar { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.10); overflow: hidden; }
+.att-q-bar span {
+    display: block;
+    height: 100%;
+    width: 40%;
+    border-radius: 2px;
+    background: var(--accent);
+    animation: att-run 1.1s ease-in-out infinite;
+}
+@keyframes att-run {
+    0% { transform: translateX(-110%); }
+    100% { transform: translateX(260%); }
+}
+.att-q-error { font: var(--fw-medium) 11.5px var(--font-text); color: var(--danger); }
+.att-q-size { flex: none; font: var(--fw-semibold) 11px var(--font-display); color: var(--text-tertiary); }
