@@ -1,4 +1,4 @@
-@* Слайдер задачи. Mode=Create — форма новой задачи (POST; исполнитель — отдельным PATCH /assignee после создания,
+﻿@* Слайдер задачи. Mode=Create — форма новой задачи (POST; исполнитель — отдельным PATCH /assignee после создания,
    в CreateTaskRequest его нет); Mode=View — просмотр/редактирование существующей
    (PATCH Title/Description/StatusId, PATCH /assignee, DELETE). Содержимое рендерится внутри общего Drawer. *@
 @implements IDisposable
@@ -79,7 +79,7 @@ else if (Item is not null)
             <DsIconButton Icon="close" Size="30" Title="Закрыть (Esc)" OnClick="Close" />
         </div>
     </div>
-    <div class="drawer-body" @onkeydown="OnBodyKey">
+    <div class="drawer-body" id="td-drop" @onkeydown="OnBodyKey">
         @if (_editingTitle)
         {
             <input id="td-title-edit" class="title-input" value="@_title" maxlength="500"
@@ -143,14 +143,14 @@ else if (Item is not null)
             @if (_editingDesc)
             {
                 <MarkdownEditor Id="td-desc" @bind-Value="_description" MinHeight="140" Autofocus="true" Busy="_busy" AllowEmpty="true"
-                                ShowActions="false" OnSubmit="SaveDesc" OnCancel="CancelDesc" />
+                                AttachToTaskId="Item.Id" ShowActions="false" OnSubmit="SaveDesc" OnCancel="CancelDesc" />
             }
             else
             {
                 <MarkdownView Text="@Item.Description" OnClick="OnDescClick" />
             }
         </div>
-        <AttachmentList TaskId="Item.Id" />
+        <AttachmentList TaskId="Item.Id" DropZoneId="td-drop" />
         <TaskTimeline @ref="_timeline" TaskItem="Item" Board="Board" OnCommentCountChanged="OnCommentCountChanged" />
         @if (_error is not null)
         {

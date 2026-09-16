@@ -234,6 +234,14 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
+    /// <summary>
+    /// Вставляет текст на месте курсора (ссылка на вложение). Своей функции в бандле редактора нет:
+    /// это wrap без «середины» — каретка встаёт сразу за вставленным. Пересобирать CodeMirror
+    /// (полтысячи килобайт, отдельная сборка) ради одного частного случая дороже, чем этот вызов.
+    /// </summary>
+    public Task<string?> EditorInsertAsync(string elementId, string text) =>
+        EditorWrapAsync(elementId, text, string.Empty, string.Empty);
+
     public async Task<string?> EditorInsertMentionAsync(string elementId, int atPosition, string username)
     {
         try
@@ -266,6 +274,44 @@ public sealed class BrowserInterop(IJSRuntime js)
         try
         {
             await js.InvokeVoidAsync("flow.revokeBlobUrl", url);
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Делает элемент зоной приёма файлов: брошенное (а с acceptPaste — и вставленное из буфера)
+    /// попадает в скрытый input, который читает InputFile. Прямого доступа к DataTransfer из WASM нет.
+    /// </summary>
+    public async Task AttachZoneAsync(string zoneId, string inputId, bool acceptPaste)
+    {
+        try
+        {
+            await js.InvokeAsync<bool>("flow.attachZone", zoneId, inputId, acceptPaste);
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    public async Task DetachZoneAsync(string zoneId)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flow.detachZone", zoneId);
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    /// <summary>Оживляет ссылки на вложения внутри отрендеренного Markdown (см. MarkdownView).</summary>
+    public async Task HydrateAttachmentsAsync<T>(string containerId, DotNetObjectReference<T> dotNetRef) where T : class
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flow.hydrateAttachments", containerId, dotNetRef);
         }
         catch (JSException)
         {

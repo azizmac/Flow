@@ -1,4 +1,4 @@
-@* Вложения задачи: список, загрузка, превью, скачивание и удаление (docs/TZ_attachments.md, этап 2).
+﻿@* Вложения задачи: список, загрузка, превью, скачивание и удаление (docs/TZ_attachments.md, этап 2).
 
    И картинки, и скачивание идут через .NET: файл отдаётся только по токену, а тег img и <a href>
    Bearer не носят. Байты приезжают в браузер и превращаются в blob:-URL, который освобождается
@@ -9,6 +9,7 @@
 @inject ToastService Toasts
 @inject UserDirectory Users
 @inject AppState State
+@inject AttachmentEvents Events
 
 @if (_items.Count > 0 || CanAttach)
 {
@@ -17,7 +18,7 @@
             <div class="section-title">Вложения@(_items.Count > 0 ? $" · {_items.Count}" : "")</div>
             @if (CanAttach)
             {
-                <AttachmentUpload TaskId="TaskId" InputId="@_inputId" OnUploaded="OnUploaded" />
+                <AttachmentUpload TaskId="TaskId" InputId="@_inputId" DropZoneId="@DropZoneId" />
             }
         </div>
 
@@ -74,6 +75,12 @@
     [Parameter, EditorRequired] public Guid TaskId { get; set; }
 
     /// <summary>
+    /// Элемент, в который можно бросить файл — вся карточка или тело слайдера. Редактор комментария
+    /// внутри такой зоны перехватывает файл себе и вставляет ссылку в текст (см. flow.attachZone).
+    /// </summary>
+    [Parameter] public string? DropZoneId { get; set; }
+
+    /// <summary>
     /// Превью тянет файл целиком: другого способа нет, ссылки на вложение без токена не существует.
     /// Поэтому снимок на 20 МБ показывается иконкой — ради картинки 40×40 такую загрузку не затевают.
     /// </summary>
@@ -88,6 +95,28 @@
     private AttachmentResponse? _deleting;
 
     private UserResponse? Me => Users.Find(State.CurrentUserId);
+
+    protected override void OnInitialized() => Events.Changed += OnAttachmentsChanged;
+
+    /// <summary>
+    /// Изменение приходит событием, откуда бы файл ни приложили: кнопкой здесь, перетаскиванием
+    /// в карточку или из редактора комментария. Список правится точечно — перечитывать его целиком
+    /// значит заново качать все превью.
+    /// </summary>
+    private void OnAttachmentsChanged(AttachmentChange change)
+    {
+        if (change.TaskId != TaskId)
+            return;
+
+        if (change.Added is { } added && _items.All(item => item.Id != added.Id))
+        {
+            InvokeAsync(() => AddAsync(added));
+            return;
+        }
+
+        if (change.RemovedId is { } removedId && _items.Any(item => item.Id == removedId))
+            InvokeAsync(() => RemoveAsync(removedId));
+    }
 
     private bool CanAttach => Permissions.CanAttach(Me);
 
@@ -141,11 +170,18 @@
         StateHasChanged();
     }
 
-    private async Task OnUploaded(AttachmentResponse item)
+    private async Task AddAsync(AttachmentResponse item)
     {
         _items = [.. _items, item];
         StateHasChanged();
         await LoadPreviewAsync(item);
+    }
+
+    private async Task RemoveAsync(Guid id)
+    {
+        _items = [.. _items.Where(item => item.Id != id)];
+        await ForgetPreviewAsync(id);
+        StateHasChanged();
     }
 
     private async Task Download(AttachmentResponse item)
@@ -179,8 +215,10 @@
             return;
         }
 
-        _items = [.. _items.Where(a => a.Id != item.Id)];
-        await ForgetPreviewAsync(item.Id);
+        await RemoveAsync(item.Id);
+        // Тот же файл мог быть показан в тексте комментария — там ссылка теперь не сработает,
+        // но чужие тексты не правим (см. ТЗ, «Порядок операций»).
+        Events.NotifyRemoved(TaskId, item.Id);
         Toasts.Ok($"Файл {item.FileName} удалён");
     }
 
@@ -198,5 +236,9 @@
         _previews.Clear();
     }
 
-    public async ValueTask DisposeAsync() => await ForgetPreviewsAsync();
+    public async ValueTask DisposeAsync()
+    {
+        Events.Changed -= OnAttachmentsChanged;
+        await ForgetPreviewsAsync();
+    }
 }

@@ -5,16 +5,20 @@
    Процента у полосы нет намеренно: браузер не отдаёт прогресс отправки тела (fetch умеет потоковый
    запрос только по HTTP/2 с duplex, чего у нас нет), и любая цифра была бы выдумкой. Полоса
    неопределённая, зато честная: она означает «файл в полёте», и его можно отменить. *@
-@implements IDisposable
+@implements IAsyncDisposable
 @inject FlowApi Api
 @inject BrowserInterop Browser
+@inject AttachmentEvents Attachments
 
 <div class="att-upload">
-    @* Скрытый input, кнопка — label: в третьем этапе в этот же input будет складывать файлы drop-зона. *@
+    @* Скрытый input: в него же drop-зона кладёт брошенные и вставленные из буфера файлы (flow.attachZone). *@
     <InputFile id="@InputId" class="att-file" multiple OnChange="OnPicked" disabled="@Disabled" />
-    <label class="ds-btn secondary sm att-pick @(Disabled ? "off" : "")" for="@InputId">
-        <Icon Name="add-file" Size="16" />Прикрепить файл
-    </label>
+    @if (ShowButton)
+    {
+        <label class="ds-btn secondary sm att-pick @(Disabled ? "off" : "")" for="@InputId">
+            <Icon Name="add-file" Size="16" />Прикрепить файл
+        </label>
+    }
 
     @if (_pickError is not null)
     {
@@ -57,8 +61,17 @@
 
     [Parameter] public bool Disabled { get; set; }
 
-    /// <summary>Id скрытого input: по нему drop-зона третьего этапа кладёт в него брошенные файлы.</summary>
+    /// <summary>Id скрытого input: на него ссылается кнопка-label и в него складывает файлы drop-зона.</summary>
     [Parameter] public string InputId { get; set; } = "att-file";
+
+    /// <summary>Своя кнопка «Прикрепить файл». Без неё выбор открывает чужая (тулбар редактора).</summary>
+    [Parameter] public bool ShowButton { get; set; } = true;
+
+    /// <summary>Элемент, в который можно бросить файл: карточка, слайдер или редактор. null — только кнопка.</summary>
+    [Parameter] public string? DropZoneId { get; set; }
+
+    /// <summary>Ловить ли вставку из буфера (скриншот). Имеет смысл там, где есть курсор — в редакторе.</summary>
+    [Parameter] public bool AcceptPaste { get; set; }
 
     /// <summary>
     /// Зеркало Attachments:MaxFileBytes. Сервер проверяет сам и отвечает 400 — здесь это только чтобы
@@ -123,6 +136,9 @@
             if (result.Ok)
             {
                 _queue.Remove(upload);
+                // Сначала общее уведомление (список вложений задачи обновится, откуда бы файл ни пришёл),
+                // потом частное — вставка ссылки в текст, если грузили из редактора.
+                Attachments.NotifyAdded(TaskId, result.Value!);
                 await OnUploaded.InvokeAsync(result.Value!);
             }
             else
@@ -179,8 +195,17 @@
         public void Dispose() => _cts.Dispose();
     }
 
-    public void Dispose()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender && DropZoneId is not null)
+            await Browser.AttachZoneAsync(DropZoneId, InputId, AcceptPaste);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (DropZoneId is not null)
+            await Browser.DetachZoneAsync(DropZoneId);
+
         // Уход со страницы посреди загрузки: недокачанные файлы отменяем, иначе запросы доживут до конца.
         foreach (var upload in _queue)
         {

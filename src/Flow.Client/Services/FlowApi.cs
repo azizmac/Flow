@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -13,8 +13,8 @@ using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 
 namespace Flow.Client.Services;
 
-/// <summary>Файл вложения, приехавший в браузер: байты и тип, который определил сервер.</summary>
-public sealed record AttachmentContent(byte[] Bytes, string ContentType);
+/// <summary>Файл вложения, приехавший в браузер: байты, тип и имя — всё как их назвал сервер.</summary>
+public sealed record AttachmentContent(byte[] Bytes, string ContentType, string FileName);
 
 /// <summary>Результат вызова API: либо значение, либо человекочитаемая ошибка (тело { message } от 400/409).</summary>
 public sealed record ApiResult<T>(T? Value, string? Error, HttpStatusCode Status)
@@ -176,7 +176,11 @@ public sealed class FlowApi(HttpClient http)
 
             var bytes = await response.Content.ReadAsByteArrayAsync(ct);
             var type = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
-            return ApiResult<AttachmentContent>.Success(new AttachmentContent(bytes, type), response.StatusCode);
+            // Имя едет в filename* (RFC 5987) — там оно с кириллицей и пробелами; FileName без звёздочки
+            // остаётся запасным вариантом.
+            var disposition = response.Content.Headers.ContentDisposition;
+            var name = disposition?.FileNameStar ?? disposition?.FileName?.Trim('"') ?? "file";
+            return ApiResult<AttachmentContent>.Success(new AttachmentContent(bytes, type, name), response.StatusCode);
         }
         catch (AccessTokenNotAvailableException ex)
         {

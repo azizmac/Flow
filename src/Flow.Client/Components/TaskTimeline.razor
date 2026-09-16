@@ -1,4 +1,4 @@
-@* Лента задачи: комментарии (карточки) и журнал изменений (компактные строки) в одном хронологическом списке.
+﻿@* Лента задачи: комментарии (карточки) и журнал изменений (компактные строки) в одном хронологическом списке.
    Данные — GET /tasks/{id}/comments + GET /tasks/{id}/activity параллельно, слияние по CreatedAt.
    Соседние записи журнала одного актора в пределах минуты — одна группа. CommentAdded не показываем:
    сам комментарий уже в ленте. Композер внизу — только Member+ (Permissions.CanComment). *@
@@ -67,7 +67,7 @@
                             </div>
                             @if (_editingId == c.Id)
                             {
-                                <MarkdownEditor @bind-Value="_editText" MinHeight="100" Autofocus="true" Busy="_busy"
+                                <MarkdownEditor @bind-Value="_editText" MinHeight="100" Autofocus="true" Busy="_busy" AttachToTaskId="TaskItem.Id"
                                                 SubmitLabel="Сохранить" OnSubmit="SaveEdit" OnCancel="() => _editingId = null" />
                             }
                             else
@@ -112,8 +112,8 @@
     {
         <div class="tl-composer">
             <Avatar User="Me" Size="30" />
-            <MarkdownEditor @bind-Value="_draft" Placeholder="Написать комментарий… @@username — упомянуть" MinHeight="96"
-                            Busy="_busy" SubmitLabel="Отправить" SubmitHint="отправить" OnSubmit="Send" Id="tl-draft" />
+            <MarkdownEditor @bind-Value="_draft" Placeholder="Написать комментарий… @@username — упомянуть, файл можно перетащить" MinHeight="96"
+                            Busy="_busy" SubmitLabel="Отправить" SubmitHint="отправить" OnSubmit="Send" Id="tl-draft" AttachToTaskId="TaskItem.Id" />
         </div>
     }
     else if (Me is not null)

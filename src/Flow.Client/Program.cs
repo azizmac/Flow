@@ -45,5 +45,7 @@ builder.Services.AddScoped<BrowserInterop>();
 builder.Services.AddScoped<HotkeyService>();
 builder.Services.AddSingleton<ToastService>();
 builder.Services.AddSingleton<AppState>();
+// Один на приложение: блок вложений и редактор комментария узнают о новых файлах друг друга.
+builder.Services.AddSingleton<AttachmentEvents>();
 
 await builder.Build().RunAsync();

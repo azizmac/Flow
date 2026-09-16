@@ -15,6 +15,40 @@ window.flow = (function () {
             .filter(function (el) { return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement; });
     }
 
+    // Зоны приёма файлов: id зоны → функция снятия обработчиков (см. attachZone).
+    const dropZones = new Map();
+
+    // Файлы из перетаскивания или буфера кладём в скрытый <input type="file"> и будим change:
+    // до DataTransfer.files из Blazor WASM не дотянуться, InputFile умеет читать только свой input.
+    function pushFiles(input, files, fromClipboard) {
+        const data = new DataTransfer();
+        for (const file of files) data.items.add(fromClipboard ? namedScreenshot(file) : file);
+        if (!data.files.length) return;
+
+        input.files = data.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // Скриншот из буфера приезжает безымянным или как image.png — в списке вложений это бесполезно.
+    function namedScreenshot(file) {
+        if (file.name && file.name !== 'image.png') return file;
+
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const name = 'Снимок экрана ' + now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+            + ' ' + pad(now.getHours()) + '-' + pad(now.getMinutes()) + '.png';
+        try {
+            return new File([file], name, { type: file.type || 'image/png' });
+        } catch (_) {
+            return file;
+        }
+    }
+
+    function draggingFiles(e) {
+        const types = e.dataTransfer && e.dataTransfer.types;
+        return !!types && Array.prototype.indexOf.call(types, 'Files') >= 0;
+    }
+
     // Открытый модальный слой: поповер обрабатывает Tab сам, поэтому здесь только дровер и модалка.
     function openLayer() {
         return document.querySelector('.modal') || document.querySelector('.drawer.in');
@@ -218,6 +252,107 @@ window.flow = (function () {
         resetFileInput: function (id) {
             const el = document.getElementById(id);
             if (el) el.value = '';
+        },
+
+        // Зона приёма файлов: карточка задачи, слайдер или редактор. Подсветка обязательна — иначе
+        // непонятно, куда именно бросать. Вложенные зоны (редактор внутри карточки) забирают файл себе:
+        // обработчик на внутренней зоне срабатывает первым и останавливает всплытие.
+        attachZone: function (zoneId, inputId, acceptPaste) {
+            const zone = document.getElementById(zoneId);
+            const input = document.getElementById(inputId);
+            if (!zone || !input) return false;
+
+            window.flow.detachZone(zoneId);
+            let depth = 0;
+
+            const clear = function () {
+                depth = 0;
+                zone.classList.remove('drop-on');
+            };
+
+            const onEnter = function (e) {
+                if (!draggingFiles(e)) return;
+                e.preventDefault();
+                // Счётчик, а не флаг: dragleave приходит и при переходе на дочерний элемент.
+                depth++;
+                zone.classList.add('drop-on');
+            };
+            const onOver = function (e) {
+                if (!draggingFiles(e)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+            };
+            const onLeave = function (e) {
+                if (!draggingFiles(e)) return;
+                depth = Math.max(0, depth - 1);
+                if (!depth) zone.classList.remove('drop-on');
+            };
+            const onDrop = function (e) {
+                if (!draggingFiles(e)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                clear();
+                pushFiles(input, e.dataTransfer.files, false);
+            };
+            const onPaste = function (e) {
+                const files = e.clipboardData && e.clipboardData.files;
+                if (!files || !files.length) return;
+                e.preventDefault();
+                e.stopPropagation();
+                pushFiles(input, files, true);
+            };
+
+            zone.addEventListener('dragenter', onEnter);
+            zone.addEventListener('dragover', onOver);
+            zone.addEventListener('dragleave', onLeave);
+            zone.addEventListener('drop', onDrop);
+            if (acceptPaste) zone.addEventListener('paste', onPaste);
+
+            dropZones.set(zoneId, function () {
+                zone.removeEventListener('dragenter', onEnter);
+                zone.removeEventListener('dragover', onOver);
+                zone.removeEventListener('dragleave', onLeave);
+                zone.removeEventListener('drop', onDrop);
+                if (acceptPaste) zone.removeEventListener('paste', onPaste);
+                clear();
+            });
+
+            return true;
+        },
+
+        detachZone: function (zoneId) {
+            const off = dropZones.get(zoneId);
+            if (!off) return;
+            dropZones.delete(zoneId);
+            try { off(); } catch (_) { }
+        },
+
+        // Оживление ссылок на вложения в отрендеренном Markdown: картинке подставляется blob, ссылка
+        // на файл получает обработчик клика. Содержимое приносит .NET — оно доступно только по токену.
+        // Метка data-att-done защищает от повторной работы, когда компонент перерисовался сам по себе.
+        hydrateAttachments: async function (containerId, ref) {
+            const box = document.getElementById(containerId);
+            if (!box) return;
+
+            const images = box.querySelectorAll('img[data-attachment]:not([data-att-done])');
+            for (const image of images) {
+                image.setAttribute('data-att-done', '1');
+                try {
+                    const url = await ref.invokeMethodAsync('ResolveAttachment', image.getAttribute('data-attachment'));
+                    if (url) image.src = url;
+                    else image.classList.add('missing');
+                } catch (_) {
+                    image.classList.add('missing');
+                }
+            }
+
+            box.querySelectorAll('a[data-attachment]:not([data-att-done])').forEach(function (link) {
+                link.setAttribute('data-att-done', '1');
+                link.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    ref.invokeMethodAsync('DownloadAttachment', link.getAttribute('data-attachment')).catch(function () { });
+                });
+            });
         },
 
         saveFile: function (name, contentType, bytes) {
