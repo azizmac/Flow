@@ -1,4 +1,4 @@
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Flow.Application.Abstractions;
 using Flow.Application.Features.Search;
@@ -28,7 +28,7 @@ internal sealed class HttpVisionEmbeddingGenerator(
     public string ModelVersion { get; } =
         Qwen3Embeddings.BuildModelVersion(options.Embeddings.Vision.Model, options.Embeddings.Vision.Dimensions, string.Empty);
 
-    public bool IsConfigured => _options.Enabled && !string.IsNullOrWhiteSpace(_options.Endpoint);
+    public bool IsConfigured => options.VisionEnabled && !string.IsNullOrWhiteSpace(_options.Endpoint);
 
     public Task<float[]> EmbedQueryAsync(string query, CancellationToken cancellationToken) =>
         SendAsync(new { model = _options.Model, input = query }, "запрос", cancellationToken);

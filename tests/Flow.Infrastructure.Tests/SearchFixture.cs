@@ -1,6 +1,7 @@
 ﻿using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
 using Flow.Application.Features.Bootstrap;
+using Flow.Application.Features.Search;
 using Flow.Application.Tests.Fakes;
 using Flow.Infrastructure.DependencyInjection;
 using Flow.Infrastructure.Persistence;
@@ -33,6 +34,9 @@ public sealed class SearchFixture : IAsyncLifetime
 
     /// <summary>Визуальная модель тоже фейковая: проверяется индексация картинок, а не качество модели.</summary>
     public FakeVisionEmbeddingGenerator Vision { get; } = new() { IsConfigured = true };
+
+    /// <summary>Тот же синглтон настроек, что читают хендлеры: тестам он нужен, чтобы гасить модели.</summary>
+    public SearchOptions Options => _services.GetRequiredService<SearchOptions>();
 
     public async Task InitializeAsync()
     {

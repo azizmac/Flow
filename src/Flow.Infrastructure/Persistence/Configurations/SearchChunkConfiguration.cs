@@ -1,4 +1,4 @@
-using Flow.Infrastructure.Search.Entities;
+﻿using Flow.Infrastructure.Search.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using NpgsqlTypes;
@@ -30,9 +30,10 @@ internal sealed class SearchChunkConfiguration : IEntityTypeConfiguration<Search
         builder.Property(c => c.ContentHash).IsRequired();
 
         // halfvec (fp16) вдвое легче vector: на целевом объёме это гигабайты памяти под HNSW.
+        // Столбец необязательный: при выключенных эмбеддингах чанк пишется без вектора и живёт
+        // только полнотекстовой половиной (см. SearchEmbeddingsOptions.Enabled).
         builder.Property(c => c.Embedding)
-            .HasColumnType($"halfvec({SearchDimensions.Stored})")
-            .IsRequired();
+            .HasColumnType($"halfvec({SearchDimensions.Stored})");
 
         builder.Property(c => c.IsClosed).IsRequired();
 

@@ -1,3 +1,4 @@
+﻿using Flow.Application.Abstractions;
 using Flow.Application.Features.Search;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -20,6 +21,8 @@ internal sealed class SearchIndexingWorker(
     {
         var interval = TimeSpan.FromSeconds(Math.Max(1, options.Indexing.PollIntervalSeconds));
         logger.LogInformation("Индексация поиска запущена, опрос очереди раз в {Interval}.", interval);
+
+        await BackfillMissingVectorsAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -54,6 +57,36 @@ internal sealed class SearchIndexingWorker(
             {
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// Пока эмбеддинги были выключены, чанки писались без векторов — текст находился, смысл нет.
+    /// Модель вернулась: ставим такие источники в очередь один раз на старте, дальше их доиндексирует
+    /// обычный проход. Ошибка здесь не должна мешать воркеру работать: очередь и без дозаполнения жива,
+    /// а недостающие векторы всегда можно добрать через POST /search/reindex.
+    /// </summary>
+    private async Task BackfillMissingVectorsAsync(CancellationToken stoppingToken)
+    {
+        if (!options.Embeddings.Enabled)
+            return;
+
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            var index = scope.ServiceProvider.GetRequiredService<ISearchIndexRepository>();
+            var embedder = scope.ServiceProvider.GetRequiredService<IEmbeddingGenerator>();
+
+            var enqueued = await index.EnqueueMissingVectorsAsync(embedder.ModelVersion, stoppingToken);
+            if (enqueued > 0)
+                logger.LogInformation("Дозаполнение векторов: в очередь поставлено источников — {Count}.", enqueued);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Не удалось поставить в очередь источники без векторов.");
         }
     }
 }

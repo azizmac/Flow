@@ -218,13 +218,19 @@ internal sealed class SearchIndexingRunner(
             .ToArray();
 
         // Чанки, чей текст не изменился, переписывать незачем: у них меняются только флаги источника
-        // (IsClosed после смены статуса) — модель в этом случае не зовут вовсе.
+        // (IsClosed после смены статуса) — модель в этом случае не зовут вовсе. Исключение — чанк без
+        // вектора: его записали при выключенных эмбеддингах, и теперь текст тот же, а прогнать надо.
         var stale = desired
             .Where(item => Find(existing, item.Chunk.Index) is not { } match
+                           || match.Embedding is null
                            || !match.ContentHash.AsSpan().SequenceEqual(item.Hash))
             .ToArray();
 
-        var vectors = await EmbedAsync(stale, modelVersion, cancellationToken);
+        // Модель выключена — чанки пишутся без вектора: текст остаётся находимым полнотекстом,
+        // а векторы дозаполнятся, когда модель вернётся (SearchIndexingWorker ставит их в очередь).
+        var vectors = options.Embeddings.Enabled
+            ? await EmbedAsync(stale, modelVersion, cancellationToken)
+            : [];
 
         foreach (var item in desired)
         {
@@ -276,13 +282,13 @@ internal sealed class SearchIndexingRunner(
         var hashes = stale.Select(item => item.Hash).ToArray();
 
         var reusable = await db.SearchChunks
-            .Where(c => c.ModelVersion == modelVersion && hashes.Contains(c.ContentHash))
+            .Where(c => c.ModelVersion == modelVersion && c.Embedding != null && hashes.Contains(c.ContentHash))
             .Select(c => new { c.ContentHash, c.Embedding })
             .ToListAsync(cancellationToken);
 
         var byHash = new Dictionary<string, HalfVector>();
         foreach (var item in reusable)
-            byHash.TryAdd(Key(item.ContentHash), item.Embedding);
+            byHash.TryAdd(Key(item.ContentHash), item.Embedding!);
 
         var toEmbed = stale.Where(item => !byHash.ContainsKey(Key(item.Hash))).ToArray();
         if (toEmbed.Length > 0)

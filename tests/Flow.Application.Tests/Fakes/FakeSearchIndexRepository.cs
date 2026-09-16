@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Search;
 
 namespace Flow.Application.Tests.Fakes;
@@ -21,4 +21,8 @@ public sealed class FakeSearchIndexRepository : ISearchIndexRepository
         _reindexCalls.Add((types, boardId));
         return Task.FromResult(types.Count);
     }
+
+    /// <summary>Дозаполнение векторов зовёт только воркер, а он в тестах Application не участвует.</summary>
+    public Task<int> EnqueueMissingVectorsAsync(string modelVersion, CancellationToken cancellationToken) =>
+        Task.FromResult(0);
 }

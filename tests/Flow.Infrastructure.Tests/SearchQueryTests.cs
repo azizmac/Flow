@@ -1,4 +1,5 @@
-﻿using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
+﻿using Flow.Application.Abstractions;
+using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Search.Queries.SearchQuery;
 using Flow.Application.Features.Search.Queries.SimilarTasksQuery;
 using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
@@ -8,6 +9,8 @@ using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Application.Features.Users.Commands.UserCreateCommand;
 using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
 using Flow.Shared.Contracts.Tasks;
@@ -241,6 +244,52 @@ public class SearchQueryTests(SearchFixture fixture)
             fixture.Embedder.Unavailable = false;
         }
     }
+
+    /// <summary>
+    /// Выключенный «умный поиск» (Search:Embeddings:Enabled=false) — не то же, что погашенная модель:
+    /// индексация продолжает работать и пишет чанки без векторов, выдача честно остаётся текстовой
+    /// и не помечается degraded, а когда модель включают обратно — векторы дозаполняются.
+    /// </summary>
+    [Fact]
+    public async Task Disabled_Embeddings_Index_By_Words_And_Fill_Vectors_In_Later()
+    {
+        var board = await CreateBoardAsync();
+        fixture.Options.Embeddings.Enabled = false;
+
+        TaskResponse task;
+        try
+        {
+            task = (await CreateTaskAsync(board.Id, "Перенос склада в Химки", "Согласовать даты и транспорт."))!;
+            await fixture.DrainIndexingAsync();
+
+            var response = await SearchAsync("перенос склада", board.Id);
+
+            Assert.Contains(response!.Items, item => item.SourceId == task.Id);
+            Assert.Equal(SearchMode.Text, response.Mode);
+            // Выключено по настройке — это не деградация: клиенту не о чем предупреждать.
+            Assert.False(response.Degraded);
+            Assert.True(await CountChunksWithoutVectorAsync(task.Id) > 0);
+        }
+        finally
+        {
+            fixture.Options.Embeddings.Enabled = true;
+        }
+
+        // То же самое делает воркер на старте: источники с пустыми векторами возвращаются в очередь.
+        await using (var scope = fixture.CreateScope())
+        {
+            var index = scope.ServiceProvider.GetRequiredService<ISearchIndexRepository>();
+            Assert.True(await index.EnqueueMissingVectorsAsync(fixture.Embedder.ModelVersion, CancellationToken.None) > 0);
+        }
+
+        await fixture.DrainIndexingAsync();
+
+        Assert.Equal(0, await CountChunksWithoutVectorAsync(task.Id));
+        Assert.Equal(SearchMode.Hybrid, (await SearchAsync("перенос склада", board.Id))!.Mode);
+    }
+
+    private Task<int> CountChunksWithoutVectorAsync(Guid sourceId) =>
+        fixture.QueryAsync(db => db.SearchChunks.CountAsync(c => c.SourceId == sourceId && c.Embedding == null));
 
     [Fact]
     public async Task Assignee_Filter_From_Query_String_Narrows_To_Assigned_Tasks()

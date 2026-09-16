@@ -176,7 +176,7 @@ internal sealed class SearchSourceReader(
         CancellationToken cancellationToken)
     {
         var vision = options.Embeddings.Vision;
-        if (!vision.Enabled || sizeBytes > vision.MaxBytes)
+        if (!options.VisionEnabled || sizeBytes > vision.MaxBytes)
             return [];
 
         var isImage = contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)

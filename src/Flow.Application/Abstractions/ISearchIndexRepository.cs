@@ -1,4 +1,4 @@
-using Flow.Shared.Contracts.Search;
+﻿using Flow.Shared.Contracts.Search;
 
 namespace Flow.Application.Abstractions;
 
@@ -17,6 +17,13 @@ public interface ISearchIndexRepository
     /// Возвращает число поставленных записей.
     /// </summary>
     Task<int> EnqueueAllAsync(IReadOnlyCollection<SearchSourceType> types, Guid? boardId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Ставит в очередь источники, чьи чанки записаны без вектора: так бывает после работы
+    /// с выключенными эмбеддингами. Вызывается на старте воркера, когда модель снова включена —
+    /// иначе такой текст остался бы навсегда только в полнотекстовой половине.
+    /// </summary>
+    Task<int> EnqueueMissingVectorsAsync(string modelVersion, CancellationToken cancellationToken);
 }
 
 /// <param name="QueueTotal">Всего записей в очереди.</param>

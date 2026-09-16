@@ -85,6 +85,10 @@ services:
       # отключает и эндпоинты, и воркер — поведение приложения становится в точности прежним.
       Search__Enabled: ${SEARCH_ENABLED:-true}
       Search__Indexing__Enabled: ${SEARCH_INDEXING_ENABLED:-true}
+      # Умный поиск: EMBEDDINGS_ENABLED=false — ни одной модели, поиск идёт только по словам,
+      # а индексация продолжает работать и пишет чанки без векторов. Заодно гаснут визуальная
+      # половина и реранкер: держать GPU-сайдкары ради выключенного поиска смысла нет.
+      Search__Embeddings__Enabled: ${EMBEDDINGS_ENABLED:-true}
       Search__Embeddings__QueryEndpoint: ${EMBEDDINGS_QUERY_ENDPOINT:-http://embeddings:8081/v1}
       Search__Embeddings__IndexingEndpoint: ${EMBEDDINGS_INDEXING_ENDPOINT:-}
       Search__Embeddings__Model: ${EMBEDDINGS_MODEL:-Qwen3-Embedding-0.6B}

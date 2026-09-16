@@ -1,4 +1,4 @@
-using Flow.Shared.Contracts.Search;
+﻿using Flow.Shared.Contracts.Search;
 using Pgvector;
 
 namespace Flow.Infrastructure.Search.Entities;
@@ -28,7 +28,12 @@ internal sealed class SearchChunk
     /// <summary>SHA-256 от Content: не переэмбеддить неизменившийся текст и переиспользовать готовый вектор.</summary>
     public byte[] ContentHash { get; set; } = [];
 
-    public HalfVector Embedding { get; set; } = null!;
+    /// <summary>
+    /// null — чанк проиндексирован без модели (Search:Embeddings:Enabled=false): текст ищется,
+    /// вектор дозаполнится при следующей индексации источника. Векторная половина такие чанки
+    /// пропускает явным условием, а не полагается на порядок NULL в ORDER BY.
+    /// </summary>
+    public HalfVector? Embedding { get; set; }
 
     /// <summary>Задача в финальном статусе; у остальных типов false. Меняется UPDATE'ом, без реэмбеддинга.</summary>
     public bool IsClosed { get; set; }

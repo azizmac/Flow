@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Shared.Contracts.Search;
 using MediatR;
@@ -30,7 +30,8 @@ internal sealed class SearchStatusQueryHandler(
                 OldestQueuedAt: null);
 
         var statistics = await index.GetStatisticsAsync(embedder.ModelVersion, options.Indexing.MaxAttempts, cancellationToken);
-        var available = await embedder.IsAvailableAsync(cancellationToken);
+        // Выключенную модель не опрашиваем: пробный вызов уехал бы в таймаут и ничего не сообщил.
+        var available = options.Embeddings.Enabled && await embedder.IsAvailableAsync(cancellationToken);
 
         return new SearchStatusResponse(
             Enabled: true,

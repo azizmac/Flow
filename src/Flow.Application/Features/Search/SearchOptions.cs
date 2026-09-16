@@ -19,6 +19,15 @@ public sealed class SearchOptions
     public SearchQueryOptions Query { get; set; } = new();
 
     public SearchRerankOptions Rerank { get; set; } = new();
+
+    /// <summary>
+    /// Визуальная половина. Зависит от Embeddings:Enabled намеренно: это вторая нейросеть, и выключатель
+    /// «без моделей» должен гасить обе, иначе установка без GPU продолжала бы ходить в vLLM за кадрами.
+    /// </summary>
+    public bool VisionEnabled => Embeddings.Enabled && Embeddings.Vision.Enabled;
+
+    /// <summary>Вторая ступень выдачи — тоже модель, поэтому тоже гаснет вместе с Embeddings:Enabled.</summary>
+    public bool RerankEnabled => Embeddings.Enabled && Rerank.Enabled;
 }
 
 /// <summary>
@@ -62,6 +71,17 @@ public sealed class SearchRerankOptions
 
 public sealed class SearchEmbeddingsOptions
 {
+    /// <summary>
+    /// Главный выключатель «умного поиска». false — ни одна модель не вызывается: запрос ищется
+    /// только по словам (полнотекст), картинки и вторая ступень выключены вместе с векторами
+    /// (см. SearchOptions.VisionEnabled и RerankEnabled), а индексация продолжает работать и пишет
+    /// чанки без вектора — текст остаётся находимым, и установке без GPU не нужен ни один сайдкар.
+    ///
+    /// Векторы этих чанков дозаполняются, когда модель возвращается: воркер на старте ставит такие
+    /// источники в очередь сам (см. SearchIndexingWorker), вручную это же делает POST /search/reindex.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>Http — сайдкар llama-server (OpenAI-совместимый /v1/embeddings). Onnx — этап «дальше по потребности».</summary>
     public EmbeddingProvider Provider { get; set; } = EmbeddingProvider.Http;
 

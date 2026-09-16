@@ -64,7 +64,9 @@ internal sealed class SearchQueryHandler(
             : null;
 
         // Векторная половина нужна во всех режимах, кроме Text, и только когда есть что эмбеддить.
-        if (request.Mode != SearchMode.Text && resolved.Text.Length > 0)
+        // Выключенные эмбеддинги — не деградация, а настройка: выдача честно остаётся текстовой,
+        // и клиент не показывает «модель недоступна» там, где её просто не просили.
+        if (request.Mode != SearchMode.Text && resolved.Text.Length > 0 && options.Embeddings.Enabled)
         {
             try
             {
@@ -95,7 +97,7 @@ internal sealed class SearchQueryHandler(
 
         // Вторая ступень работает только по первой странице: переупорядочивать окно, которое человек
         // уже пролистал, незачем, а тянуть ради этого лишние кандидаты — значит платить за каждую пару.
-        var rerankWindow = request.Rerank && options.Rerank.Enabled && reranker.IsConfigured && offset == 0 && resolved.Text.Length > 0;
+        var rerankWindow = request.Rerank && options.RerankEnabled && reranker.IsConfigured && offset == 0 && resolved.Text.Length > 0;
         var candidates = rerankWindow ? Math.Max(options.Rerank.TopN, limit) : limit;
 
         var criteria = new SearchCriteria(

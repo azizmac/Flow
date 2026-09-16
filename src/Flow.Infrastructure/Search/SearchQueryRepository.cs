@@ -103,7 +103,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                      FROM (
                          SELECT c."Id", c."Embedding" <=> @query AS distance
                          FROM {source}
-                         WHERE {filter}
+                         WHERE {filter} AND c."Embedding" IS NOT NULL
                          ORDER BY c."Embedding" <=> @query
                          LIMIT @vectorTopN
                      ) v
@@ -126,7 +126,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                      FROM (
                          SELECT c."Id", c."Embedding" <=> @visionQuery AS distance
                          FROM {source}
-                         WHERE {visionFilter}
+                         WHERE {visionFilter} AND c."Embedding" IS NOT NULL
                          ORDER BY c."Embedding" <=> @visionQuery
                          LIMIT @vectorTopN
                      ) v
@@ -304,6 +304,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             WITH source AS (
                 SELECT "Embedding" FROM "SearchChunks"
                 WHERE "SourceType" = 1 AND "SourceId" = @taskId AND "ModelVersion" = @model
+                  AND "Embedding" IS NOT NULL
                 ORDER BY "ChunkIndex"
                 LIMIT 1
             ),
@@ -313,6 +314,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                 FROM "SearchChunks" c
                 WHERE c."SourceType" = 1
                   AND c."ModelVersion" = @model
+                  AND c."Embedding" IS NOT NULL
                   AND c."IsClosed" = false
                   AND c."SourceId" <> @taskId
                   AND EXISTS (SELECT 1 FROM source)
