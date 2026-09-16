@@ -436,6 +436,14 @@ a.mud-link:hover {
     color: var(--text-secondary);
 }
 
+/* Ниже 1200px колонка «Создана» уходит: дата видна в карточке задачи, а ширина нужнее названию. */
+@media (max-width: 1200px) {
+    .flow-grid th:nth-child(5),
+    .flow-grid td:nth-child(5) {
+        display: none;
+    }
+}
+
 /* Пустой список и индикатор загрузки занимают всю ширину таблицы. */
 .flow-grid .mud-table-body .empty {
     padding: 40px 20px;

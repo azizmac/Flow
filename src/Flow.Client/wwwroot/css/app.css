@@ -339,19 +339,6 @@ input, textarea { font-family: inherit; }
 }
 @keyframes err-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
-/* ---------- Tag (pill) ---------- */
-.ds-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    height: 34px;
-    padding: 0 15px;
-    border-radius: var(--radius-pill);
-    background: rgba(255, 255, 255, 0.10);
-    font: var(--fw-medium) var(--text-body) var(--font-display);
-    color: var(--text-primary);
-    white-space: nowrap;
-}
 
 /* ---------- Spinner ---------- */
 .ds-spin {
@@ -825,18 +812,6 @@ a.sb-me:active { transform: scale(0.98); }
     flex-shrink: 0;
 }
 .task-row:last-child { border-bottom: none; }
-/* Появление строк: анимируем только прозрачность — transform превратил бы строку
-   в containing block для fixed-поповера меню «…» внутри неё. */
-.rows-in > .task-row { animation: row-in 220ms var(--ease-out) backwards; }
-.rows-in > .task-row:nth-child(1) { animation-delay: 0ms; }
-.rows-in > .task-row:nth-child(2) { animation-delay: 25ms; }
-.rows-in > .task-row:nth-child(3) { animation-delay: 50ms; }
-.rows-in > .task-row:nth-child(4) { animation-delay: 75ms; }
-.rows-in > .task-row:nth-child(5) { animation-delay: 100ms; }
-.rows-in > .task-row:nth-child(6) { animation-delay: 125ms; }
-.rows-in > .task-row:nth-child(7) { animation-delay: 150ms; }
-.rows-in > .task-row:nth-child(n+8) { animation-delay: 170ms; }
-@keyframes row-in { from { opacity: 0; } to { opacity: 1; } }
 .task-row.done .task-title { color: var(--text-tertiary); }
 .task-row.sel { background: var(--accent-soft); }
 .task-row.flash { animation: row-flash 1.5s ease-out; }
@@ -907,24 +882,9 @@ a.sb-me:active { transform: scale(0.98); }
 .status-sel .ds-icon { color: rgba(255, 255, 255, 0.4); margin-left: 2px; }
 .status-sel .lbl { overflow: hidden; text-overflow: ellipsis; }
 
-/* ---------- Popover (status-menu / row-menu) ---------- */
-.pop-scrim { position: fixed; inset: 0; z-index: 40; }
-.pop {
-    position: fixed;
-    z-index: 41;
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    padding: 6px;
-    box-shadow: var(--shadow-popover);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    opacity: 0;
-    transform: scale(0.96);
-    transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out);
-}
-.pop.in { opacity: 1; transform: scale(1); }
+/* ---------- Пункты списков в слоях ----------
+   Сам слой рисует MudPopover (см. mud-overrides.css, .flow-pop). Здесь остались пункты: они те же
+   в меню задач, в селектах и в списке упоминаний Markdown-редактора, который слоем не пользуется. */
 .pop-item {
     display: flex;
     align-items: center;
@@ -1000,14 +960,6 @@ a.sb-me:active { transform: scale(0.98); }
 /* Служебная группа (кастомные статусы): показывает число, но фильтром не является. */
 .seg-btn.muted { cursor: default; opacity: 0.7; }
 .filter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.list-more {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 14px 20px;
-    border-top: 1px solid var(--border);
-}
 
 /* ---------- Empty states ---------- */
 .empty {
@@ -1046,7 +998,9 @@ a.sb-me:active { transform: scale(0.98); }
     top: 0;
     right: 0;
     bottom: 0;
-    width: 560px;
+    /* На широком экране — привычные 560px, на ноутбуке уступает список: доля от окна, но не уже 380px,
+       иначе мета-сетка и лента комментариев начинают переноситься по одному слову. */
+    width: clamp(380px, 46vw, 560px);
     max-width: 100%;
     background: var(--surface);
     border-left: 1px solid var(--border);
@@ -1444,7 +1398,6 @@ a.sb-me:active { transform: scale(0.98); }
 .profile-name { margin: 0; font: var(--fw-black) 24px/1.15 var(--font-display); letter-spacing: -0.5px; color: #fff; word-break: break-word; }
 .profile-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font: var(--fw-medium) 13px var(--font-text); color: var(--text-secondary); }
 .profile-sub .dot { color: var(--text-tertiary); }
-.profile-actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; }
 .tabs { display: flex; gap: 4px; padding: 0 40px; border-bottom: 1px solid var(--border); }
 .tab {
     position: relative;
@@ -1581,6 +1534,16 @@ a.task-row { color: inherit; text-decoration: none; }
 .content::-webkit-scrollbar, .panel-rows::-webkit-scrollbar, .drawer-body::-webkit-scrollbar { width: 8px; }
 .content::-webkit-scrollbar-thumb, .panel-rows::-webkit-scrollbar-thumb, .drawer-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 4px; }
 
+/* ---------- Ноутбучные ширины ----------
+   Целевой минимум — 1280px (docs/TZ_client_mudblazor.md, раздел 6). Ниже 1280 ужимаем поля экрана,
+   ниже 1200 — прячем в списке задач колонку «Создана»: дата есть в карточке, а место нужнее названию.
+   Вёрстка не рассыпается и на 1024, но обещанного вида там не гарантируем. */
+@media (max-width: 1280px) {
+    .topbar { padding: 0 20px; gap: 12px; }
+    .content { padding: 20px 20px; }
+    .task-page { padding: 24px 24px; gap: 20px; }
+}
+
 /* ---------- Hover — только для настоящих указателей ---------- */
 @media (hover: hover) and (pointer: fine) {
     .ds-btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
@@ -1630,7 +1593,6 @@ a.task-row { color: inherit; text-decoration: none; }
     .pop, .pop.in { transform: none; }
     .drawer, .drawer.in { transition: none; }
     .stagger > * { animation: none; }
-    .rows-in > .task-row { animation: none; }
     .seg-btn.on { animation: none; }
     .seg-btn.on .sd { transform: none; }
     .task-row.flash { animation: none; }
@@ -1685,7 +1647,6 @@ a.task-row { color: inherit; text-decoration: none; }
     background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--r-lg);
     padding: 6px; box-shadow: var(--shadow-popover); display: flex; flex-direction: column; gap: 2px;
 }
-.md-preview.desc-box { border-style: dashed; }
 .md-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .md-foot .hint { white-space: nowrap; }
 .md-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
