@@ -27,11 +27,13 @@ public sealed class ApiFixture : IAsyncLifetime
     private static readonly SymmetricSecurityKey SigningKey =
         new(Encoding.UTF8.GetBytes("flow-api-tests-signing-key-must-be-at-least-32-bytes"));
 
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:pg16").Build();
 
     public WebApplicationFactory<Program> Factory { get; private set; } = null!;
 
     public FakeAccountService Accounts { get; } = new();
+
+    public InMemoryFileStorage Storage { get; } = new();
 
     public async Task InitializeAsync()
     {
@@ -43,10 +45,18 @@ public sealed class ApiFixture : IAsyncLifetime
             builder.UseSetting("Auth:BaseUrl", Issuer);
             builder.UseSetting("Auth:Issuer", Issuer);
             builder.UseSetting("Auth:ApiClient:Secret", "unused");
+            // Поиск включён (дефолт приложения), но без фонового воркера и с заведомо недоступным
+            // эмбеддером: тесты проверяют HTTP-поверхность и деградацию, а не качество выдачи,
+            // и не должны зависеть от того, поднят ли llama-server на машине.
+            builder.UseSetting("Search:Indexing:Enabled", "false");
+            builder.UseSetting("Search:Embeddings:QueryEndpoint", "http://localhost:1/v1");
 
             builder.ConfigureTestServices(services =>
             {
                 services.AddSingleton<IAccountService>(Accounts);
+                // Вложения кладутся в память: поднимать MinIO ради проверки кодов ответа незачем,
+                // сам S3-клиент проверяется отдельным интеграционным тестом.
+                services.AddSingleton<IFileStorage>(Storage);
 
                 // Без discovery: проверяем подпись локальным ключом, issuer и audience — как у настоящего Flow.Auth.
                 services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>

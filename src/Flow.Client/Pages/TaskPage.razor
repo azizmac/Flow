@@ -1,4 +1,4 @@
-@* Экран 5 — задача на всю страницу (GET /tasks/{id} → GET /boards/{boardId}). *@
+﻿@* Экран 5 — задача на всю страницу (GET /tasks/{id} → GET /boards/{boardId}). *@
 @page "/tasks/{Id:guid}"
 @implements IDisposable
 @inject FlowApi Api
@@ -59,7 +59,7 @@ else if (_loadError is not null)
 else if (_task is not null && _board is not null)
 {
     <div class="content task-page" @onkeydown="OnBodyKey">
-        <div class="task-page-main">
+        <div class="task-page-main" id="tp-drop">
             <div>
                 <div class="code accent" style="margin-bottom:10px;">@_task.Code</div>
                 @if (_editingTitle)
@@ -95,13 +95,14 @@ else if (_task is not null && _board is not null)
                 @if (_editingDesc)
                 {
                     <MarkdownEditor Id="tp-desc" @bind-Value="_description" MinHeight="220" Autofocus="true" Busy="_busy" AllowEmpty="true"
-                                    ShowActions="false" OnSubmit="SaveDesc" OnCancel="() => _editingDesc = false" />
+                                    AttachToTaskId="_task.Id" ShowActions="false" OnSubmit="SaveDesc" OnCancel="() => _editingDesc = false" />
                 }
                 else
                 {
                     <MarkdownView Text="@_task.Description" Class="big" OnClick="OnDescClick" />
                 }
             </div>
+            <AttachmentList TaskId="_task.Id" DropZoneId="tp-drop" />
             <TaskTimeline @ref="_timeline" TaskItem="_task" Board="_board" OnCommentCountChanged="OnCommentCountChanged" />
         </div>
 
@@ -156,6 +157,7 @@ else if (_task is not null && _board is not null)
                     <UserCard User="who" AnchorId="tp-who" OnClose="() => _whoOpen = false" />
                 }
             }
+            <SimilarTasks TaskId="_task.Id" />
             @if (CanEdit)
             {
                 <button type="button" class="icon-lnk danger" style="padding:0 4px;align-self:flex-start;" @onclick="() => _deleting = true">

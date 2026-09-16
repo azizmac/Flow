@@ -11,6 +11,10 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddFlowInfrastructure(builder.Configuration);
+// Поисковый индекс (секция "Search"): эмбеддер, очередь и фоновый воркер индексации.
+// AddFlowInfrastructure уже вызывает его — повтор оставлен намеренно, чтобы состав сервисов
+// читался прямо здесь; второй вызов ничего не регистрирует.
+builder.Services.AddFlowSearch(builder.Configuration);
 builder.Services.AddFlowApplication();
 builder.Services.AddControllers(options => options.Filters.Add<ApiExceptionFilter>());
 

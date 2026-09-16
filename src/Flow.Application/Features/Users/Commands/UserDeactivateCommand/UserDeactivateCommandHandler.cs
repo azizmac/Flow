@@ -1,6 +1,7 @@
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
+using Flow.Shared.Contracts.Search;
 using MediatR;
 
 namespace Flow.Application.Features.Users.Commands.UserDeactivateCommand;
@@ -9,7 +10,7 @@ namespace Flow.Application.Features.Users.Commands.UserDeactivateCommand;
 /// Сначала блокировка входа в Flow.Auth (иначе деактивированный продолжит входить и обновлять токены),
 /// потом статус в Users. Если Flow.Auth недоступен — AuthUnavailableException, статус не меняется.
 /// </summary>
-internal sealed class UserDeactivateCommandHandler(IUserRepository users, ActorResolver actors, IPermissionService permissions, IAccountService accounts, IUnitOfWork unitOfWork)
+internal sealed class UserDeactivateCommandHandler(IUserRepository users, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IAccountService accounts, IUnitOfWork unitOfWork)
     : IRequestHandler<UserDeactivateCommand, UserUpdateResult>
 {
     public async Task<UserUpdateResult> Handle(UserDeactivateCommand request, CancellationToken cancellationToken)
@@ -32,6 +33,10 @@ internal sealed class UserDeactivateCommandHandler(IUserRepository users, ActorR
         await accounts.DisableAsync(user.Id, cancellationToken);
 
         user.Deactivate();
+
+        // Ушедший человек из поиска убирается: назначать на него нельзя, и в выдаче он только мешает.
+        // Профиль и история назначений остаются — удаляется проекция, а не данные.
+        searchIndex.Enqueue(SearchSourceType.User, user.Id, boardId: null, SearchIndexOperation.Delete);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return UserUpdateResult.Success(user.ToResponse());

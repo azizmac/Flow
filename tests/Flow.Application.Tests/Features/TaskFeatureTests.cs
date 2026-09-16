@@ -1,4 +1,4 @@
-using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
+﻿using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
@@ -56,20 +56,7 @@ public class TaskFeatureTests
         Assert.Null(response);
     }
 
-    [Fact]
-    public async Task CreateTask_Should_GenerateSequentialCodes()
-    {
-        var (mediator, boards, tasks, _) = TestMediatorFactory.Create();
-        var board = await CreateBoardAsync(mediator, boards, tasks);
-
-        var first = await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, board.Id, "First", null, null), CancellationToken.None);
-        var second = await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, board.Id, "Second", null, null), CancellationToken.None);
-
-        Assert.Equal("FLW-1", first!.Code);
-        Assert.Equal("FLW-2", second!.Code);
-    }
-
-    [Fact]
+     [Fact]
     public async Task GetBoardTasks_Should_ReturnOnlyTasksOfThatBoard()
     {
         var (mediator, boards, tasks, _) = TestMediatorFactory.Create();

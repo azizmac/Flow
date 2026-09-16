@@ -1,6 +1,7 @@
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
+using Flow.Shared.Contracts.Search;
 using MediatR;
 
 namespace Flow.Application.Features.Tasks.Commands.TaskCommentDeleteCommand;
@@ -8,6 +9,7 @@ namespace Flow.Application.Features.Tasks.Commands.TaskCommentDeleteCommand;
 internal sealed class TaskCommentDeleteCommandHandler(
     ITaskCommentRepository comments,
     ITaskActivityRepository activities,
+    ISearchIndexQueue searchIndex,
     ActorResolver actors,
     IPermissionService permissions,
     IUnitOfWork unitOfWork)
@@ -25,6 +27,7 @@ internal sealed class TaskCommentDeleteCommandHandler(
 
         comments.Remove(comment);
         activities.Add(TaskActivity.CommentDeleted(comment.TaskId, actor.Id, comment.Id));
+        searchIndex.Enqueue(SearchSourceType.Comment, comment.Id, boardId: null, SearchIndexOperation.Delete);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return true;

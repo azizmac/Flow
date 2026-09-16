@@ -1,6 +1,8 @@
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
+using Flow.Application.Features.Search.Commands.ReindexCommand;
+using Flow.Application.Features.Search.Queries.SearchStatusQuery;
 using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
@@ -325,5 +327,28 @@ public class PermissionTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             mediator.Send(new UserDeactivateCommand(Owner, second), CancellationToken.None));
+    }
+
+    // ---- поиск ----
+
+    [Fact]
+    public async Task Search_Status_Is_Admin_Only()
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var admin = AddUser(users, UserRole.Admin, "admin");
+        var developer = AddUser(users, UserRole.Developer, "dev");
+
+        Assert.NotNull(await mediator.Send(new SearchStatusQuery(admin), CancellationToken.None));
+        await Forbidden(() => mediator.Send(new SearchStatusQuery(developer), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Reindex_Is_Owner_Only()
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var admin = AddUser(users, UserRole.Admin, "admin");
+
+        await mediator.Send(new ReindexCommand(Owner, null, null), CancellationToken.None);
+        await Forbidden(() => mediator.Send(new ReindexCommand(admin, null, null), CancellationToken.None));
     }
 }

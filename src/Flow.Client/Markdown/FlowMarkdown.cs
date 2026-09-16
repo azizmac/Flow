@@ -1,4 +1,7 @@
 using Markdig;
+using Markdig.Renderers;
+using Markdig.Syntax;
+using Markdig.Syntax.Inlines;
 
 namespace Flow.Client.Markdown;
 
@@ -10,7 +13,23 @@ public static class FlowMarkdown
 {
     public static readonly MarkdownPipeline Pipeline = Build();
 
-    public static string ToHtml(string? text) => Markdig.Markdown.ToHtml(text ?? string.Empty, Pipeline);
+    /// <summary>
+    /// Текст → HTML. Ссылки на вложения правятся в дереве, а не в готовой строке: подменять атрибуты
+    /// регулярками по HTML — значит однажды попасть в текст пользователя, а не в разметку.
+    /// </summary>
+    public static string ToHtml(string? text)
+    {
+        var document = Markdig.Markdown.Parse(text ?? string.Empty, Pipeline);
+
+        foreach (var link in document.Descendants<LinkInline>())
+            AttachmentLinks.Rewrite(link);
+
+        using var writer = new StringWriter();
+        var renderer = new HtmlRenderer(writer);
+        Pipeline.Setup(renderer);
+        renderer.Render(document);
+        return writer.ToString();
+    }
 
     private static MarkdownPipeline Build()
     {

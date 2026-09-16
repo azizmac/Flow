@@ -1,4 +1,4 @@
-@* Markdown-редактор: разметка видна прямо при наборе (CodeMirror, см. editor/README.md) — заголовок крупнее,
+﻿@* Markdown-редактор: разметка видна прямо при наборе (CodeMirror, см. editor/README.md) — заголовок крупнее,
    жирный жирным, ссылка цветом акцента, а сами символы разметки остаются в тексте приглушёнными.
    Вкладки «Написать / Предпросмотр» больше не нужны; тулбар (заголовок, жирный, курсив, зачёркнутый, код,
    цитата, списки, чек-лист, ссылка) и хоткеи Ctrl B / I / K, Ctrl Enter → OnSubmit, Esc → OnCancel остались.
@@ -23,6 +23,14 @@
             <button type="button" class="md-tool" title="Список" @onclick='() => Prefix("- ")'><Icon Name="list" Size="15" /></button>
             <button type="button" class="md-tool" title="Нумерованный список" @onclick='() => Prefix("1. ", ordered: true)'><Icon Name="list-ordered" Size="15" /></button>
             <button type="button" class="md-tool" title="Чек-лист" @onclick='() => Prefix("- [ ] ")'><Icon Name="check-square" Size="15" /></button>
+            @if (AttachToTaskId is not null)
+            {
+                <span class="md-sep"></span>
+                @* Label, а не кнопка: диалог выбора файла открывает сам input, без похода в JS. *@
+                <label class="md-tool" for="@_attachInputId" title="Прикрепить файл (или перетащите в поле)">
+                    <Icon Name="add-file" Size="15" />
+                </label>
+            }
         </div>
     </div>
 
@@ -51,6 +59,14 @@
             </div>
         }
     </div>
+
+    @if (AttachToTaskId is { } attachTo)
+    {
+        @* Зона приёма — поле ввода: брошенный или вставленный файл грузится в задачу, а на место
+           курсора встаёт ссылка. Кнопка своя не нужна — её роль играет label в тулбаре. *@
+        <AttachmentUpload TaskId="attachTo" InputId="@_attachInputId" ShowButton="false"
+                          DropZoneId="@Id" AcceptPaste="true" Disabled="Busy" OnUploaded="InsertAttachment" />
+    }
 
     <div class="md-foot">
         <span class="hint">Markdown · <span class="kbd">@@</span> упомянуть · <span class="kbd">Ctrl Enter</span> @SubmitHint</span>
@@ -85,6 +101,14 @@
     [Parameter] public EventCallback OnCancel { get; set; }
     /// <summary>Id контейнера редактора — чтобы страница могла поставить фокус.</summary>
     [Parameter] public string Id { get; set; } = "md-" + Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>
+    /// Задача, к которой приложить брошенный или выбранный файл (docs/TZ_attachments.md). null —
+    /// редактор без вложений (например, форма новой задачи: задачи ещё нет, прикладывать не к чему).
+    /// </summary>
+    [Parameter] public Guid? AttachToTaskId { get; set; }
+
+    private readonly string _attachInputId = "mda-" + Guid.NewGuid().ToString("N")[..8];
 
     private bool _mentionOpen;
     private int _mentionAt;
@@ -276,6 +300,26 @@
 
     private async Task Prefix(string prefix, bool ordered = false) =>
         await SetValue(await Browser.EditorPrefixLinesAsync(Id, prefix, ordered));
+
+    /// <summary>
+    /// Файл приложен — ставим на его место ссылку «attachment:{id}»: картинка покажется прямо в тексте,
+    /// остальное станет ссылкой на скачивание. Ссылка живёт на своей строке, как в GitLab: внутри
+    /// предложения картинка разрывала бы абзац.
+    /// </summary>
+    private async Task InsertAttachment(AttachmentResponse attachment)
+    {
+        // Квадратные скобки в имени файла разорвали бы ссылку — экранируем их, остальное Markdown стерпит.
+        var name = attachment.FileName.Replace("[", "\\[").Replace("]", "\\]");
+        var link = $"{(attachment.IsImage ? "!" : string.Empty)}[{name}](attachment:{attachment.Id})";
+
+        var state = await Browser.EditorStateAsync(Id);
+        var caret = state is null ? 0 : Math.Min(state.Start, state.Value.Length);
+        var onOwnLine = state is null || caret == 0 || state.Value[caret - 1] == '\n';
+
+        var text = (onOwnLine ? string.Empty : "\n") + link + "\n";
+        await SetValue(await Browser.EditorInsertAsync(Id, text));
+        StateHasChanged();
+    }
 
     private async Task Submit()
     {

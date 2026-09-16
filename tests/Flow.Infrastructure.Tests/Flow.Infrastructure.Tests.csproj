@@ -14,11 +14,21 @@
         <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
         <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
+        <!-- S3FileStorage проверяется против настоящего MinIO: подпись запросов и контрольные суммы
+             у S3-совместимых хранилищ расходятся, на заглушке этого не увидеть. -->
+        <PackageReference Include="Testcontainers.Minio" Version="4.15.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Набор запросов для замера качества выдачи: читается тестом из каталога сборки. -->
+        <Content Include="GoldenSet\golden-set.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Flow.Application\Flow.Application.csproj" />
         <ProjectReference Include="..\..\src\Flow.Infrastructure\Flow.Infrastructure.csproj" />
+        <!-- FakeEmbeddingGenerator: интеграционные тесты индексации модель не тянут. -->
+        <ProjectReference Include="..\Flow.Application.Tests\Flow.Application.Tests.csproj" />
     </ItemGroup>
 
 </Project>

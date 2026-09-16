@@ -114,6 +114,20 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
     public Task<bool> StatusBelongsToBoardAsync(Guid statusId, Guid boardId, CancellationToken cancellationToken) =>
         db.Statuses.AnyAsync(s => s.Id == statusId && s.BoardId == boardId, cancellationToken);
 
+    /// <summary>
+    /// Код — value object с конвертером, поэтому сравнивается целиком: обращение к .Value внутри
+    /// выражения EF не переводит. Коды в базе всегда в верхнем регистре (ключ доски такой), запрос
+    /// приводится к нему здесь.
+    /// </summary>
+    public Task<TaskItem?> GetByCodeAsync(string code, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return Task.FromResult<TaskItem?>(null);
+
+        var normalized = TaskCode.FromValue(code.Trim().ToUpperInvariant());
+        return db.TaskItems.FirstOrDefaultAsync(t => t.Code == normalized, cancellationToken);
+    }
+
     public void Add(TaskItem task) => db.TaskItems.Add(task);
 
     public void Remove(TaskItem task) => db.TaskItems.Remove(task);

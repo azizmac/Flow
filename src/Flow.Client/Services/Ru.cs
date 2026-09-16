@@ -113,6 +113,32 @@ public static partial class Ru
 
     public static string Comments(int n) => $"{n} {Plural(n, "комментарий", "комментария", "комментариев")}";
 
+    public static string Files(int n) => $"{n} {Plural(n, "файл", "файла", "файлов")}";
+
+    /// <summary>Размер файла: «840 КБ», «1,2 МБ». Дробь — только у небольших значений, иначе цифры лишние.</summary>
+    public static string FileSize(long bytes)
+    {
+        if (bytes < 1024)
+            return $"{bytes} Б";
+
+        string[] units = ["КБ", "МБ", "ГБ"];
+        double value = bytes;
+        var unit = -1;
+        do
+        {
+            value /= 1024;
+            unit++;
+        }
+        while (value >= 1024 && unit < units.Length - 1);
+
+        // Культура инвариантная (см. csproj), точку меняем на запятую сами.
+        var text = value.ToString(value < 10 && unit > 0 ? "0.#" : "0", System.Globalization.CultureInfo.InvariantCulture);
+        return $"{text.Replace('.', ',')} {units[unit]}";
+    }
+
+    /// <summary>«3 результата» — счётчик найденного в поиске.</summary>
+    public static string Results(int n) => $"{n} {Plural(n, "результат", "результата", "результатов")}";
+
     /// <summary>«6 сен 2026, 14:20».</summary>
     public static string DateTimeFull(DateTime utc)
     {

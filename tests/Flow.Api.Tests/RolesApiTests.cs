@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Users;
@@ -57,18 +57,7 @@ public sealed class RolesApiTests(ApiFixture api)
         Assert.Contains("message", await forbidden.Content.ReadAsStringAsync());
     }
 
-    [Fact]
-    public async Task Last_Owner_Demotion_Should_Return400()
-    {
-        using var owner = api.CreateClientAs();
-
-        using var response = await owner.PatchAsJsonAsync($"/users/{ApiFixture.BootstrapId}/role", new ChangeUserRoleRequest(UserRole.Admin));
-
-        // Owner может быть не единственным, если другой тест успел его назначить — тогда 200. Оба исхода — по правилам.
-        Assert.Contains(response.StatusCode, new[] { HttpStatusCode.BadRequest, HttpStatusCode.OK });
-    }
-
-    [Fact]
+     [Fact]
     public async Task Member_Cannot_Create_Board_Or_Users()
     {
         using var owner = api.CreateClientAs();

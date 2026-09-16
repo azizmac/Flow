@@ -1,4 +1,5 @@
 using Flow.Application.Abstractions;
+using Flow.Application.Tests.Fakes;
 using Flow.Application.DependencyInjection;
 using Flow.Application.Features.Bootstrap;
 using Flow.Infrastructure.DependencyInjection;
@@ -22,9 +23,12 @@ public sealed class PostgresFixture : IAsyncLifetime
     /// <summary>Owner, который сеется после миграций: actor для команд в интеграционных тестах.</summary>
     public static readonly Guid OwnerId = Guid.Parse("00000000-0000-0000-0000-00000000aaaa");
 
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:pg16").Build();
 
     private ServiceProvider _services = null!;
+
+    /// <summary>Хранилище вложений в памяти — чтобы фикстуре не требовался MinIO.</summary>
+    public InMemoryFileStorage Storage { get; } = new();
 
     public async Task InitializeAsync()
     {
@@ -43,10 +47,12 @@ public sealed class PostgresFixture : IAsyncLifetime
         services.AddFlowApplication();
         // В Flow.Auth эти тесты не ходят: учётные записи всегда «создаются» успешно.
         services.AddSingleton<IAccountService, AlwaysSucceedingAccountService>();
+        // Вложения кладём в память: S3-клиент проверяется отдельным тестом против MinIO.
+        services.AddSingleton<IFileStorage>(Storage);
         _services = services.BuildServiceProvider();
 
         await using var scope = _services.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<FlowDbContext>().Database.MigrateAsync();
+        await FlowDatabase.MigrateAsync(scope.ServiceProvider, CancellationToken.None);
 
         await SendAsync(new SeedBootstrapUserCommand(OwnerId, "owner", "owner@example.com", "Owner", "Flow"));
     }

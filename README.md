@@ -1,4 +1,4 @@
-<picture>
+﻿<picture>
   <source media="(prefers-color-scheme: dark)" srcset="src/Flow.Client/wwwroot/brand/logo-inverse.svg">
   <img src="src/Flow.Client/wwwroot/brand/logo.svg" alt="Flow" height="44">
 </picture>
@@ -20,6 +20,8 @@ The longer-term goal is an AI assistant inside the tracker: grounded in the team
 - **Roles and permissions.** `Reader → Member → Developer → Admin → Owner`; the permission matrix is enforced on the server, and the client hides actions the current user cannot perform. A "last Owner" rule prevents locking the instance out of administration.
 - **Task timeline.** Markdown comments with `@mentions` (a GitHub-style editor with preview and toolbar) and a change log: title, description, status, assignee, due date, deleted comments. Due dates with overdue highlighting.
 - **Authentication.** A separate `Flow.Auth` service: ASP.NET Core Identity with BCrypt and OpenIddict (authorization code + PKCE, refresh, client credentials). The client signs in over OIDC; the API acts as a resource server validating Bearer JWTs. The initial password must be changed at first sign-in.
+- **Attachments.** Files on a task: stored in S3-compatible storage, size and type limits, downloads only over an authorised request. Listing, upload, image previews and deletion live in the task card and the drawer. A file can be dropped onto the card or straight into a comment (screenshots paste from the clipboard too): it is attached to the task, and the text gets an inline image or a download link.
+- **Search.** Hybrid vector and full-text search over tasks, comments, projects, people and the contents of attached files (PDF, docx, xlsx, pptx, plain text) on pgvector: it finds by meaning, not by substring. A sidebar box with live suggestions and a results page with filters; the index is updated in the same transaction as the edit.
 - **Infrastructure.** PostgreSQL 16, EF Core, migrations applied on API startup. Build, tests and image publishing run in GitHub Actions.
 
 ![Tasks of a project](docs/images/board.png)
@@ -37,6 +39,7 @@ Done:
 - [x] Mandatory initial password change
 - [x] Whole stack in Docker with one command, CI building and publishing images
 - [x] Comments, change log and Markdown editor on a task, due dates
+- [x] Vector search: pgvector index, Qwen3 embedder, hybrid ranking with RRF and search in the UI (stages 1-5 of `docs/TZ_search_vector.md`)
 
 Next — the `Flow.AI` subsystem ([#5](https://github.com/azizmac/Flow/issues/5), [#1](https://github.com/azizmac/Flow/issues/1)):
 
@@ -117,6 +120,98 @@ docker compose -f docker-compose.data.yml --profile backup run --rm backup \
     /scripts/restore.sh 2026-09-11T03-00-00 --yes
 ```
 
+### Search: index and embeddings
+
+Hybrid search over tasks, comments, projects, people and the contents of attachments
+(`docs/TZ_search_vector.md`): vectors plus full text, merged with RRF, with highlighting. Postgres runs
+the `pgvector/pgvector:pg16` image (same data, same volumes); the `vector` extension comes with a migration.
+
+Three models, each a separate service of the `ai` profile in the data stack:
+
+| Model | What it adds | Port | Hardware |
+|---|---|---|---|
+| `Qwen3-Embedding-0.6B` (llama.cpp) | search by meaning rather than by substring | 8081 | CPU is enough |
+| `bge-reranker-v2-m3` (llama.cpp CUDA) | the second ranking stage, the "Точнее" toggle | 8082 | needs a GPU |
+| `Qwen3-VL-Embedding-2B` (vLLM) | search over images and scans, no OCR | 8083 | needs a GPU |
+
+From scratch on a new machine:
+
+```bash
+sh docker/data/init-env.sh                                      # network and volumes, once
+docker compose -f docker-compose.data.yml up -d                 # data
+sh docker/data/pull-models.sh                                   # embedder and reranker weights, ~1.2 GB
+docker compose -f docker-compose.data.yml --profile ai up -d    # the models
+cp .env.example .env                                            # then set the flags, see below
+docker compose up -d --build                                    # the application
+```
+
+The same steps on Windows, via `init-env.ps1` and `pull-models.ps1`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File docker/data/init-env.ps1
+powershell -ExecutionPolicy Bypass -File docker/data/pull-models.ps1
+```
+
+Weights are the only thing that does not ship with the images: `pull-models.sh` puts two GGUF files into
+the `flow-models-data` volume (names must match `EMBEDDINGS_MODEL_FILE` and `RERANKER_MODEL_FILE`), skips
+what is already there and re-downloads with `--force`. The third model needs no download: vLLM pulls
+`Qwen/Qwen3-VL-Embedding-2B` itself on first start into `/models/hf` — another 4 GB or so, and a few
+minutes before the first answer. `MODELS_ROOT` picks the volume location: weights usually live away from
+the data, since they are not backed up and get reused between installations.
+
+Flags belong in `.env`, not in a command prefix: a prefix lasts for one run, and `docker compose up -d`
+recreates the `api` container — the setting silently falls back to its default.
+
+| Flag | Default | What it turns off |
+|---|---|---|
+| `SEARCH_ENABLED` | `true` | search entirely: no endpoints, no queue, no worker |
+| `EMBEDDINGS_ENABLED` | `true` | **smart search**: no vectors, no images, no reranker — words only |
+| `VISION_ENABLED` | `false` | the visual half (images and scans) |
+| `RERANK_ENABLED` | `false` | the second stage and the "Точнее" toggle |
+
+After the first start the index has to be filled once — `POST /search/reindex` as Owner; after that it
+maintains itself.
+
+No GPU: leave `VISION_ENABLED` and `RERANK_ENABLED` at `false` and pull the embedder only
+(`sh docker/data/pull-models.sh embeddings`) — search stays hybrid, just without images and the second
+stage. No models at all: `EMBEDDINGS_ENABLED=false` — search works by words, indexing keeps writing chunks
+without vectors, and once a model shows up Flow.Api queues those sources on startup and the vectors fill
+in. If the model runs on another machine, skip the `ai` profile entirely and point
+`EMBEDDINGS_QUERY_ENDPOINT` and `EMBEDDINGS_INDEXING_ENDPOINT` at it.
+
+The second stage tells "export crashes" apart from "add CSV export": a cross-encoder reorders the first
+page of results, adding about a second to the request. The first request after the service starts is
+slower than the rest — the model is warming up.
+
+The visual half puts the frame and the query text into one space, so a screenshot is found by a
+description of what is on it, without OCR. An image gets a second chunk under its own model version, and a
+query searches both halves at once. Scans go there too: a PDF with no extractable text is indexed page by
+page (the first three by default). The model is served by vLLM rather than llama.cpp: the latter ignores
+images on its embeddings endpoint. Under Docker Desktop the service needs `VLLM_WSL2_ENABLE_PIN_MEMORY=1`,
+already set in compose.
+
+After that the index fills itself: every edit of a task, comment, project or person is queued in the same
+transaction as the edit, and a background worker computes the vectors. Endpoints:
+
+| Method | Path | Who | What for |
+|---|---|---|---|
+| `GET` | `/search?q=…` | any role | Hybrid search: vectors plus full text, merged with RRF, with highlighting |
+| `GET` | `/search/status` | Admin, Owner | Queue size, stuck entries, chunk counts per type, model version, embedder availability |
+| `POST` | `/search/reindex` | Owner | Queue everything (or one project / selected source types) — on first enable and after a model change |
+
+Search parameters: `types` (`task,comment,board,user`), `boardId`, `includeArchived` (closed tasks are hidden by
+default), `mode` (`hybrid`, `semantic`, `text` — for debugging relevance), `limit` and `offset`. With the model
+unavailable the request still succeeds: the full-text half answers and the response is flagged `degraded: true`.
+
+Part of the query is parsed without the model: `@ivanov` and `мои` ("mine") filter by assignee, `PROJ-142` jumps
+straight to the task, plus `проект:DBACK` (project), `статус:в работе` (status), `просроченные` (overdue) and
+`за неделю` (last week). Recognised filters are shown as chips and the rest of the line goes to normal search.
+Alongside it, `GET /tasks/{id}/similar` returns similar tasks from the task's own vector, with no model call —
+in the UI that is the "Похожие задачи" block on the task card and in the create form.
+
+In the UI search is a box in the sidebar (suggestions as you type, grouped by type) and a `/search` page
+with filters, match highlighting and pagination.
+
 ### Coming from a single-stack checkout
 
 Volumes were renamed, so an existing deployment has to move its data over once:
@@ -177,6 +272,9 @@ Project documentation is written in Russian.
 - [`docs/TZ_auth.md`](docs/TZ_auth.md) — authentication and Flow.Auth
 - [`docs/TZ_infra_data_split.md`](docs/TZ_infra_data_split.md) — splitting the database and S3 into a data stack
 - [`docs/TZ_task_activity_comments.md`](docs/TZ_task_activity_comments.md) — comments, change log, Markdown editor, due dates
+- [`docs/TZ_attachments.md`](docs/TZ_attachments.md) — attachments: storage, drag & drop, search by content
+- [`docs/TZ_search_vector.md`](docs/TZ_search_vector.md) — vector and smart search: model, storage, indexing, stages
+- [`docs/TZ_search_stage1-3.md`](docs/TZ_search_stage1-3.md) — index schema, embedder and indexing (stages 1–3)
 - [`docs/Struktura_board_task_status.md`](docs/Struktura_board_task_status.md) — domain model structure
 - [`docs/Sravnenie_DbContext_podhodov.md`](docs/Sravnenie_DbContext_podhodov.md) — DbContext approaches compared
 

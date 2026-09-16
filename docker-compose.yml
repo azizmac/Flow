@@ -1,4 +1,4 @@
-# Стек приложения: auth, api, client. Данные (PostgreSQL и S3) живут в отдельном стеке —
+﻿# Стек приложения: auth, api, client. Данные (PostgreSQL и S3) живут в отдельном стеке —
 # docker-compose.data.yml, проект flow-data. Здесь нет ни одного тома с данными проекта, поэтому
 # `docker compose down -v` безопасен: он уносит только ключи и сертификаты Flow.Auth, которые
 # пересоздаются при следующем старте. См. docs/TZ_infra_data_split.md.
@@ -80,6 +80,27 @@ services:
       S3__SecretKey: ${MINIO_ROOT_PASSWORD:-flow12345}
       S3__Bucket: ${S3_BUCKET:-flow}
       S3__UseSsl: ${S3_USE_SSL:-false}
+      # Поиск включён по умолчанию: без модели он деградирует в полнотекстовый (GET /search
+      # отвечает degraded: true), а очередь индексации копится до её появления. SEARCH_ENABLED=false
+      # отключает и эндпоинты, и воркер — поведение приложения становится в точности прежним.
+      Search__Enabled: ${SEARCH_ENABLED:-true}
+      Search__Indexing__Enabled: ${SEARCH_INDEXING_ENABLED:-true}
+      # Умный поиск: EMBEDDINGS_ENABLED=false — ни одной модели, поиск идёт только по словам,
+      # а индексация продолжает работать и пишет чанки без векторов. Заодно гаснут визуальная
+      # половина и реранкер: держать GPU-сайдкары ради выключенного поиска смысла нет.
+      Search__Embeddings__Enabled: ${EMBEDDINGS_ENABLED:-true}
+      Search__Embeddings__QueryEndpoint: ${EMBEDDINGS_QUERY_ENDPOINT:-http://embeddings:8081/v1}
+      Search__Embeddings__IndexingEndpoint: ${EMBEDDINGS_INDEXING_ENDPOINT:-}
+      Search__Embeddings__Model: ${EMBEDDINGS_MODEL:-Qwen3-Embedding-0.6B}
+      # Вторая ступень выключена по умолчанию: она требует GPU и превращает поиск из мгновенного
+      # в секундный. RERANK_ENABLED=true включает кнопку «Точнее» в интерфейсе.
+      Search__Rerank__Enabled: ${RERANK_ENABLED:-false}
+      Search__Rerank__Endpoint: ${RERANK_ENDPOINT:-http://reranker:8082/v1}
+      Search__Rerank__Model: ${RERANKER_MODEL:-bge-reranker-v2-m3}
+      # Визуальная половина: тоже выключена по умолчанию и тоже требует GPU.
+      Search__Embeddings__Vision__Enabled: ${VISION_ENABLED:-false}
+      Search__Embeddings__Vision__Endpoint: ${VISION_ENDPOINT:-http://embeddings-vl:8083/v1}
+      Search__Embeddings__Vision__Model: ${VISION_MODEL:-Qwen3-VL-Embedding-2B}
     ports:
       - "${API_PORT:-8080}:8080"
     networks:

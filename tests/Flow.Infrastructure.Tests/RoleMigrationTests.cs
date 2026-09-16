@@ -17,14 +17,15 @@ public sealed class RoleMigrationTests : IAsyncLifetime
 {
     private const string PreviousMigration = "20260909071433_AddTaskAssignee";
 
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:pg16").Build();
 
     public Task InitializeAsync() => _container.StartAsync();
 
     public Task DisposeAsync() => _container.DisposeAsync().AsTask();
 
+    // UseVector обязателен и здесь: в модели есть halfvec-столбец чанков, без плагина EF её не валидирует.
     private FlowDbContext CreateContext() => new(new DbContextOptionsBuilder<FlowDbContext>()
-        .UseNpgsql(_container.GetConnectionString())
+        .UseNpgsql(_container.GetConnectionString(), o => o.UseVector())
         .Options);
 
     [Fact]

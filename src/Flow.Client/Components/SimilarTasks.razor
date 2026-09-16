@@ -1,0 +1,114 @@
+@* Похожие задачи — борьба с дублями. В карточке (TaskId) берутся по вектору самой задачи: он уже
+   посчитан при индексации, и модель не дёргается вовсе. В форме создания (Title) задачи ещё нет,
+   поэтому ищем по набранному названию обычным поиском — дубль видно до того, как его создали. *@
+@implements IDisposable
+@inject FlowApi Api
+
+@if (_loading || _items.Count > 0)
+{
+    <div class="side-card similar">
+        <div class="section-title">
+            Похожие задачи
+            @if (_loading)
+            {
+                <span class="ds-spin" aria-label="Ищем"></span>
+            }
+        </div>
+
+        @foreach (var item in _items)
+        {
+            <a class="similar-row" href="@($"tasks/{item.SourceId}")" title="@item.Title">
+                <span class="code">@item.TaskCode</span>
+                <span class="similar-title">@item.Title</span>
+                @if (TaskId is not null)
+                {
+                    <span class="similar-score" title="Близость по смыслу">@Percent(item.Score)</span>
+                }
+            </a>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>Карточка существующей задачи: похожие ищутся по её вектору.</summary>
+    [Parameter] public Guid? TaskId { get; set; }
+
+    /// <summary>Форма создания: похожие ищутся по набираемому названию.</summary>
+    [Parameter] public string? Title { get; set; }
+
+    [Parameter] public int Limit { get; set; } = 5;
+
+    /// <summary>Короткое название — не запрос: «тест» найдёт половину базы и только помешает.</summary>
+    private const int MinTitle = 8;
+
+    private const int DebounceMs = 400;
+
+    private List<SearchResultItem> _items = [];
+    private bool _loading;
+    private string _loaded = "";
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = TaskId?.ToString() ?? Title?.Trim() ?? "";
+        if (key == _loaded)
+            return;
+
+        _loaded = key;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        try
+        {
+            if (TaskId is { } taskId)
+            {
+                _loading = true;
+                var similar = await Api.GetSimilarTasks(taskId, Limit, ct);
+                Apply(similar.Ok ? similar.Value! : []);
+                return;
+            }
+
+            var title = Title?.Trim() ?? "";
+            if (title.Length < MinTitle)
+            {
+                Apply([]);
+                return;
+            }
+
+            // Печатают по букве — ждём паузу, иначе на каждую букву уходит запрос с инференсом.
+            await Task.Delay(DebounceMs, ct);
+
+            _loading = true;
+            StateHasChanged();
+
+            var found = await Api.Search(title, [SearchSourceType.Task], limit: Limit, ct: ct);
+            Apply(found.Ok ? found.Value!.Items : []);
+        }
+        catch (OperationCanceledException)
+        {
+            // Название продолжают набирать — этот запрос уже не нужен.
+        }
+    }
+
+    private void Apply(IReadOnlyList<SearchResultItem> items)
+    {
+        _items = [.. items];
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private static string Percent(double score) => $"{Math.Clamp(score, 0, 1) * 100:0}%";
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

@@ -1,12 +1,13 @@
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
+using Flow.Shared.Contracts.Search;
 using MediatR;
 
 namespace Flow.Application.Features.Users.Commands.UserCreateCommand;
 
 /// <summary>Бросает ArgumentException, если поля не проходят валидацию (см. User.Create) или Flow.Auth отверг пароль.</summary>
-internal sealed class UserCreateCommandHandler(IUserRepository users, IAccountService accounts, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class UserCreateCommandHandler(IUserRepository users, IAccountService accounts, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
     : IRequestHandler<UserCreateCommand, UserCreateResult>
 {
     public async Task<UserCreateResult> Handle(UserCreateCommand request, CancellationToken cancellationToken)
@@ -39,6 +40,7 @@ internal sealed class UserCreateCommandHandler(IUserRepository users, IAccountSe
         }
 
         users.Add(user);
+        searchIndex.Enqueue(SearchSourceType.User, user.Id, boardId: null, SearchIndexOperation.Upsert);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return UserCreateResult.Success(user.ToResponse());

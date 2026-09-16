@@ -1,0 +1,410 @@
+﻿using Flow.Application.Abstractions;
+using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
+using Flow.Application.Features.Search.Queries.SearchQuery;
+using Flow.Application.Features.Search.Queries.SimilarTasksQuery;
+using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskCommentAddCommand;
+using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
+using Flow.Application.Features.Users.Commands.UserCreateCommand;
+using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Flow.Shared.Contracts.Boards;
+using Flow.Shared.Contracts.Search;
+using Flow.Shared.Contracts.Tasks;
+using Xunit;
+
+namespace Flow.Infrastructure.Tests;
+
+/// <summary>
+/// Гибридная выдача на живом pgvector: обе половины, слияние RRF, свёртка чанков в источники,
+/// фильтры, пагинация и деградация. Эмбеддер — фейк (мешок слов), поэтому «похожесть» здесь
+/// предсказуема; настоящее качество модели проверяют тесты категории Model.
+/// </summary>
+[Collection(SearchCollection.Name)]
+public class SearchQueryTests(SearchFixture fixture)
+{
+    private static readonly Guid Owner = SearchFixture.OwnerId;
+
+    private static int _keySuffix;
+
+    private async Task<BoardResponse> CreateBoardAsync(string name = "Поиск")
+    {
+        var key = $"QRY{Interlocked.Increment(ref _keySuffix)}";
+        return (await fixture.SendAsync(new BoardCreateCommand(Owner, $"{name} {key}", key))).Response!;
+    }
+
+    private Task<TaskResponse?> CreateTaskAsync(Guid boardId, string title, string? description = null) =>
+        fixture.SendAsync(new TaskCreateCommand(Owner, boardId, title, description, null));
+
+    private Task<SearchResponse?> SearchAsync(
+        string text,
+        Guid? boardId = null,
+        SearchMode mode = SearchMode.Hybrid,
+        IReadOnlyList<SearchSourceType>? types = null,
+        bool includeArchived = false,
+        int limit = 20,
+        int offset = 0) =>
+        fixture.SendAsync(new SearchQuery(Owner, text, types, boardId, includeArchived, mode, limit, offset));
+
+    [Fact]
+    public async Task Text_Half_Finds_Task_And_Highlights_It()
+    {
+        var board = await CreateBoardAsync();
+        var task = await CreateTaskAsync(board.Id, "Падает экспорт отчёта в PDF", "При нажатии «Скачать» приходит ошибка 500.");
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync("экспорт отчёта", board.Id, SearchMode.Text);
+
+        var item = Assert.Single(response!.Items);
+        Assert.Equal(SearchSourceType.Task, item.SourceType);
+        Assert.Equal(task!.Id, item.SourceId);
+        Assert.Equal(board.Id, item.BoardId);
+        Assert.Equal("Падает экспорт отчёта в PDF", item.Title);
+        Assert.Equal(task.Code, item.TaskCode);
+        // Подсветка идёт по чистому Content — шапка чанка в БД не хранится.
+        Assert.Contains("<mark>", item.Snippet);
+        Assert.False(response.Degraded);
+        Assert.Equal(SearchMode.Text, response.Mode);
+    }
+
+    [Fact]
+    public async Task Hybrid_Scores_Higher_Than_One_Half_Alone()
+    {
+        var board = await CreateBoardAsync();
+        await CreateTaskAsync(board.Id, "Падает выгрузка накладной", "Сервис отчётов отвечает ошибкой.");
+        await fixture.DrainIndexingAsync();
+
+        var text = await SearchAsync("падает выгрузка", board.Id, SearchMode.Text);
+        var hybrid = await SearchAsync("падает выгрузка", board.Id);
+
+        var textScore = Assert.Single(text!.Items).Score;
+        var hybridScore = hybrid!.Items.First(item => item.SourceType == SearchSourceType.Task).Score;
+
+        // RRF складывает обратные ранги: источник, найденный обеими половинами, получает их сумму.
+        Assert.True(hybridScore > textScore, $"гибрид {hybridScore:F5} должен быть выше половины {textScore:F5}");
+        Assert.Equal(SearchMode.Hybrid, hybrid.Mode);
+    }
+
+    [Fact]
+    public async Task Semantic_Half_Works_Without_Text_Match()
+    {
+        var board = await CreateBoardAsync();
+        var task = await CreateTaskAsync(board.Id, "Каталог поставщиков", "Список контрагентов и договоров.");
+        await fixture.DrainIndexingAsync();
+
+        var semantic = await SearchAsync("каталог поставщиков", board.Id, SearchMode.Semantic);
+
+        // Векторная половина всегда отдаёт топ-N ближайших, даже далёких: важно, кто первый.
+        Assert.Equal(task!.Id, semantic!.Items[0].SourceId);
+        Assert.Equal(SearchMode.Semantic, semantic.Mode);
+    }
+
+    [Fact]
+    public async Task Many_Chunks_Of_One_Source_Collapse_Into_One_Result()
+    {
+        var board = await CreateBoardAsync();
+        var paragraph = string.Join(' ', Enumerable.Repeat("Подробное описание регламента приёмки груза.", 30));
+        var task = await CreateTaskAsync(board.Id, "Регламент приёмки", $"{paragraph}\n\n{paragraph}");
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync("регламент приёмки груза", board.Id, SearchMode.Text);
+
+        // У источника несколько чанков, но в выдаче он один — берётся лучший чанк.
+        var item = Assert.Single(response!.Items);
+        Assert.Equal(task!.Id, item.SourceId);
+        Assert.Equal(1, response.Total);
+    }
+
+    [Fact]
+    public async Task Comment_Is_Found_And_Carries_Its_Task()
+    {
+        var board = await CreateBoardAsync();
+        var task = await CreateTaskAsync(board.Id, "Интеграция с 1С");
+        await fixture.SendAsync(new TaskCommentAddCommand(Owner, task!.Id, "Воспроизводится только на проде при синхронизации остатков."));
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync("синхронизация остатков", board.Id, SearchMode.Text);
+
+        var item = Assert.Single(response!.Items, i => i.SourceType == SearchSourceType.Comment);
+        // У комментария в выдаче — название, код и id его задачи: иначе результат некуда открыть.
+        Assert.Equal("Интеграция с 1С", item.Title);
+        Assert.Equal(task.Code, item.TaskCode);
+        Assert.Equal(board.Id, item.BoardId);
+        Assert.Equal(task.Id, item.ParentId);
+    }
+
+    [Fact]
+    public async Task Types_Filter_Narrows_Results()
+    {
+        var board = await CreateBoardAsync("Логистика");
+        var task = await CreateTaskAsync(board.Id, "Логистика складов");
+        await fixture.DrainIndexingAsync();
+
+        var onlyBoards = await SearchAsync("логистика", board.Id, SearchMode.Text, [SearchSourceType.Board]);
+        var onlyTasks = await SearchAsync("логистика", board.Id, SearchMode.Text, [SearchSourceType.Task]);
+
+        Assert.All(onlyBoards!.Items, item => Assert.Equal(SearchSourceType.Board, item.SourceType));
+        Assert.Equal(board.Id, Assert.Single(onlyBoards.Items).SourceId);
+        Assert.Equal(task!.Id, Assert.Single(onlyTasks!.Items).SourceId);
+    }
+
+    [Fact]
+    public async Task Board_Filter_Keeps_Other_Projects_Out()
+    {
+        var first = await CreateBoardAsync();
+        var second = await CreateBoardAsync();
+        await CreateTaskAsync(first.Id, "Уникальное слово кракозябра здесь");
+        await CreateTaskAsync(second.Id, "Уникальное слово кракозябра тоже");
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync("кракозябра", first.Id, SearchMode.Text);
+
+        Assert.All(response!.Items, item => Assert.Equal(first.Id, item.BoardId));
+        Assert.Single(response.Items, item => item.SourceType == SearchSourceType.Task);
+    }
+
+    [Fact]
+    public async Task Closed_Tasks_Are_Hidden_Until_Asked_For()
+    {
+        var board = await CreateBoardAsync();
+        var task = await CreateTaskAsync(board.Id, "Архивная задача про дирижабли");
+        var done = board.Statuses.First(s => s.IsFinal).Id;
+        await fixture.SendAsync(new TaskUpdateCommand(Owner, task!.Id, null, null, done));
+        await fixture.DrainIndexingAsync();
+
+        var open = await SearchAsync("дирижабли", board.Id, SearchMode.Text);
+        var archived = await SearchAsync("дирижабли", board.Id, SearchMode.Text, includeArchived: true);
+        // Прямое попадание по коду минует индекс: там закрытость читается из статуса задачи, а не из чанка.
+        var byCode = await SearchAsync(task.Code!);
+
+        Assert.DoesNotContain(open!.Items, item => item.SourceId == task.Id);
+        // Пометка «архив» в клиенте: без неё закрытая задача в выдаче неотличима от живой.
+        Assert.True(Assert.Single(archived!.Items, item => item.SourceId == task.Id).IsClosed);
+        Assert.True(Assert.Single(byCode!.Items).IsClosed);
+    }
+
+    [Fact]
+    public async Task Deactivated_People_Are_Not_Returned()
+    {
+        var user = (await fixture.SendAsync(new UserCreateCommand(
+            Owner, "kraken.search", "kraken.search@example.com", "Кракен", "Поисковый", "correct horse battery", null))).Response!;
+        await fixture.DrainIndexingAsync();
+
+        var before = await SearchAsync("кракен", mode: SearchMode.Text, types: [SearchSourceType.User]);
+        Assert.Contains(before!.Items, item => item.SourceId == user.Id);
+
+        await fixture.SendAsync(new UserDeactivateCommand(Owner, user.Id));
+
+        // Чанк остаётся до прохода воркера, но в выдаче ушедшего быть не должно уже сейчас.
+        var after = await SearchAsync("кракен", mode: SearchMode.Text, types: [SearchSourceType.User]);
+        Assert.DoesNotContain(after!.Items, item => item.SourceId == user.Id);
+    }
+
+    [Fact]
+    public async Task Limit_And_Offset_Page_Through_Stable_Total()
+    {
+        var board = await CreateBoardAsync();
+        for (var i = 1; i <= 3; i++)
+            await CreateTaskAsync(board.Id, $"Пагинация номер {i} про антресоли");
+
+        await fixture.DrainIndexingAsync();
+
+        var first = await SearchAsync("антресоли", board.Id, SearchMode.Text, limit: 2);
+        var second = await SearchAsync("антресоли", board.Id, SearchMode.Text, limit: 2, offset: 2);
+
+        Assert.Equal(2, first!.Items.Count);
+        Assert.Single(second!.Items);
+        // Total не зависит от страницы: это размер всей найденной выдачи, а не текущего куска.
+        Assert.Equal(3, first.Total);
+        Assert.Equal(3, second.Total);
+        Assert.Empty(first.Items.Select(i => i.SourceId).Intersect(second.Items.Select(i => i.SourceId)));
+    }
+
+    [Fact]
+    public async Task Unavailable_Embedder_Degrades_But_Still_Finds()
+    {
+        var board = await CreateBoardAsync();
+        await CreateTaskAsync(board.Id, "Погашенная модель не ломает поиск");
+        await fixture.DrainIndexingAsync();
+
+        fixture.Embedder.Unavailable = true;
+        try
+        {
+            var response = await SearchAsync("погашенная модель", board.Id);
+
+            Assert.True(response!.Degraded);
+            Assert.Equal(SearchMode.Text, response.Mode);
+            Assert.NotEmpty(response.Items);
+        }
+        finally
+        {
+            fixture.Embedder.Unavailable = false;
+        }
+    }
+
+    /// <summary>
+    /// Выключенный «умный поиск» (Search:Embeddings:Enabled=false) — не то же, что погашенная модель:
+    /// индексация продолжает работать и пишет чанки без векторов, выдача честно остаётся текстовой
+    /// и не помечается degraded, а когда модель включают обратно — векторы дозаполняются.
+    /// </summary>
+    [Fact]
+    public async Task Disabled_Embeddings_Index_By_Words_And_Fill_Vectors_In_Later()
+    {
+        var board = await CreateBoardAsync();
+        fixture.Options.Embeddings.Enabled = false;
+
+        TaskResponse task;
+        try
+        {
+            task = (await CreateTaskAsync(board.Id, "Перенос склада в Химки", "Согласовать даты и транспорт."))!;
+            await fixture.DrainIndexingAsync();
+
+            var response = await SearchAsync("перенос склада", board.Id);
+
+            Assert.Contains(response!.Items, item => item.SourceId == task.Id);
+            Assert.Equal(SearchMode.Text, response.Mode);
+            // Выключено по настройке — это не деградация: клиенту не о чем предупреждать.
+            Assert.False(response.Degraded);
+            Assert.True(await CountChunksWithoutVectorAsync(task.Id) > 0);
+        }
+        finally
+        {
+            fixture.Options.Embeddings.Enabled = true;
+        }
+
+        // То же самое делает воркер на старте: источники с пустыми векторами возвращаются в очередь.
+        await using (var scope = fixture.CreateScope())
+        {
+            var index = scope.ServiceProvider.GetRequiredService<ISearchIndexRepository>();
+            Assert.True(await index.EnqueueMissingVectorsAsync(fixture.Embedder.ModelVersion, CancellationToken.None) > 0);
+        }
+
+        await fixture.DrainIndexingAsync();
+
+        Assert.Equal(0, await CountChunksWithoutVectorAsync(task.Id));
+        Assert.Equal(SearchMode.Hybrid, (await SearchAsync("перенос склада", board.Id))!.Mode);
+    }
+
+    private Task<int> CountChunksWithoutVectorAsync(Guid sourceId) =>
+        fixture.QueryAsync(db => db.SearchChunks.CountAsync(c => c.SourceId == sourceId && c.Embedding == null));
+
+    [Fact]
+    public async Task Assignee_Filter_From_Query_String_Narrows_To_Assigned_Tasks()
+    {
+        var board = await CreateBoardAsync();
+        var mine = await CreateTaskAsync(board.Id, "Подготовить релиз бухгалтерии");
+        var others = await CreateTaskAsync(board.Id, "Подготовить релиз склада");
+        await fixture.SendAsync(new TaskAssignCommand(Owner, mine!.Id, Owner));
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync("подготовить релиз @owner", board.Id, SearchMode.Text);
+
+        Assert.Contains(response!.Items, item => item.SourceId == mine.Id);
+        Assert.DoesNotContain(response.Items, item => item.SourceId == others!.Id);
+        Assert.Contains("@owner", response.Intent.Filters);
+    }
+
+    [Fact]
+    public async Task Overdue_Filter_Keeps_Only_Tasks_With_Past_Due_Date()
+    {
+        var board = await CreateBoardAsync();
+        var overdue = await CreateTaskAsync(board.Id, "Инвентаризация склада просрочена");
+        var future = await CreateTaskAsync(board.Id, "Инвентаризация склада в срок");
+        await fixture.SendAsync(new TaskSetDueDateCommand(Owner, overdue!.Id, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-3))));
+        await fixture.SendAsync(new TaskSetDueDateCommand(Owner, future!.Id, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))));
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync("инвентаризация просроченные", board.Id, SearchMode.Text);
+
+        Assert.Contains(response!.Items, item => item.SourceId == overdue.Id);
+        Assert.DoesNotContain(response.Items, item => item.SourceId == future.Id);
+    }
+
+    [Fact]
+    public async Task Status_Filter_From_Query_String_Narrows_By_Status_Name()
+    {
+        var board = await CreateBoardAsync();
+        var done = board.Statuses.First(status => status.IsFinal);
+        var closed = await CreateTaskAsync(board.Id, "Мембрана кровли переделана");
+        var open = await CreateTaskAsync(board.Id, "Мембрана кровли в работе");
+        await fixture.SendAsync(new TaskUpdateCommand(Owner, closed!.Id, null, null, done.Id));
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync($"мембрана кровли статус:{done.Name}", board.Id, SearchMode.Text, includeArchived: true);
+
+        Assert.Contains(response!.Items, item => item.SourceId == closed.Id);
+        Assert.DoesNotContain(response.Items, item => item.SourceId == open!.Id);
+    }
+
+    [Fact]
+    public async Task Filters_Without_Text_List_Sources_By_Date()
+    {
+        var board = await CreateBoardAsync();
+        var first = await CreateTaskAsync(board.Id, "Первая задача фильтра");
+        var second = await CreateTaskAsync(board.Id, "Вторая задача фильтра");
+        await fixture.SendAsync(new TaskAssignCommand(Owner, first!.Id, Owner));
+        await fixture.SendAsync(new TaskAssignCommand(Owner, second!.Id, Owner));
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync("мои", board.Id);
+
+        // Искать нечего — выдача просто отобрана фильтром; новая задача идёт первой.
+        Assert.Equal(SearchMode.Filters, response!.Mode);
+        Assert.Equal(second.Id, response.Items[0].SourceId);
+        Assert.Contains(response.Items, item => item.SourceId == first.Id);
+        Assert.All(response.Items, item => Assert.Equal(SearchSourceType.Task, item.SourceType));
+    }
+
+    [Fact]
+    public async Task Task_Code_In_Query_Opens_The_Task_Directly()
+    {
+        var board = await CreateBoardAsync();
+        var task = await CreateTaskAsync(board.Id, "Задача по коду");
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync(task!.Code!);
+
+        Assert.Equal(task.Id, response!.Intent.TaskId);
+        Assert.Equal(task.Id, Assert.Single(response.Items).SourceId);
+    }
+
+    [Fact]
+    public async Task Similar_Tasks_Are_Closest_By_Vector_And_Exclude_The_Task_Itself()
+    {
+        var board = await CreateBoardAsync();
+        var source = await CreateTaskAsync(board.Id, "Падает выгрузка накладных в формате PDF");
+        var near = await CreateTaskAsync(board.Id, "Не выгружаются накладные PDF из реестра");
+        var far = await CreateTaskAsync(board.Id, "Перекрасить кнопку профиля");
+        await fixture.DrainIndexingAsync();
+
+        var similar = await fixture.SendAsync(new SimilarTasksQuery(Owner, source!.Id, 10));
+
+        Assert.NotNull(similar);
+        // Похожие ищутся по всей базе, а не внутри проекта: дубль обычно и заводят в соседнем.
+        // Поэтому проверяется не место в списке, а порядок «близкая выше далёкой».
+        Assert.DoesNotContain(similar!, item => item.SourceId == source.Id);
+        var nearHit = Assert.Single(similar!, item => item.SourceId == near!.Id);
+        var farHit = Assert.Single(similar!, item => item.SourceId == far!.Id);
+        Assert.True(nearHit.Score > farHit.Score, $"близкая {nearHit.Score:F3} должна быть выше далёкой {farHit.Score:F3}");
+    }
+
+    [Fact]
+    public async Task Similar_Is_Null_For_Unknown_Task() =>
+        Assert.Null(await fixture.SendAsync(new SimilarTasksQuery(Owner, Guid.NewGuid(), 5)));
+
+    [Fact]
+    public async Task Nothing_Found_Is_An_Empty_Page_Not_An_Error()
+    {
+        var board = await CreateBoardAsync();
+        await CreateTaskAsync(board.Id, "Обычная задача");
+        await fixture.DrainIndexingAsync();
+
+        var response = await SearchAsync("абсолютнонесуществующееслово", board.Id, SearchMode.Text);
+
+        Assert.Empty(response!.Items);
+        Assert.Equal(0, response.Total);
+    }
+}

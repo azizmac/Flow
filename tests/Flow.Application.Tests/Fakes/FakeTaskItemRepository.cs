@@ -13,6 +13,9 @@ public sealed class FakeTaskItemRepository : ITaskItemRepository
     public Task<TaskItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(_tasks.SingleOrDefault(t => t.Id == id));
 
+    public Task<TaskItem?> GetByCodeAsync(string code, CancellationToken cancellationToken) =>
+        Task.FromResult(_tasks.FirstOrDefault(t => string.Equals(t.Code.Value, code, StringComparison.OrdinalIgnoreCase)));
+
     public Task<IReadOnlyList<TaskItem>> GetByBoardIdAsync(Guid boardId, Guid? assigneeId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<TaskItem>>(_tasks
             .Where(t => t.BoardId == boardId)

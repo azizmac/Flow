@@ -50,4 +50,16 @@ public interface IPermissionService
     /// Проверка «последний Owner» — в хендлере (нужен репозиторий).
     /// </summary>
     void EnsureCanChangeRole(User actor, User target, UserRole newRole);
+
+    /// <summary>Приложить файл к задаче — Member и выше (Reader только смотрит и скачивает).</summary>
+    void EnsureCanAttach(User actor);
+
+    /// <summary>Удалить вложение — тот, кто приложил, либо Admin и Owner.</summary>
+    void EnsureCanDeleteAttachment(User actor, Attachment attachment);
+
+    /// <summary>Состояние поискового индекса (GET /search/status) — Admin и Owner: это эксплуатация, не поиск.</summary>
+    void EnsureCanViewSearchDiagnostics(User actor);
+
+    /// <summary>Массовая переиндексация (POST /search/reindex) — только Owner: она грузит модель и БД надолго.</summary>
+    void EnsureCanReindex(User actor);
 }

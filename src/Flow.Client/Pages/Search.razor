@@ -1,0 +1,350 @@
+﻿@* Полная выдача поиска: запрос, фильтры по типу и проекту, архив, подсветка и пагинация.
+   Всё состояние — в query-string, поэтому ссылкой на выдачу можно поделиться и она переживает F5.
+   Строка запроса тоже с задержкой 300 мс и отменой предыдущего запроса — как в сайдбаре. *@
+@page "/search"
+@implements IDisposable
+@inject FlowApi Api
+@inject NavigationManager Nav
+
+<PageTitle>@(HasQuery ? $"{_query} — поиск" : "Поиск") — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left"><h2>Поиск</h2></div>
+    <div class="topbar-right">
+        <SearchBox Value="@_query" ValueChanged="OnQueryChanged" Placeholder="Название, текст, имя…" />
+    </div>
+</div>
+
+<div class="content">
+    <div class="filter-row">
+        <div class="seg" role="tablist">
+            @foreach (var (type, label) in TypeTabs)
+            {
+                <button type="button" class="seg-btn @(_type == type ? "on" : "")" role="tab" @onclick="() => SetType(type)">@label</button>
+            }
+        </div>
+
+        <div class="filter-row" style="gap:10px;">
+            <BoardFilter Boards="_boards" Value="_boardId" ValueChanged="SetBoard" />
+            <button type="button" class="seg-btn @(_archived ? "on" : "")" title="Показывать задачи в финальном статусе"
+                    @onclick="() => SetArchived(!_archived)">
+                <Icon Name="history" Size="13" /> С закрытыми
+            </button>
+            @* Вторая ступень: переупорядочивает первую страницу моделью. Заметно дольше обычного поиска,
+               поэтому включается руками и живёт только здесь — в подсказках при наборе её нет никогда. *@
+            <button type="button" class="seg-btn @(_precise ? "on" : "")" title="Переупорядочить выдачу моделью: точнее верхушка, примерно на секунду дольше"
+                    @onclick="() => SetPrecise(!_precise)">
+                <Icon Name="check-circle" Size="13" /> Точнее
+            </button>
+        </div>
+    </div>
+
+    @if (!HasQuery)
+    {
+        <div class="empty">
+            <div class="empty-title">Что ищем?</div>
+            <div>Поиск понимает смысл: «не грузится аватарка» найдёт «падает загрузка изображения профиля».</div>
+        </div>
+    }
+    else if (_loading && _response is null)
+    {
+        <div class="meta-line">Ищем…</div>
+    }
+    else if (_error is not null)
+    {
+        <div class="empty">
+            <div class="empty-title">Не удалось выполнить поиск</div>
+            <div>@_error</div>
+            <DsButton Variant="secondary" Size="sm" OnClick="() => RunAsync(force: true)">Повторить</DsButton>
+        </div>
+    }
+    else if (_response is { } response)
+    {
+        <div class="filter-row">
+            <div class="filter-row" style="gap:8px;">
+                <div class="meta-line">
+                    @Ru.Results(response.Total)@(response.Total >= 100 ? " или больше" : "") · @response.TookMs мс
+                </div>
+                @* Что распознано в строке: без этого непонятно, почему выдача сузилась. *@
+                @foreach (var filter in response.Intent.Filters)
+                {
+                    <span class="intent-chip">@filter</span>
+                }
+            </div>
+            @if (response.Degraded)
+            {
+                <div class="meta-line warn">Модель поиска недоступна — ищем только по словам</div>
+            }
+            else if (response.Reranked)
+            {
+                <div class="meta-line">Выдача уточнена моделью</div>
+            }
+            else if (_precise && _offset == 0)
+            {
+                <div class="meta-line warn">Уточнение недоступно: модель второй ступени выключена</div>
+            }
+        </div>
+
+        @if (response.Items.Count == 0)
+        {
+            <div class="empty">
+                <div class="empty-title">Ничего не нашлось</div>
+                <div>Попробуйте другие слова или снимите фильтры — например, включите закрытые задачи.</div>
+            </div>
+        }
+        else
+        {
+            @* Не panel-rows: там свой скроллер, и выдача получила бы вложенную прокрутку внутри
+               и без того прокручиваемого .content. Здесь список просто растёт, страницу листает .content. *@
+            <div class="panel">
+                <div class="sr-list">
+                    @foreach (var item in response.Items)
+                    {
+                        var href = SearchPresentation.Href(item);
+                        <a class="sr-row @(href is null ? "flat" : "")" href="@href">
+                            <span class="sr-type" title="@SearchPresentation.TypeLabel(item.SourceType)">
+                                <Icon Name="@SearchPresentation.TypeIcon(item.SourceType)" Size="14" />
+                            </span>
+                            <div class="sr-body">
+                                <div class="sr-title">
+                                    @if (item.TaskCode is { Length: > 0 } taskCode)
+                                    {
+                                        <span class="code accent">@taskCode</span>
+                                    }
+                                    <span class="sr-name">@item.Title</span>
+                                    @if (item.SourceType is SearchSourceType.Comment or SearchSourceType.Attachment)
+                                    {
+                                        <span class="sr-kind">@SearchPresentation.TypeLabel(item.SourceType).ToLowerInvariant()</span>
+                                    }
+                                    @if (item.IsClosed)
+                                    {
+                                        <span class="archived-chip" title="Задача в финальном статусе">архив</span>
+                                    }
+                                </div>
+                                <div class="sr-snippet">@SearchPresentation.Highlight(item.Snippet)</div>
+                            </div>
+                            <span class="sr-date" title="@Ru.DateTimeFull(item.UpdatedAt)">@Ru.DateShort(item.UpdatedAt)</span>
+                        </a>
+                    }
+                </div>
+            </div>
+
+            @if (response.Total > PageSize)
+            {
+                <div class="filter-row">
+                    <div class="meta-line">@(_offset + 1)–@(_offset + response.Items.Count) из @response.Total</div>
+                    <div style="display:flex;gap:8px;">
+                        <DsButton Variant="secondary" Size="sm" Disabled="@(_offset == 0 || _loading)" OnClick="() => SetOffset(_offset - PageSize)">Назад</DsButton>
+                        <DsButton Variant="secondary" Size="sm" Disabled="@(!HasMore || _loading)" OnClick="() => SetOffset(_offset + PageSize)">Дальше</DsButton>
+                    </div>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    private const int PageSize = 20;
+
+    private const int DebounceMs = 300;
+
+    private const int MinQuery = 2;
+
+    private static readonly (SearchSourceType? Type, string Label)[] TypeTabs =
+    [
+        (null, "Все"),
+        (SearchSourceType.Task, "Задачи"),
+        (SearchSourceType.Comment, "Комментарии"),
+        (SearchSourceType.Board, "Проекты"),
+        (SearchSourceType.User, "Люди"),
+        (SearchSourceType.Attachment, "Файлы")
+    ];
+
+    [SupplyParameterFromQuery(Name = "q")] public string? QueryParam { get; set; }
+
+    /// <summary>Тип источника: task | comment | board | user; пусто — все.</summary>
+    [SupplyParameterFromQuery(Name = "type")] public string? TypeParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "board")] public Guid? BoardParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "archived")] public bool? ArchivedParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "precise")] public bool? PreciseParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "offset")] public int? OffsetParam { get; set; }
+
+    private string _query = "";
+    private SearchSourceType? _type;
+    private Guid? _boardId;
+    private bool _archived;
+    private bool _precise;
+    private int _offset;
+
+    private IReadOnlyList<BoardResponse> _boards = [];
+    private SearchResponse? _response;
+    private string? _error;
+    private bool _loading;
+    private string _loaded = "";
+    private CancellationTokenSource? _cts;
+
+    private bool HasQuery => _query.Trim().Length >= MinQuery;
+
+    private bool HasMore => _response is { } response && _offset + response.Items.Count < response.Total;
+
+    /// <summary>Ключ уже выполненного запроса: по нему решается, нужен ли новый поход в API.</summary>
+    private string StateKey => $"{_query.Trim()}|{_type}|{_boardId}|{_archived}|{_precise}|{_offset}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Список проектов нужен только фильтру; ошибку не показываем — поиск и без него работает.
+        var boards = await Api.GetBoards();
+        if (boards.Ok)
+            _boards = boards.Value!;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _query = QueryParam ?? "";
+        _type = TypeParam is { Length: > 0 } && Enum.TryParse<SearchSourceType>(TypeParam, ignoreCase: true, out var type) ? type : null;
+        _boardId = BoardParam;
+        _archived = ArchivedParam ?? false;
+        _precise = PreciseParam ?? false;
+        _offset = Math.Max(0, OffsetParam ?? 0);
+
+        await RunAsync();
+    }
+
+    private async Task RunAsync(bool force = false)
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        if (!HasQuery)
+        {
+            _response = null;
+            _error = null;
+            _loaded = "";
+            return;
+        }
+
+        if (!force && StateKey == _loaded)
+            return;
+
+        try
+        {
+            _loading = true;
+            _error = null;
+            StateHasChanged();
+
+            var result = await Api.Search(
+                _query.Trim(),
+                _type is { } only ? [only] : null,
+                _boardId,
+                _archived,
+                PageSize,
+                _offset,
+                _precise,
+                ct);
+
+            if (ct.IsCancellationRequested)
+                return;
+
+            _loading = false;
+            _loaded = StateKey;
+
+            if (result.Ok)
+            {
+                _response = result.Value;
+            }
+            else
+            {
+                _response = null;
+                _error = result.NotFound ? "Поиск выключен на сервере." : result.Error;
+            }
+
+            StateHasChanged();
+        }
+        catch (OperationCanceledException)
+        {
+            // Запрос заменён следующим.
+        }
+    }
+
+    /// <summary>
+    /// Ввод в строке: URL меняется с задержкой, иначе каждая буква оседала бы в истории браузера
+    /// и «назад» пришлось бы жать по разу на символ.
+    /// </summary>
+    private async Task OnQueryChanged(string value)
+    {
+        _query = value;
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        try
+        {
+            await Task.Delay(DebounceMs, ct);
+            Apply(offset: 0);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void SetType(SearchSourceType? type)
+    {
+        _type = type;
+        Apply(offset: 0);
+    }
+
+    private void SetBoard(Guid? boardId)
+    {
+        _boardId = boardId;
+        Apply(offset: 0);
+    }
+
+    private void SetArchived(bool archived)
+    {
+        _archived = archived;
+        Apply(offset: 0);
+    }
+
+    /// <summary>Уточнение считается по первой странице, поэтому переключение возвращает к её началу.</summary>
+    private void SetPrecise(bool precise)
+    {
+        _precise = precise;
+        Apply(offset: 0);
+    }
+
+    private void SetOffset(int offset)
+    {
+        _offset = Math.Max(0, offset);
+        Apply(_offset);
+    }
+
+    /// <summary>Состояние выдачи живёт в адресе: ссылкой можно поделиться, F5 её не теряет.</summary>
+    private void Apply(int offset)
+    {
+        var parameters = new Dictionary<string, object?>
+        {
+            ["q"] = _query.Trim() is { Length: > 0 } text ? text : null,
+            ["type"] = _type?.ToString().ToLowerInvariant(),
+            ["board"] = _boardId,
+            ["archived"] = _archived ? true : null,
+            ["precise"] = _precise ? true : null,
+            ["offset"] = offset > 0 ? offset : null
+        };
+
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(parameters), replace: true);
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

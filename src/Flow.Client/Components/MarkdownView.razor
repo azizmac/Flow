@@ -1,8 +1,16 @@
 @* Рендер Markdown (Markdig, общий пайплайн FlowMarkdown: сырой HTML отключён, @username → ссылка на профиль).
-   Пустой текст → плейсхолдер. *@
-@using Flow.Client.Markdown
+   Пустой текст → плейсхолдер.
 
-<div class="desc-box @(IsEmpty ? "ph" : "") @Class" style="@Style" @onclick="OnClick">
+   Ссылки вида attachment:{id} (docs/TZ_attachments.md) оживляются после рендера: картинке подставляется
+   blob, ссылка на файл начинает качать по клику. Содержимое приносит .NET — вложение отдаётся только
+   по токену, а разметка его не носит. *@
+@using Flow.Client.Markdown
+@implements IAsyncDisposable
+@inject FlowApi Api
+@inject BrowserInterop Browser
+@inject ToastService Toasts
+
+<div class="desc-box @(IsEmpty ? "ph" : "") @Class" style="@Style" id="@_id" @onclick="OnClick">
     @if (IsEmpty)
     {
         @Placeholder
@@ -20,7 +28,81 @@
     [Parameter] public string? Style { get; set; }
     [Parameter] public EventCallback OnClick { get; set; }
 
+    private readonly string _id = "md-view-" + Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>blob:-адреса показанных картинок — освобождаются при уходе со страницы.</summary>
+    private readonly Dictionary<Guid, string> _blobs = [];
+
+    private DotNetObjectReference<MarkdownView>? _self;
+    private string _html = string.Empty;
+    private bool _hasAttachments;
+
     private bool IsEmpty => string.IsNullOrWhiteSpace(Text);
 
-    private MarkupString Html => new(FlowMarkdown.ToHtml(Text));
+    private MarkupString Html => new(_html);
+
+    protected override void OnParametersSet()
+    {
+        _html = FlowMarkdown.ToHtml(Text);
+        // Interop только там, где есть что оживлять: MarkdownView стоит на каждом комментарии.
+        _hasAttachments = _html.Contains(AttachmentLinks.Attribute, StringComparison.Ordinal);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_hasAttachments)
+            return;
+
+        _self ??= DotNetObjectReference.Create(this);
+        await Browser.HydrateAttachmentsAsync(_id, _self);
+    }
+
+    /// <summary>Адрес картинки для тега img; null — файла нет или его не отдали.</summary>
+    [JSInvokable]
+    public async Task<string?> ResolveAttachment(string id)
+    {
+        if (!Guid.TryParse(id, out var attachmentId))
+            return null;
+
+        if (_blobs.TryGetValue(attachmentId, out var known))
+            return known;
+
+        var content = await Api.DownloadAttachment(attachmentId);
+        if (!content.Ok)
+            return null;
+
+        var url = await Browser.BlobUrlAsync(content.Value!.ContentType, content.Value.Bytes);
+        if (url is null)
+            return null;
+
+        _blobs[attachmentId] = url;
+        return url;
+    }
+
+    /// <summary>Клик по ссылке на файл в тексте: качаем его тем же путём, что и из списка вложений.</summary>
+    [JSInvokable]
+    public async Task DownloadAttachment(string id)
+    {
+        if (!Guid.TryParse(id, out var attachmentId))
+            return;
+
+        var content = await Api.DownloadAttachment(attachmentId);
+        if (!content.Ok)
+        {
+            Toasts.Error(content.Error ?? "Не удалось скачать файл");
+            return;
+        }
+
+        // Имени файла в тексте может не быть (его пишет человек) — сервер прислал своё в заголовке.
+        await Browser.SaveFileAsync(content.Value!.FileName, content.Value.ContentType, content.Value.Bytes);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var url in _blobs.Values)
+            await Browser.RevokeBlobUrlAsync(url);
+
+        _blobs.Clear();
+        _self?.Dispose();
+    }
 }

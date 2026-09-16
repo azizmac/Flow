@@ -7,15 +7,31 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <!-- Поисковый индекс — проекция, а не домен: его сущности и воркер internal, но интеграционные
+             тесты проверяют именно их. -->
+        <InternalsVisibleTo Include="Flow.Infrastructure.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\Flow.Domain\Flow.Domain.csproj" />
         <ProjectReference Include="..\Flow.Application\Flow.Application.csproj" />
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+        <!-- Векторы поискового индекса: тип halfvec в БД (Pgvector) и его маппинг в EF (o.UseVector()). -->
+        <PackageReference Include="Pgvector" Version="0.3.2" />
+        <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
         <!-- IAccountService → Flow.Auth по HTTP (IHttpClientFactory) и биндинг секции Auth. -->
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
         <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
+        <!-- Вложения: объектное хранилище S3-совместимое (Storage/S3FileStorage). -->
+        <PackageReference Include="AWSSDK.S3" Version="4.0.103.3" />
+        <!-- Текст из вложений для индексации (Search/Extraction): PDF и документы Office. -->
+        <PackageReference Include="PdfPig" Version="0.1.16" />
+        <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
+        <!-- BackgroundService для воркера индексации (Search/SearchIndexingWorker). -->
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

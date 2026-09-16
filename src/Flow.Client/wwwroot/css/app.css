@@ -1,4 +1,4 @@
-/* ════════════════════════════════════════════════════════════════════
+﻿/* ════════════════════════════════════════════════════════════════════
    Flow — app shell + компоненты.
    Источник: Flow MVP.dc.html / Sidebar.dc.html + Profile.dc.html (Claude Design handoff, артефакт «Flow CRM»)
    + базовые контролы (Button, IconButton, Input, Tag) в CSS-виде.
@@ -406,6 +406,205 @@ input, textarea { font-family: inherit; }
 .sb-ws .sb-soon { margin-left: auto; }
 .sb-ws-name { font: var(--fw-bold) 12.5px var(--font-display); color: #fff; }
 .sb-ws-sub { font: var(--fw-medium) 10.5px var(--font-text); color: rgba(255, 255, 255, 0.45); }
+/* ---------- Поиск: строка в сайдбаре ---------- */
+/* Обёртка — якорь дропдауна. Он шире сайдбара и ложится поверх контента, поэтому позиционируется
+   абсолютно, а не участвует в потоке колонки. */
+.sb-search-wrap { position: relative; margin: 0 14px 14px; }
+.sb-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    color: rgba(255, 255, 255, 0.45);
+    transition: border-color 150ms ease, background-color 150ms ease;
+}
+.sb-search:focus-within, .sb-search.open { background: rgba(255, 255, 255, 0.08); border-color: var(--accent); }
+.sb-search input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: #fff;
+    font: var(--fw-medium) 12.5px var(--font-text);
+}
+.sb-search input::placeholder { color: rgba(255, 255, 255, 0.4); }
+.sb-search:focus-within .ds-icon:first-child { color: var(--accent); }
+
+.gs-scrim { position: fixed; inset: 0; z-index: 40; }
+.gs-pop {
+    position: absolute;
+    z-index: 41;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 380px;
+    max-height: 60vh;
+    overflow: auto;
+    padding: 6px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-popover);
+    animation: gs-in 160ms var(--ease-out);
+}
+@keyframes gs-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.gs-note { padding: 10px 12px; font: var(--fw-medium) 12.5px var(--font-text); color: var(--text-tertiary); }
+.gs-note.warn { color: var(--accent); }
+.gs-group {
+    padding: 8px 12px 4px;
+    font: var(--fw-bold) 10px var(--font-display);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+.gs-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--r-md);
+    color: var(--text-secondary);
+    text-decoration: none;
+    cursor: pointer;
+}
+.gs-item.on { background: var(--surface); color: #fff; }
+.gs-item .ds-icon { margin-top: 2px; color: var(--text-tertiary); }
+.gs-body { min-width: 0; flex: 1; }
+.gs-title { display: flex; align-items: center; gap: 6px; font: var(--fw-semibold) 13px var(--font-display); color: #fff; }
+.gs-title .gs-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Результат из задачи в финальном статусе. Подсказки в строке поиска показывают такие всегда —
+   без пометки закрытая задача в выдаче неотличима от живой. */
+.archived-chip {
+    flex: none;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+    color: var(--text-tertiary);
+    font: var(--fw-medium) 10.5px var(--font-text);
+    white-space: nowrap;
+}
+.gs-snippet {
+    font: var(--fw-medium) 11.5px var(--font-text);
+    color: var(--text-tertiary);
+    /* Фрагмент из ts_headline — две строки максимум, дальше многоточие. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.gs-all {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 4px;
+    padding: 9px;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0 0 var(--r-md) var(--r-md);
+    background: transparent;
+    color: var(--accent);
+    font: var(--fw-semibold) 12px var(--font-display);
+    cursor: pointer;
+}
+.gs-all.on { background: var(--surface); }
+
+/* Чип распознанного фильтра из строки запроса («@ivanov», «просроченные»). */
+.intent-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font: var(--fw-semibold) 11px var(--font-display);
+    white-space: nowrap;
+}
+.gs-note.chips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px; }
+
+/* ---------- Похожие задачи ---------- */
+.side-card.similar { gap: 6px; }
+.similar .section-title { display: flex; align-items: center; gap: 8px; }
+.similar-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 8px;
+    margin: 0 -8px;
+    border-radius: var(--r-md);
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: background-color 140ms ease;
+}
+.similar-row:hover { background: var(--surface-raised); }
+.similar-title {
+    flex: 1;
+    min-width: 0;
+    font: var(--fw-medium) 12.5px var(--font-text);
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.similar-score { flex: none; font: var(--fw-bold) 10.5px var(--font-display); color: var(--text-tertiary); }
+
+/* ---------- Поиск: страница выдачи ---------- */
+.sr-list { display: flex; flex-direction: column; }
+.sr-row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: start;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    color: inherit;
+    text-decoration: none;
+    transition: background-color 140ms ease;
+}
+.sr-row:last-child { border-bottom: 0; }
+.sr-row:hover { background: var(--surface-raised); }
+.sr-row.flat { pointer-events: none; }
+.sr-type {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--r-md);
+    background: var(--surface-raised);
+    color: var(--text-tertiary);
+}
+.sr-body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sr-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sr-name { font: var(--fw-semibold) 14px var(--font-display); color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-kind {
+    flex: none;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+    font: var(--fw-medium) 10.5px var(--font-text);
+    color: var(--text-tertiary);
+}
+.sr-snippet {
+    font: var(--fw-medium) 12.5px/1.5 var(--font-text);
+    color: var(--text-secondary);
+    /* ts_headline отдаёт до двух фрагментов — строку выдачи они раздувают, поэтому режем по двум строкам. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.sr-date { font: var(--fw-medium) 11.5px var(--font-text); color: var(--text-tertiary); white-space: nowrap; }
+.meta-line.warn { color: var(--accent); }
+
+/* Подсветка совпадений из ts_headline — единственный тег, который мы разворачиваем из фрагмента. */
+mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px; padding: 0 2px; }
+
 .sb-section {
     font: var(--fw-bold) 10px var(--font-display);
     letter-spacing: 0.08em;
@@ -1509,6 +1708,8 @@ a.task-row { color: inherit; text-decoration: none; }
     .search-clear, .ds-field-error { animation: none; }
     .ds-field.error .ds-field-row { animation: none; }
     .ds-field-row::after { transition: none; }
+    .att-q-bar span { animation: none; width: 100%; opacity: 0.6; }
+    .drop-on::after { transition: none; }
 }
 
 /* ---------- Markdown editor (MarkdownEditor.razor) ---------- */
@@ -1612,3 +1813,154 @@ a.task-row { color: inherit; text-decoration: none; }
 }
 .due-edit input[type="date"]:focus { border-color: var(--accent); }
 .sk-line { height: 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); }
+
+/* ---------- Вложения (docs/TZ_attachments.md) ---------- */
+.att-block { display: flex; flex-direction: column; gap: 8px; }
+.att-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.att-upload { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 0; }
+/* Input не display:none: скрытый так элемент выпадает из табуляции, и кнопка перестаёт открываться с клавиатуры. */
+.att-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.att-pick { cursor: pointer; }
+.att-pick.off { background: var(--surface-raised); color: var(--text-disabled); pointer-events: none; }
+.att-file:focus-visible + .att-pick { outline: 2px solid var(--accent); outline-offset: 2px; }
+.att-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px;
+    margin: 0 -8px;
+    border-radius: var(--r-md);
+    transition: background-color 140ms ease;
+}
+.att-row:hover { background: var(--surface-raised); }
+.att-thumb, .att-ico {
+    flex: none;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--r-sm);
+    background: var(--surface-raised);
+}
+.att-thumb { object-fit: cover; }
+.att-ico { display: inline-flex; align-items: center; justify-content: center; color: var(--text-tertiary); }
+.att-row:hover .att-ico { background: rgba(0, 0, 0, 0.18); }
+.att-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.att-name {
+    max-width: 100%;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    color: #fff;
+    font: var(--fw-medium) 13px var(--font-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.att-name:hover { color: var(--accent); }
+.att-sub {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+    font: var(--fw-medium) 11.5px var(--font-text);
+    color: var(--text-tertiary);
+}
+.att-sub .tl-name { font: inherit; color: var(--text-tertiary); }
+.att-sub .tl-name:hover { color: var(--text-secondary); }
+
+/* Очередь загрузки */
+.att-queue { display: flex; flex-direction: column; gap: 8px; width: 100%; min-width: 220px; }
+.att-q-row { display: flex; align-items: center; gap: 10px; }
+.att-q-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.att-q-name {
+    font: var(--fw-medium) 12px var(--font-text);
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.att-q-row.bad .att-q-name { color: #fff; }
+/* Полоса без процента: браузер не сообщает, сколько тела уже ушло (см. AttachmentUpload). */
+.att-q-bar { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.10); overflow: hidden; }
+.att-q-bar span {
+    display: block;
+    height: 100%;
+    width: 40%;
+    border-radius: 2px;
+    background: var(--accent);
+    animation: att-run 1.1s ease-in-out infinite;
+}
+@keyframes att-run {
+    0% { transform: translateX(-110%); }
+    100% { transform: translateX(260%); }
+}
+.att-q-error { font: var(--fw-medium) 11.5px var(--font-text); color: var(--danger); }
+.att-q-size { flex: none; font: var(--fw-semibold) 11px var(--font-display); color: var(--text-tertiary); }
+
+/* Зона приёма файлов: карточка, слайдер, поле редактора. Класс вешает flow.attachZone только на время
+   перетаскивания, поэтому position:relative не меняет вёрстку в обычном состоянии. */
+.drop-on { position: relative; }
+.drop-on::after {
+    content: "Отпустите файлы";
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dashed var(--accent);
+    border-radius: var(--r-md);
+    background: rgba(0, 0, 0, 0.45);
+    color: var(--accent);
+    font: var(--fw-semibold) 13px var(--font-display);
+    pointer-events: none;
+}
+/* Редактор внутри карточки — тоже зона: пока курсор над ним, подсвечен только он (файл заберёт он же). */
+.drop-on:has(.drop-on)::after { display: none; }
+
+/* Вложения в тексте описания и комментария (схема attachment:) */
+.md-att-img {
+    display: block;
+    max-width: 100%;
+    max-height: 420px;
+    width: auto;
+    border-radius: var(--r-md);
+    border: 1px solid var(--border);
+    background: var(--surface-raised);
+    margin: 8px 0;
+}
+.md-att-img.missing { display: none; }
+.md-att-file {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 3px 10px 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font: var(--fw-semibold) 12px var(--font-display);
+    vertical-align: baseline;
+    /* В узкой колонке (слайдер) имя иначе переносится по слогам прямо внутри чипа. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.md-att-file::before {
+    content: "";
+    flex: none;
+    width: 13px;
+    height: 13px;
+    background: currentColor;
+    /* Скрепка не из набора глифов — простая маска, чтобы не тащить иконку в разметку из Markdown. */
+    mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M16.5 6.5v9a4.5 4.5 0 0 1-9 0V5.5a3 3 0 0 1 6 0v9a1.5 1.5 0 0 1-3 0V7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/></svg>") center / contain no-repeat;
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M16.5 6.5v9a4.5 4.5 0 0 1-9 0V5.5a3 3 0 0 1 6 0v9a1.5 1.5 0 0 1-3 0V7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/></svg>") center / contain no-repeat;
+}
+.md-att-file:hover { color: #fff; border-color: var(--accent); }
+/* Кнопка «Прикрепить файл» в тулбаре — label скрытого input, и фокус попадает на сам input,
+   а он невидим. Подсвечиваем label, иначе с клавиатуры непонятно, где ты. */
+.md-editor:has(.att-file:focus-visible) .md-tool[for] { background: rgba(255, 255, 255, 0.1); color: #fff; }
+/* В редакторе очередь загрузки идёт под полем и на всю ширину, а не жмётся вправо, как в блоке вложений. */
+.md-editor > .att-upload { align-items: stretch; padding: 8px 12px 0; }

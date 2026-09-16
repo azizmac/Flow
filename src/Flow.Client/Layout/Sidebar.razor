@@ -1,4 +1,5 @@
-@* Drawer-nav 240px по Sidebar.dc.html. «Проекты» → /boards; «Задачи» → /tasks (все проекты);
+@* Drawer-nav 240px по Sidebar.dc.html. Строка поиска — GlobalSearch (выдача на /search).
+   «Проекты» → /boards; «Задачи» → /tasks (все проекты);
    «Люди» → /users. Дашборды/Настройки — в API ещё нет: помечены «скоро» и не притворяются кликабельными.
    Футер — текущий пользователь: claim sub из токена Flow.Auth → AppState.CurrentUserId, профиль — GET /users/me;
    кнопка «Выйти» → authentication/logout (endsession в Flow.Auth). *@
@@ -21,6 +22,8 @@
         <span class="sb-soon">скоро</span>
         <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.25)" />
     </div>
+
+    <GlobalSearch />
 
     <div class="sb-section">Рабочее пространство</div>
 

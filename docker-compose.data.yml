@@ -7,11 +7,14 @@
 #   docker compose -f docker-compose.data.yml up -d        # поднять данные
 #   docker compose -f docker-compose.data.yml down          # остановить (данные остаются в томах)
 #   docker volume rm flow-postgres-data flow-minio-data     # осознанно удалить данные
+#
+# Эмбеддер поиска — профиль ai:
+#   docker compose -f docker-compose.data.yml --profile ai up -d
 name: flow-data
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-flow}
@@ -75,12 +78,132 @@ services:
     networks:
       - flow-network
 
+  # Эмбеддер поиска: llama-server с Qwen3-Embedding по OpenAI-совместимому /v1/embeddings.
+  # Профиль ai включается явно:
+  #   docker compose -f docker-compose.data.yml --profile ai up -d
+  # Веса кладут во внешний том flow-models-data (создаёт docker/data/init-env.sh, путь задаёт MODELS_ROOT):
+  # это тяжёлые данные со своим жизненным циклом, пересборка приложения их не трогает.
+  # Если модель крутится на другой машине (GPU), сервис не поднимают вовсе — EMBEDDINGS_QUERY_ENDPOINT
+  # просто указывает наружу. Межстековых depends_on нет: недоступность модели — деградация поиска, не сбой старта.
+  embeddings:
+    image: ${EMBEDDINGS_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    profiles: ["ai"]
+    restart: unless-stopped
+    # --pooling last обязателен для Qwen3-Embedding: пулинг по последнему токену делает сам сервер.
+    command: >
+      --model /models/${EMBEDDINGS_MODEL_FILE:-Qwen3-Embedding-0.6B-Q8_0.gguf}
+      --alias ${EMBEDDINGS_MODEL:-Qwen3-Embedding-0.6B}
+      --embedding --pooling last
+      --ctx-size 8192 --batch-size 8192 --ubatch-size 8192
+      --host 0.0.0.0 --port 8081
+    volumes:
+      - models-data:/models
+    ports:
+      - "${EMBEDDINGS_BIND:-127.0.0.1}:${EMBEDDINGS_PORT:-8081}:8081"
+    # Свой healthcheck: встроенный в образ стучится на 8080, а сервер поднят на 8081 —
+    # без переопределения контейнер вечно «unhealthy» при исправно работающей модели.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      # Веса грузятся с диска: на холодном старте первая проба не должна считаться провалом.
+      start_period: 60s
+    networks:
+      - flow-network
+
+  # Вторая ступень поиска: cross-encoder переупорядочивает два десятка отобранных кандидатов.
+  # Тот же профиль ai, но образ с CUDA и видеокарта: на CPU прогон пар занимает десятки секунд,
+  # и ступень теряет смысл. Нет GPU — не поднимайте сервис, поиск останется одноступенчатым
+  # (Search:Rerank:Enabled=false, кнопка «Точнее» в интерфейсе не появится).
+  #
+  #   docker compose -f docker-compose.data.yml --profile ai up -d reranker
+  reranker:
+    image: ${RERANKER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
+    profiles: ["ai"]
+    restart: unless-stopped
+    # Модель не из ТЗ: там назван Qwen3-Reranker-0.6B, но это causal LM без классификационной головы —
+    # llama.cpp честно пишет «model default pooling_type is [-1]» и считает оценки по последнему токену,
+    # то есть ранжирует мусором (проверено: правильный документ получал оценку на три порядка ниже
+    # постороннего). Режим --reranking рассчитан на cross-encoder с головой, каким и является
+    # bge-reranker-v2-m3: многоязычный, сильный на русском, того же размера.
+    command: >
+      --model /models/${RERANKER_MODEL_FILE:-bge-reranker-v2-m3-Q8_0.gguf}
+      --alias ${RERANKER_MODEL:-bge-reranker-v2-m3}
+      --reranking --pooling rank
+      --ctx-size 8192 --batch-size 8192 --ubatch-size 8192
+      --gpu-layers ${RERANKER_GPU_LAYERS:-99}
+      --host 0.0.0.0 --port 8082
+    volumes:
+      - models-data:/models
+    ports:
+      - "${RERANKER_BIND:-127.0.0.1}:${RERANKER_PORT:-8082}:8082"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - flow-network
+
+  # Визуальные эмбеддинги картинок: скриншот находится по описанию того, что на нём, без OCR.
+  # Сервис — vLLM, а не llama.cpp, и это проверено: llama.cpp грузит проектор и видит картинку в чате,
+  # но из эндпоинта эмбеддингов её выбрасывает — вектор красного квадрата совпадает с вектором синего.
+  #
+  # VLLM_WSL2_ENABLE_PIN_MEMORY=1 обязателен под Docker Desktop: vLLM выключает pinned memory при WSL,
+  # а без неё v1-движок не стартует («UVA is not available»). Ядру нужно 4.19.121 и новее.
+  #
+  #   docker compose -f docker-compose.data.yml --profile ai up -d embeddings-vl
+  embeddings-vl:
+    image: ${VISION_IMAGE:-vllm/vllm-openai:latest}
+    profiles: ["ai"]
+    restart: unless-stopped
+    command: >
+      --model ${VISION_MODEL_REPO:-Qwen/Qwen3-VL-Embedding-2B}
+      --served-model-name ${VISION_MODEL:-Qwen3-VL-Embedding-2B}
+      --runner pooling --trust-remote-code
+      --max-model-len ${VISION_MAX_LEN:-8192}
+      --gpu-memory-utilization ${VISION_GPU_FRACTION:-0.35}
+      --host 0.0.0.0 --port 8083
+    environment:
+      # Веса живут в том же томе, что и остальные модели: своя жизнь, пересборка приложения их не трогает.
+      HF_HOME: /models/hf
+      VLLM_WSL2_ENABLE_PIN_MEMORY: "1"
+    volumes:
+      - models-data:/models
+    ports:
+      - "${VISION_BIND:-127.0.0.1}:${VISION_PORT:-8083}:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request;urllib.request.urlopen('http://localhost:8083/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      # Модель на 2B грузится дольше текстовых: первая проба не должна считаться провалом.
+      start_period: 300s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - flow-network
+
   # Бэкапы по расписанию. По умолчанию выключены — профиль включается явно:
   #   docker compose -f docker-compose.data.yml --profile backup up -d
   # Разовый бэкап тем же контейнером и тем же скриптом:
   #   docker compose -f docker-compose.data.yml --profile backup run --rm backup /scripts/backup.sh
   backup:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     profiles: ["backup"]
     restart: unless-stopped
     depends_on:
@@ -119,4 +242,9 @@ volumes:
     external: true
   minio-data:
     name: flow-minio-data
+    external: true
+  # Веса моделей: том внешний по той же причине, что и данные — `docker compose down -v` их не уносит,
+  # а перекачивать гигабайты заново дорого.
+  models-data:
+    name: flow-models-data
     external: true
