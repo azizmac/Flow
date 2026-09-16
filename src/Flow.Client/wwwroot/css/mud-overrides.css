@@ -1,4 +1,4 @@
-/* ════════════════════════════════════════════════════════════════════
+﻿/* ════════════════════════════════════════════════════════════════════
    Flow × MudBlazor — слой переопределений.
 
    Здесь и только здесь мы правим внешний вид компонентов библиотеки под дизайн Flow.
@@ -106,6 +106,111 @@ a.mud-link:hover {
     }
 }
 
-/* ---------- Меню, диалоги, снекбары (этап 3) ---------- */
+/* ---------- Уведомления ----------
+   Очередь и таймеры — за ISnackbar, вид — прежний тост Flow: тёмная пилюля снизу по центру,
+   наш глиф слева (его подставляет ToastService), цвет глифа по смыслу. Класс .toast приходит
+   из SnackbarTypeClass. */
+.mud-snackbar.toast {
+    min-width: 0;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 10px 16px;
+    font: var(--fw-semibold) 13px var(--font-display);
+    color: #fff;
+    box-shadow: var(--shadow-popover);
+}
+
+.mud-snackbar.toast .mud-snackbar-content-message {
+    padding: 0;
+}
+
+.mud-snackbar.toast .mud-snackbar-icon {
+    color: var(--text-secondary);
+    margin-right: 10px;
+}
+
+.mud-snackbar.toast.ok .mud-snackbar-icon {
+    color: var(--sage);
+}
+
+.mud-snackbar.toast.error {
+    border-color: rgba(226, 96, 79, 0.5);
+}
+
+.mud-snackbar.toast.error .mud-snackbar-icon {
+    color: var(--danger);
+}
+
+/* ---------- Меню ----------
+   .flow-pop — слой Flow поверх MudPopover: тот же вид, что у прежнего .pop в app.css, но без
+   position/opacity — позицию и появление считает библиотека. Отдельное имя нужно, пока свой
+   Popover.razor ещё жив у селектов (уходит на этапе 4).
+   Пункты остаются на .pop-item, у них гасим геометрию Material. */
+.mud-popover.flow-pop {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-popover);
+    padding: 6px;
+    overflow: visible;
+}
+
+.flow-pop .flow-pop-list,
+.flow-pop .mud-menu-list-wrapper,
+.flow-pop .mud-list {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: transparent;
+}
+
+.flow-pop .pop-item.mud-menu-item {
+    min-height: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    transition: background-color 120ms ease, color 120ms ease;
+}
+
+/* Текст пункта библиотека заворачивает в <p class="mud-menu-item-text"> — строку с иконкой
+   собираем именно там, иначе глиф встанет над подписью. */
+.flow-pop .pop-item .mud-menu-item-text {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font: var(--fw-semibold) 12.5px var(--font-display);
+    color: var(--text-secondary);
+    letter-spacing: normal;
+}
+
+.flow-pop .pop-item.mud-menu-item:hover,
+.flow-pop .pop-item.mud-menu-item:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.flow-pop .pop-item.mud-menu-item:hover .mud-menu-item-text,
+.flow-pop .pop-item.mud-menu-item:focus-visible .mud-menu-item-text {
+    color: #fff;
+}
+
+.flow-pop .pop-item.danger .mud-menu-item-text {
+    color: var(--danger);
+}
+
+/* Обёртка активатора меню: не должна занимать место в сетке строки. */
+.menu-anchor {
+    display: inline-flex;
+}
+
+/* Разделитель между обычными пунктами и опасным действием. */
+.flow-pop .pop-sep {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 2px;
+}
+
+/* ---------- Диалоги (этап 3) ---------- */
 /* ---------- Селекты (этап 4) ---------- */
 /* ---------- Таблица задач (этап 5) ---------- */

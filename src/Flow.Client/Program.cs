@@ -41,13 +41,27 @@ builder.Services.AddHttpClient("FlowApi", client => client.BaseAddress = new Uri
 builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("FlowApi"));
 
 // UI-кит: поповеры, диалоги, снекбары, MudDataGrid. Тема — Services/FlowTheme.cs, провайдеры — App.razor.
-builder.Services.AddMudServices();
+// Уведомления Flow выходят снизу по центру и закрываются сами: кнопку закрытия не показываем,
+// длительности и иконки каждому тосту проставляет ToastService.
+builder.Services.AddMudServices(options =>
+{
+    options.SnackbarConfiguration.PositionClass = MudBlazor.Defaults.Classes.Position.BottomCenter;
+    options.SnackbarConfiguration.NewestOnTop = false;
+    options.SnackbarConfiguration.ShowCloseIcon = false;
+    options.SnackbarConfiguration.PreventDuplicates = false;
+    options.SnackbarConfiguration.ShowTransitionDuration = 220;
+    options.SnackbarConfiguration.HideTransitionDuration = 180;
+    // Глиф в тосте 15px, как было у своего компонента, и без полупрозрачности Material.
+    options.SnackbarConfiguration.IconSize = MudBlazor.Size.Small;
+    options.SnackbarConfiguration.MaximumOpacity = 100;
+});
 
 builder.Services.AddScoped<FlowApi>();
 builder.Services.AddScoped<UserDirectory>();
 builder.Services.AddScoped<BrowserInterop>();
 builder.Services.AddScoped<HotkeyService>();
-builder.Services.AddSingleton<ToastService>();
+// Scoped, а не Singleton: внутри лежит ISnackbar, который сам scoped (в WASM это один экземпляр на приложение).
+builder.Services.AddScoped<ToastService>();
 builder.Services.AddSingleton<AppState>();
 // Один на приложение: блок вложений и редактор комментария узнают о новых файлах друг друга.
 builder.Services.AddSingleton<AttachmentEvents>();

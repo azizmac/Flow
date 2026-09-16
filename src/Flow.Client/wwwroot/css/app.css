@@ -1544,31 +1544,6 @@ a.sb-me:active { transform: scale(0.98); }
 .who-sub { font: var(--fw-medium) 11.5px var(--font-text); color: var(--text-tertiary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.task-row { color: inherit; text-decoration: none; }
 
-/* ---------- Toast ---------- */
-.toasts { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-.toast {
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
-    padding: 10px 16px;
-    font: var(--fw-semibold) 13px var(--font-display);
-    color: #fff;
-    box-shadow: var(--shadow-popover);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    pointer-events: auto;
-    /* Класс приходит вместе с элементом, поэтому появление — анимацией, а не transition:
-       переход из :начального состояния браузер бы не проиграл. */
-    animation: toast-in 220ms var(--ease-out) both;
-}
-.toast.out { animation: toast-out 180ms var(--ease-in-out) both; }
-@keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }
-@keyframes toast-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(6px) scale(0.98); } }
-.toast.error { border-color: rgba(226, 96, 79, 0.5); }
-.toast.error .ds-icon { color: var(--danger); }
-.toast.ok .ds-icon { color: var(--sage); }
-
 /* ---------- Stagger entrance (декоративно) ---------- */
 .stagger > * { animation: rise 250ms var(--ease-out) backwards; }
 .stagger > *:nth-child(1) { animation-delay: 0ms; }
@@ -1688,7 +1663,6 @@ a.task-row { color: inherit; text-decoration: none; }
     .seg-btn.on { animation: none; }
     .seg-btn.on .sd { transform: none; }
     .task-row.flash { animation: none; }
-    .toast, .toast.out { animation: none; }
     .empty { animation: none; }
     .sb-item.active::before { animation: none; }
     .sb-item.active .ds-icon { transform: none; }
