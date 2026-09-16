@@ -110,11 +110,14 @@ else if (Item is not null)
                 <AssigneeSelect Value="Item.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" />
                 @if (Item.AssigneeId is { } aid && Users.Find(aid) is { } who)
                 {
-                    <button type="button" id="@_whoId" class="icon-lnk" @onclick="() => _whoOpen = true" title="Карточка"><Icon Name="view" Size="13" />@@@who.Username</button>
-                    @if (_whoOpen)
-                    {
-                        <UserCard User="who" AnchorId="@_whoId" OnClose="() => _whoOpen = false" />
-                    }
+                    @* Обёртка — якорь карточки: MudPopover внутри UserCard позиционируется по ней. *@
+                    <span class="ucard-anchor">
+                        <button type="button" id="@_whoId" class="icon-lnk" @onclick="() => _whoOpen = true" title="Карточка"><Icon Name="view" Size="13" />@@@who.Username</button>
+                        @if (_whoOpen)
+                        {
+                            <UserCard User="who" OnClose="() => _whoOpen = false" />
+                        }
+                    </span>
                 }
             </div>
             <div class="meta-k">Срок</div>

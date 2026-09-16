@@ -71,10 +71,6 @@ window.flow = (function () {
         return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable === true;
     }
 
-    // Открытый поповер сам обрабатывает стрелки/Home/End/Tab: фокус ходит по его пунктам
-    // и не убегает наружу. preventDefault обязан быть синхронным, поэтому это здесь, а не в .NET.
-    const MENU_KEYS = { ArrowDown: 'next', ArrowUp: 'prev', Home: 'first', End: 'last' };
-
     document.addEventListener('keydown', function (e) {
         // Под полем открыт список, которому принадлежат стрелки/Enter/Tab/Esc (строка поиска в
         // сайдбаре). preventDefault обязан быть синхронным — поэтому здесь, а .NET-обработчик дальше
@@ -87,15 +83,6 @@ window.flow = (function () {
             return;
         }
 
-        const pop = e.target && e.target.closest ? e.target.closest('.pop') : null;
-        if (pop) {
-            const mode = e.key === 'Tab' ? (e.shiftKey ? 'prev' : 'next') : MENU_KEYS[e.key];
-            if (mode) {
-                e.preventDefault();
-                window.flow.menuFocus(pop.id, mode);
-                return;
-            }
-        }
         if (!hotkeyRef) return;
         const editable = isEditable(e.target);
         // Esc при открытом списке упоминаний принадлежит списку: MarkdownEditor закроет его сам,
@@ -156,47 +143,6 @@ window.flow = (function () {
             if (!el) return;
             el.focus();
             if (select && typeof el.select === 'function') el.select();
-        },
-
-        // Геометрия якоря + размеры viewport — для позиционирования поповеров в fixed-слое.
-        // layerId (необязателен) — скрим поповера (position:fixed; inset:0): если поповер лежит
-        // внутри предка с transform/filter, тот перехватывает роль containing block и left/top
-        // считаются от него, а не от viewport. originX/originY — начало этого отсчёта; их нужно
-        // вычесть из желаемой позиции. Меряем именно по скриму: у самого поповера есть собственный
-        // transform анимации появления, и getBoundingClientRect дал бы смещённый прямоугольник.
-        rect: function (id, layerId) {
-            const el = document.getElementById(id);
-            if (!el) return null;
-            const r = el.getBoundingClientRect();
-            let originX = 0, originY = 0;
-            const layer = layerId ? document.getElementById(layerId) : null;
-            if (layer) {
-                const l = layer.getBoundingClientRect();
-                originX = l.left;
-                originY = l.top;
-            }
-            return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height, vw: window.innerWidth, vh: window.innerHeight, originX: originX, originY: originY };
-        },
-
-        // Перемещение фокуса по пунктам меню/списка внутри контейнера.
-        // mode: 'first' (текущий выбранный, иначе первый) | 'last' | 'next' | 'prev'.
-        menuFocus: function (containerId, mode) {
-            const box = document.getElementById(containerId);
-            if (!box) return;
-            const items = Array.prototype.slice.call(box.querySelectorAll('.pop-item:not([disabled])'));
-            if (!items.length) return;
-            let idx;
-            if (mode === 'first') {
-                const cur = items.findIndex(function (i) { return i.classList.contains('cur'); });
-                idx = cur >= 0 ? cur : 0;
-            } else if (mode === 'last') {
-                idx = items.length - 1;
-            } else {
-                const at = items.indexOf(document.activeElement);
-                const step = mode === 'prev' ? -1 : 1;
-                idx = at < 0 ? (step > 0 ? 0 : items.length - 1) : (at + step + items.length) % items.length;
-            }
-            items[idx].focus();
         },
 
         // localStorage может быть недоступен (приватный режим, запрет site data) — тогда null / no-op.

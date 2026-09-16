@@ -1,6 +1,6 @@
 ﻿# ТЗ: перевод Flow.Client на MudBlazor
 
-Статус: **согласовано, этапы 1–3 выполнены** (поповеры селектов перенесены в этап 4). Ветка `claude/frontend-framework-refactor-609e08`.
+Статус: **согласовано, этапы 1–4 выполнены**. Ветка `claude/frontend-framework-refactor-609e08`.
 
 Заказчик поставил задачу так: «весь фронт переделать на популярный и стабильный фреймворк, чтобы все UI-компоненты
 были корректными». По итогам обсуждения зафиксировано: остаёмся на Blazor WebAssembly, самописный UI-кит заменяем
@@ -157,15 +157,20 @@ MudBlazor рендерит обычный DOM и держит JavaScript на м
 
 ## 4. Селекты и фильтры
 
-| Наш файл | Берём |
-|---|---|
-| `StatusSelect.razor` | `MudSelect<Guid>` с шаблоном пункта (точка цвета + название) |
-| `AssigneeSelect.razor`, `AssigneeFilter.razor` | `MudAutocomplete<UserResponse>` — поиск по людям уже есть в `UserDirectory` |
-| `BoardSelect.razor` | `MudMenu` с нашим триггером-заголовком (вид сохраняем: это заголовок экрана, а не поле) |
-| `RoleSelect.razor` | `MudSelect<UserRole>` |
-| `StatusFilter`, `StatusTypeFilter` | `MudToggleGroup` (сегменты с числами) |
-| `SearchBox.razor` | `MudTextField` с `Adornment` |
-| `GlobalSearch.razor` | остаётся нашим (подсказки, чипы распознанных фильтров, группы), но слой — `MudPopover`, список — `MudList` |
+Все селекты Flow — это не поля ввода, а пилюли и заголовки с выпадающим списком. Поэтому вместо `MudSelect`
+(он приносит собственное поле Material) взят `MudMenu` с нашим триггером в `ActivatorContent`: вид сохраняется
+полностью, а позиционирование, закрытие, стрелки и Esc приходят от библиотеки.
+
+| Наш файл | Стало | Замечания |
+|---|---|---|
+| `StatusSelect.razor` | `MudMenu` | сделано |
+| `AssigneeSelect.razor` | `MudMenu` + наше поле поиска внутри | сделано. Здесь фокус намеренно уходит в поле: печатать важнее, чем ходить стрелками, первый результат выбирается по Enter |
+| `AssigneeFilter.razor`, `BoardFilter.razor` | `MudMenu` | сделано |
+| `BoardSelect.razor` | `MudMenu` с триггером-заголовком | сделано, поиск появляется от 8 проектов |
+| `UserCard.razor` | `MudPopover` + `MudOverlay` | сделано. Параметр `AnchorId` больше не нужен: карточка кладётся рядом с якорем в `.ucard-anchor`, позицию считает библиотека |
+| `Popover.razor` | — | **удалён**. Вместе с ним из `flow.js` ушли `rect` и `menuFocus`, из `BrowserInterop` — `RectAsync`, `MenuFocusAsync` и запись `AnchorRect` |
+| `RoleSelect`, `StatusFilter`, `StatusTypeFilter` | — | **оставлены своими.** Это сегменты `role="tablist"` с точкой, подписью и счётчиком; `MudToggleGroup` принёс бы свою рамку и разметку, которую пришлось бы перебивать, не добавив поведения |
+| `SearchBox.razor`, `GlobalSearch.razor` | — | не трогались на этом этапе: строка поиска и её подсказки живут своей логикой (распознавание фильтров, группы результатов) и переезжают вместе с экраном поиска на этапе 6 |
 
 ## 5. Список задач на MudDataGrid и сортировка на сервере
 
