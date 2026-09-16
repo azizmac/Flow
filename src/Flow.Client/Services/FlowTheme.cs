@@ -60,7 +60,8 @@ public static class FlowTheme
             TableHover = "rgba(255,255,255,0.04)",
             TableStriped = "rgba(255,255,255,0.02)",
 
-            OverlayDark = "rgba(8,32,25,0.6)",
+            // Затемнение под модалкой и слайдером — как было у своих .modal-scrim / .drawer-scrim.
+            OverlayDark = "rgba(0,0,0,0.5)",
 
             // Полосы скелетонов (Components/Skeleton.razor) — та же подсветка, что была у своей анимации.
             Skeleton = "rgba(255,255,255,0.05)"

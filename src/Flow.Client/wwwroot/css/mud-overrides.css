@@ -211,6 +211,53 @@ a.mud-link:hover {
     margin: 4px 2px;
 }
 
-/* ---------- Диалоги (этап 3) ---------- */
+/* ---------- Диалоги ----------
+   Карточка модалки Flow: 440px, тёмная поверхность, крупный заголовок, кнопки справа.
+   Шапку и крестик Mud мы не показываем (CloseButton = false), поэтому вся геометрия — здесь. */
+.mud-dialog.flow-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 440px;
+    max-width: calc(100vw - 32px);
+    padding: 28px 32px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-modal);
+}
+
+.flow-modal .flow-modal-title {
+    padding: 0;
+}
+
+.flow-modal .flow-modal-title h3 {
+    margin: 0 0 4px;
+    font: var(--fw-extrabold) 20px var(--font-display);
+    letter-spacing: -0.3px;
+    color: #fff;
+}
+
+/* Внутри контента — та же вертикальная стопка полей, что была у .modal. */
+.flow-modal .flow-modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 0;
+    overflow: visible;
+}
+
+.flow-modal .flow-modal-content p {
+    margin: 0;
+    font: var(--fw-medium) 13.5px/1.5 var(--font-text);
+    color: var(--text-secondary);
+}
+
+.flow-modal .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 0;
+}
 /* ---------- Селекты (этап 4) ---------- */
 /* ---------- Таблица задач (этап 5) ---------- */
