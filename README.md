@@ -149,6 +149,19 @@ RERANK_ENABLED=true docker compose up -d api
 
 The first request after the service starts is slower than the rest — the model is warming up.
 
+Visual search over images is behind a flag and needs the GPU too: `Qwen3-VL-Embedding-2B` puts the
+frame and the query text into one space, so a screenshot is found by a description of what is on it,
+without OCR. An image gets a second chunk in the index under its own model version, and a query
+searches both halves at once:
+
+```bash
+docker compose -f docker-compose.data.yml --profile ai up -d embeddings-vl   # :8083, needs a GPU
+VISION_ENABLED=true docker compose up -d api
+```
+
+The model is served by vLLM rather than llama.cpp: the latter ignores images on its embeddings
+endpoint. Under Docker Desktop the service needs `VLLM_WSL2_ENABLE_PIN_MEMORY=1`, already set in compose.
+
 After that the index fills itself: every edit of a task, comment, project or person is queued in the same
 transaction as the edit, and a background worker computes the vectors. Endpoints:
 
