@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Application.Features.Search.Commands.ReindexCommand;
 using Flow.Application.Features.Search.Queries.SearchQuery;
 using Flow.Application.Features.Search.Queries.SearchStatusQuery;
@@ -64,7 +64,7 @@ public class SearchController(IMediator mediator, IActorAccessor actor) : Contro
         var parsed = new List<SearchSourceType>();
         foreach (var value in types.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            if (!Enum.TryParse<SearchSourceType>(value, ignoreCase: true, out var type) || type == SearchSourceType.Attachment)
+            if (!Enum.TryParse<SearchSourceType>(value, ignoreCase: true, out var type))
                 throw new ArgumentException($"Неизвестный тип источника: {value}.", nameof(types));
 
             parsed.Add(type);

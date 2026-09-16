@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Application.Features.Search;
 using Flow.Infrastructure.Search;
 using Flow.Infrastructure.Search.Extraction;
@@ -42,8 +42,7 @@ public static class FlowSearchServiceCollectionExtensions
         // Кэш векторов запросов: пагинация по выдаче идёт тем же текстом (см. MemoryCachedQueryEmbeddings).
         services.AddMemoryCache();
         services.AddSingleton<IQueryEmbeddingCache, MemoryCachedQueryEmbeddings>();
-        // Извлечение текста из вложений. Вызывать его пока некому — вложений в домене нет
-        // (нужно их ТЗ), но слой готов и проверен тестами: подключение — одна ветка в SearchSourceReader.
+        // Извлечение текста из вложений (SearchSourceReader, ветка Attachment).
         // ITextExtractor снаружи один — композитный; форматные регистрируются своими типами,
         // иначе композит попал бы в собственный список и вызвал сам себя.
         services.AddSingleton<PlainTextExtractor>();

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
@@ -17,8 +17,10 @@ internal sealed class SearchQueryHandler(
     ActorResolver actors)
     : IRequestHandler<SearchQuery, SearchResponse?>
 {
+    /// <summary>Что ищется, когда тип не выбран. Вложения входят сюда наравне с остальным: файл,
+    /// который виден только при явном фильтре «Файлы», для человека всё равно что не найден.</summary>
     private static readonly SearchSourceType[] AllTypes =
-        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User];
+        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User, SearchSourceType.Attachment];
 
     /// <summary>Сколько текста описания уходит в подсказку прямого попадания по коду задачи.</summary>
     private const int DirectSnippetLength = 160;

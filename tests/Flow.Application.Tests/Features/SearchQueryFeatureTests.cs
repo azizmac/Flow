@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Application.Features.Search.Queries.SearchQuery;
 using Flow.Shared.Contracts.Search;
 using Xunit;
@@ -121,8 +121,10 @@ public class SearchQueryFeatureTests
 
         await mediator.Send(Query(), CancellationToken.None);
 
+        // Вложения входят в поиск по умолчанию наравне с остальным: файл, который виден только
+        // при явном фильтре «Файлы», для человека всё равно что не найден.
         Assert.Equal(
-            [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User],
+            [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User, SearchSourceType.Attachment],
             index.LastCriteria!.Types.ToArray());
     }
 

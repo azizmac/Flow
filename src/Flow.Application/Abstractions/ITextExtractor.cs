@@ -1,4 +1,4 @@
-namespace Flow.Application.Abstractions;
+﻿namespace Flow.Application.Abstractions;
 
 /// <summary>
 /// Достаёт текст из вложенного файла, чтобы его можно было проиндексировать наравне с задачами
@@ -6,9 +6,8 @@ namespace Flow.Application.Abstractions;
 /// библиотеки и их особенности, Application про них знать не должен.
 /// </summary>
 /// <remarks>
-/// Вложений в домене пока нет (нужно их ТЗ), поэтому вызывать извлекатель некому: он готов к тому
-/// моменту, когда появятся файлы, и проверяется собственными тестами. Подключение — одна ветка
-/// в <c>SearchSourceReader</c> для <c>SearchSourceType.Attachment</c>.
+/// Вызывается из <c>SearchSourceReader</c> для <c>SearchSourceType.Attachment</c>: файл тянется
+/// из хранилища, текст режется на чанки наравне с описанием задачи.
 /// </remarks>
 public interface ITextExtractor
 {
