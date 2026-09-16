@@ -61,12 +61,28 @@ public static class FlowSearchServiceCollectionExtensions
         services.AddScoped<SearchIndexingRunner>();
 
         AddEmbeddingGenerator(services, options);
+        AddReranker(services, options);
 
         // Воркер не стартует при выключенном поиске: поведение приложения остаётся прежним до байта.
         if (options.Enabled && options.Indexing.Enabled)
             services.AddHostedService<SearchIndexingWorker>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Вторая ступень выдачи. Клиент регистрируется всегда — включает её флаг Search:Rerank:Enabled
+    /// и кнопка «Точнее» в запросе, а не наличие сервиса: без адреса ступень просто недоступна.
+    /// </summary>
+    private static void AddReranker(IServiceCollection services, SearchOptions options)
+    {
+        var rerank = options.Rerank;
+
+        services.AddHttpClient(HttpReranker.HttpClientName, client =>
+            Configure(client, Normalize(rerank.Endpoint), TimeSpan.FromSeconds(Math.Max(1, rerank.TimeoutSeconds)), rerank.ApiKey));
+
+        // TryAdd: тесты подменяют ступень фейком и модель не тянут.
+        services.TryAddSingleton<IReranker, HttpReranker>();
     }
 
     private static void AddEmbeddingGenerator(IServiceCollection services, SearchOptions options)

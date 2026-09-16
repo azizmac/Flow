@@ -175,6 +175,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                    COALESCE(ti."Code", ct."Code", att."Code") AS "TaskCode",
                    b."SourceUpdatedAt" AS "UpdatedAt",
                    COALESCE(cm."TaskId", at."TaskId") AS "ParentId",
+                   b."Content" AS "Content",
                    count(*) OVER () AS "Total"
             FROM best b
             LEFT JOIN "TaskItems" ti ON b."SourceType" = 1 AND ti."Id" = b."SourceId"
@@ -201,7 +202,8 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             row.Score,
             row.TaskCode,
             row.UpdatedAt,
-            row.ParentId);
+            row.ParentId,
+            row.Content);
 
     private NpgsqlParameter[] BuildParameters(SearchCriteria criteria)
     {
@@ -296,6 +298,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                    ti."Code" AS "TaskCode",
                    b."SourceUpdatedAt" AS "UpdatedAt",
                    NULL::uuid AS "ParentId",
+                   b."Content" AS "Content",
                    count(*) OVER () AS "Total"
             FROM best b JOIN "TaskItems" ti ON ti."Id" = b."SourceId"
             ORDER BY b.distance
@@ -329,6 +332,9 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
 
         /// <summary>Задача комментария; у остальных типов null.</summary>
         public Guid? ParentId { get; init; }
+
+        /// <summary>Лучший чанк источника: уходит в реранкер, наружу не отдаётся.</summary>
+        public string Content { get; init; } = string.Empty;
 
         /// <summary>Одинаковый во всех строках: count(*) OVER () до LIMIT.</summary>
         public long Total { get; init; }

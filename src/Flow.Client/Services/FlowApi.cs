@@ -210,11 +210,16 @@ public sealed class FlowApi(HttpClient http)
         bool includeArchived = false,
         int limit = 20,
         int offset = 0,
+        bool rerank = false,
         CancellationToken ct = default)
     {
         var url = new StringBuilder("search?q=").Append(Uri.EscapeDataString(query))
             .Append("&limit=").Append(limit)
             .Append("&offset=").Append(offset);
+
+        // Вторая ступень: дороже примерно на секунду, поэтому только по явной кнопке и никогда в подсказках.
+        if (rerank)
+            url.Append("&rerank=true");
 
         if (types is { Count: > 0 })
             url.Append("&types=").Append(string.Join(',', types));

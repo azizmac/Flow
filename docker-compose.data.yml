@@ -112,6 +112,44 @@ services:
     networks:
       - flow-network
 
+  # Вторая ступень поиска: cross-encoder переупорядочивает два десятка отобранных кандидатов.
+  # Тот же профиль ai, но образ с CUDA и видеокарта: на CPU прогон пар занимает десятки секунд,
+  # и ступень теряет смысл. Нет GPU — не поднимайте сервис, поиск останется одноступенчатым
+  # (Search:Rerank:Enabled=false, кнопка «Точнее» в интерфейсе не появится).
+  #
+  #   docker compose -f docker-compose.data.yml --profile ai up -d reranker
+  reranker:
+    image: ${RERANKER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
+    profiles: ["ai"]
+    restart: unless-stopped
+    # --reranking включает /rerank и требует пулинг rank: модель отдаёт оценку пары, а не вектор.
+    command: >
+      --model /models/${RERANKER_MODEL_FILE:-Qwen3-Reranker-0.6B-Q8_0.gguf}
+      --alias ${RERANKER_MODEL:-Qwen3-Reranker-0.6B}
+      --reranking --pooling rank
+      --ctx-size 8192 --batch-size 8192 --ubatch-size 8192
+      --gpu-layers ${RERANKER_GPU_LAYERS:-99}
+      --host 0.0.0.0 --port 8082
+    volumes:
+      - models-data:/models
+    ports:
+      - "${RERANKER_BIND:-127.0.0.1}:${RERANKER_PORT:-8082}:8082"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - flow-network
+
   # Бэкапы по расписанию. По умолчанию выключены — профиль включается явно:
   #   docker compose -f docker-compose.data.yml --profile backup up -d
   # Разовый бэкап тем же контейнером и тем же скриптом:

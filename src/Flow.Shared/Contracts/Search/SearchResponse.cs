@@ -1,4 +1,4 @@
-namespace Flow.Shared.Contracts.Search;
+﻿namespace Flow.Shared.Contracts.Search;
 
 /// <summary>
 /// Ответ GET /search. Результаты — источники, а не чанки: у источника берётся его лучший чанк,
@@ -9,6 +9,8 @@ namespace Flow.Shared.Contracts.Search;
 /// <param name="Degraded">Векторную половину выполнить не удалось (модель недоступна или не уложилась
 /// в таймаут) — выдача построена только по полнотексту.</param>
 /// <param name="Mode">Режим, в котором запрос реально выполнен; при деградации — Text.</param>
+/// <param name="Reranked">Выдача переупорядочена второй ступенью. false при запрошенном rerank означает,
+/// что ступень выключена, недоступна или не нужна для этой страницы — порядок остался гибридным.</param>
 /// <param name="Intent">Что распознано в строке запроса: фильтры и прямое попадание по коду задачи.</param>
 public sealed record SearchResponse(
     IReadOnlyList<SearchResultItem> Items,
@@ -16,7 +18,8 @@ public sealed record SearchResponse(
     bool Degraded,
     long TookMs,
     SearchMode Mode,
-    SearchIntentResponse Intent);
+    SearchIntentResponse Intent,
+    bool Reranked = false);
 
 /// <summary>
 /// Разбор строки запроса: «@ivanov просроченные проект:DBACK» — это фильтры, а не смысл, и стоят

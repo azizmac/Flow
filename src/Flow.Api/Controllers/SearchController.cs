@@ -27,6 +27,8 @@ public class SearchController(IMediator mediator, IActorAccessor actor) : Contro
     /// <param name="boardId">Искать только в одном проекте.</param>
     /// <param name="includeArchived">Включать задачи в финальном статусе; по умолчанию нет.</param>
     /// <param name="mode">hybrid (по умолчанию), semantic или text — для отладки качества.</param>
+    /// <param name="rerank">Вторая ступень («Точнее»): точнее верхушка ценой примерно секунды.
+    /// Работает по первой странице и только если она включена настройкой Search:Rerank:Enabled.</param>
     [HttpGet]
     public async Task<IActionResult> Search(
         CancellationToken cancellationToken,
@@ -36,12 +38,13 @@ public class SearchController(IMediator mediator, IActorAccessor actor) : Contro
         [FromQuery] bool includeArchived = false,
         [FromQuery] SearchMode mode = SearchMode.Hybrid,
         [FromQuery] int limit = DefaultLimit,
-        [FromQuery] int offset = 0)
+        [FromQuery] int offset = 0,
+        [FromQuery] bool rerank = false)
     {
         try
         {
             var response = await mediator.Send(
-                new SearchQuery(actor.Require(), q ?? string.Empty, ParseTypes(types), boardId, includeArchived, mode, limit, offset),
+                new SearchQuery(actor.Require(), q ?? string.Empty, ParseTypes(types), boardId, includeArchived, mode, limit, offset, rerank),
                 cancellationToken);
 
             return response is null ? NotFound() : Ok(response);

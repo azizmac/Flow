@@ -1,4 +1,4 @@
-using Flow.Shared.Contracts.Search;
+﻿using Flow.Shared.Contracts.Search;
 
 namespace Flow.Application.Abstractions;
 
@@ -55,6 +55,8 @@ public sealed record SearchCriteria(
 public sealed record SearchPage(IReadOnlyList<SearchHit> Items, int Total);
 
 /// <param name="ParentId">Задача комментария: сам комментарий открыть негде, открывают его задачу.</param>
+/// <param name="Content">Лучший чанк источника без подсветки — то, что читает реранкер. Наружу не уходит:
+/// клиенту показывается Snippet с &lt;mark&gt;, а модели нужен чистый текст.</param>
 public sealed record SearchHit(
     SearchSourceType SourceType,
     Guid SourceId,
@@ -64,4 +66,5 @@ public sealed record SearchHit(
     double Score,
     string? TaskCode,
     DateTime UpdatedAt,
-    Guid? ParentId);
+    Guid? ParentId,
+    string Content = "");

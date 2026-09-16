@@ -1,4 +1,4 @@
-namespace Flow.Application.Features.Search;
+﻿namespace Flow.Application.Features.Search;
 
 /// <summary>
 /// Секция "Search" (Flow.Api appsettings.json, в compose переопределяется переменными Search__*).
@@ -17,6 +17,44 @@ public sealed class SearchOptions
     public SearchIndexingOptions Indexing { get; set; } = new();
 
     public SearchQueryOptions Query { get; set; } = new();
+
+    public SearchRerankOptions Rerank { get; set; } = new();
+}
+
+/// <summary>
+/// Вторая ступень выдачи (docs/TZ_search_vector.md, «Реранкер»). В ТЗ флаг назван
+/// Search:Query:RerankEnabled; здесь он лежит рядом с адресом и моделью — как у эмбеддера,
+/// иначе настройки одной ступени оказались бы в двух секциях.
+/// </summary>
+public sealed class SearchRerankOptions
+{
+    /// <summary>
+    /// Выключено по умолчанию: реранкер меняет ощущение поиска с «мгновенно» на «секунда»,
+    /// и это решение продукта, а не значение по умолчанию.
+    /// </summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Адрес модели без /rerank на конце: http://reranker:8082/v1.</summary>
+    public string Endpoint { get; set; } = string.Empty;
+
+    public string Model { get; set; } = "Qwen3-Reranker-0.6B";
+
+    public string? ApiKey { get; set; }
+
+    /// <summary>
+    /// Сколько кандидатов уходит второй ступени. 25, а не 50: вдвое дешевле, а разница в качестве
+    /// на такой выдаче незначима. Пагинация дальше этого окна идёт обычным гибридным порядком.
+    /// </summary>
+    public int TopN { get; set; } = 25;
+
+    /// <summary>
+    /// Сколько символов документа уходит в модель. Cross-encoder платит за каждый токен пары,
+    /// а решают обычно первые абзацы: ограничение держит запрос в районе секунды.
+    /// </summary>
+    public int MaxDocumentChars { get; set; } = 1200;
+
+    /// <summary>Больше, чем у эмбеддера: прогон пар дороже, а пользователь уже нажал «Точнее».</summary>
+    public int TimeoutSeconds { get; set; } = 15;
 }
 
 public sealed class SearchEmbeddingsOptions

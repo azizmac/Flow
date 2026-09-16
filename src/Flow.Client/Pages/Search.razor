@@ -30,6 +30,12 @@
                     @onclick="() => SetArchived(!_archived)">
                 <Icon Name="history" Size="13" /> С закрытыми
             </button>
+            @* Вторая ступень: переупорядочивает первую страницу моделью. Заметно дольше обычного поиска,
+               поэтому включается руками и живёт только здесь — в подсказках при наборе её нет никогда. *@
+            <button type="button" class="seg-btn @(_precise ? "on" : "")" title="Переупорядочить выдачу моделью: точнее верхушка, примерно на секунду дольше"
+                    @onclick="() => SetPrecise(!_precise)">
+                <Icon Name="check-circle" Size="13" /> Точнее
+            </button>
         </div>
     </div>
 
@@ -68,6 +74,14 @@
             @if (response.Degraded)
             {
                 <div class="meta-line warn">Модель поиска недоступна — ищем только по словам</div>
+            }
+            else if (response.Reranked)
+            {
+                <div class="meta-line">Выдача уточнена моделью</div>
+            }
+            else if (_precise && _offset == 0)
+            {
+                <div class="meta-line warn">Уточнение недоступно: модель второй ступени выключена</div>
             }
         </div>
 
@@ -151,12 +165,15 @@
 
     [SupplyParameterFromQuery(Name = "archived")] public bool? ArchivedParam { get; set; }
 
+    [SupplyParameterFromQuery(Name = "precise")] public bool? PreciseParam { get; set; }
+
     [SupplyParameterFromQuery(Name = "offset")] public int? OffsetParam { get; set; }
 
     private string _query = "";
     private SearchSourceType? _type;
     private Guid? _boardId;
     private bool _archived;
+    private bool _precise;
     private int _offset;
 
     private IReadOnlyList<BoardResponse> _boards = [];
@@ -171,7 +188,7 @@
     private bool HasMore => _response is { } response && _offset + response.Items.Count < response.Total;
 
     /// <summary>Ключ уже выполненного запроса: по нему решается, нужен ли новый поход в API.</summary>
-    private string StateKey => $"{_query.Trim()}|{_type}|{_boardId}|{_archived}|{_offset}";
+    private string StateKey => $"{_query.Trim()}|{_type}|{_boardId}|{_archived}|{_precise}|{_offset}";
 
     protected override async Task OnInitializedAsync()
     {
@@ -187,6 +204,7 @@
         _type = TypeParam is { Length: > 0 } && Enum.TryParse<SearchSourceType>(TypeParam, ignoreCase: true, out var type) ? type : null;
         _boardId = BoardParam;
         _archived = ArchivedParam ?? false;
+        _precise = PreciseParam ?? false;
         _offset = Math.Max(0, OffsetParam ?? 0);
 
         await RunAsync();
@@ -223,6 +241,7 @@
                 _archived,
                 PageSize,
                 _offset,
+                _precise,
                 ct);
 
             if (ct.IsCancellationRequested)
@@ -290,6 +309,13 @@
         Apply(offset: 0);
     }
 
+    /// <summary>Уточнение считается по первой странице, поэтому переключение возвращает к её началу.</summary>
+    private void SetPrecise(bool precise)
+    {
+        _precise = precise;
+        Apply(offset: 0);
+    }
+
     private void SetOffset(int offset)
     {
         _offset = Math.Max(0, offset);
@@ -305,6 +331,7 @@
             ["type"] = _type?.ToString().ToLowerInvariant(),
             ["board"] = _boardId,
             ["archived"] = _archived ? true : null,
+            ["precise"] = _precise ? true : null,
             ["offset"] = offset > 0 ? offset : null
         };
 

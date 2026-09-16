@@ -10,6 +10,7 @@ namespace Flow.Application.Features.Search.Queries.SearchQuery;
 internal sealed class SearchQueryHandler(
     ISearchQueryRepository index,
     IQueryEmbeddingCache queryEmbeddings,
+    IReranker reranker,
     IBoardRepository boards,
     ITaskItemRepository tasks,
     IUserRepository users,
@@ -76,6 +77,14 @@ internal sealed class SearchQueryHandler(
             _ => SearchMode.Filters
         };
 
+        var limit = Math.Clamp(request.Limit, 1, Math.Max(1, query.MaxLimit));
+        var offset = Math.Max(0, request.Offset);
+
+        // Вторая ступень работает только по первой странице: переупорядочивать окно, которое человек
+        // уже пролистал, незачем, а тянуть ради этого лишние кандидаты — значит платить за каждую пару.
+        var rerankWindow = request.Rerank && options.Rerank.Enabled && reranker.IsConfigured && offset == 0 && resolved.Text.Length > 0;
+        var candidates = rerankWindow ? Math.Max(options.Rerank.TopN, limit) : limit;
+
         var criteria = new SearchCriteria(
             Query: resolved.Text,
             QueryEmbedding: embedding,
@@ -86,8 +95,8 @@ internal sealed class SearchQueryHandler(
             VectorTopN: query.VectorTopN,
             TextTopN: query.TextTopN,
             RrfK: query.RrfK,
-            Limit: Math.Clamp(request.Limit, 1, Math.Max(1, query.MaxLimit)),
-            Offset: Math.Max(0, request.Offset),
+            Limit: candidates,
+            Offset: offset,
             AssigneeId: resolved.AssigneeId,
             StatusIds: resolved.StatusIds,
             OverdueOnly: intent.Overdue,
@@ -95,7 +104,17 @@ internal sealed class SearchQueryHandler(
 
         var page = await index.SearchAsync(criteria, cancellationToken);
 
-        var items = page.Items.Select(ToItem).ToList();
+        var hits = page.Items;
+        var reranked = false;
+        if (rerankWindow)
+        {
+            (hits, reranked) = await RerankAsync(resolved.Text, hits, cancellationToken);
+            // Окно кандидатов шире страницы, и обрезать его нужно в любом случае — в том числе когда
+            // модель промолчала: человек просил страницу, а не два десятка результатов.
+            hits = hits.Take(limit).ToArray();
+        }
+
+        var items = hits.Select(ToItem).ToList();
         var total = page.Total;
 
         if (direct is not null)
@@ -106,7 +125,51 @@ internal sealed class SearchQueryHandler(
             total += duplicates > 0 ? 0 : 1;
         }
 
-        return Respond(items, total, degraded, mode, intent, resolved, direct, started);
+        return Respond(items, total, degraded, mode, intent, resolved, direct, started, reranked);
+    }
+
+    /// <summary>
+    /// Переупорядочивает отобранное первой ступенью. Недоступная модель — не ошибка запроса: выдача
+    /// уже есть, она просто остаётся гибридной, и клиент видит это по Reranked = false.
+    /// </summary>
+    private async Task<(IReadOnlyList<SearchHit> Hits, bool Reranked)> RerankAsync(
+        string query,
+        IReadOnlyList<SearchHit> hits,
+        CancellationToken cancellationToken)
+    {
+        if (hits.Count <= 1)
+            return (hits, false);
+
+        try
+        {
+            var scores = await reranker.RankAsync(query, hits.Select(Document).ToArray(), cancellationToken);
+            if (scores.Count == 0)
+                return (hits, false);
+
+            var ordered = scores.OrderByDescending(score => score.Score).Select(score => hits[score.Index]).ToList();
+
+            // Документы, которых модель не оценила, уходят в хвост в исходном порядке: выбросить их
+            // нельзя — первая ступень их уже нашла, а человек ждёт полную страницу.
+            var scored = scores.Select(score => score.Index).ToHashSet();
+            ordered.AddRange(hits.Where((_, position) => !scored.Contains(position)));
+
+            return (ordered, true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return (hits, false);
+        }
+    }
+
+    /// <summary>
+    /// Что видит cross-encoder: заголовок и лучший чанк без подсветки, обрезанные по лимиту —
+    /// он платит за каждый токен пары, а решают обычно первые строки.
+    /// </summary>
+    private string Document(SearchHit hit)
+    {
+        var text = string.IsNullOrWhiteSpace(hit.Content) ? hit.Title : $"{hit.Title}\n{hit.Content}";
+        var max = Math.Max(200, options.Rerank.MaxDocumentChars);
+        return text.Length <= max ? text : text[..max];
     }
 
     private static SearchResponse Respond(
@@ -117,13 +180,15 @@ internal sealed class SearchQueryHandler(
         SearchIntent intent,
         ResolvedIntent resolved,
         SearchResultItem? direct,
-        long started) =>
+        long started,
+        bool reranked = false) =>
         new(items,
             total,
             degraded,
             (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
             mode,
-            new SearchIntentResponse(resolved.Text, Labels(intent, resolved), direct?.SourceId));
+            new SearchIntentResponse(resolved.Text, Labels(intent, resolved), direct?.SourceId),
+            reranked);
 
     /// <summary>
     /// Достраивает разобранную строку до фильтров, которые понимает индекс: @username → id,

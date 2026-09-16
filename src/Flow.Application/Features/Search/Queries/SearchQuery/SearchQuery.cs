@@ -1,4 +1,4 @@
-using Flow.Shared.Contracts.Search;
+﻿using Flow.Shared.Contracts.Search;
 using MediatR;
 
 namespace Flow.Application.Features.Search.Queries.SearchQuery;
@@ -15,6 +15,8 @@ namespace Flow.Application.Features.Search.Queries.SearchQuery;
 /// <param name="Text">Строка запроса; пустая — ArgumentException (400).</param>
 /// <param name="Types">Типы источников; null или пусто — все.</param>
 /// <param name="IncludeArchived">Включать задачи в финальном статусе; по умолчанию нет.</param>
+/// <param name="Rerank">Вторая ступень («Точнее» в интерфейсе): точнее верхушка, дороже на секунду.
+/// В подсказках при наборе не используется никогда — там бюджет в десятки миллисекунд.</param>
 public sealed record SearchQuery(
     Guid ActorId,
     string Text,
@@ -23,4 +25,5 @@ public sealed record SearchQuery(
     bool IncludeArchived,
     SearchMode Mode,
     int Limit,
-    int Offset) : IRequest<SearchResponse?>;
+    int Offset,
+    bool Rerank = false) : IRequest<SearchResponse?>;

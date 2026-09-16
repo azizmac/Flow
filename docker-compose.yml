@@ -88,6 +88,11 @@ services:
       Search__Embeddings__QueryEndpoint: ${EMBEDDINGS_QUERY_ENDPOINT:-http://embeddings:8081/v1}
       Search__Embeddings__IndexingEndpoint: ${EMBEDDINGS_INDEXING_ENDPOINT:-}
       Search__Embeddings__Model: ${EMBEDDINGS_MODEL:-Qwen3-Embedding-0.6B}
+      # Вторая ступень выключена по умолчанию: она требует GPU и превращает поиск из мгновенного
+      # в секундный. RERANK_ENABLED=true включает кнопку «Точнее» в интерфейсе.
+      Search__Rerank__Enabled: ${RERANK_ENABLED:-false}
+      Search__Rerank__Endpoint: ${RERANK_ENDPOINT:-http://reranker:8082/v1}
+      Search__Rerank__Model: ${RERANKER_MODEL:-Qwen3-Reranker-0.6B}
     ports:
       - "${API_PORT:-8080}:8080"
     networks:
