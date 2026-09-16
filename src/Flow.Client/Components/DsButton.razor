@@ -1,7 +1,12 @@
-@* Кнопка Flow — pill. Variant: primary | secondary | tertiary | danger. Size: sm | md | lg. *@
+@* Кнопка Flow — pill. Variant: primary | secondary | tertiary | danger. Size: sm | md | lg.
 
-<button type="@Type" id="@Id" class="ds-btn @Variant @Size @(FullWidth ? "full" : "") @Class" style="@Style"
-        disabled="@(Disabled || Busy)" title="@Title" @onclick="OnClick" @onclick:stopPropagation="StopPropagation">
+   Фасад над MudButton: снаружи API прежний (страницы не переписываются), внутри — компонент библиотеки,
+   который даёт состояния, фокус и доступность. Вид задают классы .ds-btn (app.css) и сбросы
+   mud-overrides.css; Material-эффекты (ripple, тень, ВЕРХНИЙ РЕГИСТР) выключены. *@
+
+<MudButton id="@Id" Class="@($"ds-btn {Variant} {Size} {(FullWidth ? "full" : "")} {Class}")" Style="@Style"
+           ButtonType="@ButtonType" Disabled="@(Disabled || Busy)" title="@Title"
+           Ripple="false" DropShadow="false" ClickPropagation="@(!StopPropagation)" OnClick="OnClick">
     @if (Busy)
     {
         <span class="ds-spin"></span>
@@ -11,7 +16,7 @@
         <Icon Name="@Icon" Size="@IconSize" />
     }
     @ChildContent
-</button>
+</MudButton>
 
 @code {
     [Parameter] public string Variant { get; set; } = "primary";
@@ -21,14 +26,23 @@
     [Parameter] public bool Disabled { get; set; }
     /// <summary>Запрос в полёте: спиннер вместо иконки, кнопка заблокирована, текст остаётся.</summary>
     [Parameter] public bool Busy { get; set; }
+    /// <summary>"button" (по умолчанию) или "submit" — кнопка внутри формы.</summary>
     [Parameter] public string Type { get; set; } = "button";
     [Parameter] public string? Style { get; set; }
     [Parameter] public string? Class { get; set; }
     [Parameter] public string? Title { get; set; }
     [Parameter] public string? Id { get; set; }
+    /// <summary>Клик не всплывает выше кнопки — нужно в строках и карточках, которые сами кликабельны.</summary>
     [Parameter] public bool StopPropagation { get; set; }
     [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     private int IconSize => Size == "lg" ? 20 : Size == "sm" ? 16 : 18;
+
+    private ButtonType ButtonType => Type switch
+    {
+        "submit" => MudBlazor.ButtonType.Submit,
+        "reset" => MudBlazor.ButtonType.Reset,
+        _ => MudBlazor.ButtonType.Button
+    };
 }

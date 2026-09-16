@@ -60,7 +60,10 @@ public static class FlowTheme
             TableHover = "rgba(255,255,255,0.04)",
             TableStriped = "rgba(255,255,255,0.02)",
 
-            OverlayDark = "rgba(8,32,25,0.6)"
+            OverlayDark = "rgba(8,32,25,0.6)",
+
+            // Полосы скелетонов (Components/Skeleton.razor) — та же подсветка, что была у своей анимации.
+            Skeleton = "rgba(255,255,255,0.05)"
         },
 
         // Inter 500/600/900 и шкала из tokens.css (--text-*). Roboto, который MudBlazor ждёт по умолчанию,

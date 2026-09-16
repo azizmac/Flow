@@ -37,8 +37,75 @@ a.mud-link:hover {
    слои MudBlazor — от 1100. На время миграции это удобно: новые меню и диалоги всегда поверх старых.
    Когда старые слои уйдут (этап 3), правило можно будет убрать. */
 
-/* ---------- Кнопки (этап 2) ---------- */
-/* ---------- Поля (этап 2) ---------- */
+/* ---------- Кнопки ----------
+   Вид pill-кнопок и круглых icon-кнопок остаётся в app.css (.ds-btn / .ds-iconbtn) — здесь только то,
+   что MudBlazor задаёт сам и что иначе перебило бы наш макет. */
+
+/* Material резервирует кнопке минимум 64px ширины — у Flow кнопка ровно по содержимому. */
+.mud-button-root.ds-btn {
+    min-width: 0;
+}
+
+/* Press-эффект Flow: библиотека своего transform не ставит, но её transition перебивает наш. */
+.mud-button-root.ds-btn:active:not(:disabled) {
+    transform: scale(0.97);
+}
+
+.mud-button-root.ds-iconbtn:active:not(:disabled) {
+    transform: scale(0.94);
+}
+/* ---------- Поля ----------
+   Значение в поле Flow крупное (22px semibold), отступов сверху и снизу у него нет: линию и воздух
+   задаёт .ds-field-row. Material ставит своё — перебиваем точечно, сама разметка остаётся от MudTextField. */
+/* Размер поле наследует от обёртки (правило библиотеки — font-size: inherit), поэтому задаём его там;
+   вертикальные отступы приходят из `.mud-input > input.mud-input-root`, его и перебиваем. */
+.ds-field-row .mud-input {
+    font-family: var(--font-text);
+    font-size: var(--text-h3);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-tight);
+    line-height: var(--lh-normal);
+    color: var(--text-primary);
+}
+
+.ds-field-row .mud-input > input.mud-input-root {
+    padding: 0;
+    color: var(--text-primary);
+}
+
+.ds-field-row .mud-input-root::placeholder {
+    color: var(--text-tertiary);
+    font-weight: var(--fw-medium);
+    opacity: 1;
+}
+
+/* Обёртки Mud внутри строки поля не должны добавлять собственную ширину и отступы. */
+.ds-field-row .mud-input-control,
+.ds-field-row .mud-input {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+}
+/* ---------- Скелетоны ----------
+   Ширину и высоту полос задаёт Components/Skeleton.razor, цвет — Palette.Skeleton из темы.
+   Здесь: радиус как у остальной вёрстки Flow и выравнивание в строке-сетке списка задач. */
+.mud-skeleton {
+    border-radius: var(--radius-sm);
+}
+
+.skel-row .mud-skeleton {
+    justify-self: start;
+}
+
+/* Правило из app.css для .skel: при выключенных анимациях полоса просто стоит. */
+@media (prefers-reduced-motion: reduce) {
+    .mud-skeleton::after,
+    .mud-skeleton {
+        animation: none;
+    }
+}
+
 /* ---------- Меню, диалоги, снекбары (этап 3) ---------- */
 /* ---------- Селекты (этап 4) ---------- */
 /* ---------- Таблица задач (этап 5) ---------- */

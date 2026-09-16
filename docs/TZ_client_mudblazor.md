@@ -123,15 +123,18 @@ MudBlazor рендерит обычный DOM и держит JavaScript на м
 принципиальное решение: 8 страниц и ~7000 строк разметки при таком подходе почти не переписываются, а откат
 возможен по одному примитиву.
 
-| Наш файл | Внутри | Замечания |
+| Наш файл | Внутри | Состояние по итогам этапа 2 |
 |---|---|---|
-| `DsButton.razor` | `MudButton` | `Busy` → `MudProgressCircular` внутри кнопки, pill — через `mud-overrides.css` |
-| `DsIconButton.razor` | `MudIconButton` | круглая форма, размеры 30/34 |
-| `DsInput.razor` | `MudTextField<string>` | `Variant.Text` даёт подчёркивание; анимация линии из центра — наш CSS |
-| `Icon.razor` | `MudIcon` | `FlowIcons.Glyphs` отдаём как строку SVG — формат совпадает с тем, что ждёт `MudIcon` |
-| `Skeleton.razor` | `MudSkeleton` | наши четыре вида (`rows`, `cards`, …) остаются параметром |
-| `Avatar.razor` | `MudAvatar` | цвета и инициалы — существующий `Services/Avatars.cs` |
-| `RoleChip`, `KeyChip`, `DueChip` | `MudChip` | |
+| `DsButton.razor` | `MudButton` | сделано. `ClickPropagation` библиотеки заменил самописный `StopPropagation`; сброшен `min-width: 64px` от Material |
+| `DsIconButton.razor` | `MudIconButton` | сделано. Размер в px, поэтому иконка идёт в `ChildContent`: перечисление `Size` у Mud даёт только Small/Medium/Large |
+| `DsInput.razor` | `MudTextField<string>` | сделано. `Underline="false"` — линию по-прежнему рисует `.ds-field-row`; в `mud-overrides.css` перебиты размер значения (22px) и вертикальные отступы Material |
+| `Skeleton.razor` | `MudSkeleton` | сделано. Свой shimmer удалён из `app.css`, цвет полос — `Palette.Skeleton` в теме |
+| `Icon.razor` | — | **оставлен своим.** `MudIcon` — такая же обёртка `<svg viewBox="0 0 24 24">`, но размер у неё перечислением, а у нас в пикселях (12…24 по месту). Глифы из `FlowIcons` при этом свободно уходят в параметры `Icon` любых компонентов Mud — формат совпадает |
+| `Avatar.razor` | — | **оставлен своим.** `MudAvatar` даёт только контейнер; картинка с фолбэком на инициалы, детерминированный цвет по `Id` и приглушение деактивированных — наша логика, которая от обёртки не улучшается |
+| `RoleChip`, `KeyChip`, `DueChip` | — | **оставлены своими.** Это `span`-пилюли без поведения; `MudChip` принёс бы Material-форму, ripple и состояния выбора, которые пришлось бы целиком перебивать |
+
+Три «оставлен своим» — предусмотренный ТЗ случай (см. риски): фасады позволяют не менять контрол там, где
+библиотека не добавляет поведения, а только форму, которую пришлось бы перебивать.
 
 ## 3. Слои: меню, диалоги, слайдер, тосты
 
