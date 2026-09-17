@@ -35,11 +35,11 @@
 
     <div class="sb-section">Рабочее пространство</div>
 
-    <a class="sb-item @(IsBoards ? "active" : "")" href="boards"><Icon Name="grid" Size="18" />Проекты</a>
-    <a class="sb-item @(IsTasks ? "active" : "")" href="@TasksHref"><Icon Name="check" Size="18" />Задачи</a>
-    <a class="sb-item @(IsUsers ? "active" : "")" href="users"><Icon Name="users" Size="18" />Люди</a>
-    <span class="sb-item disabled" aria-disabled="true" title="Раздел появится позже"><Icon Name="chart" Size="18" />Дашборды<span class="sb-soon">скоро</span></span>
-    <span class="sb-item disabled" aria-disabled="true" title="Раздел появится позже"><Icon Name="settings" Size="18" />Настройки<span class="sb-soon">скоро</span></span>
+    <a class="sb-item @(IsBoards ? "active" : "")" href="boards" title="Проекты"><Icon Name="grid" Size="18" /><span>Проекты</span></a>
+    <a class="sb-item @(IsTasks ? "active" : "")" href="@TasksHref" title="Задачи"><Icon Name="check" Size="18" /><span>Задачи</span></a>
+    <a class="sb-item @(IsUsers ? "active" : "")" href="users" title="Люди"><Icon Name="users" Size="18" /><span>Люди</span></a>
+    <span class="sb-item disabled" aria-disabled="true" title="Раздел появится позже"><Icon Name="chart" Size="18" /><span>Дашборды</span><span class="sb-soon">скоро</span></span>
+    <span class="sb-item disabled" aria-disabled="true" title="Раздел появится позже"><Icon Name="settings" Size="18" /><span>Настройки</span><span class="sb-soon">скоро</span></span>
 
     <div class="sb-foot">
         @if (Me is { } me)
