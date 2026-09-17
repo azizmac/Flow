@@ -1,0 +1,8 @@
+# Метки нашего self-hosted раннера (flow-home). Без этого списка actionlint считает их опечаткой в
+# runs-on, потому что знает только про раннеров GitHub. Джобы выкатки нацелены на [self-hosted, flow]:
+# flow — что это раннер именно нашего кластера, home/k8s — для наглядности в списке раннеров.
+self-hosted-runner:
+  labels:
+    - flow
+    - home
+    - k8s

@@ -1,0 +1,64 @@
+name: kube-apply
+description: >-
+  Применить один отрендеренный модуль в кластер узким токеном раннера и дождаться выката.
+  Вся общая обвязка джоб выкатки (декод kubeconfig во временный файл, apply, rollout status,
+  подчистка) живёт здесь, чтобы шесть джоб не повторяли её шесть раз и не разъезжались.
+
+inputs:
+  kubeconfig_b64:
+    description: base64 kubeconfig ServiceAccount'а flow-deployer (секрет KUBE_DEPLOY_B64)
+    required: true
+  file:
+    description: путь к отрендеренному манифесту модуля, например manifests/postgres.yaml
+    required: true
+  namespace:
+    description: namespace модуля — им же ограничен токен (flow / flow-data / flow-ai)
+    required: true
+  wait:
+    description: >-
+      что дождаться после apply, через пробел, в форме kind/name (deployment/flow-api
+      statefulset/flow-postgres). Пусто — не ждать (например, слой storage: PVC выкатывать нечего).
+    required: false
+    default: ''
+  timeout:
+    description: бюджет rollout status. Не меньше бюджета startupProbe модуля плюс скачивание образа.
+    required: false
+    default: 600s
+
+runs:
+  using: composite
+  steps:
+    # Значения приходят через env, а не подстановкой ${{ }} прямо в текст скрипта: подстановка склеивается
+    # с shell-кодом, и любой спецсимвол (а в base64-секрете он вероятен) сломал бы скрипт или утёк бы в лог.
+    - shell: bash
+      env:
+        KUBECONFIG_B64: ${{ inputs.kubeconfig_b64 }}
+        FILE: ${{ inputs.file }}
+        NAMESPACE: ${{ inputs.namespace }}
+        WAIT: ${{ inputs.wait }}
+        TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        set -euo pipefail
+
+        # Временный файл в RUNNER_TEMP: он свой на каждую джобу и вычищается раннером после неё, поэтому
+        # узкий токен не остаётся лежать на self-hosted машине между прогонами. umask 077 — чтобы файл
+        # не был читаем другим пользователям, пока существует.
+        umask 077
+        kc="$RUNNER_TEMP/kubeconfig"
+        printf '%s' "$KUBECONFIG_B64" | base64 -d > "$kc"
+        export KUBECONFIG="$kc"
+        trap 'rm -f "$kc"' EXIT
+
+        echo "::group::apply $FILE ($NAMESPACE)"
+        # Namespace берётся из самого манифеста (его проставил оверлей на рендере), -n дублирует его лишь
+        # как страховку от объекта без namespace: такой уехал бы в default, а туда токену доступа нет —
+        # честный отказ лучше молчаливого промаха.
+        kubectl apply -n "$NAMESPACE" -f "$FILE"
+        echo "::endgroup::"
+
+        for res in $WAIT; do
+          echo "::group::rollout $res"
+          # Явный -n: контекст токена смотрит в flow, а ждать выката приходится и в flow-data, и в flow-ai.
+          kubectl -n "$NAMESPACE" rollout status "$res" --timeout="$TIMEOUT"
+          echo "::endgroup::"
+        done

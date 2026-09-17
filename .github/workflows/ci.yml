@@ -24,6 +24,14 @@ on:
         description: Пропустить тесты (только для отладки самого пайплайна; публикация образов при этом выключается)
         type: boolean
         default: false
+      pull_models:
+        description: Скачать веса моделей в том flow-models (гигабайты, разово; не часть обычной выкатки)
+        type: boolean
+        default: false
+      deploy_ai:
+        description: Выкатить AI-слой (llama.cpp CPU). Требует уже скачанных весов — сперва прогнать с pull_models
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -764,6 +772,276 @@ jobs:
           name: manifests-${{ github.sha }}
           path: manifests/
           retention-days: 30
+
+  # ---------- Стадия 3: выкатка (self-hosted раннер flow-home) ----------
+  #
+  # Джобы выкатки идут ТОЛЬКО на своём раннере (runs-on: [self-hosted, flow]) и ТОЛЬКО узким токеном
+  # KUBE_DEPLOY_B64 — ServiceAccount flow-deployer, права на flow/flow-data/flow-ai и больше никуда.
+  # Условие запуска — на push в main и вручную — стоит лишь у deploy-platform и deploy-storage; остальные
+  # висят на них через needs и пропускаются автоматически, если корневые пропущены (на PR и ветках выкатки
+  # нет — там ещё и образов в реестре нет). Сами джобы ничего не рендерят: применяют артефакт
+  # manifests-<sha> от джобы render, иначе стало бы возможным api из одного рендера, client из другого.
+
+  deploy-platform:
+    name: Выкатка · платформа (config + secrets)
+    needs: render
+    if: >-
+      needs.render.result == 'success'
+      && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 10
+    steps:
+      - name: ConfigMap flow-config, Secret flow-secrets и regcred в трёх неймспейсах
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          # flow-config: внутренние адреса сервисов фиксированы архитектурой, тумблеры и модели —
+          # переменными с дефолтами, чтобы не заводить два десятка Variables ради почти неизменных значений.
+          POSTGRES_HOST: flow-postgres.flow-data.svc.cluster.local
+          POSTGRES_DB: ${{ vars.POSTGRES_DB || 'flow' }}
+          POSTGRES_USER: ${{ vars.POSTGRES_USER || 'flow' }}
+          S3_ENDPOINT: http://flow-s3.flow-data.svc.cluster.local:9000
+          S3_BUCKET: ${{ vars.S3_BUCKET || 'flow' }}
+          S3_USE_SSL: 'false'
+          SEARCH_ENABLED: ${{ vars.SEARCH_ENABLED || 'true' }}
+          SEARCH_INDEXING_ENABLED: ${{ vars.SEARCH_INDEXING_ENABLED || 'true' }}
+          EMBEDDINGS_ENABLED: ${{ vars.EMBEDDINGS_ENABLED || 'true' }}
+          EMBEDDINGS_QUERY_ENDPOINT: http://flow-ai.flow-ai.svc.cluster.local:8081/v1
+          EMBEDDINGS_INDEXING_ENDPOINT: ''
+          EMBEDDINGS_MODEL: ${{ vars.EMBEDDINGS_MODEL || 'Qwen3-Embedding-0.6B' }}
+          EMBEDDINGS_MODEL_FILE: ${{ vars.EMBEDDINGS_MODEL_FILE || 'Qwen3-Embedding-0.6B-Q8_0.gguf' }}
+          EMBEDDINGS_MODEL_URL: ${{ vars.EMBEDDINGS_MODEL_URL || 'https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf' }}
+          EMBEDDINGS_MODEL_SHA256: ${{ vars.EMBEDDINGS_MODEL_SHA256 }}
+          RERANK_ENABLED: ${{ vars.RERANK_ENABLED || 'false' }}
+          RERANK_ENDPOINT: http://flow-ai.flow-ai.svc.cluster.local:8081/v1
+          RERANKER_MODEL: ${{ vars.RERANKER_MODEL || 'bge-reranker-v2-m3' }}
+          RERANKER_MODEL_FILE: ${{ vars.RERANKER_MODEL_FILE || 'bge-reranker-v2-m3-Q8_0.gguf' }}
+          RERANKER_MODEL_URL: ${{ vars.RERANKER_MODEL_URL || 'https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF/resolve/main/bge-reranker-v2-m3-Q8_0.gguf' }}
+          RERANKER_MODEL_SHA256: ${{ vars.RERANKER_MODEL_SHA256 }}
+          VISION_ENABLED: ${{ vars.VISION_ENABLED || 'false' }}
+          VISION_ENDPOINT: http://flow-vision.flow-ai.svc.cluster.local:8083/v1
+          VISION_MODEL: ${{ vars.VISION_MODEL || 'Qwen3-VL-Embedding-2B' }}
+          VISION_MODEL_REPO: ${{ vars.VISION_MODEL_REPO || 'Qwen/Qwen3-VL-Embedding-2B' }}
+          VISION_MAX_LEN: ${{ vars.VISION_MAX_LEN || '8192' }}
+          VISION_GPU_FRACTION: ${{ vars.VISION_GPU_FRACTION || '0.35' }}
+          AUTH_ALLOW_INSECURE_HTTP: ${{ vars.AUTH_ALLOW_INSECURE_HTTP || 'true' }}
+          BOOTSTRAP_ENABLED: ${{ vars.BOOTSTRAP_ENABLED || 'true' }}
+          BOOTSTRAP_ID: ${{ vars.BOOTSTRAP_ID }}
+          BOOTSTRAP_EMAIL: ${{ vars.BOOTSTRAP_EMAIL || 'admin@flow.local' }}
+          BOOTSTRAP_USERNAME: ${{ vars.BOOTSTRAP_USERNAME || 'admin' }}
+          BOOTSTRAP_FIRST_NAME: ${{ vars.BOOTSTRAP_FIRST_NAME || 'Admin' }}
+          BOOTSTRAP_LAST_NAME: ${{ vars.BOOTSTRAP_LAST_NAME || 'Flow' }}
+          BACKUP_KEEP: ${{ vars.BACKUP_KEEP || '7' }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          MINIO_ROOT_USER: ${{ secrets.MINIO_ROOT_USER }}
+          MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+          AUTH_CERT_PASSWORD: ${{ secrets.AUTH_CERT_PASSWORD }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          kc="$RUNNER_TEMP/kubeconfig"; printf '%s' "$KUBECONFIG_B64" | base64 -d > "$kc"
+          export KUBECONFIG="$kc"; trap 'rm -f "$kc" cfg.env sec.env' EXIT
+
+          # Через env-file, а не --from-literal: значение из --from-literal видно в списке процессов раннера,
+          # а секрет там светиться не должен. printenv читает переменную по имени; файлы под umask 077.
+          config_keys="POSTGRES_HOST POSTGRES_DB POSTGRES_USER S3_ENDPOINT S3_BUCKET S3_USE_SSL
+            SEARCH_ENABLED SEARCH_INDEXING_ENABLED EMBEDDINGS_ENABLED EMBEDDINGS_QUERY_ENDPOINT
+            EMBEDDINGS_INDEXING_ENDPOINT EMBEDDINGS_MODEL EMBEDDINGS_MODEL_FILE EMBEDDINGS_MODEL_URL
+            EMBEDDINGS_MODEL_SHA256 RERANK_ENABLED RERANK_ENDPOINT RERANKER_MODEL RERANKER_MODEL_FILE
+            RERANKER_MODEL_URL RERANKER_MODEL_SHA256 VISION_ENABLED VISION_ENDPOINT VISION_MODEL
+            VISION_MODEL_REPO VISION_MAX_LEN VISION_GPU_FRACTION AUTH_ALLOW_INSECURE_HTTP
+            BOOTSTRAP_ENABLED BOOTSTRAP_ID BOOTSTRAP_EMAIL BOOTSTRAP_USERNAME BOOTSTRAP_FIRST_NAME
+            BOOTSTRAP_LAST_NAME BACKUP_KEEP"
+          : > cfg.env
+          for k in $config_keys; do printf '%s=%s\n' "$k" "$(printenv "$k" || true)" >> cfg.env; done
+          : > sec.env
+          for k in POSTGRES_PASSWORD MINIO_ROOT_USER MINIO_ROOT_PASSWORD AUTH_CERT_PASSWORD; do
+            printf '%s=%s\n' "$k" "$(printenv "$k" || true)" >> sec.env
+          done
+
+          for ns in flow flow-data flow-ai; do
+            kubectl create configmap flow-config --from-env-file=cfg.env -n "$ns" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            kubectl create secret generic flow-secrets --from-env-file=sec.env -n "$ns" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            kubectl create secret docker-registry regcred -n "$ns" \
+              --docker-server=docker.io --docker-username="$REGISTRY_USERNAME" \
+              --docker-password="$REGISTRY_PASSWORD" --dry-run=client -o yaml | kubectl apply -f -
+          done
+          echo "flow-config, flow-secrets (4) и regcred созданы в flow / flow-data / flow-ai"
+
+  deploy-storage:
+    name: Выкатка · тома (PVC)
+    needs: render
+    if: >-
+      needs.render.result == 'success'
+      && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 10
+    steps:
+      - name: Отрендеренные манифесты
+        uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - name: Применить PVC
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_DEPLOY_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077; kc="$RUNNER_TEMP/kubeconfig"; printf '%s' "$KUBECONFIG_B64" | base64 -d > "$kc"
+          export KUBECONFIG="$kc"; trap 'rm -f "$kc"' EXIT
+          # Без -n: тома лежат в трёх неймспейсах, каждый объект несёт свой. Ждать нечего — local-path
+          # с WaitForFirstConsumer держит PVC в Pending, пока его не затребует под, и это норма, а не сбой.
+          kubectl apply -f manifests/storage.yaml
+          kubectl get pvc -A -l app.kubernetes.io/part-of=flow
+
+  deploy-postgres:
+    name: Выкатка · PostgreSQL
+    needs: [deploy-platform, deploy-storage]
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/postgres.yaml
+          namespace: flow-data
+          wait: statefulset/flow-postgres
+          timeout: 600s
+
+  deploy-s3:
+    name: Выкатка · MinIO
+    needs: [deploy-platform, deploy-storage]
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/s3.yaml
+          namespace: flow-data
+          wait: statefulset/flow-s3
+          timeout: 600s
+
+  deploy-api:
+    name: Выкатка · Flow.Api
+    needs: [deploy-postgres, deploy-s3]
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/api.yaml
+          namespace: flow
+          # 900с: startupProbe api до 300с (миграции) плюс скачивание образа с нуля.
+          wait: deployment/flow-api
+          timeout: 900s
+
+  deploy-client:
+    name: Выкатка · Flow.Client
+    needs: deploy-api
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/client.yaml
+          namespace: flow
+          wait: deployment/flow-client
+          timeout: 600s
+
+  deploy-ingress:
+    name: Выкатка · Ingress
+    needs: [deploy-api, deploy-client]
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/ingress.yaml
+          namespace: flow
+          # Ingress — не рабочая нагрузка, ждать rollout нечего: он либо принят admission'ом, либо отклонён.
+          wait: ''
+
+  # AI-слой и закачка весов — только вручную: веса это гигабайты, качаются разово, а модуль ai без них
+  # уходит в CrashLoop. Поэтому в автоматический путь (push в main) они не входят.
+
+  deploy-models-pull:
+    name: Выкатка · закачка весов (вручную)
+    needs: [deploy-platform, deploy-storage]
+    if: github.event_name == 'workflow_dispatch' && inputs.pull_models
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - name: Job закачки и ожидание
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_DEPLOY_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077; kc="$RUNNER_TEMP/kubeconfig"; printf '%s' "$KUBECONFIG_B64" | base64 -d > "$kc"
+          export KUBECONFIG="$kc"; trap 'rm -f "$kc"' EXIT
+          kubectl apply -f manifests/models.yaml
+          # Имя Job несёт суффикс релиза, поэтому ждём по метке, а не по имени.
+          kubectl -n flow-ai wait --for=condition=complete job \
+            -l app.kubernetes.io/name=models --timeout=7200s
+          kubectl -n flow-ai logs -l app.kubernetes.io/name=models --tail=20 || true
+
+  deploy-ai:
+    name: Выкатка · AI-слой (вручную)
+    needs: [deploy-platform, deploy-storage]
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_ai
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/ai.yaml
+          namespace: flow-ai
+          wait: deployment/flow-ai
+          timeout: 900s
 
   # ---------- Агрегатор ----------
 
