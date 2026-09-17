@@ -1,3 +1,12 @@
+﻿# Markdown-редактор: бандл CodeMirror собирается из исходника, а не берётся готовым из репозитория —
+# так образ нельзя собрать с бандлом, отставшим от editor/flow-editor.src.js (см. editor/README.md).
+FROM node:22-alpine AS editor
+WORKDIR /editor
+COPY ["src/Flow.Client/editor/package.json", "src/Flow.Client/editor/package-lock.json", "./"]
+RUN npm ci --no-audit --no-fund
+COPY ["src/Flow.Client/editor/flow-editor.src.js", "./"]
+RUN npx esbuild flow-editor.src.js --bundle --minify --format=iife --target=es2020 --outfile=/editor/flow-editor.js
+
 # Blazor WebAssembly — статика, поэтому финальный образ не aspnet, а nginx (Rider-шаблон с dotnet Flow.Client.dll здесь не работает).
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
@@ -6,6 +15,8 @@ COPY ["src/Flow.Client/Flow.Client.csproj", "src/Flow.Client/"]
 COPY ["src/Flow.Shared/Flow.Shared.csproj", "src/Flow.Shared/"]
 RUN dotnet restore "src/Flow.Client/Flow.Client.csproj"
 COPY src/ src/
+# Свежесобранный бандл кладём поверх закоммиченного — в образ попадает он.
+COPY --from=editor /editor/flow-editor.js src/Flow.Client/wwwroot/js/flow-editor.js
 WORKDIR "/src/src/Flow.Client"
 RUN dotnet publish "./Flow.Client.csproj" -c $BUILD_CONFIGURATION -o /app/publish
 
