@@ -32,29 +32,6 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
-    public async Task<string?> StorageGetAsync(string key)
-    {
-        try
-        {
-            return await js.InvokeAsync<string?>("flow.storageGet", key);
-        }
-        catch (JSException)
-        {
-            return null;
-        }
-    }
-
-    public async Task StorageSetAsync(string key, string? value)
-    {
-        try
-        {
-            await js.InvokeVoidAsync("flow.storageSet", key, value);
-        }
-        catch (JSException)
-        {
-        }
-    }
-
     /// <summary>Запоминает текущий фокус перед открытием модального слоя.</summary>
     public async Task PushFocusAsync()
     {

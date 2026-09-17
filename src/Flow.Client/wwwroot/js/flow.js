@@ -147,17 +147,6 @@ window.flow = (function () {
             if (select && typeof el.select === 'function') el.select();
         },
 
-        // localStorage может быть недоступен (приватный режим, запрет site data) — тогда null / no-op.
-        storageGet: function (key) {
-            try { return window.localStorage.getItem(key); } catch (_) { return null; }
-        },
-        storageSet: function (key, value) {
-            try {
-                if (value === null || value === undefined) window.localStorage.removeItem(key);
-                else window.localStorage.setItem(key, value);
-            } catch (_) { }
-        },
-
         scrollIntoView: function (id) {
             const el = document.getElementById(id);
             if (el) el.scrollIntoView({ block: 'nearest' });

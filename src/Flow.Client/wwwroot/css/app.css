@@ -711,7 +711,7 @@ a.sb-me:active { transform: scale(0.98); }
 /* ---------- Auth screen (вход/выход через Flow.Auth, «нет доступа») ---------- */
 .auth-screen { min-height: 100vh; display: grid; place-items: center; padding: 30px 20px; background: var(--bg-deep); }
 .auth-card { width: 100%; max-width: 400px; background: var(--bg-content); border: 1px solid var(--border); border-radius: var(--r-xl); box-shadow: var(--shadow-card); padding: 40px 30px; display: flex; flex-direction: column; gap: 15px; }
-.auth-title { font: var(--fw-black) 24px var(--font-display); letter-spacing: -0.02em; color: var(--text-primary); }
+.auth-title { font: var(--fw-black) 24px var(--font-display); letter-spacing: var(--tracking-display); color: var(--text-primary); }
 .auth-text { font: var(--fw-medium) var(--text-body) var(--font-text); color: var(--text-secondary); }
 .auth-link { color: var(--accent); font: var(--fw-semibold) var(--text-body) var(--font-display); }
 

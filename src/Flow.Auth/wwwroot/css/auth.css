@@ -69,7 +69,7 @@ html, body {
 .login-title {
     margin: 0;
     font: var(--fw-black) 24px var(--font-display);
-    letter-spacing: -0.02em;
+    letter-spacing: var(--tracking-display);
     line-height: 1.15;
 }
 

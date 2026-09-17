@@ -1,8 +1,10 @@
 /* ════════════════════════════════════════════════════════════════════
    Flow — design tokens.
    База: Inter 500/600/900, шаг отступов 5px, pill-контролы 34/50px,
-   радиусы 5/10/25. Палитра — тёмно-зелёная с янтарным акцентом поверх
-   семантических алиасов.
+   радиусы 6/10/12/16. Палитра — тёмно-зелёная с янтарным акцентом.
+
+   Здесь только то, чем пользуется разметка: неиспользуемые токены удаляются,
+   иначе файл перестаёт отвечать на вопрос «какие значения в проекте разрешены».
    ════════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -12,7 +14,6 @@
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
     /* ── weights ── */
-    --fw-regular: 400;
     --fw-medium: 500;
     --fw-semibold: 600;
     --fw-bold: 700;
@@ -20,27 +21,19 @@
     --fw-black: 900;
 
     /* ── type scale ── */
-    --text-display: 40px;
-    --text-h1: 40px;
-    --text-h2: 25px;
     --text-h3: 22px;
-    --text-title: 22px;
-    --text-lg: 20px;
     --text-body: 15px;
     --text-sm: 14px;
-    --text-xs: 12px;
 
-    --lh-tight: 1;
-    --lh-display: 0.925;
-    --lh-snug: 1.15;
     --lh-normal: 1.33;
 
     --tracking-tight: -0.4px;
     --tracking-display: -0.02em;
-    --tracking-label: 0.37px;
     --tracking-wide: 0.08em;
 
-    /* ── spacing (base 5px) ── */
+    /* ── spacing (base 5px) ──
+       Шкала держится целиком, включая шаги, которых сейчас нет в разметке: пропуск в ряду
+       5/10/15/20/25/30/40/50 читается как ошибка и провоцирует магические числа в CSS. */
     --space-1: 5px;
     --space-2: 10px;
     --space-3: 15px;
@@ -52,11 +45,7 @@
 
     /* ── radii ── */
     --radius-pill: 999px;
-    --radius-card: 25px;
-    --radius-sheet: 30px;
-    --radius-md: 10px;
     --radius-sm: 5px;
-    --radius-xs: 2px;
 
     /* Flow-специфичные радиусы карточек/панелей из макета */
     --r-sm: 6px;
@@ -68,10 +57,8 @@
     --control-h-sm: 34px;
     --control-h-md: 40px;   /* Flow: компактный md для topbar (hint-size из макета) */
     --control-h: 50px;
-    --tap-min: 44px;
 
     /* ── Flow · палитра ── */
-    --bg-page: #EFE9DD;
     --bg-deep: #082019;
     --bg-content: #153E32;
     --surface: #1B4A3B;
@@ -80,15 +67,13 @@
 
     --accent: #FFBA00;
     --accent-hover: #FFCB40;
-    --accent-pressed: #E8A900;
     --accent-soft: rgba(255, 186, 0, 0.14);
     --on-accent: #0C3B2E;
 
     /* Бренд: знак Flow (Components/BrandMark.razor, комплект — wwwroot/brand/).
        Единственный синий в проекте и единственное место, где он допустим: палитра
-       интерфейса остаётся зелёно-янтарной. Токены отдельные, чтобы правка знака
-       не задевала --accent, и наоборот. */
-    --brand-ink: #15181B;
+       интерфейса остаётся зелёно-янтарной. Тёмная доля знака (#15181B) живёт прямо
+       в SVG — в CSS она не нужна, знак нигде не перекрашивается. */
     --brand-blue: #2451D6;
 
     --sage: #6D9773;
@@ -106,21 +91,14 @@
     --border-strong: rgba(255, 255, 255, 0.22);
     --border-subtle: rgba(255, 255, 255, 0.06);
 
-    /* ── семантические алиасы → Flow ── */
-    --bg: var(--bg-content);
-    --surface-panel: var(--surface);
-    --error: var(--danger);
-
     /* ── elevation ── */
     --shadow-card: 0 40px 80px -30px rgba(0, 0, 0, 0.35);
     --shadow-popover: 0 20px 40px rgba(0, 0, 0, 0.4);
     --shadow-modal: 0 30px 60px -20px rgba(0, 0, 0, 0.6);
     --shadow-drawer: -30px 0 60px rgba(0, 0, 0, 0.4);
     --shadow-sidebar: 2px 0 12px rgba(0, 0, 0, 0.25);
-    --ring-subtle: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
 
     /* ── motion ── */
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
