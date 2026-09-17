@@ -5,10 +5,13 @@
 // (state / wrap / prefixLines / insertMention), поэтому MarkdownEditor.razor не переписывает свою логику
 // упоминаний и тулбара, а только вызывает другие функции.
 //
-// Клавиши, которые нужны меню упоминаний (↑ ↓ Enter Tab Esc), уходят в .NET синхронно через invokeMethod:
-// ответ «перехвачено или нет» нужен здесь и сейчас, чтобы решить судьбу события — асинхронного ждать негде.
+// Клавиши, которые нужны меню упоминаний (↑ ↓ Enter Tab Esc) и тулбару (Ctrl B/I/K, Ctrl Enter), уходят
+// в .NET синхронно через invokeMethod: ответ нужен здесь и сейчас, чтобы решить судьбу события. В ответ
+// приходит команда — что именно сделать. Правку текста выполняем здесь же: вызвать JS из .NET, пока тот
+// отвечает на синхронный вызов, нельзя — вложенный вызов не проходит и правка молча теряется. Новое
+// значение уходит наверх обычным асинхронным каналом (HandleEditorInput), действия — через RunEditorAction.
 
-import { EditorState, Compartment } from '@codemirror/state';
+import { EditorState, Compartment, Prec } from '@codemirror/state';
 import { EditorView, keymap, placeholder as placeholderExt, drawSelection } from '@codemirror/view';
 import { history, historyKeymap, defaultKeymap } from '@codemirror/commands';
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
@@ -54,9 +57,6 @@ const flowTheme = EditorView.theme({
     '.cm-scroller': { fontFamily: 'inherit', lineHeight: '1.55', overflow: 'auto' }
 }, { dark: true });
 
-// Клавиши, которые может забрать себе список упоминаний; всё остальное принадлежит редактору.
-const MENU_KEYS = ['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'];
-
 /** @type {Map<string, {view: EditorView, ref: any, editable: Compartment}>} */
 const editors = new Map();
 
@@ -64,14 +64,40 @@ function get(id) {
     return editors.get(id);
 }
 
-// Клавиши меню упоминаний: .NET отвечает синхронно, перехватил он клавишу или нет.
+// .NET отвечает синхронно: команда — если клавишу забрали себе, null — если это обычный ввод.
 function askDotNet(entry, key) {
-    if (!entry || !entry.ref) return false;
+    if (!entry || !entry.ref) return null;
     try {
-        return entry.ref.invokeMethod('HandleEditorKey', key) === true;
+        return entry.ref.invokeMethod('HandleEditorKey', key) || null;
     } catch (_) {
         // Компонент уже уничтожен — клавиша принадлежит редактору.
-        return false;
+        return null;
+    }
+}
+
+// Выполнить команду от .NET: текст правим здесь, наверх отдаём новое значение.
+function runCommand(entry, id, cmd) {
+    let value;
+    switch (cmd.kind) {
+        case 'wrap':
+            value = window.flowEditor.wrap(id, cmd.before, cmd.after, cmd.placeholder);
+            break;
+        case 'prefix':
+            value = window.flowEditor.prefixLines(id, cmd.prefix, cmd.ordered);
+            break;
+        case 'mention':
+            value = window.flowEditor.insertMention(id, cmd.at, cmd.username);
+            break;
+        case 'action':
+            entry.ref.invokeMethodAsync('RunEditorAction', cmd.action).catch(function () { });
+            return;
+        default:
+            // handled: состояние поменяли в .NET, здесь делать нечего.
+            return;
+    }
+
+    if (value !== null && value !== undefined) {
+        entry.ref.invokeMethodAsync('HandleEditorInput', value).catch(function () { });
     }
 }
 
@@ -89,31 +115,29 @@ window.flowEditor = {
         const editable = new Compartment();
         const entry = { view: null, ref: dotNetRef, editable: editable };
 
-        // Клавиши разбираем на уровне DOM, а не через keymap: перехваченное нужно не только отдать .NET,
-        // но и остановить — иначе Esc, закрывший список упоминаний, всплывёт до глобальных хоткеев
-        // и закроет заодно слайдер задачи вместе с недописанным комментарием.
-        const menuKeys = EditorView.domEventHandlers({
-            keydown(event) {
-                const mod = event.ctrlKey || event.metaKey;
-                let key = null;
+        // Клавиши забираем через keymap наивысшего приоритета, а не через domEventHandlers: последние
+        // в связке с keymap срабатывают не на всякое событие, и Enter уходил в редактор мимо списка
+        // упоминаний. Возврат true = «команда выполнена»: CodeMirror сам гасит событие и дальше его
+        // не несёт. Раскладку keymap разбирает сам — на русской Ctrl+B приходит как key «и».
+        const ask = (key) => {
+            const cmd = askDotNet(entry, key);
+            if (!cmd) return false;
 
-                if (mod) {
-                    // По event.code, а не по key: на русской раскладке Ctrl+B — это key «и».
-                    if (event.key === 'Enter') key = 'Mod-Enter';
-                    else if (event.code === 'KeyB') key = 'Mod-b';
-                    else if (event.code === 'KeyI') key = 'Mod-i';
-                    else if (event.code === 'KeyK') key = 'Mod-k';
-                } else if (MENU_KEYS.indexOf(event.key) >= 0) {
-                    key = event.key;
-                }
+            runCommand(entry, id, cmd);
+            return true;
+        };
 
-                if (!key || !askDotNet(entry, key)) return false;
-
-                event.preventDefault();
-                event.stopPropagation();
-                return true;
-            }
-        });
+        const menuKeys = Prec.highest(keymap.of([
+            { key: 'ArrowDown', run: () => ask('ArrowDown') },
+            { key: 'ArrowUp', run: () => ask('ArrowUp') },
+            { key: 'Enter', run: () => ask('Enter') },
+            { key: 'Tab', run: () => ask('Tab') },
+            { key: 'Escape', run: () => ask('Escape') },
+            { key: 'Mod-Enter', run: () => ask('Mod-Enter') },
+            { key: 'Mod-b', run: () => ask('Mod-b') },
+            { key: 'Mod-i', run: () => ask('Mod-i') },
+            { key: 'Mod-k', run: () => ask('Mod-k') },
+        ]));
 
         const view = new EditorView({
             parent: host,

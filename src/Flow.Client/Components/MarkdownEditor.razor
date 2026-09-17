@@ -182,11 +182,34 @@
     }
 
     /// <summary>
-    /// Клавиша из редактора. Возвращаем true, если забрали её себе: стрелки и Enter принадлежат меню
-    /// упоминаний, только пока оно открыто, иначе это обычный ввод. Вызов синхронный — CodeMirror ждёт ответ.
+    /// Что редактору сделать с перехваченной клавишей. Правку текста выполняет JS (kind = wrap/prefix/mention),
+    /// действие компонента — отдельным асинхронным вызовом (kind = action), «handled» — состояние уже поменяли
+    /// здесь и делать больше нечего.
+    /// </summary>
+    public sealed record EditorCommand(
+        string Kind,
+        string? Before = null,
+        string? After = null,
+        string? Placeholder = null,
+        string? Prefix = null,
+        bool Ordered = false,
+        int At = 0,
+        string? Username = null,
+        string? Action = null);
+
+    private static readonly EditorCommand Handled = new("handled");
+
+    /// <summary>
+    /// Клавиша из редактора. Возвращаем команду, если забрали клавишу себе, и null, если это обычный ввод:
+    /// стрелки и Enter принадлежат меню упоминаний, только пока оно открыто.
+    ///
+    /// Вызов синхронный — CodeMirror ждёт ответ, чтобы решить судьбу события. Поэтому здесь нельзя ни звать
+    /// JS, ни запускать задачу, которая его позовёт: пока JS ждёт нас, вложенный вызов к нему не проходит,
+    /// и правка текста молча теряется (Ctrl B, выбор упоминания по Enter). Отсюда и разделение: решение —
+    /// в .NET, выполнение — в JS.
     /// </summary>
     [JSInvokable]
-    public bool HandleEditorKey(string key)
+    public EditorCommand? HandleEditorKey(string key)
     {
         if (_mentionOpen && _mentionItems.Count > 0)
         {
@@ -195,41 +218,59 @@
                 case "ArrowDown":
                     _mentionIndex = (_mentionIndex + 1) % _mentionItems.Count;
                     StateHasChanged();
-                    return true;
+                    return Handled;
                 case "ArrowUp":
                     _mentionIndex = (_mentionIndex - 1 + _mentionItems.Count) % _mentionItems.Count;
                     StateHasChanged();
-                    return true;
+                    return Handled;
                 case "Enter":
                 case "Tab":
-                    _ = PickMention(_mentionIndex);
-                    return true;
+                {
+                    var user = _mentionItems[_mentionIndex];
+                    var at = _mentionAt;
+                    CloseMention();
+                    StateHasChanged();
+                    return new EditorCommand("mention", At: at, Username: user.Username);
+                }
                 case "Escape":
                     CloseMention();
                     StateHasChanged();
-                    return true;
+                    return Handled;
             }
         }
 
         switch (key)
         {
             case "Mod-Enter":
-                _ = Submit();
-                return true;
+                return new EditorCommand("action", Action: "submit");
             case "Mod-b":
-                _ = Wrap("**", "**", "жирный");
-                return true;
+                return new EditorCommand("wrap", Before: "**", After: "**", Placeholder: "жирный");
             case "Mod-i":
-                _ = Wrap("_", "_", "курсив");
-                return true;
+                return new EditorCommand("wrap", Before: "_", After: "_", Placeholder: "курсив");
             case "Mod-k":
-                _ = Wrap("[", "](url)", "текст ссылки");
-                return true;
+                return new EditorCommand("wrap", Before: "[", After: "](url)", Placeholder: "текст ссылки");
             case "Escape" when OnCancel.HasDelegate:
-                _ = OnCancel.InvokeAsync();
-                return true;
+                return new EditorCommand("action", Action: "cancel");
             default:
-                return false;
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Действие компонента по клавише. Зовётся из JS асинхронно и уже вне синхронного HandleEditorKey —
+    /// поэтому отсюда можно и в API сходить, и в редактор.
+    /// </summary>
+    [JSInvokable]
+    public async Task RunEditorAction(string action)
+    {
+        switch (action)
+        {
+            case "submit":
+                await Submit();
+                break;
+            case "cancel":
+                await OnCancel.InvokeAsync();
+                break;
         }
     }
 
