@@ -1,4 +1,9 @@
-# Скрипты и SQL для контейнеров должны оставаться LF даже на Windows-чекауте
+﻿# Скрипты и SQL для контейнеров должны оставаться LF даже на Windows-чекауте
 *.sh text eol=lf
 *.sql text eol=lf
 **/Dockerfile text eol=lf
+
+# Бандл редактора и его исходник — всегда LF: esbuild пишет LF, а CI сравнивает собранный файл
+# с закоммиченным (build.yml, шаг «Editor bundle is up to date»). CRLF-чекаут на Windows ломал бы сравнение.
+src/Flow.Client/editor/*.js text eol=lf
+src/Flow.Client/wwwroot/js/flow-editor.js text eol=lf
