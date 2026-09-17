@@ -1,10 +1,10 @@
-namespace Flow.Application.Abstractions;
+namespace Flow.Auth.Contracts;
 
 /// <summary>
-/// Учётные записи (username, email, пароль, блокировка входа) живут в Flow.Auth — это клиент его admin-API.
-/// Flow.Auth — источник истины для username/email: команды сначала меняют учётную запись, и только при успехе —
-/// копию в Users. Реализация — Flow.Infrastructure (AuthAccountService); недоступность сервиса →
-/// <see cref="Exceptions.AuthUnavailableException"/> → 502.
+/// Публичный контракт Auth-модуля: учётные записи (username, email, пароль, блокировка входа).
+/// Ядро вызывает этот интерфейс, реализация — Flow.Auth (Security/AuthAccountManager, in-process поверх Identity).
+/// Auth-модуль — источник истины для username/email: команды сначала меняют учётную запись,
+/// и только при успехе — копию в Users.
 /// </summary>
 public interface IAccountService
 {
@@ -30,7 +30,7 @@ public enum AccountResultStatus
     UsernameTaken,
     EmailTaken,
 
-    /// <summary>Flow.Auth отверг ввод (слабый пароль, неверный текущий пароль, формат) — Error содержит его текст.</summary>
+    /// <summary>Auth-модуль отверг ввод (слабый пароль, неверный текущий пароль, формат, нет учётной записи) — Error содержит текст.</summary>
     Invalid
 }
 

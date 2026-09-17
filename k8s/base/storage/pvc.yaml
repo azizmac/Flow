@@ -96,7 +96,30 @@ spec:
 
 # ---------- namespace flow ----------
 
-# Ключи ASP.NET DataProtection (/keys у Flow.Auth): там килобайты XML, и 1Gi взят как разумный минимум —
+# Сертификаты подписи и шифрования токенов (/certs). Раньше они приезжали Secret-ом из
+# docker/auth/make-certs.sh; после перехода на модульный монолит скрипта нет, а самоподписанные PFX
+# создаёт сам Auth-модуль при первом старте — значит каталог обязан быть записываемым, и Secret
+# на его месте дал бы отказ при первом же запуске. Терять этот том нельзя по той же причине, что
+# и соседний: новая пара ключей означает, что все ранее выданные токены перестают проверяться.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flow-auth-certs
+  namespace: flow
+  labels:
+    app.kubernetes.io/name: storage
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: auth
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: "${STORAGE_CLASS}"
+  resources:
+    requests:
+      storage: 1Gi
+---
+
+# Ключи ASP.NET DataProtection (/keys у Auth-модуля): там килобайты XML, и 1Gi взят как разумный минимум —
 # меньше просить смысла нет. Ценность тома не в объёме: потеря этих ключей разлогинивает всех
 # пользователей разом, без единой ошибки в логах, потому что cookie и токены перестают расшифровываться.
 apiVersion: v1

@@ -41,12 +41,10 @@ STORAGE_CLASS|var|2|Класс для всех PVC
 INGRESS_CLASS|var|2|ingressClassName в Ingress-манифестах
 PUBLIC_CLIENT_ORIGIN|var|2|Адрес клиента для браузера. Из него собираются RedirectUris, PostLogoutRedirectUris и Cors__Origins__0 — один источник вместо пяти ручных подстановок
 PUBLIC_API_URL|var|2|Адрес API для браузера, он же API_BASE_URL пода клиента
-PUBLIC_AUTH_URL|var|2|Адрес Flow.Auth для браузера: одновременно Auth__Issuer (claim iss и discovery) и AUTH_BASE_URL клиента. Обязан совпадать в обоих местах, иначе валидация токена в браузере провалится
 
 # ---- §7.1 Внутрикластерные адреса ----
 # Самый дорогой блок списка: у каждой настройки в appsettings.json лежит localhost-дефолт, поэтому под
 # поднимется зелёным, rollout отрапортует успех, а сервис будет молча нерабочим.
-INTERNAL_AUTH_URL|var|4|Auth__BaseUrl у Flow.Api: discovery, JWKS и admin-API. В кластере это http://flow-auth.flow.svc.cluster.local:8080 — имя совпадает с именем Service в k8s/base/auth. Дефолт http://localhost:5100, а симптом ошибки — «401 на всё»
 POSTGRES_HOST|var|3|Хост БД в обеих строках подключения. В кластере ровно flow-postgres.flow-data.svc.cluster.local: имя Service совпадает с именем StatefulSet, а короткого postgres из namespace flow не существует. Туда же ходят Job создания базы и CronJob бэкапа
 POSTGRES_INTERNAL_PORT|var|-|Порт БД в обеих строках подключения compose. В кластере переменной больше нет: публикацию портов заменяет Service, он всегда слушает 5432, и манифесты api, auth, backup и Job создания базы пишут 5432 числом. Строка остаётся ради compose и check-compose-env.sh
 S3_ENDPOINT|var|3|S3__Endpoint у Flow.Api и адрес для Job создания бакета. В кластере http://flow-s3.flow-data.svc.cluster.local:9000 — Service назван flow-s3, а не s3. Дефолт http://localhost:9000
@@ -56,13 +54,11 @@ RERANK_ENDPOINT|var|5|Search__Rerank__Endpoint. Адрес ТОТ ЖЕ, что �
 VISION_ENDPOINT|var|5|Search__Embeddings__Vision__Endpoint. В кластере http://flow-vision.flow-ai.svc.cluster.local:8083/v1: в compose сервис зовётся embeddings-vl, в кластере — flow-vision
 
 # ---- §7.1 TLS-зависимые ----
-AUTH_ALLOW_INSECURE_HTTP|var|4|За ingress без TLS — true. В образе окружение Production, где Auth:AllowInsecureHttp по умолчанию false, то есть требует https
-AUTH_REQUIRE_HTTPS_METADATA|var|4|false, пока Auth__BaseUrl остаётся внутрикластерным http: в коде requireHttps = RequireHttpsMetadata ?? !IsDevelopment()
+AUTH_ALLOW_INSECURE_HTTP|var|4|За ingress без TLS — true: OpenIddict иначе откажется выдавать токены по http, и скажет об этом на старте, а не при первом входе. После §10.1 (переход на https) — false, вместе с PUBLIC_* адресами
 
 # ---- §7.1 Данные, S3, bootstrap ----
 POSTGRES_USER|var|3|Несекретная часть строк подключения. Обязан быть суперпользователем: миграция делает CREATE EXTENSION vector
 POSTGRES_DB|var|3|База приложения
-AUTH_DB|var|3|База учётных записей Flow.Auth, отдельная от POSTGRES_DB
 S3_BUCKET|var|3|Бакет вложений, создаётся Job внутри deploy-s3
 S3_USE_SSL|var|3|false: внутри кластера MinIO ходит по http
 EMBEDDINGS_ENABLED|var|4|Главный выключатель нейросетевого слоя: false гасит разом векторы, реранкер и визуальную половину, AI-джобы пропускаются целиком
@@ -116,8 +112,5 @@ GH_RUNNERS_READ_TOKEN|secret|3|Fine-grained PAT с правом Administration r
 POSTGRES_PASSWORD|secret|3|Строки подключения api и auth плюс PGPASSWORD у CronJob бэкапа. Не должен совпадать с дев-дефолтом flow
 MINIO_ROOT_USER|secret|3|Он же S3__AccessKey. Api ходит в хранилище root-учёткой, отдельный пользователь на бакет — в бэклоге
 MINIO_ROOT_PASSWORD|secret|3|Он же S3__SecretKey
-AUTH_API_CLIENT_SECRET|secret|4|Нужен обоим сервисам одновременно. Пустой — ClientSeeder бросает InvalidOperationException, и под уходит в CrashLoopBackOff
-AUTH_CERT_PASSWORD|secret|4|Пароль PFX. Меняешь пароль — меняй вместе с самими файлами: при существующих PFX Flow.Auth падает с CryptographicException в CrashLoopBackOff
+AUTH_CERT_PASSWORD|secret|4|Пароль обоих PFX. Сами файлы модуль создаёт при первом старте в томе flow-auth-certs, класть их Secret-ом больше не нужно. Менять пароль можно только вместе с пересозданием файлов: новый пароль к старым PFX — отказ на старте
 BOOTSTRAP_PASSWORD|secret|4|Пароль первичной учётной записи
-AUTH_SIGNING_PFX_B64|secret|4|base64 от signing.pfx. Формально необязателен, фактически нужен: без файла Flow.Auth молча создаёт новый самоподписанный, ключ теряется вместе с PVC, а симптом — «всех разлогинило» без единой ошибки
-AUTH_ENCRYPTION_PFX_B64|secret|4|base64 от encryption.pfx, ровно та же история

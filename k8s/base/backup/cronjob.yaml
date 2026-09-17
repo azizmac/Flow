@@ -110,11 +110,6 @@ spec:
                       name: flow-config
                       key: POSTGRES_DB
                 # Вторая база (учётные записи Flow.Auth) дампится тем же скриптом отдельным вызовом.
-                - name: AUTH_DB
-                  valueFrom:
-                    configMapKeyRef:
-                      name: flow-config
-                      key: AUTH_DB
                 - name: BACKUP_KEEP
                   valueFrom:
                     configMapKeyRef:

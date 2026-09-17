@@ -19,4 +19,3 @@ kind: Kustomization
 resources:
   - service.yaml
   - statefulset.yaml
-  - job-create-auth-db.yaml

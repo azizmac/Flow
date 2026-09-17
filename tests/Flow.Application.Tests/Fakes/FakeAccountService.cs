@@ -1,9 +1,9 @@
-using Flow.Application.Abstractions;
+using Flow.Auth.Contracts;
 
 namespace Flow.Application.Tests.Fakes;
 
 /// <summary>
-/// Запоминает вызовы к Flow.Auth и отвечает тем, что настроено (по умолчанию — Success).
+/// Запоминает вызовы к Auth-модулю и отвечает тем, что настроено (по умолчанию — Success).
 /// NextResult — одноразовый ответ на следующий вызов, возвращающий AccountResult (Create/ChangeUsername/ChangeEmail/ChangePassword).
 /// </summary>
 public sealed class FakeAccountService : IAccountService
@@ -14,7 +14,7 @@ public sealed class FakeAccountService : IAccountService
 
     public AccountResult? NextResult { get; set; }
 
-    /// <summary>Если задано — Disable/Enable бросают это исключение (недоступность Flow.Auth).</summary>
+    /// <summary>Если задано — Disable/Enable бросают это исключение (сбой управления учётной записью).</summary>
     public Exception? DisableEnableException { get; set; }
 
     public IEnumerable<Call> CallsTo(string operation) => Calls.Where(c => c.Operation == operation);

@@ -2,7 +2,7 @@ namespace Flow.Auth.Options;
 
 /// <summary>
 /// Базовый пользователь, который создаётся при первом запуске (секция "Bootstrap", в Docker — Bootstrap__*).
-/// Та же секция с тем же Id читается Flow.Api для профиля Owner, поэтому Id фиксирован и одинаков в обоих сервисах.
+/// Та же секция с тем же Id читается ядром для профиля Owner, поэтому Id фиксирован и одинаков в обоих модулях.
 /// </summary>
 public sealed class BootstrapOptions
 {

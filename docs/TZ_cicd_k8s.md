@@ -79,7 +79,11 @@ Docker Hub (`REGISTRY=docker.io`, `IMAGE_NAME=not2ilya2work/flow-api` и два 
    (`flow`, `flow12345`, `dev-only-change-me`, `flow-certs`, `admin`). Забытая переменная не падает: подставляется
    дефолт из `appsettings.json`, и ты получаешь прод с паролем `flow`. Именно поэтому в §4 предусмотрена
    отдельная джоба `check-vars`.
-8. **Сгенерировать `signing.pfx` и `encryption.pfx`** (`sh docker/auth/make-certs.sh`) один раз локально и
+8. **Ничего генерировать не нужно.** Скрипта `docker/auth/make-certs.sh` больше нет: самоподписанные
+   `signing.pfx` и `encryption.pfx` Auth-модуль создаёт сам при первом старте в PVC `flow-auth-certs`.
+   Что действительно важно — **не потерять этот том**: новая пара ключей означает, что все выданные
+   токены разом перестают проверяться, а выглядит это как «после выкатки всех разлогинило». Копию тома
+   стоит держать вне кластера, как и раньше. Прежний текст пункта:
    сохранить копию вне кластера. Если файлов нет, Flow.Auth **молча** создаёт новые самоподписанные и пишет
    только `LogWarning` (`SelfSignedCertificates.cs:24-35`) — ни один под не падает, просто все ранее выданные
    токены перестают валидироваться.
@@ -96,10 +100,18 @@ Docker Hub (`REGISTRY=docker.io`, `IMAGE_NAME=not2ilya2work/flow-api` и два 
 
 **Собираются из репозитория** (три `Dockerfile`, три образа):
 
+> **Изменение после мёрджа модульного монолита (`docs/TZ_modular_monolith.md`).** Собираемых модулей
+> стало два вместо трёх: `Flow.Auth` больше не отдельный сервис, а Razor Class Library внутри хоста
+> `Flow.Api`. Отсюда всё остальное в этом документе: нет образа `flow-auth`, нет Deployment, Service
+> и Ingress для него, нет второй базы `flow_auth` (таблицы Identity и OpenIddict живут в схеме `auth`
+> базы `flow`), нет пары «внутренний адрес плюс внешний issuer» — токены проверяются локально, а
+> `Auth__Issuer` равен `PUBLIC_API_URL`. Тома `/certs` и `/keys` переехали к `flow-api`, а тесты
+> `test-auth` стали гейтом образа `flow-api`, потому что их код едет именно в нём.
+
+
 | Модуль | Dockerfile | Зависимости по коду | Пересобирать при изменениях в |
 |--------|-----------|---------------------|-------------------------------|
 | `flow-api` | `src/Flow.Api/Dockerfile` | Application → Domain, Infrastructure, Shared | `src/Flow.{Api,Application,Domain,Infrastructure,Shared}/**`, `global.json`, `.dockerignore` |
-| `flow-auth` | `src/Flow.Auth/Dockerfile` | **только** Shared | `src/Flow.{Auth,Shared}/**`, `global.json`, `.dockerignore` |
 | `flow-client` | `src/Flow.Client/Dockerfile` | **только** Shared | `src/Flow.{Client,Shared}/**`, `docker/client/**`, `global.json`, `.dockerignore` |
 
 Граф ссылок узкий и это выгодно: правка `Flow.Infrastructure` не обязана трогать образы auth и client.
@@ -178,9 +190,8 @@ Role деплойера выдаётся на каждый отдельно. Э�
 
 | Откуда | Куда | Адрес |
 |--------|------|-------|
-| `flow-api`, `flow-auth` | postgres | `flow-postgres.flow-data.svc.cluster.local:5432` |
+| `flow-api` | postgres | `flow-postgres.flow-data.svc.cluster.local:5432` |
 | `flow-api` | MinIO | `http://flow-s3.flow-data.svc.cluster.local:9000` |
-| `flow-api` | Flow.Auth (discovery, JWKS, admin-API) | `http://flow-auth.flow.svc.cluster.local:8080` |
 | `flow-api` | эмбеддер и реранкер | `http://flow-ai.flow-ai.svc.cluster.local:8081/v1` — один адрес на обе модели, различает их поле `model` в запросе |
 | `flow-api` | vision | `http://flow-vision.flow-ai.svc.cluster.local:8083/v1` |
 | браузер | client / api / auth | внешние адреса Ingress (`PUBLIC_*`) |
@@ -224,7 +235,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `changes` | Что изменилось | `dorny/paths-filter` по графу ссылок проектов. В Job Summary — таблица «модуль \| изменён \| будет пересобран». Это и есть ответ на вопрос «почему auth не пересобрался» |
 | `check-vars` | Проверка · переменные | сверяет `deploy/required-vars.txt` (он же источник таблиц §7) с тем, что реально задано в Variables и Secrets, и падает с текстом «не задана переменная X». Без этой джобы забытая переменная не падает, а молча подставляет дев-дефолт из `appsettings.json` |
 | `lint-actions` | Проверка · workflows | `actionlint`: типы выражений `${{ }}`, несуществующие поля контекстов, ошибки в `needs` и `matrix`, shellcheck по `run` |
-| `lint-docker` | Проверка · Dockerfile | `hadolint` матрицей по трём файлам. Если сработает `DL3002` на `Flow.Auth` (инструкции `USER` там нет намеренно — сервис пишет `/certs` и `/keys` в тома от root), глушим точечно в `.hadolint.yaml` с комментарием, а не правилом на весь репозиторий |
+| `lint-docker` | Проверка · Dockerfile | `hadolint` матрицей по двум файлам. Если сработает `DL3002` на `Flow.Api` (инструкции `USER` там нет намеренно — Auth-модуль пишет `/certs` и `/keys` в тома, а их каталоги создаются от root), глушим точечно в `.hadolint.yaml` с комментарием, а не правилом на весь репозиторий |
 | `lint-compose` | Проверка · compose config | существующая джоба плюс сверка: все `${VAR}` из обоих compose должны быть объявлены в ConfigMap/Secret манифестов. Класс ошибок «переменная читается, но нигде не объявлена» |
 | `lint-manifests` | Проверка · kustomize + kubeconform | `kustomize build` всех оверлеев + `kubeconform -strict` под версию кластера. Офлайн, без кластера. Плюс `kube-linter` с правилами под здешние грабли: клиенту **нельзя** `runAsNonRoot`, `readOnlyRootFilesystem` и переопределение `command`/`args`; у Deployment обязаны быть probes и resources |
 | `lint-sdk` | Проверка · версии SDK | тег SDK в трёх Dockerfile сверяется с `global.json`. Ловит «зелёный `dotnet build`, красная сборка образа» |
@@ -236,7 +247,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `build` | Сборка .NET (Release) | всех трёх образов. Для `flow-client` это **единственная** проверка: тестового проекта у Blazor-клиента нет |
 | `test-unit` | Тесты · unit (Domain + Application) | всех трёх образов. Docker не нужен, секунды |
 | `test-infra` | Тесты · Infrastructure (pgvector + MinIO) | `flow-api`. Testcontainers, `--filter "Category!=Model&Category!=Golden"` |
-| `test-auth` | Тесты · Auth | `flow-auth` |
+| `test-auth` | Тесты · Auth | `flow-api` (Auth-модуль компилируется внутрь этого образа, поэтому его тесты — гейт образа api) |
 | `test-api` | Тесты · Api | `flow-api` |
 
 Сегодня пять тестовых проектов гоняются четырьмя шагами одной джобы `build` (Domain и Application — двумя
@@ -252,7 +263,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 
 | Джоба | Имя в UI | Особенность |
 |-------|----------|-------------|
-| `image-api` / `image-auth` / `image-client` | Образ · flow-<модуль> | `platforms: linux/amd64` явно; `cache-to: type=gha,mode=max,scope=<модуль>` — **свой scope**, иначе три сборки перетирают общий кэш. Push только с `main`. Выход джобы — digest |
+| `image-api` / `image-client` | Образ · flow-<модуль> | `platforms: linux/amd64` явно; `cache-to: type=gha,mode=max,scope=<модуль>` — **свой scope**, иначе сборки перетирают общий кэш. Push только с `main`. Выход джобы — digest |
 | `resolve-images` | Набор образов релиза | **Самая важная джоба для консистентности.** Для каждого своего модуля берёт digest из сборки, а если джоба была пропущена — вытаскивает digest у тега прошлого релиза (`imagetools inspect`). Тем же `imagetools inspect` резолвит **шесть чужих образов** (postgres, minio, mc, llama.cpp ×2, vllm) из тегов в digest'ы. Результат — `release.json` со всеми девятью. Состояние «api новый, client неизвестно какой» становится физически невозможным, а апстрим не может подменить базовый образ БД между двумя выкатками |
 | `publish-promote` | Публикация · тег main | `imagetools create` двигает указатель без пересборки. Тег `latest` не используется нигде: в манифестах только digest, иначе `kubectl apply` не увидит изменений и rollout не произойдёт |
 | `render` | Манифесты · рендер | `kustomize edit set image ...@<digest>`, затем `kustomize build` в отдельные файлы `postgres.yaml`, `s3.yaml`, `api.yaml`, … Повторный `kubeconform`. **Единственный артефакт, который применяют деплой-джобы** — сами они ничего не рендерят, поэтому «api из одного рендера, client из другого» невозможно |
@@ -270,7 +281,6 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `deploy-s3` | Данные · MinIO + бакет | данные | **выключен** |
 | `deploy-backup` | Данные · backup (CronJob) | данные | — |
 | `data-gate` | Данные · итог слоя | данные | — |
-| `deploy-auth` | Приложение · flow-auth | приложение | включён |
 | `deploy-api` | Приложение · flow-api | приложение | включён |
 | `deploy-client` | Приложение · flow-client | приложение | включён |
 | `app-gate` | Приложение · итог слоя | приложение | — |
@@ -299,11 +309,11 @@ Role деплойера выдаётся на каждый отдельно. Э�
 - **`deploy-postgres`** — StatefulSet **без** `volumeClaimTemplates` (PVC приходит из storage-оверлея, чтобы
   удаление StatefulSet не уносило данные), headless Service, `nodeSelector` на worker. Плюс идемпотентный Job
   создания второй базы:
-  `psql -tc "SELECT 1 FROM pg_database WHERE datname='$AUTH_DB'" | grep -q 1 || psql -c "CREATE DATABASE \"$AUTH_DB\" OWNER \"$POSTGRES_USER\""`
-  — именно через переменные `AUTH_DB` и `POSTGRES_USER`, а не строкой: иначе при смене `AUTH_DB` джоба создаст
-  не ту базу, а Flow.Auth уйдёт в CrashLoopBackOff.
+  ОТМЕНЕНО вместе с модульным монолитом: база одна (`flow`), таблицы Auth-модуля живут в схеме `auth`,
+  и создавать вторую базу больше нечем и незачем. Прежнее содержание пункта:
+  — именно через переменные, а не строкой.
   Он обязателен: `docker/postgres/init.sql` отрабатывает только на пустом PGDATA — при переносе существующего
-  тома базы `flow_auth` просто не будет, и Flow.Auth уйдёт в CrashLoopBackOff с диагнозом, похожим на сетевой.
+  тома второй базы просто не будет.
 - **Job'ы immutable.** Повторный `kubectl apply` поверх завершившегося Job с изменённым spec даёт ошибку
   `field is immutable`. Поэтому все Job'ы (создание базы, бакета, закачка весов) рендерятся с именем,
   включающим `<sha>` релиза, и получают `ttlSecondsAfterFinished` (например 3600), чтобы кластер не копил
@@ -322,16 +332,17 @@ Role деплойера выдаётся на каждый отдельно. Э�
   нельзя примонтировать вторым подом, пока он занят, — либо оба пода прибиты к одной ноде и том
   переиспользуется, либо копия снимается `mc mirror` по сети вместо `tar` с диска. Это решение принимается
   на этапе 3.
-- **`deploy-auth` / `deploy-api`** — `replicas: 1` и `strategy: Recreate` жёстко: миграции применяются **внутри
+- **`deploy-api`** — `replicas: 1` и `strategy: Recreate` жёстко: миграции применяются **внутри
   процесса** при старте (`AuthDatabaseInitializer`, `BootstrapOwnerSeeder`), две реплики при RollingUpdate пойдут
-  мигрировать одновременно. Тома `/certs` и `/keys` (RWO-PVC) есть **только у Flow.Auth**; у Flow.Api томов нет
+  мигрировать одновременно. Тома `/certs` и `/keys` (RWO-PVC) теперь у **Flow.Api**: их забрал Auth-модуль,
+  переехавший внутрь этого процесса. Прежняя формулировка про отсутствие томов у Flow.Api
   вовсе — лишний PVC ему заводить не надо.
 - **Таймауты rollout.** `kubectl rollout status` без `--timeout` ждёт **бесконечно** (дефолт `0`), поэтому
   `--timeout` задаём всегда; верхняя граница со стороны кластера — `spec.progressDeadlineSeconds` Deployment
   (дефолт 600 с). Оба значения должны быть заведомо больше `Startup:DatabaseWaitTimeoutSeconds` (60 с) плюс
   время миграций, а для AI-слоя — больше времени прогрева модели.
 - **`deploy-client`** — в env пода **`API_BASE_URL` и `AUTH_BASE_URL`** (значения берутся из переменных
-  `PUBLIC_API_URL` / `PUBLIC_AUTH_URL`): `entrypoint.sh` читает именно эти имена и пишет их в `appsettings.json`,
+  `PUBLIC_API_URL`, он же адрес входа): `entrypoint.sh` читает именно эти имена и пишет их в `appsettings.json`,
   который читает **браузер**. Отдельный контрольный шаг после rollout: `kubectl exec` в под и
   `cat /usr/share/nginx/html/appsettings.json` в Job Summary. Это единственный способ увидеть провал
   подстановки: механизм висит на `/docker-entrypoint.d` официального образа nginx, который при `runAsNonRoot`
@@ -357,7 +368,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 
 | Джоба | Имя в UI | Что делает |
 |-------|----------|------------|
-| `smoke` | Smoke · data / app / ingress / ai | матрица из четырёх легов, `fail-fast: false` — четыре строки в UI вместо одной. `GET /` у `flow-api` (единственный анонимный эндпоинт), `/.well-known/openid-configuration` у `flow-auth` (доказывает, что сертификаты загрузились), `GET /` у клиента плюс чтение отданного `appsettings.json`, загрузка файла ~5 МБ через Ingress (ловит дефолтный `proxy-body-size: 1m` при лимите вложений 25 МБ), `/health` у `flow-ai` и сверка длины вектора с `halfvec(512)`, а при `RERANK_ENABLED=true` ещё и `POST /v1/rerank` в тот же порт — это единственная проверка, которая ловит перепутанные режимы моделей: глобальный `--reranking` тихо превращает векторы эмбеддера в нули. Плюс сверка метки `flow.io/release` у подов api/auth/client — автоматическая проверка «api новый, client старый не бывает». И отдельный шаг «подождать 60 с и убедиться, что `restartCount` не вырос»: при `Recreate` + миграциях в процессе под поднимается, проходит пробу на `GET /` и падает через минуту, а прогон уже зелёный |
+| `smoke` | Smoke · data / app / ingress / ai | матрица из четырёх легов, `fail-fast: false` — четыре строки в UI вместо одной. `GET /` у `flow-api` (единственный анонимный эндпоинт), `/.well-known/openid-configuration` у `flow-api` (доказывает, что сертификаты Auth-модуля загрузились), `GET /` у клиента плюс чтение отданного `appsettings.json`, загрузка файла ~5 МБ через Ingress (ловит дефолтный `proxy-body-size: 1m` при лимите вложений 25 МБ), `/health` у `flow-ai` и сверка длины вектора с `halfvec(512)`, а при `RERANK_ENABLED=true` ещё и `POST /v1/rerank` в тот же порт — это единственная проверка, которая ловит перепутанные режимы моделей: глобальный `--reranking` тихо превращает векторы эмбеддера в нули. Плюс сверка метки `flow.io/release` у подов api/client — автоматическая проверка «api новый, client старый не бывает». И отдельный шаг «подождать 60 с и убедиться, что `restartCount` не вырос»: при `Recreate` + миграциях в процессе под поднимается, проходит пробу на `GET /` и падает через минуту, а прогон уже зелёный |
 | `report` | Отчёт о выкатке | `if: ${{ !cancelled() }}`. Релизная таблица digest'ов (включая шесть чужих образов), статус каждого модуля, `kubectl get pods -o wide` на финише, результаты smoke, готовые к копированию команды повтора одного модуля. При полном успехе двигает тег `:deployed` — якорь для отката: всегда известно, какой набор образов последним доехал живым |
 
 ---
@@ -376,7 +387,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
    `spec.selector` у Deployment иммутабелен, и запись релиза в селектор сделает следующий `apply` невозможным.
    В kustomize v5 это `labels: [{pairs: {flow.io/release: <sha>}, includeSelectors: false}]`, а не устаревший
    `commonLabels`, который как раз пишет в селекторы.
-5. `smoke` сверяет метку у подов api/auth/client между собой.
+5. `smoke` сверяет метку у подов api/client между собой.
 
 ---
 
@@ -462,7 +473,6 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `INGRESS_CLASS` | `nginx` | `ingressClassName` в Ingress-манифестах |
 | `PUBLIC_CLIENT_ORIGIN` | `http://flow.home.lan` (этап 1, без TLS) | из него собираются `Auth__Client__RedirectUris__0`, `PostLogoutRedirectUris__0` и `Cors__Origins__0` — один источник вместо пяти ручных подстановок |
 | `PUBLIC_API_URL` | `http://api.flow.home.lan` | адрес API **для браузера** → `API_BASE_URL` пода клиента |
-| `PUBLIC_AUTH_URL` | `http://auth.flow.home.lan` | одновременно `Auth__Issuer` (попадает в claim `iss` и в discovery) и `AUTH_BASE_URL` пода клиента. Обязано совпадать в обоих местах, иначе валидация токена в браузере провалится |
 
 **Внутрикластерные адреса** — блок, который легко забыть, а цена забывчивости высокая: у каждой из этих
 настроек в `appsettings.json` лежит localhost-дефолт, поэтому под поднимется «зелёным», `rollout status`
@@ -470,7 +480,6 @@ Role деплойера выдаётся на каждый отдельно. Э�
 
 | Переменная | Пример | Куда уходит |
 |------------|--------|-------------|
-| `INTERNAL_AUTH_URL` | `http://flow-auth.flow.svc.cluster.local:8080` | `Auth__BaseUrl` у Flow.Api — discovery, JWKS и admin-API. Дефолт `http://localhost:5100` (`appsettings.json:22`); при ошибке симптом «401 на всё», не похожий на забытую переменную |
 | `POSTGRES_HOST` | `flow-postgres.flow-data.svc.cluster.local` | обе строки подключения. Имя совпадает с именем StatefulSet и Service в `k8s/base/postgres` — короткого `postgres` в кластере не существует вовсе |
 | ~~`POSTGRES_INTERNAL_PORT`~~ | — | **в кластере не нужна**: публикацию портов заменяет Service, и он всегда слушает 5432. Манифесты api, auth, backup и Job создания базы пишут `Port=5432` числом — ни один не читает этот ключ из ConfigMap. В `deploy/required-vars.txt` строка оставлена с этапом `-` ради compose и `check-compose-env.sh` |
 | `S3_ENDPOINT` | `http://flow-s3.flow-data.svc.cluster.local:9000` | `S3__Endpoint`; дефолт `http://localhost:9000`. Имя Service — `flow-s3`, а не `s3` |
@@ -487,14 +496,14 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `AUTH_REQUIRE_HTTPS_METADATA` | `false` | `false`, пока `Auth__BaseUrl` — внутрикластерный http |
 
 В контейнере окружение `Production`, а там `Auth:AllowInsecureHttp` по умолчанию `false`
-(`src/Flow.Auth/appsettings.json:43`) и `requireHttps = RequireHttpsMetadata ?? !IsDevelopment()`
+(конфигурация модуля читается из хоста) и `requireHttps = RequireHttpsMetadata ?? !IsDevelopment()`
 (`src/Flow.Api/Program.cs:32`) — то есть оба значения по умолчанию требуют https.
 
 **Данные, S3, bootstrap:**
 
 | Переменная | Пример | Зачем |
 |------------|--------|-------|
-| `POSTGRES_USER`, `POSTGRES_DB`, `AUTH_DB` | `flow`, `flow`, `flow_auth` | несекретная часть строк подключения. Пользователь должен быть суперпользователем: миграция делает `CREATE EXTENSION vector` |
+| `POSTGRES_USER`, `POSTGRES_DB` | `flow`, `flow` | несекретная часть строк подключения. База одна: таблицы ядра в схеме `public`, таблицы Auth-модуля — в схеме `auth`. Пользователь должен быть суперпользователем: миграция делает `CREATE EXTENSION vector` |
 | `S3_BUCKET`, `S3_USE_SSL` | `flow`, `false` | внутри кластера MinIO ходит по http |
 | `EMBEDDINGS_ENABLED` | `false` | главный выключатель нейросетевого слоя: `false` гасит разом векторы, реранкер и визуальную половину, AI-джобы пропускаются целиком |
 | `POSTGRES_IMAGE` | `pgvector/pgvector:pg16` | чужой образ; в переменной, чтобы смена мажорной версии была осознанной |
@@ -508,7 +517,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `AUTO_DEPLOY` | `false` | включает стадии 3–4 на push в `main` |
 | `K8S_CONTEXT` | `flow-home` | если в kubeconfig раннера ровно один контекст — можно не задавать |
 | `GPU_NODE` | `flow-worker` | на домашнем кластере обычно совпадает с `WORKER_NODE` |
-| `DEPLOY_TIMEOUT` | `600` | `--timeout` у `rollout status` для api/auth/client. **Не меньше 600**, и это арифметика, а не осторожность: `rollout status` считает время от `apply`, то есть вместе со скачиванием образа, а бюджет `startupProbe` у api уже 300 с (у auth 240 с). Со старыми 300 джоба краснела бы на здоровой выкатке. Парой к нему в манифесте стоит `progressDeadlineSeconds: 600` |
+| `DEPLOY_TIMEOUT` | `600` | `--timeout` у `rollout status` для api/client. **Не меньше 600**, и это арифметика, а не осторожность: `rollout status` считает время от `apply`, то есть вместе со скачиванием образа, а бюджет `startupProbe` у api уже 300 с. Со старыми 300 джоба краснела бы на здоровой выкатке. Парой к нему в манифесте стоит `progressDeadlineSeconds: 600` |
 | `AI_DEPLOY_TIMEOUT` | `1500` | то же для AI-слоя. Не меньше 1500: бюджет `startupProbe` у модуля `vision` — 1200 с, и ограничитель обязан его покрывать, иначе выкатка краснеет на исправном сервисе, который просто ещё грузит модель |
 | `BOOTSTRAP_FIRST_NAME`, `BOOTSTRAP_LAST_NAME` | `Admin`, `Flow` | тот же общий ConfigMap; забыть их — тихо получить владельца «Admin Flow» навсегда |
 | `SEARCH_ENABLED`, `SEARCH_INDEXING_ENABLED` | `true`, `true` | выключатели поиска и фонового индексатора |
@@ -540,7 +549,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `POSTGRES_PORT`, `POSTGRES_BIND`, `MINIO_API_PORT`, `MINIO_CONSOLE_PORT`, `MINIO_BIND`, `AI_PORT`/`AI_BIND`, `VISION_PORT`/`BIND`, `AUTH_PORT`, `API_PORT`, `CLIENT_PORT` | не нужны: публикацию портов заменяют Service и Ingress |
 | `DATA_ROOT`, `MODELS_ROOT` | заменены PVC и `STORAGE_CLASS` |
 | `BACKUP_DIR` | заменён PVC `flow-backups` |
-| `AUTH_ISSUER` | стал `PUBLIC_AUTH_URL` |
+| `AUTH_ISSUER` | стал `PUBLIC_API_URL`: после перехода на модульный монолит вход живёт на адресе backend'а |
 | `COMPOSE_*`, всё, что читают только скрипты `docker/data/*.sh` | остаётся для локального запуска и в кластер не едет |
 
 ### 7.4. Secrets
@@ -552,7 +561,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `POSTGRES_PASSWORD` | строки подключения api и auth плюс `PGPASSWORD` для CronJob бэкапа |
 | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | они же `S3__AccessKey`/`S3__SecretKey`. Сейчас Api ходит в хранилище root-учёткой — в бэклог отдельного пользователя с правами только на бакет |
 | `AUTH_API_CLIENT_SECRET` | нужен обоим сервисам одновременно. Если пуст — `ClientSeeder` бросает `InvalidOperationException` (`ClientSeeder.cs:55-56`) и под уходит в CrashLoopBackOff |
-| `AUTH_CERT_PASSWORD` | пароль PFX. Меняешь пароль — меняй вместе с самими PFX: при существующих файлах Flow.Auth упадёт с `CryptographicException` в CrashLoopBackOff (`SelfSignedCertificates.cs:19-20`). Молча новые сертификаты создаются только если файлов нет вовсе |
+| `AUTH_CERT_PASSWORD` | пароль PFX. Меняешь пароль — меняй вместе с самими PFX: при существующих файлах модуль упадёт с `CryptographicException` в CrashLoopBackOff (`SelfSignedCertificates.cs:19-20`). Молча новые сертификаты создаются только если файлов нет вовсе |
 | `BOOTSTRAP_PASSWORD` | пароль первичной учётки |
 | `AUTH_SIGNING_PFX_B64`, `AUTH_ENCRYPTION_PFX_B64` | base64 от PFX. Формально необязательны, **фактически нужны**: без них ключ подписи случайный и теряется вместе с PVC, а симптом — «всех разлогинило» без единой ошибки |
 | `GH_RUNNERS_READ_TOKEN` | fine-grained PAT с правом Administration: read на этот репозиторий — только для джобы `runner-check` (см. §3). Встроенный `GITHUB_TOKEN` этот эндпоинт не отдаёт |
@@ -607,7 +616,7 @@ deploy/
   required-vars.txt список обязательных Variables и Secrets — источник для check-vars и таблиц §7
 k8s/
   base/             общие манифесты по модулям
-    postgres/ s3/ backup/ auth/ api/ client/ ai/ vision/ models/
+    postgres/ s3/ backup/ api/ client/ ai/ vision/ models/
   components/       профили железа: gpu-nvidia (добавляет карту, ноду и runtimeClass)
   overlays/home/    оверлей домашнего кластера: имена нод, StorageClass, домены, digest'ы
   overlays/home/storage/   PVC отдельно — применяется ТОЛЬКО вручную (module=storage)
@@ -633,8 +642,8 @@ docs/
 
 | # | Что | Почему |
 |---|-----|--------|
-| 1 | Убрать `https://localhost:7062` из `Cors:Origins` и `Auth:Client:*RedirectUris` в `src/Flow.Api/appsettings.json:18` и `src/Flow.Auth/appsettings.json:18,27,31` | переменные вида `Cors__Origins__0` перекрывают **только нулевой элемент** — localhost тихо останется разрешённым origin и redirect URI в проде |
-| 2 | `/health/live` и `/health/ready` — **сделано**, осталось не сломать парное требование к манифестам — см. §9.1 | сами эндпоинты есть в `src/Flow.Api/Program.cs` и `src/Flow.Auth/Program.cs`, но без `startupProbe` в Deployment они не защищают ни от чего: во время миграций недоступен даже `/health/live` |
+| 1 | Убрать `https://localhost:7062` из `Cors:Origins` и `Auth:Client:*RedirectUris` в `src/Flow.Api/appsettings.json:18` (файла `src/Flow.Auth/appsettings.json` больше нет — модуль читает конфигурацию хоста) | переменные вида `Cors__Origins__0` перекрывают **только нулевой элемент** — localhost тихо останется разрешённым origin и redirect URI в проде |
+| 2 | `/health/live` и `/health/ready` — **сделано**, осталось не сломать парное требование к манифестам — см. §9.1 | сами эндпоинты есть в `src/Flow.Api/Program.cs` — единственном хосте после модульного монолита, но без `startupProbe` в Deployment они не защищают ни от чего: во время миграций недоступен даже `/health/live` |
 | 3 | `cache-to: type=gha,mode=max,scope=<модуль>` вместо общего кэша (`.github/workflows/docker.yml:60-61`) | сейчас scope не задан, и три сборки перетирают друг друга; плюс `mode=max` на трёх .NET SDK-сборках быстро выедает лимит Actions Cache (**10 ГБ на репозиторий**, вытеснение по LRU) и выселяет NuGet-кэш тестовых джоб |
 | 4 | `platforms: linux/amd64` явно | сегодня не проблема, но в день, когда в кластер добавят arm64-ноду, kubelet выдаст `exec format error` |
 | 5 | Добавить `GitHubActionsTestLogger` в тестовые проекты | без пакета `--logger GitHubActions` даёт «Could not find a test logger with URI or FriendlyName» — красную джобу на зелёных тестах |
@@ -663,7 +672,7 @@ hosted service внутри `WebApplicationBuilder.Build()`, то есть **п�
 2. Во время ожидания БД и миграций недоступен не только `/health/ready`, но и `/health/live`. То есть
    привычное «`live` лёгкий, его можно ставить без оглядки на старт» здесь просто неверно.
 
-**Требования к `k8s/base/api/deployment.yaml` и `k8s/base/auth/deployment.yaml`:**
+**Требования к `k8s/base/api/deployment.yaml`:**
 
 | # | Требование | Цена нарушения |
 |---|------------|-----------------|
@@ -695,7 +704,7 @@ hosted service внутри `WebApplicationBuilder.Build()`, то есть **п�
 
 ### 10.1. Переключение на TLS — одной операцией
 
-Меняются одновременно: `PUBLIC_CLIENT_ORIGIN`, `PUBLIC_API_URL`, `PUBLIC_AUTH_URL` (на `https://`),
+Меняются одновременно: `PUBLIC_CLIENT_ORIGIN`, `PUBLIC_API_URL` (на `https://`),
 `AUTH_ALLOW_INSECURE_HTTP` → `false`, плюс TLS-секция в Ingress. Половинчатая смена ломает вход:
 `Auth__Issuer` попадает в claim `iss` и в discovery, и если он разъедется с адресом, по которому браузер
 пришёл, валидация токена провалится. После смены — рестарт пода auth (ClientSeeder идемпотентен, redirect URI
@@ -787,7 +796,10 @@ gh api -X POST /repos/azizmac/Flow/actions/runners/registration-token --jq .toke
 kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
 ```
 
-**Сертификаты Flow.Auth и их base64 для Secrets:**
+**Сертификаты Auth-модуля.** С переходом на модульный монолит команды ниже больше не нужны для выкатки:
+модуль создаёт самоподписанные PFX сам при первом старте в PVC `flow-auth-certs`, и переменных
+`AUTH_SIGNING_PFX_B64` / `AUTH_ENCRYPTION_PFX_B64` больше нет. Команды оставлены на случай, когда PFX
+хочется выпустить своим CA и положить в том руками:
 
 ```bash
 sh docker/auth/make-certs.sh "<тот же пароль, что уйдёт в AUTH_CERT_PASSWORD>"

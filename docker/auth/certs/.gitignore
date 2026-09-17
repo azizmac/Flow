@@ -1,3 +1,0 @@
-# PFX генерируются docker/auth/make-certs.sh и в репозиторий не попадают.
-*
-!.gitignore

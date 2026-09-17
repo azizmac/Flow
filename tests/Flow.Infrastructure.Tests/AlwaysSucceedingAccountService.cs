@@ -1,8 +1,8 @@
-using Flow.Application.Abstractions;
+using Flow.Auth.Contracts;
 
 namespace Flow.Infrastructure.Tests;
 
-/// <summary>Заглушка Flow.Auth для интеграционных тестов Flow.Infrastructure: любая операция успешна.</summary>
+/// <summary>Заглушка Auth-модуля для интеграционных тестов Flow.Infrastructure: любая операция успешна.</summary>
 public sealed class AlwaysSucceedingAccountService : IAccountService
 {
     public Task<AccountResult> CreateAsync(Guid id, string username, string email, string password, CancellationToken cancellationToken) =>

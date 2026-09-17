@@ -55,7 +55,6 @@ jobs:
       pull-requests: read
     outputs:
       api: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.api }}
-      auth: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.auth }}
       client: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.client }}
       registry: ${{ steps.registry.outputs.registry }}
       prefix: ${{ steps.registry.outputs.prefix }}
@@ -79,16 +78,17 @@ jobs:
               - '.dockerignore'
               - '.github/actions/build-image/**'
               - '.github/workflows/ci.yml'
+            # Flow.Auth и Flow.Auth.Contracts входят сюда, а не в отдельный фильтр: после перехода
+            # на модульный монолит Auth — это Razor Class Library внутри хоста Flow.Api, и её правка
+            # меняет ровно один образ — flow-api. Отдельный образ flow-auth больше не собирается.
             api:
               - *common
               - 'src/Flow.Api/**'
               - 'src/Flow.Application/**'
+              - 'src/Flow.Auth/**'
+              - 'src/Flow.Auth.Contracts/**'
               - 'src/Flow.Domain/**'
               - 'src/Flow.Infrastructure/**'
-              - 'src/Flow.Shared/**'
-            auth:
-              - *common
-              - 'src/Flow.Auth/**'
               - 'src/Flow.Shared/**'
             client:
               - *common
@@ -137,7 +137,6 @@ jobs:
             echo "| Модуль | Изменён | Будет собран |"
             echo "|--------|---------|--------------|"
             echo "| flow-api | ${{ steps.filter.outputs.api || '—' }} | ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.api == 'true' }} |"
-            echo "| flow-auth | ${{ steps.filter.outputs.auth || '—' }} | ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.auth == 'true' }} |"
             echo "| flow-client | ${{ steps.filter.outputs.client || '—' }} | ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.client == 'true' }} |"
             echo
             echo "Ручной запуск: $manual · образы: \`${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.prefix }}/flow-*\`"
@@ -170,8 +169,6 @@ jobs:
         include:
           - module: api
             dockerfile: src/Flow.Api/Dockerfile
-          - module: auth
-            dockerfile: src/Flow.Auth/Dockerfile
           - module: client
             dockerfile: src/Flow.Client/Dockerfile
     steps:
@@ -225,7 +222,7 @@ jobs:
           set -euo pipefail
           expected="$(jq -r '.sdk.version' global.json | cut -d. -f1-2)"
           status=0
-          for file in src/Flow.Api/Dockerfile src/Flow.Auth/Dockerfile src/Flow.Client/Dockerfile; do
+          for file in src/Flow.Api/Dockerfile src/Flow.Client/Dockerfile; do
             line="$(grep -n 'mcr.microsoft.com/dotnet/sdk:' "$file" | head -1)"
             number="${line%%:*}"
             tag="$(printf '%s' "$line" | sed -n 's|.*dotnet/sdk:\([0-9.]*\).*|\1|p')"
@@ -366,13 +363,16 @@ jobs:
 
   # ---------- Стадия 2: образы ----------
   #
-  # Гейты у каждого образа свои и ровно по зависимостям кода: Flow.Auth ссылается только на Flow.Shared,
-  # поэтому падение тестов Api не имеет права блокировать публикацию auth. Публикуем только с main и только
-  # не из pull_request: форк не должен уметь положить образ в реестр.
+  # Гейты у каждого образа свои и ровно по зависимостям кода: Flow.Client ссылается только на Flow.Shared,
+  # поэтому падение тестов Api не имеет права блокировать публикацию клиента. Образов теперь два, а не три:
+  # после перехода на модульный монолит Auth уехал внутрь flow-api, и его тесты стали гейтом этого образа.
+  # Публикуем только с main и только не из pull_request: форк не должен уметь положить образ в реестр.
 
   image-api:
     name: Образ · flow-api
-    needs: [changes, check-vars, lint-sdk, lint-docker, build, test-unit, test-infra, test-api]
+    # test-auth здесь не для полноты: Auth-модуль компилируется внутрь этого образа, значит его
+    # падение обязано останавливать публикацию ровно так же, как падение тестов Api.
+    needs: [changes, check-vars, lint-sdk, lint-docker, build, test-unit, test-infra, test-api, test-auth]
     # Условие разбираем поимённо, а не через needs.*: при провале build тестовые джобы получают результат
     # skipped, и общая проверка «нет ни одного failure» пропустила бы сборку образа на несобирающемся коде.
     # skipped у тестов допустим только осознанно — при ручном запуске со skip_tests.
@@ -387,6 +387,7 @@ jobs:
       && (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped')
       && (needs.test-infra.result == 'success' || needs.test-infra.result == 'skipped')
       && (needs.test-api.result == 'success' || needs.test-api.result == 'skipped')
+      && (needs.test-auth.result == 'success' || needs.test-auth.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -411,43 +412,6 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
-  image-auth:
-    name: Образ · flow-auth
-    needs: [changes, check-vars, lint-sdk, lint-docker, build, test-unit, test-auth]
-    # Гейт узкий намеренно: Flow.Auth ссылается только на Flow.Shared, поэтому падение тестов Api его не касается.
-    if: >-
-      always()
-      && needs.changes.outputs.auth == 'true'
-      && needs.changes.result == 'success'
-      && needs.check-vars.result == 'success'
-      && needs.lint-sdk.result == 'success'
-      && needs.lint-docker.result == 'success'
-      && needs.build.result == 'success'
-      && (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped')
-      && (needs.test-auth.result == 'success' || needs.test-auth.result == 'skipped')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    # Digest забирает resolve-images: в манифестах кластера стоят только digest'ы, а не теги,
-    # иначе kubectl apply не увидит изменений и rollout просто не произойдёт.
-    outputs:
-      digest: ${{ steps.image.outputs.digest }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Сборка образа
-        id: image
-        uses: ./.github/actions/build-image
-        with:
-          module: auth
-          dockerfile: src/Flow.Auth/Dockerfile
-          registry: ${{ needs.changes.outputs.registry }}
-          image: ${{ needs.changes.outputs.registry }}/${{ needs.changes.outputs.prefix }}/flow-auth
-          push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && inputs.skip_tests != true }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
 
   image-client:
     name: Образ · flow-client
@@ -576,7 +540,7 @@ jobs:
 
   resolve-images:
     name: Набор образов релиза
-    needs: [changes, lint-manifests, image-api, image-auth, image-client]
+    needs: [changes, lint-manifests, image-api, image-client]
     # Только там, где образы реально существуют в реестре: на ветке и в PR публикации нет, резолвить нечего.
     # Пропущенная джоба образа — норма (модуль не менялся), провалившаяся — нет.
     if: >-
@@ -584,7 +548,6 @@ jobs:
       && needs.changes.result == 'success'
       && needs.lint-manifests.result == 'success'
       && needs.image-api.result != 'failure'
-      && needs.image-auth.result != 'failure'
       && needs.image-client.result != 'failure'
       && ((github.ref == 'refs/heads/main' && github.event_name != 'pull_request') || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
@@ -615,7 +578,6 @@ jobs:
             --registry "${{ needs.changes.outputs.registry }}" \
             --prefix "${{ needs.changes.outputs.prefix }}" \
             --digest "flow-api=${{ needs.image-api.outputs.digest }}" \
-            --digest "flow-auth=${{ needs.image-auth.outputs.digest }}" \
             --digest "flow-client=${{ needs.image-client.outputs.digest }}"
 
       - name: release.json в артефакт
@@ -665,7 +627,6 @@ jobs:
           INGRESS_CLASS: ${{ vars.INGRESS_CLASS || 'nginx' }}
           PUBLIC_CLIENT_ORIGIN: ${{ vars.PUBLIC_CLIENT_ORIGIN }}
           PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL }}
-          PUBLIC_AUTH_URL: ${{ vars.PUBLIC_AUTH_URL }}
           BACKUP_CRON: ${{ vars.BACKUP_CRON || '0 3 * * *' }}
           BACKUP_TZ: ${{ vars.BACKUP_TZ || 'Europe/Moscow' }}
           # Сколько ядер отдать моделям. Дефолт 8, а не 4: на боевых чанках (1536 символов) четыре ядра
@@ -681,15 +642,14 @@ jobs:
           # или поздно разъедутся со своими URL.
           PUBLIC_CLIENT_HOST="$(printf '%s' "${PUBLIC_CLIENT_ORIGIN:-}" | sed -E 's#^[a-z]+://##; s#/.*$##')"
           PUBLIC_API_HOST="$(printf '%s' "${PUBLIC_API_URL:-}" | sed -E 's#^[a-z]+://##; s#/.*$##')"
-          PUBLIC_AUTH_HOST="$(printf '%s' "${PUBLIC_AUTH_URL:-}" | sed -E 's#^[a-z]+://##; s#/.*$##')"
           RELEASE_SHA="${GITHUB_SHA:0:7}"
-          export PUBLIC_CLIENT_HOST PUBLIC_API_HOST PUBLIC_AUTH_HOST RELEASE_SHA
+          export PUBLIC_CLIENT_HOST PUBLIC_API_HOST RELEASE_SHA
 
           # Один список на всё: и что проверить на пустоту, и что подставить. Двух списков быть не должно —
           # разъедутся, и подстановка молча начнёт вставлять пустые строки.
           required="STORAGE_CLASS WORKER_NODE GPU_NODE INGRESS_CLASS AI_CPU_LIMIT
-                    PUBLIC_CLIENT_ORIGIN PUBLIC_API_URL PUBLIC_AUTH_URL
-                    PUBLIC_CLIENT_HOST PUBLIC_API_HOST PUBLIC_AUTH_HOST
+                    PUBLIC_CLIENT_ORIGIN PUBLIC_API_URL
+                    PUBLIC_CLIENT_HOST PUBLIC_API_HOST
                     RELEASE_SHA BACKUP_CRON BACKUP_TZ"
 
           # Проверяем ДО подстановки: envsubst незаданное имя заменяет пустой строкой, и манифест остаётся
@@ -793,7 +753,6 @@ jobs:
       - test-auth
       - test-api
       - image-api
-      - image-auth
       - image-client
       - lint-manifests
       - resolve-images

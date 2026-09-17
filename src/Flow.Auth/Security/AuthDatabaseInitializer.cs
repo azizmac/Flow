@@ -11,7 +11,7 @@ namespace Flow.Auth.Security;
 /// builder.Build(), то есть после этого hosted service, поэтому до возврата из StartAsync сокет не открыт и
 /// увидеть нас недоделанными некому — ни одна проба не получит ответа. Обратная сторона — до конца этого метода
 /// молчит и /health/live, из-за чего манифест обязан объявлять startupProbe (см. комментарий рядом
-/// с AddHealthChecks в Program.cs).
+/// с AddHealthChecks в Program.cs ХОСТА — после перехода на модульный монолит это src/Flow.Api/Program.cs).
 /// </summary>
 public sealed class AuthDatabaseInitializer(
     IServiceProvider services,

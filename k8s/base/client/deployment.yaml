@@ -73,7 +73,7 @@ spec:
             - name: API_BASE_URL
               value: "${PUBLIC_API_URL}"
             - name: AUTH_BASE_URL
-              value: "${PUBLIC_AUTH_URL}"
+              value: "${PUBLIC_API_URL}"  # вход живёт на адресе backend'а: Auth — модуль внутри него
           # Проб две, а не три: своего /health у статики нет, и придумывать его незачем — GET / отдаёт
           # index.html и доказывает ровно то, что нужно знать о nginx. startupProbe не нужен: подставить
           # два адреса в файл и подняться nginx успевает за доли секунды, а стартовый бюджет тут пришлось бы

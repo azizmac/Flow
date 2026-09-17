@@ -63,7 +63,8 @@ spec:
                 configMapKeyRef:
                   name: flow-config
                   key: POSTGRES_HOST
-            # База приложения, не база учёток: у Flow.Auth своя, AUTH_DB.
+            # База одна на всё приложение: таблицы ядра в схеме public, таблицы Auth-модуля
+            # (Identity и OpenIddict) — в схеме auth. Отдельной базы flow_auth больше нет.
             - name: POSTGRES_DB
               valueFrom:
                 configMapKeyRef:
@@ -83,44 +84,59 @@ spec:
             - name: ConnectionStrings__Postgres
               value: "Host=$(POSTGRES_HOST);Port=5432;Database=$(POSTGRES_DB);Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"
 
-            # ---- Flow.Auth: пара «внутренний адрес + внешний issuer» ----
-            # Это самое лёгкое место, чтобы всё сломать, поэтому распишу механизм целиком.
-            # Auth__BaseUrl — адрес, по которому Flow.Api физически ходит за discovery и JWKS. Он
-            # внутрикластерный (http://flow-auth.flow.svc.cluster.local:8080), потому что гонять служебный
-            # трафик через ingress и внешний DNS незачем, а в домашней сети внешнее имя изнутри кластера
-            # может и не резолвиться вовсе.
-            # Auth__Issuer — значение claim iss в токенах, то есть внешний адрес: токен выдан браузеру и им
-            # же предъявлен. IssuerRewritingConfigurationRetriever в Program.cs рассчитан ровно на эту пару:
-            # документ discovery скачивается по внутреннему адресу, а issuer в нём подменяется на внешний.
-            # Перепутать их местами — получить «401 на всё» с сообщением о несовпадении issuer.
-            - name: INTERNAL_AUTH_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: flow-config
-                  key: INTERNAL_AUTH_URL
-            - name: Auth__BaseUrl
-              value: "$(INTERNAL_AUTH_URL)"
-            # Внешние адреса подставляет envsubst на рендере, а не configMapKeyRef: их видит браузер, они
-            # обязаны совпадать у api, auth, client и в хостах Ingress, и их изменение обязано вызывать
-            # rollout. Правка ConfigMap под не перезапускает — значение молча осталось бы прежним.
+            # ---- Auth-модуль ----
+            # Отдельного сервиса Flow.Auth больше нет: это Razor Class Library внутри ЭТОГО процесса
+            # (docs/TZ_modular_monolith.md). Поэтому отсюда ушла вся прежняя пара «внутренний адрес плюс
+            # внешний issuer»: Auth__BaseUrl, Auth__RequireHttpsMetadata и секрет клиента flow-api.
+            # Токены проверяются локально через OpenIddict, ходить за discovery и JWKS больше некуда.
+            #
+            # Остался issuer — внешний адрес, который видит БРАУЗЕР: он попадает в claim iss и в документ
+            # discovery, поэтому обязан совпадать с тем, по которому пользователь реально открывает вход.
+            # Это адрес самого backend'а, потому что вход теперь живёт на нём же. Подставляет envsubst
+            # на рендере, а не configMapKeyRef: правка ConfigMap не перезапускает под, и iss молча остался
+            # бы прежним при «успешной» выкатке.
             - name: Auth__Issuer
-              value: "${PUBLIC_AUTH_URL}"
-            # В коде requireHttps = RequireHttpsMetadata ?? !IsDevelopment(), а в контейнере окружение
-            # Production — то есть по умолчанию Flow.Api потребует https у документа discovery, который
-            # лежит по внутреннему http-адресу. Значение остаётся false и после включения TLS снаружи:
-            # Auth__BaseUrl как был внутрикластерным http, так и останется.
-            - name: Auth__RequireHttpsMetadata
+              value: "${PUBLIC_API_URL}"
+            # Адреса возврата после входа и выхода. Хвосты путей заданы клиентом (Blazor
+            # WebAssembly Authentication), менять их нельзя — промах выглядит как invalid_request
+            # про redirect_uri, а не как ошибка настроек.
+            - name: Auth__Client__RedirectUris__0
+              value: "${PUBLIC_CLIENT_ORIGIN}/authentication/login-callback"
+            - name: Auth__Client__PostLogoutRedirectUris__0
+              value: "${PUBLIC_CLIENT_ORIGIN}/authentication/logout-callback"
+            # true, пока снаружи нет TLS. OpenIddict иначе откажется выдавать токены по http и скажет
+            # об этом на старте, а не в момент первого входа — см. §10.1 про переход на https.
+            - name: Auth__AllowInsecureHttp
               valueFrom:
                 configMapKeyRef:
                   name: flow-config
-                  key: AUTH_REQUIRE_HTTPS_METADATA
-            # Секрет клиента flow-api: по нему Flow.Api получает токен к admin-API Flow.Auth
-            # (client_credentials, scope auth:admin). Обязан совпадать со значением у Flow.Auth.
-            - name: Auth__ApiClient__Secret
+                  key: AUTH_ALLOW_INSECURE_HTTP
+            # PFX подписи и шифрования. Раньше они приезжали Secret-ом из docker/auth/make-certs.sh;
+            # скрипта больше нет — модуль создаёт самоподписанные сертификаты сам при первом старте
+            # (Security/SelfSignedCertificates). Отсюда и том вместо Secret: каталог обязан быть
+            # записываемым. Том обязателен и по второй причине: без него каждый рестарт выпускает новую
+            # пару ключей, и все ранее выданные токены разом перестают проверяться — у пользователей это
+            # выглядит как «всех разлогинило после выкатки».
+            - name: Auth__SigningCertificate__Path
+              value: /certs/signing.pfx
+            - name: Auth__EncryptionCertificate__Path
+              value: /certs/encryption.pfx
+            # Пароль один на оба PFX. Меняется только вместе с пересозданием файлов: подложить новый
+            # пароль к старым сертификатам — это отказ на старте с жалобой на неверный пароль.
+            - name: Auth__SigningCertificate__Password
               valueFrom:
                 secretKeyRef:
                   name: flow-secrets
-                  key: AUTH_API_CLIENT_SECRET
+                  key: AUTH_CERT_PASSWORD
+            - name: Auth__EncryptionCertificate__Password
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: AUTH_CERT_PASSWORD
+            # Ключи DataProtection: ими подписываются cookie входа и antiforgery на страницах модуля.
+            # Без тома они пересоздаются при каждом рестарте, и пользователи вылетают из сессии.
+            - name: DataProtection__KeysPath
+              value: /keys
 
             # ---- CORS ----
             # Blazor-клиент живёт на своём origin, поэтому браузер требует разрешения. Индекс __0
@@ -356,9 +372,13 @@ spec:
               cpu: "2"
               memory: 1Gi
           securityContext:
-            # Образ уже собран под непривилегированного пользователя (USER $APP_UID), поэтому требование
-            # честное и ничего не ломает.
-            runAsNonRoot: true
+            # runAsNonRoot СНЯТ, и это не послабление, а следствие мёрджа модульного монолита: из
+            # src/Flow.Api/Dockerfile убрали USER $APP_UID, потому что Auth-модуль пишет сертификаты
+            # в /certs и ключи Data Protection в /keys, а каталоги томов создаются от root. Оставить
+            # флаг здесь значило бы получить CreateContainerConfigError на выкатке — «container has
+            # runAsNonRoot and image will run as root», — то есть под, который не стартует вовсе.
+            # Вернуть его можно ровно вместе с fsGroup на томах ниже и USER в образе, и проверять это
+            # надо на стенде, а не первой выкаткой в кластер.
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
@@ -367,3 +387,18 @@ spec:
             # память. На read-only корне это упало бы не при старте, а при первой большой загрузке — то есть
             # выкатка была бы зелёной, а вложения перестали бы прикрепляться. Включать его можно только
             # вместе с emptyDir на /tmp и проверкой загрузки файла в smoke.
+          volumeMounts:
+            # Сертификаты и ключи пишет сам модуль, поэтому readOnly здесь быть не может.
+            - name: auth-certs
+              mountPath: /certs
+            - name: auth-keys
+              mountPath: /keys
+      volumes:
+        # PVC объявлены в слое k8s/base/storage и применяются вручную: их удаление уносит ключи подписи,
+        # а это разом инвалидирует все выданные токены и сессии.
+        - name: auth-certs
+          persistentVolumeClaim:
+            claimName: flow-auth-certs
+        - name: auth-keys
+          persistentVolumeClaim:
+            claimName: flow-auth-keys

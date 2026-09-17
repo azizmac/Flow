@@ -16,7 +16,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Flow.Auth\Flow.Auth.csproj" />
+        <!-- Хост один: Flow.Api, в него встроен Auth-модуль. -->
+        <ProjectReference Include="..\..\src\Flow.Api\Flow.Api.csproj" />
         <ProjectReference Include="..\..\src\Flow.Shared\Flow.Shared.csproj" />
     </ItemGroup>
 

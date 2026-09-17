@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flow.Auth.Data;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -14,8 +15,9 @@ namespace Flow.Auth.Controllers;
 /// <summary>
 /// Эндпоинты OpenIddict в passthrough-режиме: OpenIddict валидирует запрос (client_id, redirect_uri, PKCE, код),
 /// а здесь решается, кто входит и какие claims попадут в токены. Роль и статус workspace сюда намеренно не
-/// попадают — их Flow.Api читает из своей БД на каждую команду (см. docs/TZ_auth.md).
+/// попадают — ядро читает их из Users на каждую команду (см. docs/TZ_modular_monolith.md).
 /// </summary>
+[AllowAnonymous]
 public sealed class AuthorizationController(
     UserManager<ApplicationUser> users,
     IOpenIddictApplicationManager applications,
@@ -127,7 +129,7 @@ public sealed class AuthorizationController(
 
         if (request.IsClientCredentialsGrantType())
         {
-            // client_id/client_secret уже проверены OpenIddict — сюда попадает только flow-api.
+            // client_id/client_secret уже проверены OpenIddict; этот grant оставлен для будущих машинных клиентов.
             var application = await applications.FindByClientIdAsync(request.ClientId!)
                 ?? throw new InvalidOperationException("The application cannot be found.");
 

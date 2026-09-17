@@ -29,7 +29,7 @@ namespace Flow.Api.Controllers;
 [Route("users")]
 public class UsersController(IMediator mediator, IActorAccessor actor) : ControllerBase
 {
-    /// <summary>Создаёт учётную запись в Flow.Auth (нужен начальный пароль) и профиль. 502 — Flow.Auth недоступен.</summary>
+    /// <summary>Создаёт через Auth-модуль учётную запись с начальным паролем и профиль с тем же Id.</summary>
     [HttpPost]
     public async Task<IActionResult> CreateUser(CreateUserRequest request, CancellationToken cancellationToken)
     {

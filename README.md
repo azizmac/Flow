@@ -5,7 +5,7 @@
 
 English · [Русский](README.ru.md)
 
-A project task tracker built on .NET 10: a server API, a standalone authentication service, and a Blazor WebAssembly client. The whole stack starts with a single Docker command.
+A project task tracker built on .NET 10: one backend with an authentication module and a Blazor WebAssembly client. The whole stack starts with a single Docker command.
 
 ## What it is for
 
@@ -19,10 +19,10 @@ The longer-term goal is an AI assistant inside the tracker: grounded in the team
 - **Users.** Profiles (name, contacts, external links), `Invited / Active / Deactivated` states, search and autocomplete.
 - **Roles and permissions.** `Reader → Member → Developer → Admin → Owner`; the permission matrix is enforced on the server, and the client hides actions the current user cannot perform. A "last Owner" rule prevents locking the instance out of administration.
 - **Task timeline.** Markdown comments with `@mentions` (a GitHub-style editor with preview and toolbar) and a change log: title, description, status, assignee, due date, deleted comments. Due dates with overdue highlighting.
-- **Authentication.** A separate `Flow.Auth` service: ASP.NET Core Identity with BCrypt and OpenIddict (authorization code + PKCE, refresh, client credentials). The client signs in over OIDC; the API acts as a resource server validating Bearer JWTs. The initial password must be changed at first sign-in.
+- **Authentication.** The `Flow.Auth` module is hosted by `Flow.Api`: ASP.NET Core Identity with BCrypt and OpenIddict (authorization code + PKCE, refresh, client credentials). The client signs in over OIDC; the API validates Bearer JWTs locally. The initial password must be changed at first sign-in.
 - **Attachments.** Files on a task: stored in S3-compatible storage, size and type limits, downloads only over an authorised request. Listing, upload, image previews and deletion live in the task card and the drawer. A file can be dropped onto the card or straight into a comment (screenshots paste from the clipboard too): it is attached to the task, and the text gets an inline image or a download link.
 - **Search.** Hybrid vector and full-text search over tasks, comments, projects, people and the contents of attached files (PDF, docx, xlsx, pptx, plain text) on pgvector: it finds by meaning, not by substring. A sidebar box with live suggestions and a results page with filters; the index is updated in the same transaction as the edit.
-- **Infrastructure.** PostgreSQL 16, EF Core, migrations applied on API startup. Build, tests and image publishing run in GitHub Actions.
+- **Infrastructure.** PostgreSQL 16, EF Core, migrations applied on backend startup. Build, tests and image publishing run in GitHub Actions.
 
 ![Tasks of a project](docs/images/board.png)
 
@@ -35,7 +35,7 @@ Done:
 - [x] Boards, statuses, tasks, task codes
 - [x] User profiles and external links
 - [x] Roles, user states, permission matrix
-- [x] Authentication extracted into an OpenIddict service, OIDC sign-in from the client
+- [x] OpenIddict authentication module, OIDC sign-in from the client
 - [x] Mandatory initial password change
 - [x] Whole stack in Docker with one command, CI building and publishing images
 - [x] Comments, change log and Markdown editor on a task, due dates
@@ -70,9 +70,9 @@ docker compose up -d --build                     # application
 
 The first build takes a few minutes. Once the containers are up, the client is at http://localhost:5016 — continue with "First sign-in" below.
 
-Services: client :5016, API :8080, authentication :5100, PostgreSQL :5432, S3-compatible storage :9000 with its console on :9001. Ports and the bootstrap user's credentials come from `.env`, which is not tracked in git — the same file feeds both stacks. If a local PostgreSQL already holds port 5432, set `POSTGRES_PORT=5433`. On Windows, run `docker/data/init-env.ps1` instead of the shell script.
+Services: client :5016, backend API and authentication :8080, PostgreSQL :5432, S3-compatible storage :9000 with its console on :9001. Ports and the bootstrap user's credentials come from `.env`, which is not tracked in git — the same file feeds both stacks. If a local PostgreSQL already holds port 5432, set `POSTGRES_PORT=5433`. On Windows, run `docker/data/init-env.ps1` instead of the shell script.
 
-Token-signing certificates are generated on first start, and the `flow` and `flow_auth` databases are created by migrations. The two stacks start in any order: a service that comes up before the database waits for it (`Startup:DatabaseWaitTimeoutSeconds`, 60 s by default).
+Token-signing certificates are generated on first start. Migrations create one `flow` database layout: core tables in the `public` schema and Identity/OpenIddict tables in `auth`. The two stacks start in any order: the backend waits for the database when necessary (`Startup:DatabaseWaitTimeoutSeconds`, 60 s by default).
 
 ### The start script
 
@@ -81,7 +81,7 @@ Token-signing certificates are generated on first start, and the `flow` and `flo
 1. **`.env`** — copied from `.env.example` if missing. Both stacks read it; without it the compose defaults apply.
 2. **`docker/data/init-env.sh`** — the shared `flow-network` network and the external `flow-postgres-data`, `flow-minio-data` volumes. `DATA_ROOT` puts the volumes on a directory of your choice: `DATA_ROOT=/mnt/flow sh docker/up.sh` (only honoured when the volumes are created).
 3. **Data stack** — `docker compose -f docker-compose.data.yml up -d`: PostgreSQL and S3.
-4. **Application stack** — `docker compose up -d --build`: auth, api, client.
+4. **Application stack** — `docker compose up -d --build`: api (including authentication) and client.
 
 | Flag | What it does |
 |---|---|
@@ -95,7 +95,7 @@ You don't need the script if the data lives elsewhere: point `POSTGRES_HOST` and
 
 ### Two stacks, and why
 
-Data lives in its own Compose project (`docker-compose.data.yml`, project `flow-data`) on external volumes `flow-postgres-data` and `flow-minio-data`. The application stack owns no project data at all, so `docker compose down -v` cannot touch it — it only drops Flow.Auth's keys and certificates, which are recreated on the next start.
+Data lives in its own Compose project (`docker-compose.data.yml`, project `flow-data`) on external volumes `flow-postgres-data` and `flow-minio-data`. The application stack owns no project data at all, so `docker compose down -v` cannot touch it — it only drops the Auth module's keys and certificates, which are recreated on the next start.
 
 | What you want | Command |
 |---|---|
@@ -251,7 +251,7 @@ The first start creates a bootstrap user — the single account every other acco
 
 The values come from `.env` (`BOOTSTRAP_USERNAME`, `BOOTSTRAP_EMAIL`, `BOOTSTRAP_PASSWORD`) and are applied once, when the database is created. Changing them after the first run has no effect — change the password through the UI instead.
 
-**1. Open http://localhost:5016.** The client checks for a session and, finding none, sends you to the Flow.Auth sign-in page on :5100. The login field accepts either a username or an email.
+**1. Open http://localhost:5016.** The client checks for a session and, finding none, sends you to the sign-in page served by the backend on :8080. The login field accepts either a username or an email.
 
 ![Flow sign-in page](docs/images/login.png)
 
@@ -279,7 +279,8 @@ Project documentation is written in Russian.
 - [`docs/TZ_board_task_status.md`](docs/TZ_board_task_status.md) — boards, statuses, tasks
 - [`docs/TZ_user.md`](docs/TZ_user.md) — users and profiles
 - [`docs/TZ_user_roles.md`](docs/TZ_user_roles.md) — roles, states, permission matrix
-- [`docs/TZ_auth.md`](docs/TZ_auth.md) — authentication and Flow.Auth
+- [`docs/TZ_modular_monolith.md`](docs/TZ_modular_monolith.md) — current backend and authentication-module architecture
+- [`docs/TZ_auth.md`](docs/TZ_auth.md) — historical specification of the former standalone authentication service
 - [`docs/TZ_infra_data_split.md`](docs/TZ_infra_data_split.md) — splitting the database and S3 into a data stack
 - [`docs/TZ_task_activity_comments.md`](docs/TZ_task_activity_comments.md) — comments, change log, Markdown editor, due dates
 - [`docs/TZ_attachments.md`](docs/TZ_attachments.md) — attachments: storage, drag & drop, search by content
