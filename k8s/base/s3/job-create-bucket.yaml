@@ -66,6 +66,11 @@ spec:
               mc ls "flow/$S3_BUCKET"
               echo "бакет $S3_BUCKET готов"
           env:
+            # Каталог конфигурации mc. Без него клиент идёт в $HOME/.mc, то есть в /root, куда со
+            # сброшенными capability записи нет (подробно — в securityContext ниже). /tmp в образе
+            # имеет режим 1777, поэтому пишется при любом пользователе и без единой привилегии.
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
             # Адрес берём из ConfigMap, а не пишем короткое http://flow-s3:9000, хотя Job живёт в том же
             # namespace. Причина в том, что так Job проверяет ровно ту строку, по которой в хранилище
             # пойдёт Flow.Api: опечатка в S3_ENDPOINT падает здесь, в выкатке, а не в рантайме.
@@ -99,8 +104,12 @@ spec:
               cpu: 200m
               memory: 128Mi
           securityContext:
-            # runAsNonRoot не ставим: mc пишет конфиг алиаса в /root/.mc, и non-root в этом образе
-            # упёрся бы в права на домашний каталог. Привилегии при этом не нужны ни одной.
+            # runAsNonRoot не ставим: образ mc и так стартует root'ом, а домашний каталог у него один.
+            # Важнее соседнее: drop ALL забирает и CAP_DAC_OVERRIDE, а /root в этом образе имеет режим
+            # dr-xr-x--- (0550) — закрыт на запись даже для владельца. Root пишет туда только за счёт
+            # DAC_OVERRIDE, поэтому со сброшенными capability mc падал на «mkdir /root/.mc: permission
+            # denied». Лечится не ослаблением прав, а переносом конфига в /tmp — см. MC_CONFIG_DIR выше.
+            # Проверено на самом образе: с drop=ALL mkdir в /root отказывает, в /tmp проходит.
             allowPrivilegeEscalation: false
             capabilities:
               drop:
