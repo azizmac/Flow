@@ -265,6 +265,10 @@ else if (Item is not null)
         if (_focusTitle)
         {
             _focusTitle = false;
+            // Пауза обязательна: MudFocusTrap слайдера ставит фокус на первый элемент внутри (кнопку
+            // закрытия) в своём OnAfterRender — без задержки он перебивает нас, и «N» открывает форму,
+            // в которой нельзя сразу печатать.
+            await Task.Delay(50);
             await Browser.FocusAsync("td-title");
         }
     }
