@@ -897,7 +897,13 @@ jobs:
           # Без -n: тома лежат в трёх неймспейсах, каждый объект несёт свой. Ждать нечего — local-path
           # с WaitForFirstConsumer держит PVC в Pending, пока его не затребует под, и это норма, а не сбой.
           kubectl apply -f manifests/storage.yaml
-          kubectl get pvc -A -l app.kubernetes.io/part-of=flow
+          # По неймспейсам, а не kubectl get pvc -A: ключ -A запрашивает список на уровне кластера, а токен
+          # выкатки намеренно ограничен тремя неймспейсами и получает Forbidden. Первый прогон на это и упал —
+          # причём уже ПОСЛЕ успешного создания всех томов, то есть на собственной диагностике.
+          for ns in flow flow-data flow-ai; do
+            echo "--- $ns"
+            kubectl -n "$ns" get pvc -l app.kubernetes.io/part-of=flow
+          done
 
   deploy-postgres:
     name: Выкатка · PostgreSQL
