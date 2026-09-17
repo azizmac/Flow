@@ -3,6 +3,7 @@ using Flow.Application.DependencyInjection;
 using Flow.Application.Features.Attachments;
 using Flow.Application.Features.Search;
 using Flow.Application.Tests.Fakes;
+using Flow.Auth.Contracts;
 using Flow.Domain.Entities;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;

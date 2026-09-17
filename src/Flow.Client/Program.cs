@@ -10,7 +10,7 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-// Адреса — wwwroot/appsettings.json: "ApiBaseUrl" (Flow.Api) и "AuthBaseUrl" (Flow.Auth, OIDC authority).
+// Адреса — wwwroot/appsettings.json: "ApiBaseUrl" (API) и "AuthBaseUrl" (OIDC authority того же backend).
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
 if (!apiBaseUrl.EndsWith('/'))
     apiBaseUrl += "/";
@@ -18,8 +18,8 @@ if (!apiBaseUrl.EndsWith('/'))
 var authBaseUrl = builder.Configuration["AuthBaseUrl"]
     ?? throw new InvalidOperationException("AuthBaseUrl is not configured (wwwroot/appsettings.json).");
 
-// Вход через Flow.Auth: Authorization Code + PKCE, refresh по offline_access. Redirect URI — authentication/login-callback,
-// он же зарегистрирован у клиента flow-client в Flow.Auth (Auth:Client:RedirectUris). См. docs/TZ_auth.md.
+// Вход через Auth-модуль: Authorization Code + PKCE, refresh по offline_access. Redirect URI — authentication/login-callback,
+// он же зарегистрирован у клиента flow-client (Auth:Client:RedirectUris). См. docs/TZ_modular_monolith.md.
 builder.Services.AddOidcAuthentication(options =>
 {
     options.ProviderOptions.Authority = authBaseUrl;

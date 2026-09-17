@@ -1,5 +1,4 @@
 using Flow.Application.Abstractions;
-using Flow.Application.Exceptions;
 using Flow.Application.Features.Bootstrap;
 using Flow.Application.Features.Users.Commands.UserActivateCommand;
 using Flow.Application.Features.Users.Commands.UserChangeEmailCommand;
@@ -9,13 +8,14 @@ using Flow.Application.Features.Users.Commands.UserCreateCommand;
 using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
 using Flow.Application.Features.Users.Queries.UserGetMeQuery;
 using Flow.Application.Tests.Fakes;
+using Flow.Auth.Contracts;
 using Flow.Domain.Entities;
 using MediatR;
 using Xunit;
 
 namespace Flow.Application.Tests.Features;
 
-/// <summary>Связка команд Users с Flow.Auth (IAccountService) и bootstrap-профиль. См. docs/TZ_auth.md, #23.</summary>
+/// <summary>Связка команд Users с Auth-модулем (IAccountService) и bootstrap-профиль. См. docs/TZ_auth.md, #23.</summary>
 public class AccountFeatureTests
 {
     private const string Password = "correct horse battery";
@@ -240,13 +240,13 @@ public class AccountFeatureTests
     }
 
     [Fact]
-    public async Task Deactivate_When_Auth_Unavailable_Should_Throw_And_KeepStatus()
+    public async Task Deactivate_When_AccountService_Fails_Should_Throw_And_KeepStatus()
     {
         var (mediator, _, _, users, accounts) = TestMediatorFactory.CreateWithAccounts();
         var id = await CreateUserAsync(mediator);
-        accounts.DisableEnableException = new AuthUnavailableException("down");
+        accounts.DisableEnableException = new InvalidOperationException("account missing");
 
-        await Assert.ThrowsAsync<AuthUnavailableException>(() => mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, id), CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new UserDeactivateCommand(TestMediatorFactory.OwnerId, id), CancellationToken.None));
 
         Assert.True((await users.GetByIdAsync(id, CancellationToken.None))!.IsActive);
     }

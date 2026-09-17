@@ -32,17 +32,6 @@ jobs:
       image: ${{ vars.REGISTRY && format('{0}/{1}', vars.REGISTRY, vars.IMAGE_NAME) || 'flow-api' }}
     secrets: inherit
 
-  docker-auth:
-    name: Docker image (Flow.Auth)
-    needs: build
-    uses: ./.github/workflows/docker.yml
-    with:
-      push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
-      # Имя образа Auth — переменная AUTH_IMAGE_NAME (по умолчанию flow-auth рядом с IMAGE_NAME).
-      image: ${{ vars.REGISTRY && format('{0}/{1}', vars.REGISTRY, vars.AUTH_IMAGE_NAME || 'flow-auth') || 'flow-auth' }}
-      dockerfile: src/Flow.Auth/Dockerfile
-    secrets: inherit
-
   docker-client:
     name: Docker image (Flow.Client)
     needs: build

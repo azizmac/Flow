@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Flow.Auth.Data;
+using Flow.Auth.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -12,7 +13,7 @@ namespace Flow.Auth.Pages.Account;
 /// <see cref="ApplicationUser.MustChangePassword"/>. Требует cookie входа (иначе — на /account/login).
 /// После смены — обратно на ReturnUrl (обычно /connect/authorize), и клиент получает токен.
 /// </summary>
-[Authorize]
+[Authorize(Policy = AuthConstants.CookiePolicy)]
 public sealed class ChangePasswordModel(SignInManager<ApplicationUser> signIn, UserManager<ApplicationUser> users) : PageModel
 {
     [BindProperty]

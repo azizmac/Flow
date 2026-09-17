@@ -1,5 +1,6 @@
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
+using Flow.Auth.Contracts;
 using MediatR;
 
 namespace Flow.Application.Features.Users.Commands.UserChangeEmailCommand;
@@ -31,7 +32,7 @@ internal sealed class UserChangeEmailCommandHandler(IUserRepository users, Actor
 
         var account = await accounts.ChangeEmailAsync(user.Id, candidate, cancellationToken);
         if (account.Status == AccountResultStatus.Invalid)
-            throw new ArgumentException(account.Error ?? "Flow.Auth rejected the email.", nameof(request.Email));
+            throw new ArgumentException(account.Error ?? "Auth rejected the email.", nameof(request.Email));
 
         if (!account.IsSuccess)
             return UserUpdateResult.EmailTaken(candidate);

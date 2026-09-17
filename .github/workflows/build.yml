@@ -70,7 +70,7 @@ jobs:
             --filter "Category!=Model&Category!=Golden" \
             --logger "trx;LogFileName=infrastructure.trx" --results-directory TestResults
 
-      - name: Integration tests (Flow.Auth, WebApplicationFactory + Testcontainers/Postgres)
+      - name: Integration tests (Auth module, WebApplicationFactory + Testcontainers/Postgres)
         run: |
           dotnet test tests/Flow.Auth.Tests -c Release --no-build \
             --logger "trx;LogFileName=auth.trx" --results-directory TestResults

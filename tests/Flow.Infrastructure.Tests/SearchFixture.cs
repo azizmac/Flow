@@ -3,6 +3,7 @@ using Flow.Application.DependencyInjection;
 using Flow.Application.Features.Bootstrap;
 using Flow.Application.Features.Search;
 using Flow.Application.Tests.Fakes;
+using Flow.Auth.Contracts;
 using Flow.Infrastructure.DependencyInjection;
 using Flow.Infrastructure.Persistence;
 using Flow.Infrastructure.Search;

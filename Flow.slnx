@@ -5,6 +5,7 @@
     <Project Path="src/Flow.Infrastructure/Flow.Infrastructure.csproj" />
     <Project Path="src/Flow.Api/Flow.Api.csproj" />
     <Project Path="src/Flow.Auth/Flow.Auth.csproj" />
+    <Project Path="src/Flow.Auth.Contracts/Flow.Auth.Contracts.csproj" />
     <Project Path="src/Flow.Client/Flow.Client.csproj" />
     <Project Path="src/Flow.Shared/Flow.Shared.csproj" />
   </Folder>
@@ -14,7 +15,6 @@
     <File Path=".dockerignore" />
     <File Path="docker/client/nginx.conf" />
     <File Path="docker/client/entrypoint.sh" />
-    <File Path="docker/postgres/init.sql" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Flow.Domain.Tests/Flow.Domain.Tests.csproj" />

@@ -7,11 +7,6 @@ public static class AuthConstants
 
     public const string ApiResource = "flow-api";
 
-    /// <summary>Scope admin-API этого сервиса (client_credentials клиента flow-api).</summary>
-    public const string AdminScope = "auth:admin";
-
-    public const string AuthResource = "flow-auth";
-
-    /// <summary>Политика авторизации admin-API: Bearer-токен с aud = flow-auth и scope auth:admin.</summary>
-    public const string AdminPolicy = "AuthAdmin";
+    /// <summary>Политика страниц с cookie-схемой (смена пароля и т.п.).</summary>
+    public const string CookiePolicy = "AuthCookie";
 }
