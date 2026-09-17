@@ -179,9 +179,10 @@ After the first start the index has to be filled once — `POST /search/reindex`
 maintains itself.
 
 No GPU: leave `VISION_ENABLED` at `false` — the visual half is the only part that really needs a card.
-The second stage runs on CPU too, and how well is the one thing worth measuring on your own machine:
-the old "tens of seconds on CPU" verdict was computed for a different model and a window of 25 pairs,
-while the shipped configuration sends 10 pairs of 1200 characters. No models at all:
+The second stage runs on CPU too: on an i9-14900KF the shipped window takes 8.5 s and ranks correctly.
+The old "tens of seconds on CPU" verdict was computed for a different model and a window of 25 pairs.
+The time is linear in text volume, so `MaxDocumentChars` and `TopN` are the levers — thread count is not,
+it barely moves. No models at all:
 `EMBEDDINGS_ENABLED=false` — search works by words, indexing keeps writing chunks
 without vectors, and once a model shows up Flow.Api queues those sources on startup and the vectors fill
 in. If the model runs on another machine, skip the `ai` profile entirely and point
