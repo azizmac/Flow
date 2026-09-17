@@ -273,6 +273,10 @@
     private List<BoardResponse> _boards = [];
     private bool _boardsLoading = true;
     private List<TaskResponse> _tasks = [];
+    /// <summary>Сколько строк под текущим отбором — им живёт пейджер таблицы.</summary>
+    private int _matched;
+    /// <summary>Флаг для <see cref="LoadTasks"/>: отдать текущую страницу без запроса (см. Redraw).</summary>
+    private bool _redrawOnly;
     private IReadOnlyList<StatusTypeCount> _countsByType = [];
     private Dictionary<Guid, int> _countsByStatus = new();
     private int _total;
@@ -404,6 +408,14 @@
         if (_notFound)
             return new GridData<TaskResponse> { Items = [], TotalItems = 0 };
 
+        // Перерисовка после правки строки на месте (статус, исполнитель, название): состав страницы тот же,
+        // ходить за ним второй раз незачем — отдаём уже загруженное.
+        if (_redrawOnly)
+        {
+            _redrawOnly = false;
+            return new GridData<TaskResponse> { Items = _tasks, TotalItems = _matched };
+        }
+
         _loading = true;
         var result = await Api.SearchTasks(
             BoardId, AssigneeFilterId, Who == "none", StatusId, BoardId is null ? TypeFilter : null, _search,
@@ -428,7 +440,8 @@
         if (BoardId is { } boardId)
             State.SetLastBoard(boardId);
 
-        return new GridData<TaskResponse> { Items = page.Items, TotalItems = page.Matched };
+        _matched = page.Matched;
+        return new GridData<TaskResponse> { Items = _tasks, TotalItems = page.Matched };
     }
 
     /// <summary>
@@ -471,6 +484,20 @@
     {
         if (_grid is not null)
             await _grid.ReloadServerData();
+    }
+
+    /// <summary>
+    /// Перерисовать таблицу из уже загруженной страницы. Нужна, потому что MudDataGrid в серверном режиме
+    /// держит свою копию строк: правка нашего списка (_tasks) до неё не доходит, и строка остаётся старой,
+    /// пока не перезапросишь данные. Запрос тут был бы лишним — состав страницы не менялся.
+    /// </summary>
+    private async Task Redraw()
+    {
+        if (_grid is null)
+            return;
+
+        _redrawOnly = true;
+        await _grid.ReloadServerData();
     }
 
     private string RowClass(TaskResponse task, int _)
@@ -707,6 +734,7 @@
         {
             _tasks.Insert(0, t);
             _total++;
+            await Reload();
         }
 
         _createOpen = false;
@@ -736,25 +764,25 @@
         }
     }
 
-    private void OnTaskUpdated(TaskResponse t) => ReplaceTask(t);
+    private Task OnTaskUpdated(TaskResponse t) => ReplaceTask(t);
 
     private async Task ChangeStatus((TaskResponse Task, Guid StatusId) args)
     {
         var (task, statusId) = args;
         var before = task;
         // Оптимистично: строка меняется сразу, при ошибке — откат.
-        ReplaceTask(task with { StatusId = statusId });
+        await ReplaceTask(task with { StatusId = statusId });
 
         var result = await Api.UpdateTask(task.Id, new UpdateTaskRequest(null, null, statusId));
         if (result.Ok)
         {
-            ReplaceTask(result.Value!);
+            await ReplaceTask(result.Value!);
             // Счётчики статусов считает сервер: после смены статуса они устарели.
             await RefreshCounts();
         }
         else
         {
-            ReplaceTask(before);
+            await ReplaceTask(before);
             Toasts.Error(result.Error ?? "Не удалось сменить статус");
         }
     }
@@ -778,18 +806,18 @@
     {
         var (task, userId) = args;
         var before = task;
-        ReplaceTask(task with { AssigneeId = userId });
+        await ReplaceTask(task with { AssigneeId = userId });
 
         var result = await Api.AssignTask(task.Id, new AssignTaskRequest(userId));
         if (result.Ok)
         {
-            ReplaceTask(result.Value!);
+            await ReplaceTask(result.Value!);
             var who = Users.Find(userId);
             Toasts.Ok(who is null ? $"{task.Code}: исполнитель снят" : $"{task.Code} → {who.FullName}");
         }
         else
         {
-            ReplaceTask(before);
+            await ReplaceTask(before);
             Toasts.Error(result.Error ?? "Не удалось назначить исполнителя");
         }
     }
@@ -798,7 +826,7 @@
     {
         var result = await Api.UpdateTask(args.Task.Id, new UpdateTaskRequest(args.Title, null, null));
         if (result.Ok)
-            ReplaceTask(result.Value!);
+            await ReplaceTask(result.Value!);
         else
             Toasts.Error(result.Error ?? "Не удалось переименовать задачу");
     }
@@ -824,6 +852,7 @@
 
         _tasks.RemoveAll(x => x.Id == t.Id);
         _total = Math.Max(0, _total - 1);
+        await Reload();
         var i = _boards.FindIndex(b => b.Id == t.BoardId);
         if (i >= 0)
             _boards[i] = _boards[i] with { TaskCount = Math.Max(0, _boards[i].TaskCount - 1) };
@@ -835,11 +864,14 @@
         await RefreshCounts();
     }
 
-    private void ReplaceTask(TaskResponse t)
+    private async Task ReplaceTask(TaskResponse t)
     {
         var i = _tasks.FindIndex(x => x.Id == t.Id);
-        if (i >= 0)
-            _tasks[i] = t;
+        if (i < 0)
+            return;
+
+        _tasks[i] = t;
+        await Redraw();
     }
 
     // ---- переименование проекта ----
