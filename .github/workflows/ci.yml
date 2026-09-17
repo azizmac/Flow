@@ -943,6 +943,26 @@ jobs:
           wait: statefulset/flow-s3
           timeout: 600s
 
+      # Отдельным шагом, потому что первый же реальный деплой показал дыру: джоба ждала только
+      # StatefulSet и была зелёной, тогда как Job создания бакета падал. Приложение осталось бы
+      # без хранилища вложений при «успешной» выкатке — молча, до первой загрузки файла.
+      - name: Бакет создан
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_DEPLOY_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077; kc="$RUNNER_TEMP/kubeconfig"; printf '%s' "$KUBECONFIG_B64" | base64 -d > "$kc"
+          export KUBECONFIG="$kc"; trap 'rm -f "$kc"' EXIT
+          # Ждём Job именно этого релиза по имени, а не по метке: имя несёт суффикс RELEASE_SHA,
+          # а под метку попали бы и прошлые Job'ы, включая упавшие, — тогда ожидание врёт.
+          job="flow-create-bucket-${GITHUB_SHA:0:7}"
+          if ! kubectl -n flow-data wait --for=condition=complete "job/$job" --timeout=180s; then
+            echo "::error title=bucket::Job создания бакета не завершился — логи ниже"
+            kubectl -n flow-data logs "job/$job" --tail=40 || true
+            exit 1
+          fi
+
   deploy-api:
     name: Выкатка · Flow.Api
     needs: [deploy-postgres, deploy-s3]
