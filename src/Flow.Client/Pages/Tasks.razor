@@ -99,8 +99,12 @@
                         <SortHeader Field="TaskSortField.Code" Current="_sortField" Descending="_sortDescending" OnSort="SortBy">Код</SortHeader>
                     </HeaderTemplate>
                     <CellTemplate>
-                        @* Якорь строки: по нему листаются задачи стрелками и подсвечивается новая. *@
-                        <span id="@TaskAnchorId(context.Item.Id)">@context.Item.Code</span>
+                        @* Ячейка кода — точка входа строки с клавиатуры: Tab останавливается здесь, Enter
+                           открывает задачу, ↑↓ переводят фокус на соседнюю. Она же якорь для прокрутки. *@
+                        <span id="@TaskAnchorId(context.Item.Id)" class="row-key" role="button" tabindex="0"
+                              aria-label="@($"{context.Item.Code}: {context.Item.Title}")"
+                              @onclick:stopPropagation @onclick="() => OpenTask(context.Item)"
+                              @onkeydown="e => OnRowKey(e, context.Item)">@context.Item.Code</span>
                     </CellTemplate>
                 </PropertyColumn>
 
@@ -483,6 +487,38 @@
 
     /// <summary>Якорь строки для прокрутки: id ставится в ячейке кода.</summary>
     public static string TaskAnchorId(Guid id) => "task-" + id.ToString("N");
+
+    /// <summary>
+    /// Клавиши на строке списка: Enter/Space открывают задачу, ↑↓ переводят фокус на соседнюю строку
+    /// (Home/End — на первую и последнюю). Стрелки перехватываем здесь, а не глобальным хоткеем:
+    /// когда фокус в списке, они принадлежат списку.
+    /// </summary>
+    private async Task OnRowKey(KeyboardEventArgs e, TaskResponse task)
+    {
+        switch (e.Key)
+        {
+            case "Enter" or " ":
+                OpenTask(task);
+                return;
+            case "ArrowDown" or "ArrowUp" or "Home" or "End":
+                var at = _tasks.FindIndex(t => t.Id == task.Id);
+                if (at < 0)
+                    return;
+
+                var next = e.Key switch
+                {
+                    "ArrowDown" => Math.Min(at + 1, _tasks.Count - 1),
+                    "ArrowUp" => Math.Max(at - 1, 0),
+                    "Home" => 0,
+                    _ => _tasks.Count - 1
+                };
+
+                if (next != at)
+                    await Browser.FocusAsync(TaskAnchorId(_tasks[next].Id));
+
+                return;
+        }
+    }
 
     // ---- переименование прямо в строке ----
 

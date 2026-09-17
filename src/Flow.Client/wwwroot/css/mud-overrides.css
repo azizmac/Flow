@@ -436,6 +436,17 @@ a.mud-link:hover {
     color: var(--text-secondary);
 }
 
+/* Код задачи — точка входа строки с клавиатуры: выглядит как текст, но получает фокус и кольцо. */
+.flow-grid .row-key {
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.flow-grid .row-key:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
 /* Ниже 1200px колонка «Создана» уходит: дата видна в карточке задачи, а ширина нужнее названию. */
 @media (max-width: 1200px) {
     .flow-grid th:nth-child(5),

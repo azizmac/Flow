@@ -1,4 +1,4 @@
-@* Drawer-nav 240px по Sidebar.dc.html. Строка поиска — GlobalSearch (выдача на /search).
+﻿@* Drawer-nav 240px по Sidebar.dc.html. Строка поиска — GlobalSearch (выдача на /search).
    «Проекты» → /boards; «Задачи» → /tasks (все проекты);
    «Люди» → /users. Дашборды/Настройки — в API ещё нет: помечены «скоро» и не притворяются кликабельными.
    Футер — текущий пользователь: claim sub из токена Flow.Auth → AppState.CurrentUserId, профиль — GET /users/me;
@@ -10,8 +10,14 @@
 @inject FlowApi Api
 @inject AuthenticationStateProvider AuthState
 
-<nav class="sb">
-    <a class="sb-brand" href="boards" title="К проектам" aria-label="Flow — к проектам"><BrandMark Size="34" /><div class="sb-word">FLOW</div></a>
+<nav class="sb @SidebarModeClass">
+    <div class="sb-top">
+        <a class="sb-brand" href="boards" title="К проектам" aria-label="Flow — к проектам"><BrandMark Size="34" /><div class="sb-word">FLOW</div></a>
+        @* Ниже 1366px сайдбар сворачивается сам; кнопка нужна, чтобы это решение можно было отменить в обе стороны. *@
+        <DsIconButton Icon="@(Collapsed ? "expand" : "arrow-left")" Size="26" Class="sb-toggle"
+                      Title="@(Collapsed ? "Развернуть меню" : "Свернуть меню")"
+                      Style="color:rgba(255,255,255,0.4)" OnClick="ToggleSidebar" />
+    </div>
 
     @* Шеврон обещает выпадающий список, которого ещё нет: помечаем блок как «скоро», чтобы клик по нему не выглядел сломанным. *@
     <div class="sb-ws disabled" aria-disabled="true" title="Рабочие пространства — в разработке">
@@ -23,7 +29,9 @@
         <Icon Name="chevrons" Size="14" Style="color:rgba(255,255,255,0.25)" />
     </div>
 
+    @* В иконочном режиме строка поиска не помещается — вместо неё ссылка на экран поиска. *@
     <GlobalSearch />
+    <a class="sb-item sb-search-icon" href="search" title="Поиск"><Icon Name="search" Size="18" /></a>
 
     <div class="sb-section">Рабочее пространство</div>
 
@@ -60,6 +68,18 @@
 
 @code {
     private string _name = "";
+
+    /// <summary>Класс режима: пусто — ширина решает сама, collapsed/expanded — выбор кнопкой.</summary>
+    private string SidebarModeClass => State.SidebarCollapsed switch
+    {
+        true => "collapsed",
+        false => "expanded",
+        null => ""
+    };
+
+    private bool Collapsed => State.SidebarCollapsed ?? false;
+
+    private void ToggleSidebar() => State.ToggleSidebar(!Collapsed);
     private string? _meError;
 
     private string Path => Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimEnd('/');

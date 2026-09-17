@@ -93,9 +93,11 @@ window.flow = (function () {
         // В полях ввода пропускаем только Esc и Ctrl/Cmd+Enter — остальное принадлежит полю.
         if (editable && e.key !== 'Escape' && !((e.ctrlKey || e.metaKey) && e.key === 'Enter')) return;
         const plainLetter = (e.key === 'n' || e.key === 'N' || e.key === 'т' || e.key === 'Т') && !e.ctrlKey && !e.metaKey && !e.altKey;
+        // «/» — фокус в строку поиска; символ гасим здесь же, иначе он окажется в поле, которое только что получило фокус.
+        const slash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey;
         // preventDefault нужен синхронно: .NET-обработчик асинхронный и не успеет отменить ввод символа
         // в поле, которое откроется по хоткею (N → дровер с автофокусом на названии).
-        if (!editable && (plainLetter || e.key === 'Escape')) e.preventDefault();
+        if (!editable && (plainLetter || slash || e.key === 'Escape')) e.preventDefault();
         hotkeyRef.invokeMethodAsync('OnKeyDown', e.key, e.ctrlKey || e.metaKey, e.shiftKey, editable)
             .catch(function () { });
     });
