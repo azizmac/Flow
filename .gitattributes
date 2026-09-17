@@ -2,6 +2,7 @@
 *.sh text eol=lf
 *.sql text eol=lf
 **/Dockerfile text eol=lf
+*.ini text eol=lf
 
 # Бандл редактора и его исходник — всегда LF: esbuild пишет LF, а CI сравнивает собранный файл
 # с закоммиченным (build.yml, шаг «Editor bundle is up to date»). CRLF-чекаут на Windows ломал бы сравнение.

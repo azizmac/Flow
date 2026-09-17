@@ -1,43 +1,1099 @@
-# Оркестратор: триггеры + порядок джоб. Сами джобы лежат в отдельных файлах.
+# Оркестратор CI: триггеры, порядок стадий и все джобы, видимые в интерфейсе.
+#
+# Почему всё в одном файле, а не в reusable workflow: вызов reusable-воркфлоу переименовывает вложенные джобы
+# в составные («Тесты · Auth / run») и ломает читаемость списка запуска — а нам важно ровно обратное, видеть
+# каждый модуль отдельной понятной строкой. Повторяющиеся шаги вынесены в composite actions (.github/actions/*):
+# они не трогают имена джоб. Reusable останется там, где без него нельзя — у выкатки (свои environment и runs-on).
+#
+# Стадии: проверки → тесты → образы. Выкатка в Kubernetes появится отдельным файлом на этапе 3, см. docs/TZ_cicd_k8s.md.
+
 name: CI
 
+run-name: CI · ${{ github.event_name == 'workflow_dispatch' && 'ручной запуск' || github.ref_name }} · @${{ github.actor }}
+
 on:
+  # Ветки без PR намеренно не гоняем: пуш в ветку с открытым PR иначе запускал бы CI дважды, причём
+  # группы concurrency у push и pull_request разные — прогоны не отменяли бы друг друга, а шли парой.
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: Пропустить тесты (только для отладки самого пайплайна; публикация образов при этом выключается)
+        type: boolean
+        default: false
+      pull_models:
+        description: Скачать веса моделей в том flow-models (гигабайты, разово; не часть обычной выкатки)
+        type: boolean
+        default: false
+      deploy_ai:
+        description: Выкатить AI-слой (llama.cpp CPU). Требует уже скачанных весов — сперва прогнать с pull_models
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # На main не отменяем: вытесненный посреди публикации прогон оставляет реестр в непонятном состоянии,
+  # а на коммите — красный CI без внятной причины.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Минимум и ничего сверх: образы уезжают в Docker Hub по паре REGISTRY_USERNAME/REGISTRY_PASSWORD,
+# то есть прав самого GITHUB_TOKEN пайплайну не нужно вовсе.
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
 
 jobs:
+  # ---------- Стадия 0: проверки ----------
+
+  changes:
+    name: Что изменилось
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # На pull_request paths-filter не смотрит в git, а запрашивает список файлов через REST API —
+    # без pull-requests: read получает 403 «Resource not accessible by integration» и роняет весь прогон.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      api: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.api }}
+      client: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.client }}
+      registry: ${{ steps.registry.outputs.registry }}
+      prefix: ${{ steps.registry.outputs.prefix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Фильтры строго по графу ProjectReference, а не «всё в src/»: Flow.Auth и Flow.Client ссылаются только
+      # на Flow.Shared, поэтому правка Flow.Infrastructure их образов не касается и пересобирать их незачем.
+      # Только для автоматических событий: на workflow_dispatch base не с чем сравнивать (нет
+      # github.event.before), и действие молча переключается на «изменения последнего коммита», что при
+      # поверхностном чекауте означает «всё дерево». Ручной запуск поэтому просто собирает всё.
+      - name: Затронутые модули
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            common: &common
+              - 'global.json'
+              - '.dockerignore'
+              - '.github/actions/build-image/**'
+              - '.github/workflows/ci.yml'
+            # Flow.Auth и Flow.Auth.Contracts входят сюда, а не в отдельный фильтр: после перехода
+            # на модульный монолит Auth — это Razor Class Library внутри хоста Flow.Api, и её правка
+            # меняет ровно один образ — flow-api. Отдельный образ flow-auth больше не собирается.
+            api:
+              - *common
+              - 'src/Flow.Api/**'
+              - 'src/Flow.Application/**'
+              - 'src/Flow.Auth/**'
+              - 'src/Flow.Auth.Contracts/**'
+              - 'src/Flow.Domain/**'
+              - 'src/Flow.Infrastructure/**'
+              - 'src/Flow.Shared/**'
+            client:
+              - *common
+              - 'src/Flow.Client/**'
+              - 'src/Flow.Shared/**'
+              - 'docker/client/**'
+
+      # Реестр — Docker Hub (REGISTRY=docker.io), владелец образов задаётся переменной IMAGE_PREFIX и с именем
+      # владельца репозитория на GitHub не совпадает, поэтому дефолта здесь нет: лучше честно упасть с текстом,
+      # чем молча собрать образ под чужим или несуществующим именем. Регистр приводим к нижнему — реестры
+      # принимают только его, а функции lower() в выражениях GitHub нет.
+      - name: Реестр и префикс образов
+        id: registry
+        shell: bash
+        env:
+          REGISTRY: ${{ vars.REGISTRY }}
+          IMAGE_PREFIX: ${{ vars.IMAGE_PREFIX }}
+          PUBLISHING: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+        run: |
+          set -euo pipefail
+          registry="${REGISTRY:-docker.io}"
+          prefix="${IMAGE_PREFIX:-}"
+
+          # Падаем только там, где имя образа действительно нужно. На PR и в ветке образ никуда не уезжает,
+          # поэтому отсутствие переменной там — не ошибка автора, а обычное дело для чужого форка.
+          if [ -z "$prefix" ]; then
+            if [ "$PUBLISHING" = true ]; then
+              echo "::error title=IMAGE_PREFIX::не задана переменная IMAGE_PREFIX — это владелец образов в реестре (например, not2ilya2work). Settings → Secrets and variables → Actions → Variables"
+              exit 1
+            fi
+            prefix=local
+            echo "::notice title=IMAGE_PREFIX::переменная не задана; образ соберётся под локальным именем, публикации в этом прогоне нет"
+          fi
+
+          prefix="$(echo "$prefix" | tr '[:upper:]' '[:lower:]')"
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+
+      - name: Итог в отчёт
+        shell: bash
+        run: |
+          manual="${{ github.event_name == 'workflow_dispatch' && 'да (ручной запуск собирает всё)' || 'нет' }}"
+          {
+            echo "### Что изменилось"
+            echo
+            echo "| Модуль | Изменён | Будет собран |"
+            echo "|--------|---------|--------------|"
+            echo "| flow-api | ${{ steps.filter.outputs.api || '—' }} | ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.api == 'true' }} |"
+            echo "| flow-client | ${{ steps.filter.outputs.client || '—' }} | ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.client == 'true' }} |"
+            echo
+            echo "Ручной запуск: $manual · образы: \`${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.prefix }}/flow-*\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  lint-actions:
+    name: Проверка · workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ловит то, что иначе видно только после пуша: опечатки в контекстах, несуществующие поля, ошибки в
+      # needs и matrix, а заодно shellcheck по каждому run-блоку.
+      - name: actionlint
+        uses: docker://rhysd/actionlint:latest
+        with:
+          args: -color
+
+  lint-docker:
+    name: Проверка · Dockerfile (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      # Путь задаём явным include, а не вычисляем из имени модуля: цепочка тернарников в выражениях GitHub
+      # читается хуже таблицы и молча даёт пустую строку при опечатке.
+      matrix:
+        include:
+          - module: api
+            dockerfile: src/Flow.Api/Dockerfile
+          - module: client
+            dockerfile: src/Flow.Client/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ${{ matrix.dockerfile }}
+          config: .hadolint.yaml
+
+  lint-compose:
+    name: Проверка · compose config
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Оба стека проверяем отдельно: ошибка в любом ломает обещание «проект поднимается одной командой».
+      - name: Стек приложения
+        run: docker compose -f docker-compose.yml config -q
+
+      - name: Стек данных
+        run: docker compose -f docker-compose.data.yml config -q
+
+      # Оверлей профиля железа проверяется отдельно и вместе с базой: сам по себе он неполон
+      # (в нём только переопределения), а ошибка в нём всплыла бы лишь у того, у кого есть карта.
+      - name: docker-compose.data.yml + оверлей NVIDIA
+        shell: bash
+        run: docker compose -f docker-compose.data.yml -f docker/ai/nvidia.yml config -q
+
+      # Класс ошибок «сервис читает ${VAR}, а нигде она не объявлена» — именно так когда-то потерялся AUTH_ISSUER.
+      - name: Переменные compose объявлены
+        run: sh scripts/check-compose-env.sh
+
+  lint-editor:
+    name: Проверка · бандл редактора
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Эта проверка пришла из .github/workflows/build.yml, который после переработки пайплайна больше
+      # никто не вызывает: он остался reusable-воркфлоу без единого вызывающего. Оставить её там значило бы
+      # тихо потерять гарантию — файл на месте, шаг написан, а не выполняется никогда.
+      #
+      # Что она стережёт: бандл CodeMirror лежит в репозитории, чтобы клиент запускался без Node, но
+      # собирается из editor/flow-editor.src.js. Правка исходника без пересборки бандла не ломает ни сборку,
+      # ни тесты — редактор просто продолжает работать по старому коду, и обнаруживается это в браузере.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/Flow.Client/editor/package-lock.json
+
+      - name: Бандл собран из текущего исходника
+        working-directory: src/Flow.Client/editor
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          git diff --stat --exit-code -- ../wwwroot/js/flow-editor.js
+
+  lint-sdk:
+    name: Проверка · версия SDK
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ловит «зелёный dotnet build, красная сборка образа»: в global.json одна версия SDK, а в Dockerfile тег
+      # базового образа живёт своей жизнью и меняется руками.
+      - name: Теги SDK в Dockerfile совпадают с global.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(jq -r '.sdk.version' global.json | cut -d. -f1-2)"
+          status=0
+          for file in src/Flow.Api/Dockerfile src/Flow.Client/Dockerfile; do
+            line="$(grep -n 'mcr.microsoft.com/dotnet/sdk:' "$file" | head -1)"
+            number="${line%%:*}"
+            tag="$(printf '%s' "$line" | sed -n 's|.*dotnet/sdk:\([0-9.]*\).*|\1|p')"
+            if [ "$tag" != "$expected" ]; then
+              echo "::error file=$file,line=$number,title=SDK::в Dockerfile образ sdk:$tag, а в global.json $expected"
+              status=1
+            fi
+          done
+          exit $status
+
+  check-vars:
+    name: Проверка · переменные
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Забытая переменная не роняет приложение: подставляется дев-дефолт из appsettings.json, и прод молча
+      # уезжает с паролем flow. Поэтому проверяем состав переменных до того, как что-то соберётся.
+      # Секреты проверяем только там, где они реально нужны и доступны: в pull request из форка GitHub их
+      # не выдаёт вовсе, и красный крестик на чужом PR означал бы лишь то, что автор — не владелец репозитория.
+      - name: Обязательные переменные заданы
+        env:
+          REGISTRY: ${{ vars.REGISTRY }}
+          IMAGE_PREFIX: ${{ vars.IMAGE_PREFIX }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+          PUBLISHING: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+        run: |
+          if [ "$PUBLISHING" = true ]; then
+            sh scripts/check-vars.sh 1
+          else
+            sh scripts/check-vars.sh 1 --no-secrets
+          fi
+
+  # ---------- Стадия 1: сборка и тесты ----------
+
   build:
-    name: Build & test
-    uses: ./.github/workflows/build.yml
+    name: Сборка .NET (Release)
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  compose:
-    name: Compose config
-    uses: ./.github/workflows/compose.yml
+      # Единственный гейт для образа flow-client: тестового проекта у Blazor-клиента в репозитории нет,
+      # и компиляция WASM — всё, что мы можем про него проверить.
+      - name: Сборка решения
+        uses: ./.github/actions/dotnet-test
+        with:
+          title: Сборка решения
 
-  docker:
-    name: Docker image
+  test-unit:
+    name: Тесты · unit (Domain + Application)
     needs: build
-    uses: ./.github/workflows/docker.yml
-    with:
-      # Публикуем только с main; из веток и PR образ лишь собирается.
-      push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
-      # Если переменные registry не заданы, образ собирается под локальным именем.
-      image: ${{ vars.REGISTRY && format('{0}/{1}', vars.REGISTRY, vars.IMAGE_NAME) || 'flow-api' }}
-    secrets: inherit
+    if: inputs.skip_tests != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  docker-client:
-    name: Docker image (Flow.Client)
+      - name: Flow.Domain.Tests
+        uses: ./.github/actions/dotnet-test
+        with:
+          project: tests/Flow.Domain.Tests
+          title: Domain
+
+      - name: Flow.Application.Tests
+        uses: ./.github/actions/dotnet-test
+        with:
+          project: tests/Flow.Application.Tests
+          title: Application
+
+  test-infra:
+    name: Тесты · Infrastructure (pgvector + MinIO)
     needs: build
-    uses: ./.github/workflows/docker.yml
-    with:
-      push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
-      image: ${{ vars.REGISTRY && format('{0}/{1}', vars.REGISTRY, vars.CLIENT_IMAGE_NAME || 'flow-client') || 'flow-client' }}
-      dockerfile: src/Flow.Client/Dockerfile
-    secrets: inherit
+    if: inputs.skip_tests != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Образ базы тянем заранее: он большой, а Testcontainers считает время его скачивания частью таймаута
+      # запуска контейнера. Именно pgvector, а не postgres: миграция делает CREATE EXTENSION vector.
+      - name: Предзагрузка образа БД
+        run: docker pull pgvector/pgvector:pg16
+
+      # Category!=Model — тесты, которым нужен живой llama-server; Category!=Golden — замер качества выдачи
+      # на базе разработчика. И то, и другое в CI ничего не проверяет.
+      - name: Flow.Infrastructure.Tests
+        uses: ./.github/actions/dotnet-test
+        with:
+          project: tests/Flow.Infrastructure.Tests
+          filter: Category!=Model&Category!=Golden
+          title: Infrastructure
+
+  test-auth:
+    name: Тесты · Auth
+    needs: build
+    if: inputs.skip_tests != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Предзагрузка образа БД
+        run: docker pull pgvector/pgvector:pg16
+
+      - name: Flow.Auth.Tests
+        uses: ./.github/actions/dotnet-test
+        with:
+          project: tests/Flow.Auth.Tests
+          title: Auth
+
+  test-api:
+    name: Тесты · Api
+    needs: build
+    if: inputs.skip_tests != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Предзагрузка образа БД
+        run: docker pull pgvector/pgvector:pg16
+
+      - name: Flow.Api.Tests
+        uses: ./.github/actions/dotnet-test
+        with:
+          project: tests/Flow.Api.Tests
+          title: Api
+
+  # ---------- Стадия 2: образы ----------
+  #
+  # Гейты у каждого образа свои и ровно по зависимостям кода: Flow.Client ссылается только на Flow.Shared,
+  # поэтому падение тестов Api не имеет права блокировать публикацию клиента. Образов теперь два, а не три:
+  # после перехода на модульный монолит Auth уехал внутрь flow-api, и его тесты стали гейтом этого образа.
+  # Публикуем только с main и только не из pull_request: форк не должен уметь положить образ в реестр.
+
+  image-api:
+    name: Образ · flow-api
+    # test-auth здесь не для полноты: Auth-модуль компилируется внутрь этого образа, значит его
+    # падение обязано останавливать публикацию ровно так же, как падение тестов Api.
+    needs: [changes, check-vars, lint-sdk, lint-docker, build, test-unit, test-infra, test-api, test-auth]
+    # Условие разбираем поимённо, а не через needs.*: при провале build тестовые джобы получают результат
+    # skipped, и общая проверка «нет ни одного failure» пропустила бы сборку образа на несобирающемся коде.
+    # skipped у тестов допустим только осознанно — при ручном запуске со skip_tests.
+    if: >-
+      always()
+      && needs.changes.outputs.api == 'true'
+      && needs.changes.result == 'success'
+      && needs.check-vars.result == 'success'
+      && needs.lint-sdk.result == 'success'
+      && needs.lint-docker.result == 'success'
+      && needs.build.result == 'success'
+      && (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped')
+      && (needs.test-infra.result == 'success' || needs.test-infra.result == 'skipped')
+      && (needs.test-api.result == 'success' || needs.test-api.result == 'skipped')
+      && (needs.test-auth.result == 'success' || needs.test-auth.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    # Digest забирает resolve-images: в манифестах кластера стоят только digest'ы, а не теги,
+    # иначе kubectl apply не увидит изменений и rollout просто не произойдёт.
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Сборка образа
+        id: image
+        uses: ./.github/actions/build-image
+        with:
+          module: api
+          dockerfile: src/Flow.Api/Dockerfile
+          registry: ${{ needs.changes.outputs.registry }}
+          image: ${{ needs.changes.outputs.registry }}/${{ needs.changes.outputs.prefix }}/flow-api
+          push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && inputs.skip_tests != true }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+
+  image-client:
+    name: Образ · flow-client
+    needs: [changes, check-vars, lint-sdk, lint-docker, build, test-unit]
+    # У клиента тестового проекта нет вовсе, поэтому его единственный содержательный гейт — компиляция WASM.
+    if: >-
+      always()
+      && needs.changes.outputs.client == 'true'
+      && needs.changes.result == 'success'
+      && needs.check-vars.result == 'success'
+      && needs.lint-sdk.result == 'success'
+      && needs.lint-docker.result == 'success'
+      && needs.build.result == 'success'
+      && (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    # Digest забирает resolve-images: в манифестах кластера стоят только digest'ы, а не теги,
+    # иначе kubectl apply не увидит изменений и rollout просто не произойдёт.
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Сборка образа
+        id: image
+        uses: ./.github/actions/build-image
+        with:
+          module: client
+          dockerfile: src/Flow.Client/Dockerfile
+          registry: ${{ needs.changes.outputs.registry }}
+          image: ${{ needs.changes.outputs.registry }}/${{ needs.changes.outputs.prefix }}/flow-client
+          push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && inputs.skip_tests != true }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+  # ---------- Стадия 2: манифесты ----------
+
+  lint-manifests:
+    name: Проверка · манифесты k8s
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Версии инструментов прибиты намеренно: разные версии kustomize дают разный рендер, и «локально
+      # не воспроизводится» на одном домашнем раннере потом ищут часами.
+      KUSTOMIZE_VERSION: v5.5.0
+      KUBECONFORM_VERSION: v0.6.7
+      K8S_VERSION: ${{ vars.K8S_VERSION || '1.32.0' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Инструменты
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" | sudo tar -xz -C /usr/local/bin kustomize
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | sudo tar -xz -C /usr/local/bin kubeconform
+          python3 -m pip install --quiet pyyaml
+
+      # Плейсхолдеры ${...} тут намеренно не подставляются: на этом шаге проверяется структура, а не
+      # значения кластера. Джоба офлайновая и быстрая — красный крестик должен появляться на первой
+      # минуте, а не на двадцатой.
+      - name: Сборка оверлеев
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p rendered
+          for dir in k8s/overlays/home/*/; do
+            module="$(basename "$dir")"
+            kustomize build "$dir" > "rendered/$module.yaml"
+            echo "собран $module: $(grep -c '^kind:' "rendered/$module.yaml") объектов"
+          done
+
+      # kustomize не умеет читать файлы выше своего корня (LoadRestrictionsRootOnly), поэтому файлы,
+      # общие у локального стенда и кластера, лежат в k8s/ копиями. Копия без проверки расходится с
+      # оригиналом молча, и расходится в худшую сторону: в кластере поедет одна процедура восстановления,
+      # а на стенде другая — выяснится это в тот день, когда бэкап понадобится. То же с пресетом моделей:
+      # разъехавшийся models.ini означает, что локально поиск работает, а в кластере молча нет.
+      - name: Копии файлов совпадают с оригиналами
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Пары «оригинал:копия». Появился ещё один общий файл — допиши строку сюда, и больше никуда.
+          pairs="docker/data/backup.sh:k8s/base/backup/backup.sh
+                 docker/ai/models.ini:k8s/base/ai/models.ini"
+          status=0
+          for pair in $pairs; do
+            original="${pair%%:*}"
+            copy="${pair#*:}"
+            if diff -u "$original" "$copy"; then
+              echo "совпадает: $copy"
+            else
+              echo "::error file=$copy,title=копия разошлась::синхронизируй с $original"
+              status=1
+            fi
+          done
+          exit "$status"
+
+      # Пресет моделей связан с .env.example тремя нитями, и все три рвутся молча: имя секции — это
+      # то, что .NET кладёт в поле model; путь к весам — то, что качает Job закачки; а режимы обязаны
+      # быть пер-модельными, иначе эмбеддер начинает отдавать нули без единой ошибки в логе.
+      - name: Пресет моделей сходится с переменными
+        shell: bash
+        run: python3 scripts/check-ai-preset.py
+
+      - name: kubeconform (схемы объектов)
+        shell: bash
+        run: kubeconform -strict -summary -kubernetes-version "$K8S_VERSION" rendered/
+
+      # Проверка не общая, а здешняя: клиенту nginx runAsNonRoot запрещён, Job обязан иметь уникальное имя
+      # на релиз, метка релиза не должна попадать в селектор. Подробности — в шапке самого скрипта.
+      - name: Проверки этого проекта
+        shell: bash
+        run: python3 scripts/check-manifests.py rendered/
+
+      - name: Отрендеренные манифесты в артефакт
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifests-lint
+          path: rendered/
+          retention-days: 7
+
+  resolve-images:
+    name: Набор образов релиза
+    needs: [changes, lint-manifests, image-api, image-client]
+    # Только там, где образы реально существуют в реестре: на ветке и в PR публикации нет, резолвить нечего.
+    # Пропущенная джоба образа — норма (модуль не менялся), провалившаяся — нет.
+    if: >-
+      always()
+      && needs.changes.result == 'success'
+      && needs.lint-manifests.result == 'success'
+      && needs.image-api.result != 'failure'
+      && needs.image-client.result != 'failure'
+      && ((github.ref == 'refs/heads/main' && github.event_name != 'pull_request') || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Логинимся даже при публичных образах: анонимные pull'ы Docker Hub ограничены по IP, а раннеры
+      # GitHub этот IP делят со всем миром.
+      - name: Логин в реестр
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ needs.changes.outputs.registry }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Отрендеренные манифесты
+        uses: actions/download-artifact@v4
+        with:
+          name: manifests-lint
+          path: rendered
+
+      - name: Резолв digest'ов
+        shell: bash
+        run: |
+          python3 scripts/resolve-images.py rendered/ \
+            --registry "${{ needs.changes.outputs.registry }}" \
+            --prefix "${{ needs.changes.outputs.prefix }}" \
+            --digest "flow-api=${{ needs.image-api.outputs.digest }}" \
+            --digest "flow-client=${{ needs.image-client.outputs.digest }}"
+
+      - name: release.json в артефакт
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}
+          path: release.json
+          retention-days: 30
+
+  render:
+    name: Манифесты · рендер
+    needs: [changes, resolve-images]
+    if: needs.resolve-images.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KUSTOMIZE_VERSION: v5.5.0
+      KUBECONFORM_VERSION: v0.6.7
+      K8S_VERSION: ${{ vars.K8S_VERSION || '1.32.0' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Инструменты
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" | sudo tar -xz -C /usr/local/bin kustomize
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | sudo tar -xz -C /usr/local/bin kubeconform
+          python3 -m pip install --quiet pyyaml
+
+      - name: release.json
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.sha }}
+
+      # Подстановка идёт ПО СПИСКУ имён, а не подряд. Иначе envsubst съел бы две вещи: $(VAR) —
+      # подстановку самого Kubernetes между env одного контейнера — и $AUTH_DB внутри скрипта Job'а,
+      # который тогда превратился бы в пустую строку и создал базу с пустым именем.
+      - name: Подстановка значений кластера
+        shell: bash
+        env:
+          STORAGE_CLASS: ${{ vars.STORAGE_CLASS }}
+          WORKER_NODE: ${{ vars.WORKER_NODE }}
+          GPU_NODE: ${{ vars.GPU_NODE || vars.WORKER_NODE }}
+          INGRESS_CLASS: ${{ vars.INGRESS_CLASS || 'nginx' }}
+          PUBLIC_CLIENT_ORIGIN: ${{ vars.PUBLIC_CLIENT_ORIGIN }}
+          PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL }}
+          BACKUP_CRON: ${{ vars.BACKUP_CRON || '0 3 * * *' }}
+          BACKUP_TZ: ${{ vars.BACKUP_TZ || 'Europe/Moscow' }}
+          # Сколько ядер отдать моделям. Дефолт 8, а не 4: на боевых чанках (1536 символов) четыре ядра
+          # дают батч индексации в 60.9 с при таймауте клиента 60 с — то есть отказ, а не медленно.
+          # Это же число уезжает в --threads через Downward API, отдельной переменной для потоков нет.
+          AI_CPU_LIMIT: ${{ vars.AI_CPU_LIMIT || '8' }}
+        run: |
+          set -euo pipefail
+          cp -r k8s work
+
+          # Ingress'у нужно имя хоста без схемы, а человеку удобнее задавать полный адрес — тот же, что
+          # видит браузер. Поэтому хосты выводим из URL, а не заводим ещё три переменные, которые рано
+          # или поздно разъедутся со своими URL.
+          PUBLIC_CLIENT_HOST="$(printf '%s' "${PUBLIC_CLIENT_ORIGIN:-}" | sed -E 's#^[a-z]+://##; s#/.*$##')"
+          PUBLIC_API_HOST="$(printf '%s' "${PUBLIC_API_URL:-}" | sed -E 's#^[a-z]+://##; s#/.*$##')"
+          RELEASE_SHA="${GITHUB_SHA:0:7}"
+          export PUBLIC_CLIENT_HOST PUBLIC_API_HOST RELEASE_SHA
+
+          # Один список на всё: и что проверить на пустоту, и что подставить. Двух списков быть не должно —
+          # разъедутся, и подстановка молча начнёт вставлять пустые строки.
+          required="STORAGE_CLASS WORKER_NODE GPU_NODE INGRESS_CLASS AI_CPU_LIMIT
+                    PUBLIC_CLIENT_ORIGIN PUBLIC_API_URL
+                    PUBLIC_CLIENT_HOST PUBLIC_API_HOST
+                    RELEASE_SHA BACKUP_CRON BACKUP_TZ"
+
+          # Проверяем ДО подстановки: envsubst незаданное имя заменяет пустой строкой, и манифест остаётся
+          # синтаксически валидным. Пустой storageClassName или пустой хост Ingress обнаруживаются уже
+          # в кластере и выглядят как что угодно, только не как забытая переменная в настройках репозитория.
+          missing=
+          for name in $required; do
+            eval "value=\${$name:-}"
+            [ -n "$value" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error title=render::не заданы переменные:$missing — подстановка дала бы пустые значения. Settings → Secrets and variables → Actions → Variables"
+            exit 1
+          fi
+
+          names=
+          for name in $required; do
+            names="$names\${$name}"
+          done
+
+          find work -name '*.yaml' -print0 | while IFS= read -r -d '' file; do
+            envsubst "$names" < "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+          done
+
+          # Остался плейсхолдер — значит в манифесте есть имя, которого нет в списке выше. Ищем только
+          # форму ${ИМЯ}: запись ${ИМЯ:?} — это шелл внутри скриптов Job, её envsubst не трогает и трогать
+          # не должен. Класс имён широкий намеренно: прежний шаблон [A-Z_]* молча пропускал всё с цифрами,
+          # то есть ровно S3_ENDPOINT и K8S_NAMESPACE.
+          # shellcheck disable=SC2016
+          if grep -rnE '\$\{[A-Za-z_][A-Za-z0-9_]*\}' work --include='*.yaml'; then
+            echo "::error title=render::в манифестах остались неподставленные плейсхолдеры (см. выше) — либо переменной нет в списке required этой джобы, либо в комментарии написан литерал вида доллар-скобка"
+            exit 1
+          fi
+
+      # kustomize edit set image пишет прямо в kustomization.yaml, поэтому работаем на копии work,
+      # а не на дереве репозитория: рендер не должен менять исходники.
+      - name: Закрепление образов по digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          release="$PWD/release.json"
+          for dir in work/overlays/home/*/; do
+            module="$(basename "$dir")"
+            # Только образы ЭТОГО модуля, а не весь набор релиза. Причина не в аккуратности: трансформер
+            # images сопоставляет образы по имени без тега, а ghcr.io/ggml-org/llama.cpp — это и CPU-вариант
+            # (:server), и CUDA-шный (:server-cuda). Скормив оверлею весь набор, мы бы записали в него
+            # последний подошедший по имени digest, и профиль на процессоре уехал бы на CUDA-образе
+            # без единой жалобы от kustomize.
+            (
+              cd "$dir"
+              jq -r --arg module "$module" '.modules[$module][]?' "$release" \
+                | while IFS= read -r pair; do kustomize edit set image "$pair"; done
+            )
+          done
+
+      - name: Рендер по модулям
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p manifests
+          for dir in work/overlays/home/*/; do
+            module="$(basename "$dir")"
+            kustomize build "$dir" > "manifests/$module.yaml"
+          done
+          kubeconform -strict -summary -kubernetes-version "$K8S_VERSION" manifests/
+          python3 scripts/check-manifests.py --require-digest manifests/
+
+          {
+            echo "### Отрендеренные манифесты"
+            echo
+            echo "| Модуль | Объектов |"
+            echo "|--------|----------|"
+            for file in manifests/*.yaml; do
+              echo "| $(basename "$file" .yaml) | $(grep -c '^kind:' "$file") |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Единственный артефакт, который будут применять джобы выкатки на этапе 3. Сами они ничего не
+      # рендерят — иначе стало бы возможным «api из одного рендера, client из другого».
+      - name: Манифесты в артефакт
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests/
+          retention-days: 30
+
+  # ---------- Стадия 3: выкатка (self-hosted раннер flow-home) ----------
+  #
+  # Джобы выкатки идут ТОЛЬКО на своём раннере (runs-on: [self-hosted, flow]) и ТОЛЬКО узким токеном
+  # KUBE_DEPLOY_B64 — ServiceAccount flow-deployer, права на flow/flow-data/flow-ai и больше никуда.
+  # Условие запуска — на push в main и вручную — стоит лишь у deploy-platform и deploy-storage; остальные
+  # висят на них через needs и пропускаются автоматически, если корневые пропущены (на PR и ветках выкатки
+  # нет — там ещё и образов в реестре нет). Сами джобы ничего не рендерят: применяют артефакт
+  # manifests-<sha> от джобы render, иначе стало бы возможным api из одного рендера, client из другого.
+
+  deploy-platform:
+    name: Выкатка · платформа (config + secrets)
+    needs: render
+    if: >-
+      needs.render.result == 'success'
+      && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 10
+    steps:
+      - name: ConfigMap flow-config, Secret flow-secrets и regcred в трёх неймспейсах
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          # flow-config: внутренние адреса сервисов фиксированы архитектурой, тумблеры и модели —
+          # переменными с дефолтами, чтобы не заводить два десятка Variables ради почти неизменных значений.
+          POSTGRES_HOST: flow-postgres.flow-data.svc.cluster.local
+          POSTGRES_DB: ${{ vars.POSTGRES_DB || 'flow' }}
+          POSTGRES_USER: ${{ vars.POSTGRES_USER || 'flow' }}
+          S3_ENDPOINT: http://flow-s3.flow-data.svc.cluster.local:9000
+          S3_BUCKET: ${{ vars.S3_BUCKET || 'flow' }}
+          S3_USE_SSL: 'false'
+          SEARCH_ENABLED: ${{ vars.SEARCH_ENABLED || 'true' }}
+          SEARCH_INDEXING_ENABLED: ${{ vars.SEARCH_INDEXING_ENABLED || 'true' }}
+          EMBEDDINGS_ENABLED: ${{ vars.EMBEDDINGS_ENABLED || 'true' }}
+          EMBEDDINGS_QUERY_ENDPOINT: http://flow-ai.flow-ai.svc.cluster.local:8081/v1
+          EMBEDDINGS_INDEXING_ENDPOINT: ''
+          EMBEDDINGS_MODEL: ${{ vars.EMBEDDINGS_MODEL || 'Qwen3-Embedding-0.6B' }}
+          EMBEDDINGS_MODEL_FILE: ${{ vars.EMBEDDINGS_MODEL_FILE || 'Qwen3-Embedding-0.6B-Q8_0.gguf' }}
+          EMBEDDINGS_MODEL_URL: ${{ vars.EMBEDDINGS_MODEL_URL || 'https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf' }}
+          EMBEDDINGS_MODEL_SHA256: ${{ vars.EMBEDDINGS_MODEL_SHA256 }}
+          RERANK_ENABLED: ${{ vars.RERANK_ENABLED || 'false' }}
+          RERANK_ENDPOINT: http://flow-ai.flow-ai.svc.cluster.local:8081/v1
+          RERANKER_MODEL: ${{ vars.RERANKER_MODEL || 'bge-reranker-v2-m3' }}
+          RERANKER_MODEL_FILE: ${{ vars.RERANKER_MODEL_FILE || 'bge-reranker-v2-m3-Q8_0.gguf' }}
+          RERANKER_MODEL_URL: ${{ vars.RERANKER_MODEL_URL || 'https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF/resolve/main/bge-reranker-v2-m3-Q8_0.gguf' }}
+          RERANKER_MODEL_SHA256: ${{ vars.RERANKER_MODEL_SHA256 }}
+          VISION_ENABLED: ${{ vars.VISION_ENABLED || 'false' }}
+          VISION_ENDPOINT: http://flow-vision.flow-ai.svc.cluster.local:8083/v1
+          VISION_MODEL: ${{ vars.VISION_MODEL || 'Qwen3-VL-Embedding-2B' }}
+          VISION_MODEL_REPO: ${{ vars.VISION_MODEL_REPO || 'Qwen/Qwen3-VL-Embedding-2B' }}
+          VISION_MAX_LEN: ${{ vars.VISION_MAX_LEN || '8192' }}
+          VISION_GPU_FRACTION: ${{ vars.VISION_GPU_FRACTION || '0.35' }}
+          AUTH_ALLOW_INSECURE_HTTP: ${{ vars.AUTH_ALLOW_INSECURE_HTTP || 'true' }}
+          BOOTSTRAP_ENABLED: ${{ vars.BOOTSTRAP_ENABLED || 'true' }}
+          BOOTSTRAP_ID: ${{ vars.BOOTSTRAP_ID }}
+          BOOTSTRAP_EMAIL: ${{ vars.BOOTSTRAP_EMAIL || 'admin@flow.local' }}
+          BOOTSTRAP_USERNAME: ${{ vars.BOOTSTRAP_USERNAME || 'admin' }}
+          BOOTSTRAP_FIRST_NAME: ${{ vars.BOOTSTRAP_FIRST_NAME || 'Admin' }}
+          BOOTSTRAP_LAST_NAME: ${{ vars.BOOTSTRAP_LAST_NAME || 'Flow' }}
+          BACKUP_KEEP: ${{ vars.BACKUP_KEEP || '7' }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          MINIO_ROOT_USER: ${{ secrets.MINIO_ROOT_USER }}
+          MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+          AUTH_CERT_PASSWORD: ${{ secrets.AUTH_CERT_PASSWORD }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          kc="$RUNNER_TEMP/kubeconfig"; printf '%s' "$KUBECONFIG_B64" | base64 -d > "$kc"
+          export KUBECONFIG="$kc"; trap 'rm -f "$kc" cfg.env sec.env' EXIT
+
+          # Через env-file, а не --from-literal: значение из --from-literal видно в списке процессов раннера,
+          # а секрет там светиться не должен. printenv читает переменную по имени; файлы под umask 077.
+          config_keys="POSTGRES_HOST POSTGRES_DB POSTGRES_USER S3_ENDPOINT S3_BUCKET S3_USE_SSL
+            SEARCH_ENABLED SEARCH_INDEXING_ENABLED EMBEDDINGS_ENABLED EMBEDDINGS_QUERY_ENDPOINT
+            EMBEDDINGS_INDEXING_ENDPOINT EMBEDDINGS_MODEL EMBEDDINGS_MODEL_FILE EMBEDDINGS_MODEL_URL
+            EMBEDDINGS_MODEL_SHA256 RERANK_ENABLED RERANK_ENDPOINT RERANKER_MODEL RERANKER_MODEL_FILE
+            RERANKER_MODEL_URL RERANKER_MODEL_SHA256 VISION_ENABLED VISION_ENDPOINT VISION_MODEL
+            VISION_MODEL_REPO VISION_MAX_LEN VISION_GPU_FRACTION AUTH_ALLOW_INSECURE_HTTP
+            BOOTSTRAP_ENABLED BOOTSTRAP_ID BOOTSTRAP_EMAIL BOOTSTRAP_USERNAME BOOTSTRAP_FIRST_NAME
+            BOOTSTRAP_LAST_NAME BACKUP_KEEP"
+          : > cfg.env
+          for k in $config_keys; do printf '%s=%s\n' "$k" "$(printenv "$k" || true)" >> cfg.env; done
+          : > sec.env
+          for k in POSTGRES_PASSWORD MINIO_ROOT_USER MINIO_ROOT_PASSWORD AUTH_CERT_PASSWORD; do
+            printf '%s=%s\n' "$k" "$(printenv "$k" || true)" >> sec.env
+          done
+
+          for ns in flow flow-data flow-ai; do
+            kubectl create configmap flow-config --from-env-file=cfg.env -n "$ns" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            kubectl create secret generic flow-secrets --from-env-file=sec.env -n "$ns" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            kubectl create secret docker-registry regcred -n "$ns" \
+              --docker-server=docker.io --docker-username="$REGISTRY_USERNAME" \
+              --docker-password="$REGISTRY_PASSWORD" --dry-run=client -o yaml | kubectl apply -f -
+          done
+          echo "flow-config, flow-secrets (4) и regcred созданы в flow / flow-data / flow-ai"
+
+  deploy-storage:
+    name: Выкатка · тома (PVC)
+    needs: render
+    if: >-
+      needs.render.result == 'success'
+      && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 10
+    steps:
+      - name: Отрендеренные манифесты
+        uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - name: Применить PVC
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_DEPLOY_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077; kc="$RUNNER_TEMP/kubeconfig"; printf '%s' "$KUBECONFIG_B64" | base64 -d > "$kc"
+          export KUBECONFIG="$kc"; trap 'rm -f "$kc"' EXIT
+          # Без -n: тома лежат в трёх неймспейсах, каждый объект несёт свой. Ждать нечего — local-path
+          # с WaitForFirstConsumer держит PVC в Pending, пока его не затребует под, и это норма, а не сбой.
+          kubectl apply -f manifests/storage.yaml
+          kubectl get pvc -A -l app.kubernetes.io/part-of=flow
+
+  deploy-postgres:
+    name: Выкатка · PostgreSQL
+    needs: [deploy-platform, deploy-storage]
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/postgres.yaml
+          namespace: flow-data
+          wait: statefulset/flow-postgres
+          timeout: 600s
+
+  deploy-s3:
+    name: Выкатка · MinIO
+    needs: [deploy-platform, deploy-storage]
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/s3.yaml
+          namespace: flow-data
+          wait: statefulset/flow-s3
+          timeout: 600s
+
+  deploy-api:
+    name: Выкатка · Flow.Api
+    needs: [deploy-postgres, deploy-s3]
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/api.yaml
+          namespace: flow
+          # 900с: startupProbe api до 300с (миграции) плюс скачивание образа с нуля.
+          wait: deployment/flow-api
+          timeout: 900s
+
+  deploy-client:
+    name: Выкатка · Flow.Client
+    needs: deploy-api
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/client.yaml
+          namespace: flow
+          wait: deployment/flow-client
+          timeout: 600s
+
+  deploy-ingress:
+    name: Выкатка · Ingress
+    needs: [deploy-api, deploy-client]
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/ingress.yaml
+          namespace: flow
+          # Ingress — не рабочая нагрузка, ждать rollout нечего: он либо принят admission'ом, либо отклонён.
+          wait: ''
+
+  # AI-слой и закачка весов — только вручную: веса это гигабайты, качаются разово, а модуль ai без них
+  # уходит в CrashLoop. Поэтому в автоматический путь (push в main) они не входят.
+
+  deploy-models-pull:
+    name: Выкатка · закачка весов (вручную)
+    needs: [deploy-platform, deploy-storage]
+    if: github.event_name == 'workflow_dispatch' && inputs.pull_models
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - name: Job закачки и ожидание
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_DEPLOY_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077; kc="$RUNNER_TEMP/kubeconfig"; printf '%s' "$KUBECONFIG_B64" | base64 -d > "$kc"
+          export KUBECONFIG="$kc"; trap 'rm -f "$kc"' EXIT
+          kubectl apply -f manifests/models.yaml
+          # Имя Job несёт суффикс релиза, поэтому ждём по метке, а не по имени.
+          kubectl -n flow-ai wait --for=condition=complete job \
+            -l app.kubernetes.io/name=models --timeout=7200s
+          kubectl -n flow-ai logs -l app.kubernetes.io/name=models --tail=20 || true
+
+  deploy-ai:
+    name: Выкатка · AI-слой (вручную)
+    needs: [deploy-platform, deploy-storage]
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_ai
+    runs-on: [self-hosted, flow]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: manifests-${{ github.sha }}
+          path: manifests
+      - uses: ./.github/actions/kube-apply
+        with:
+          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
+          file: manifests/ai.yaml
+          namespace: flow-ai
+          wait: deployment/flow-ai
+          timeout: 900s
+
+  # ---------- Агрегатор ----------
+
+  ci-ok:
+    name: CI
+    needs:
+      - changes
+      - lint-actions
+      - lint-docker
+      - lint-compose
+      - lint-editor
+      - lint-sdk
+      - check-vars
+      - build
+      - test-unit
+      - test-infra
+      - test-auth
+      - test-api
+      - image-api
+      - image-client
+      - lint-manifests
+      - resolve-images
+      - render
+    # Не always(): при отмене всего прогона ci-ok выполнился бы и честно посчитал cancelled провалом —
+    # на коммите оставался бы красный крестик там, где человек просто нажал «Cancel».
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Единственная джоба, которую имеет смысл ставить required-проверкой в branch protection: имена всех
+      # остальных меняются при любой правке пайплайна, а пропущенные по фильтру джобы сами по себе мерж не держат.
+      # Здесь же — таблица «кто именно упал», иначе required-проверка превращается в красный крестик без причины.
+      - name: Итог
+        shell: bash
+        # Результаты передаём через env, а не подстановкой в текст команды: подстановка ${{ }} внутри run
+        # склеивается с shell-кодом, и любая кавычка в значении ломает скрипт.
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          results="$NEEDS"
+          {
+            echo "### Итог CI"
+            echo
+            echo "| Джоба | Результат |"
+            echo "|-------|-----------|"
+            echo "$results" | jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          failed="$(echo "$results" | jq -r 'to_entries[] | select(.value.result == "failure") | .key' | paste -sd', ' -)"
+          if [ -n "$failed" ]; then
+            echo "::error title=CI::упали или отменены джобы: $failed"
+            exit 1
+          fi
+          echo "все джобы зелёные или осознанно пропущены"

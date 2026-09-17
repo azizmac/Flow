@@ -1,0 +1,24 @@
+# Внутрикластерный адрес клиента: http://flow-client.flow.svc.cluster.local:80.
+#
+# Потребитель один — Ingress клиента. Порт 80, а не 8080, как у api и auth: внутри контейнера слушает nginx
+# официального образа, и переносить его на другой порт значило бы править nginx.conf ради симметрии, которая
+# ничего не даёт.
+#
+# Метки релиза в селекторе нет — см. комментарий в k8s/base/auth/service.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-client
+  labels:
+    app.kubernetes.io/name: client
+    app.kubernetes.io/part-of: flow
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: client
+    app.kubernetes.io/part-of: flow
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

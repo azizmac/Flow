@@ -1,0 +1,21 @@
+# Оверлей домашнего кластера, слой бэкапов. Рендерится в manifests/backup.yaml.
+#
+# Как и у остальных модулей, оверлей задаёт только namespace и образ: расписание (${BACKUP_CRON}),
+# часовой пояс (${BACKUP_TZ}) и нода (${WORKER_NODE}) стоят плейсхолдерами в базе и подставляются
+# envsubst до kustomize build.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Бэкап живёт рядом с тем, что бэкапит: и постгрес, и том MinIO — в namespace данных, а межнеймспейсных
+# томов не бывает вовсе (PVC всегда видно только в своём namespace).
+namespace: flow-data
+
+resources:
+  - ../../../base/backup
+
+# Тот же образ, что у постгреса: pg_dump не должен быть старше сервера. Джоба релиза заменит тег на
+# digest, и важно, чтобы digest оказался тем же самым — иначе однажды бэкап пойдёт снимать дампы клиентом
+# другой мажорной версии.
+images:
+  - name: pgvector/pgvector
+    newTag: pg16

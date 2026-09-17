@@ -1,0 +1,7 @@
+# Модуль визуального поиска: Deployment и Service. Namespace и образ задаёт оверлей, метки — сами объекты
+# (почему не трансформером — см. k8s/base/embeddings/kustomization.yaml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - vision.yaml

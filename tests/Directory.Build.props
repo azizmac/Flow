@@ -1,0 +1,20 @@
+<Project>
+
+    <!-- Импорт родительского Directory.Build.props: MSBuild берёт только ближайший файл вверх по дереву,
+         и без этой строки появившийся позже Directory.Build.props в корне репозитория молча перестал бы
+         действовать на тестовые проекты. Condition — на случай, когда его там ещё нет. -->
+    <PropertyGroup>
+        <ParentBuildProps>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))</ParentBuildProps>
+    </PropertyGroup>
+    <Import Project="$(ParentBuildProps)" Condition="'$(ParentBuildProps)' != ''" />
+
+    <ItemGroup>
+        <!-- Аннотации с файлом и строкой прямо в diff PR: логгера GitHubActions в самом VSTest нет,
+             и без этого пакета запуск тестов с ним падает на «Could not find a test logger»,
+             то есть красной джобой при зелёных тестах.
+             Ссылка здесь, а не в пяти csproj: пакет нужен каждому тестовому проекту без исключений,
+             а объяснение, повторённое пять раз, при следующей правке разъедется по копиям. -->
+        <PackageReference Include="GitHubActionsTestLogger" Version="3.0.5" />
+    </ItemGroup>
+
+</Project>

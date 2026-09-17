@@ -1,5 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/launchsettings.json",
+  // Профиль один и он http. Профиль https на https://localhost:7062 убран намеренно: этот адрес вычищен
+  // из Cors:Origins Flow.Api/Flow.Auth и из Auth:Client:RedirectUris, потому что переменные окружения вида
+  // Cors__Origins__0 перекрывают только нулевой элемент массива — оставленный в appsettings localhost тихо
+  // остался бы разрешённым origin и redirect_uri в проде. Запуск клиента по 7062 после этого давал бы отказ
+  // CORS на Api и invalid redirect_uri от OpenIddict, то есть сломанный вход при внешне рабочей сборке.
+  // Нужен https локально — добавьте адрес и в Cors:Origins, и в Auth:Client:*RedirectUris обоих сервисов.
   "profiles": {
     "http": {
       "commandName": "Project",
@@ -7,16 +13,6 @@
       "launchBrowser": false,
       "inspectUri": "{wsProtocol}://{url.hostname}:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}",
       "applicationUrl": "http://localhost:5016",
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      }
-    },
-    "https": {
-      "commandName": "Project",
-      "dotnetRunMessages": true,
-      "launchBrowser": false,
-      "inspectUri": "{wsProtocol}://{url.hostname}:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}",
-      "applicationUrl": "https://localhost:7062;http://localhost:5016",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }

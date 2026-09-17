@@ -1,0 +1,13 @@
+# Слой приложения, модуль api: Deployment и Service Flow.Api.
+#
+# `namespace:` задаёт оверлей, `images:` — он же (в базе стоит заглушка flow-api:local, digest вписывает
+# джоба render). Ни Secret, ни ConfigMap в ресурсах нет: их создаёт джоба deploy-platform, а в репозитории
+# не лежит ни одного секрета.
+#
+# PVC у Flow.Api нет вовсе и заводить его не надо: состояние живёт в Postgres, вложения — в MinIO.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment.yaml
+  - service.yaml

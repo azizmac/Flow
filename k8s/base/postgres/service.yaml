@@ -1,0 +1,46 @@
+# Точка входа в базу для всего кластера.
+#
+# Почему headless (clusterIP: None). Обычный ClusterIP — это правило в iptables/IPVS и балансировка по
+# эндпоинтам; для единственного пода с постоянным соединением он не даёт ничего, кроме лишнего звена и
+# лишнего же класса ошибок («conntrack потерял долгоживущее соединение»). Headless отдаёт клиенту сразу
+# адрес пода, а StatefulSet вдобавок получает стабильное имя каждого пода:
+#   flow-postgres-0.flow-postgres.flow-data.svc.cluster.local
+# Это то самое имя, к которому придётся обращаться в тот день, когда реплик станет больше одной.
+#
+# Имя сервиса совпадает с именем StatefulSet — общий контракт слоя. Отсюда следует значение, которое
+# джоба deploy-platform обязана положить в ConfigMap flow-config:
+#   POSTGRES_HOST=flow-postgres.flow-data.svc.cluster.local
+# FQDN, а не короткое `flow-postgres`: Flow.Api и Flow.Auth живут в namespace flow, и короткое имя из
+# соседнего namespace не резолвится вовсе.
+#
+# publishNotReadyAddresses намеренно не включён (дефолт false): пока startupProbe не прошла, в DNS не
+# должно быть адреса — иначе Flow.Auth получит отказ соединения посреди восстановления по WAL и потратит
+# на него своё окно Startup:DatabaseWaitTimeoutSeconds.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: database
+spec:
+  clusterIP: None
+  # Селектор включает component: database — и это не украшение. Job создания базы flow_auth крутится в том
+  # же namespace и несёт те же метки name/part-of; без третьей метки его под попал бы в Endpoints этого
+  # сервиса на всё время своей работы, и часть соединений приложения уехала бы в контейнер с psql.
+  # Диагноз у такой ошибки отвратительный: «иногда connection refused сразу после выкатки».
+  #
+  # Селектор Service, в отличие от селектора Deployment, изменяемый — но метку релиза flow.io/release
+  # сюда всё равно не кладём: она меняется каждый релиз, и сервис на секунду оставался бы без эндпоинтов.
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: database
+  ports:
+    - name: postgres
+      port: 5432
+      # По имени порта контейнера, а не числом: если порт когда-нибудь переедет, править придётся
+      # одно место в StatefulSet, а не два в разных файлах.
+      targetPort: postgres
+      protocol: TCP

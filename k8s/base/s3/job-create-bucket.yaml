@@ -1,0 +1,107 @@
+# Создание бакета вложений — перенос сервиса s3-init из docker-compose.data.yml.
+#
+# Что изменилось по сравнению с compose и почему. Там было "mc mb -p local/$S3_BUCKET || true": любая
+# ошибка — неверные ключи, недоступное хранилище, опечатка в имени — глушилась, контейнер завершался
+# нулём, и отсутствие бакета всплывало гораздо позже, на первой загрузке вложения в рантайме (приложение
+# бакет само не создаёт). Здесь вместо этого "mc mb --ignore-existing" плюс "mc ls": повторный запуск
+# по-прежнему идемпотентен, но неверные ключи дают честный Failed прямо в выкатке, а "mc ls" доказывает,
+# что бакет не просто создан, а виден теми же ключами, которыми в него потом полезет Flow.Api.
+#
+# Имя заканчивается на ${RELEASE_SHA} потому, что Job иммутабелен: повторный apply поверх завершившегося
+# объекта с изменившимся spec падает с "field is immutable". Новый релиз — новый Job, а ttl убирает старые.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: flow-create-bucket-${RELEASE_SHA}
+  labels:
+    app.kubernetes.io/name: s3
+    app.kubernetes.io/part-of: flow
+spec:
+  # Чтобы кластер не копил завершённые объекты: час — достаточно, чтобы прочитать логи упавшей выкатки.
+  ttlSecondsAfterFinished: 3600
+  # Две повторных попытки сверх первой. Больше смысла нет: внутри скрипта уже есть минутное ожидание
+  # хранилища, а всё, что не лечится минутой, — это неверные ключи или неверный адрес, и их надо увидеть.
+  backoffLimit: 2
+  # Верхняя граница на весь Job: без неё зависший mc держал бы выкатку до таймаута джобы.
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: s3
+        app.kubernetes.io/part-of: flow
+    spec:
+      # Never, а не OnFailure: при OnFailure контейнер перезапускается в том же поде и вывод предыдущей
+      # попытки достаётся только через "logs --previous". С Never каждая попытка оставляет свой под со
+      # своими логами — ровно то, что собирает диагностический блок деплой-джобы.
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: mc
+          # Тот же quay.io: в Docker Hub образа mc больше нет.
+          image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+          imagePullPolicy: IfNotPresent
+          # Здесь именно command, а не args, — в отличие от самого MinIO. ENTRYPOINT образа mc это сам
+          # бинарь mc, и подменить надо именно его; в compose ровно по той же причине переопределялся
+          # entrypoint, а не command.
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              # depends_on: service_healthy в Kubernetes нет, а Job может стартовать раньше, чем MinIO
+              # поднялся. Ждём минуту: mc alias set сам проверяет и адрес, и ключи, поэтому неверные
+              # ключи после этой минуты всё равно дадут Failed, а не бесконечную петлю.
+              i=0
+              until mc alias set flow "$S3_ENDPOINT" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                  i=$((i + 1))
+                  if [ "$i" -ge 30 ]; then
+                      echo "хранилище $S3_ENDPOINT за минуту не ответило или не приняло ключи" >&2
+                      exit 1
+                  fi
+                  sleep 2
+              done
+              mc mb --ignore-existing "flow/$S3_BUCKET"
+              # Проверка, ради которой Job и существует: бакет есть и читается этими ключами.
+              mc ls "flow/$S3_BUCKET"
+              echo "бакет $S3_BUCKET готов"
+          env:
+            # Адрес берём из ConfigMap, а не пишем короткое http://flow-s3:9000, хотя Job живёт в том же
+            # namespace. Причина в том, что так Job проверяет ровно ту строку, по которой в хранилище
+            # пойдёт Flow.Api: опечатка в S3_ENDPOINT падает здесь, в выкатке, а не в рантайме.
+            - name: S3_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: S3_ENDPOINT
+            - name: S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: S3_BUCKET
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: MINIO_ROOT_PASSWORD
+          resources:
+            # Одна короткая команда: просим минимум, чтобы Job не мешал планированию остальных подов на
+            # единственной рабочей ноде.
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            # runAsNonRoot не ставим: mc пишет конфиг алиаса в /root/.mc, и non-root в этом образе
+            # упёрся бы в права на домашний каталог. Привилегии при этом не нужны ни одной.
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL

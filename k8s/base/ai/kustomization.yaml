@@ -1,0 +1,20 @@
+# Модуль текстового ИИ: Deployment, Service и ConfigMap с пресетом моделей.
+#
+# Поля `namespace:` здесь нет: по контракту слоёв namespace задаёт оверлей (flow-ai), а база остаётся
+# пригодной для любого контура. Метки проставлены руками прямо на объектах, а не трансформером `labels:` —
+# трансформер умеет писать в селекторы, а селектор Deployment иммутабелен, и любая метка, попавшая туда
+# однажды, делает следующий apply невозможным. Метку релиза flow.io/release добавляет джоба рендера.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ai.yaml
+
+# models.ini лежит здесь копией docker/ai/models.ini: kustomize не читает файлы выше своего корня,
+# а держать пресет только в docker/ значило бы либо поднять корень до репозитория, либо собирать
+# ConfigMap в CI руками. Копия дешевле обоих вариантов, а расхождение ловит проверка в ci.yml —
+# тот же приём, что у k8s/base/backup/backup.sh.
+configMapGenerator:
+  - name: flow-ai-models
+    files:
+      - models.ini

@@ -1,0 +1,225 @@
+# PostgreSQL слоя данных. Перенос сервиса `postgres` из docker-compose.data.yml, но с поправкой на то,
+# чем Kubernetes отличается от Compose: рестарт здесь не `restart: unless-stopped`, а пересоздание пода
+# на произвольной ноде, поэтому всё, что в Compose было неявным (том привязан к машине, контейнер живёт
+# вечно, порядок старта задаёт depends_on), приходится проговаривать явно.
+#
+# Почему StatefulSet, а не Deployment. Дело не в количестве реплик (она одна), а в стратегии замены:
+# Deployment по умолчанию поднимает новый под до остановки старого, и два процесса postgres на одном
+# каталоге PGDATA — это либо «lock file already exists», либо испорченные данные. StatefulSet гарантирует
+# «сначала погасили, потом подняли», причём без Recreate-строчки: это его встроенное поведение.
+#
+# Почему образ pgvector/pgvector:pg16, а не postgres:16. Миграция выполняет CREATE EXTENSION vector,
+# а в модели поиска есть колонка halfvec(512) — на чистом postgres обе вещи падают при старте Flow.Api,
+# и симптом выглядит как ошибка миграции, а не как «не тот образ».
+#
+# Почему нет volumeClaimTemplates. PVC flow-postgres-data живёт в отдельном слое k8s/base/storage и
+# применяется только вручную: шаблон тома привязал бы жизнь PGDATA к жизни контроллера, а StatefulSet
+# приходится пересоздавать (у него иммутабельны selector, serviceName и сам шаблон тома).
+#
+# Почему нет runAsNonRoot. Официальный образ postgres стартует от root и сам переключается на пользователя
+# postgres через gosu — ему нужны права root ровно на один шаг: chown PGDATA после того, как том
+# примонтирован. С runAsNonRoot: true entrypoint падает на этом chown, и под уходит в CrashLoopBackOff
+# с сообщением про права доступа к каталогу, а не про securityContext.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: flow-postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: flow
+    # component нужен, чтобы отличать поды самой БД от пода Job создания второй базы: у Job те же две
+    # первые метки, и без component он попал бы в Endpoints headless-сервиса. Подробнее — в service.yaml.
+    app.kubernetes.io/component: database
+spec:
+  # Ровно одна реплика — и это не «пока что». Репликация postgres в Kubernetes делается оператором
+  # (CloudNativePG, Zalando) или patroni, а не увеличением replicas: вторая реплика StatefulSet просто
+  # получила бы второй пустой том и второй независимый кластер БД.
+  replicas: 1
+  serviceName: flow-postgres
+  updateStrategy:
+    # RollingUpdate при одной реплике означает «удалить под, дождаться, создать новый» — то есть короткий
+    # простой БД при каждом изменении спеки. Альтернатива OnDelete не нужна: изменения сюда приезжают
+    # только из git через выкатку, и они должны применяться сами.
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/part-of: flow
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: flow
+        app.kubernetes.io/component: database
+    spec:
+      # Секрет доступа к реестру создаёт джоба deploy-platform (в репозитории секретов нет). Для чужого
+      # образа с Docker Hub это не формальность: анонимные pull'ы лимитируются по IP, и на пересоздании
+      # ноды или после чистки образов домашний кластер упирается в лимит первым делом.
+      imagePullSecrets:
+        - name: regcred
+      # Том local-path — это каталог на диске конкретной ноды, и созданный им PV несёт nodeAffinity.
+      # Под на чужой ноде не запустился бы всё равно, но с диагнозом «volume node affinity conflict»,
+      # который читается хуже, чем честное «нет ноды с таким hostname».
+      nodeSelector:
+        kubernetes.io/hostname: "${WORKER_NODE}"
+      # 120 секунд вместо дефолтных 30. Столько может занимать контрольная точка при остановке БД под
+      # нагрузкой; если не успеть, kubelet пришлёт SIGKILL, и следующий старт уйдёт в восстановление
+      # по WAL — ровно тот сценарий, под который ниже растянут startupProbe.
+      terminationGracePeriodSeconds: 120
+      volumes:
+        # Данные. Имя claim фиксировано контрактом слоя storage; PVC создаётся отдельно и намеренно
+        # переживает удаление этого StatefulSet.
+        - name: data
+          persistentVolumeClaim:
+            claimName: flow-postgres-data
+        # /dev/shm. Docker и containerd дают контейнеру 64 МБ разделяемой памяти, а postgres размещает
+        # в ней очереди параллельных планов: при parallel seq scan по большой таблице сервер падает с
+        # «could not resize shared memory segment … No space left on device». В Compose об этом можно
+        # было не думать только потому, что параллельных запросов на дев-данных не возникало.
+        - name: dev-shm
+          emptyDir:
+            medium: Memory
+            # Память этого тома считается в лимит пода (cgroup), поэтому размер задан явно и с запасом
+            # относительно limits.memory ниже: без sizeLimit том может вырасти до лимита пода и
+            # утащить за собой сам postgres по OOM.
+            sizeLimit: 256Mi
+      containers:
+        - name: postgres
+          # Тег-заглушка: реальный образ приезжает digest'ом через `kustomize edit set image` в джобе
+          # рендера. Тег осмысленный, а не latest, чтобы `kubectl kustomize` руками собирал рабочий
+          # манифест, а не заготовку.
+          image: pgvector/pgvector:pg16
+          # Образы в релизе закреплены по digest, поэтому перекачивать уже скачанный слой не нужно —
+          # и не хочется: см. лимиты Docker Hub выше.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            # Несекретная часть — из ConfigMap flow-config, пароль — из Secret flow-secrets. Оба объекта
+            # создаёт джоба deploy-platform из GitHub Variables и Secrets; kustomize их не генерирует,
+            # в репозитории их нет. Через envFrom целиком ConfigMap не подключаем намеренно: в нём лежат
+            # десятки ключей всего проекта (PUBLIC_*, SEARCH_*, EMBEDDINGS_*), и postgres не должен
+            # реагировать перезапуском на правку настройки поиска.
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              # Подпуть обязателен. PGDATA по умолчанию — сам /var/lib/postgresql/data, а initdb
+              # отказывается работать в непустом каталоге. На томе, который провижнер отдаёт как
+              # отформатированный раздел, там лежит lost+found — и первый же старт падает с
+              # «directory exists but is not empty». Подпуть подсовывает контейнеру заведомо пустой
+              # подкаталог тома. Цена — при переносе данных из docker-тома flow-postgres-data их надо
+              # класть не в корень PVC, а в подкаталог pgdata.
+              subPath: pgdata
+            - name: dev-shm
+              mountPath: /dev/shm
+          # Пробы — через pg_isready, а не через TCP-порт: порт открывается раньше, чем сервер готов
+          # принимать запросы, и tcpSocket-проба пометила бы под готовым посреди восстановления.
+          #
+          # Почему -h 127.0.0.1, а не unix-сокет (дефолт pg_isready). При первой инициализации тома
+          # entrypoint образа поднимает временный сервер с listen_addresses='' — только на сокете, чтобы
+          # выполнить initdb и скрипты. По сокету pg_isready ответил бы «accepting connections» уже там,
+          # и Service начал бы слать трафик в базу, которая через секунду будет перезапущена. TCP
+          # появляется только у настоящего сервера.
+          #
+          # Почему ${POSTGRES_USER:?}, а не $POSTGRES_USER. Манифест перед сборкой прогоняется через
+          # envsubst (он подставляет имя ноды в nodeSelector выше). envsubst заменяет обе формы записи —
+          # и короткую $VAR, и её вариант в фигурных скобках, — включая переменные, которые адресованы
+          # шеллу внутри контейнера, а не рендеру. Форма ${VAR:?} для envsubst подстановкой не является
+          # и доезжает до пода как есть, а в шелле означает «упасть, если переменная не задана» — то есть
+          # заодно даёт внятную ошибку при потерянном ключе в ConfigMap вместо загадочного пустого имени
+          # пользователя.
+          #
+          # Отдельно про запись в этом комментарии. Ни одного литерала вида доллар-скобка-ИМЯ-скобка здесь
+          # быть не должно даже в тексте: джоба рендера после envsubst делает grep по такому шаблону и
+          # падает с «остались неподставленные плейсхолдеры». Комментарию всё равно, а сборка красная.
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - exec pg_isready -q -h 127.0.0.1 -p 5432 -U "${POSTGRES_USER:?}" -d "${POSTGRES_DB:?}" -t 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - exec pg_isready -q -h 127.0.0.1 -p 5432 -U "${POSTGRES_USER:?}" -d "${POSTGRES_DB:?}" -t 3
+            # Три минуты до перезапуска (30 с × 6). Намеренно тупая проба: перезапуск пода БД дороже
+            # любой отдельной неудачной попытки, а «postgres завис, но порт слушает» лечится
+            # перезапуском ничуть не лучше, чем ожиданием.
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - exec pg_isready -q -h 127.0.0.1 -p 5432 -U "${POSTGRES_USER:?}" -d "${POSTGRES_DB:?}" -t 3
+            # До десяти минут (10 с × 60) на первый ответ. Это не запас «на всякий случай»: для домашней
+            # машины жёсткое выключение по питанию — самый частый сценарий отказа, а после него postgres
+            # проигрывает WAL, и до конца восстановления он не отвечает вовсе. Без startupProbe этим
+            # окном управляла бы livenessProbe: она убивала бы под на середине восстановления, и каждая
+            # следующая попытка начиналась бы заново — бесконечный CrashLoopBackOff на исправной базе.
+            # Пока startupProbe не прошла, liveness и readiness не выполняются вообще.
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          lifecycle:
+            preStop:
+              # Kubernetes всегда шлёт SIGTERM и игнорирует STOPSIGNAL из Dockerfile (а официальный образ
+              # postgres ставит там SIGINT, и не случайно). Для postgres SIGTERM — это «умная» остановка:
+              # сервер ждёт, пока сами отключатся все клиенты, а Flow.Api держит пул соединений открытым.
+              # То есть без хука остановка упирается в terminationGracePeriodSeconds, заканчивается
+              # SIGKILL и восстановлением по WAL при следующем старте — при каждой выкатке.
+              # pg_ctl -m fast обрывает сессии, но корректно пишет контрольную точку.
+              #
+              # gosu нужен, потому что хук исполняется от root, а pg_ctl от root работать отказывается.
+              #
+              # Флаг -W (не дожидаться завершения) выбран осознанно, вместо привычного -w. С -w хук висит
+              # до конца остановки, но в конце остановки умирает postgres — то есть PID 1 контейнера, —
+              # и вместе с контейнером убивается сам процесс хука. Он не успевает вернуть нулевой код,
+              # и kubelet пишет предупреждение FailedPreStopHook при каждом штатном выключении: событие
+              # выглядит как поломка ровно там, где потом будут искать настоящую. С -W pg_ctl только шлёт
+              # сигнал и возвращает 0; следующий за хуком SIGTERM postmaster уже игнорирует, потому что
+              # режим остановки выставлен и понижать его он не станет. Проверено: контейнер выходит с
+              # кодом 0, в логе — «database system is shut down».
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - exec gosu postgres pg_ctl stop -D "${PGDATA:?}" -m fast -W
+          resources:
+            # Кластер из двух нод, и вся нагрузка данных живёт на одной worker-ноде. requests — это то,
+            # что планировщик резервирует под БД навсегда: 512Mi покрывают shared_buffers по умолчанию
+            # (128 МБ) плюс рабочую память бэкендов. limits — защита соседей по ноде: выселение по памяти
+            # на единственном worker'е стоит дорого, поэтому верхняя граница есть, но она заметно выше
+            # рабочего минимума. 2Gi — с учётом того, что в cgroup v2 в лимит попадает и страничный кэш
+            # файлов БД, и 256Mi тома /dev/shm; кэш вытесняется под давлением, а не приводит к OOM.
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi

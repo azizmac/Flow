@@ -192,12 +192,12 @@ public sealed class BCryptPasswordHasher(IOptions<BCryptOptions> options) : IPas
 ```json
 {
   "ConnectionStrings": { "Postgres": "Host=localhost;Port=5432;Database=flow_auth;Username=flow;Password=flow" },
-  "Cors": { "Origins": [ "http://localhost:5016", "https://localhost:7062" ] },
+  "Cors": { "Origins": [ "http://localhost:5016" ] },
   "Auth": {
     "Issuer": "http://localhost:5100",
     "Client": {
-      "RedirectUris": [ "http://localhost:5016/authentication/login-callback", "https://localhost:7062/authentication/login-callback" ],
-      "PostLogoutRedirectUris": [ "http://localhost:5016/authentication/logout-callback", "https://localhost:7062/authentication/logout-callback" ]
+      "RedirectUris": [ "http://localhost:5016/authentication/login-callback" ],
+      "PostLogoutRedirectUris": [ "http://localhost:5016/authentication/logout-callback" ]
     },
     "ApiClient": { "Secret": "dev-only-change-me" },
     "BCrypt": { "WorkFactor": 12 },
@@ -273,7 +273,9 @@ public interface IAccountService
 
 - Пакет `Microsoft.AspNetCore.Authentication.JwtBearer 10.0.0`.
 - `AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o => { Authority = Auth:BaseUrl; Audience = "flow-api"; RequireHttpsMetadata = !Development; MapInboundClaims = false; })`.
-- `AddAuthorization(o => o.FallbackPolicy = RequireAuthenticatedUser())` — закрыто всё; `[AllowAnonymous]` только `GET /` (health).
+- `AddAuthorization(o => o.FallbackPolicy = RequireAuthenticatedUser())` — закрыто всё; анонимных эндпоинтов ровно три:
+  `GET /` (признак жизни для человека), `GET /health/live` и `GET /health/ready` (пробы Kubernetes, `.AllowAnonymous()` на `MapHealthChecks`).
+  Пробе нельзя отвечать 401: для kubelet это «не готов никогда» — под не войдёт в Endpoints и выкатка встанет. Те же три эндпоинта анонимны и во Flow.Auth.
 - `Bootstrap/BootstrapOwnerSeeder : IHostedService`: после миграций шлёт `SeedOwnerCommand` из секции `Bootstrap` (та же, что у Auth: `Id`, `Username`, `Email`, `FirstName`, `LastName`; `Password` Api игнорирует). `Bootstrap:Enabled=false` отключает.
 - `Auth/ClaimsActorAccessor : IActorAccessor` — `sub` из `HttpContext.User`.
 - `UsersController`: `GET /users/me`, `POST /users/{id}/password`; `POST /users` принимает `Password`.

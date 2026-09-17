@@ -127,13 +127,19 @@ Hybrid search over tasks, comments, projects, people and the contents of attachm
 (`docs/TZ_search_vector.md`): vectors plus full text, merged with RRF, with highlighting. Postgres runs
 the `pgvector/pgvector:pg16` image (same data, same volumes); the `vector` extension comes with a migration.
 
-Three models, each a separate service of the `ai` profile in the data stack:
+Three models in two services of the `ai` profile in the data stack. Both text models live in one
+`llama-server` running in router mode: it serves them on one port and picks one by the `model` field of
+the request, loading a model only when something asks for it. Which models it serves and how is
+`docker/ai/models.ini`.
 
-| Model | What it adds | Port | Hardware |
+| Model | What it adds | Service | Hardware |
 |---|---|---|---|
-| `Qwen3-Embedding-0.6B` (llama.cpp) | search by meaning rather than by substring | 8081 | CPU is enough |
-| `bge-reranker-v2-m3` (llama.cpp CUDA) | the second ranking stage, the "Точнее" toggle | 8082 | needs a GPU |
-| `Qwen3-VL-Embedding-2B` (vLLM) | search over images and scans, no OCR | 8083 | needs a GPU |
+| `Qwen3-Embedding-0.6B` (llama.cpp) | search by meaning rather than by substring | `ai`, port 8081 | CPU is enough |
+| `bge-reranker-v2-m3` (llama.cpp) | the second ranking stage, the "Точнее" toggle | `ai`, port 8081 | CPU is enough |
+| `Qwen3-VL-Embedding-2B` (vLLM) | search over images and scans, no OCR | `embeddings-vl`, port 8083 | needs an NVIDIA GPU |
+
+With an NVIDIA card, add the hardware overlay so the text service uses the CUDA build of the same image:
+`docker compose -f docker-compose.data.yml -f docker/ai/nvidia.yml --profile ai up -d`.
 
 From scratch on a new machine:
 
@@ -173,9 +179,12 @@ recreates the `api` container — the setting silently falls back to its default
 After the first start the index has to be filled once — `POST /search/reindex` as Owner; after that it
 maintains itself.
 
-No GPU: leave `VISION_ENABLED` and `RERANK_ENABLED` at `false` and pull the embedder only
-(`sh docker/data/pull-models.sh embeddings`) — search stays hybrid, just without images and the second
-stage. No models at all: `EMBEDDINGS_ENABLED=false` — search works by words, indexing keeps writing chunks
+No GPU: leave `VISION_ENABLED` at `false` — the visual half is the only part that really needs a card.
+The second stage runs on CPU too: on an i9-14900KF the shipped window takes 8.5 s and ranks correctly.
+The old "tens of seconds on CPU" verdict was computed for a different model and a window of 25 pairs.
+The time is linear in text volume, so `MaxDocumentChars` and `TopN` are the levers — thread count is not,
+it barely moves. No models at all:
+`EMBEDDINGS_ENABLED=false` — search works by words, indexing keeps writing chunks
 without vectors, and once a model shows up Flow.Api queues those sources on startup and the vectors fill
 in. If the model runs on another machine, skip the `ai` profile entirely and point
 `EMBEDDINGS_QUERY_ENDPOINT` and `EMBEDDINGS_INDEXING_ENDPOINT` at it.
@@ -187,8 +196,10 @@ slower than the rest — the model is warming up.
 The visual half puts the frame and the query text into one space, so a screenshot is found by a
 description of what is on it, without OCR. An image gets a second chunk under its own model version, and a
 query searches both halves at once. Scans go there too: a PDF with no extractable text is indexed page by
-page (the first three by default). The model is served by vLLM rather than llama.cpp: the latter ignores
-images on its embeddings endpoint. Under Docker Desktop the service needs `VLLM_WSL2_ENABLE_PIN_MEMORY=1`,
+page (the first three by default). The model is served by vLLM rather than llama.cpp, and the reason is narrower
+than it looks: llama.cpp does push an image through the projector on its embeddings endpoint, but only
+in its own request shape, not in the OpenAI-style one this project sends, and it has no dedicated support
+for `Qwen3-VL-Embedding` either. Under Docker Desktop the service needs `VLLM_WSL2_ENABLE_PIN_MEMORY=1`,
 already set in compose.
 
 After that the index fills itself: every edit of a task, comment, project or person is queued in the same

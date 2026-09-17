@@ -1,0 +1,185 @@
+# Бэкапы по расписанию — перенос сервиса backup из docker-compose.data.yml.
+#
+# Что выброшено при переносе. В compose это был вечно живущий контейнер: busybox crond, поднятый
+# docker/data/scheduler.sh, плюс трюк с сохранением окружения в /tmp/backup.env (crond запускает задачи с
+# пустым окружением). В Kubernetes расписание — это поле schedule, а окружение подставляет kubelet, поэтому
+# scheduler.sh и сам crond не нужны вовсе: ни одного процесса между запусками не остаётся, и раз в сутки
+# кластер поднимает под, который живёт минуты. Сам backup.sh остался как был и приезжает ConfigMap'ом.
+#
+# Разовый бэкап руками (аналог "docker compose run --rm backup /scripts/backup.sh"):
+#   kubectl -n flow-data create job --from=cronjob/flow-backup backup-manual-$(date +%s)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: flow-backup
+  labels:
+    app.kubernetes.io/name: backup
+    app.kubernetes.io/part-of: flow
+spec:
+  # Кавычки обязательны, и это не стиль: envsubst подставляет значение до разбора YAML, а расписание вида
+  # */5 * * * * без кавычек начинается со звёздочки — то есть с указателя якоря, и файл перестаёт
+  # разбираться вовсе. С кавычками kustomize сам выведет строку в правильном виде.
+  schedule: "${BACKUP_CRON}"
+  # Без timeZone расписание считается в UTC — "0 3 * * *" отработал бы в шесть утра по Москве. Поле
+  # появилось в 1.25 и стабильно с 1.27, наш кластер 1.32.
+  timeZone: "${BACKUP_TZ}"
+  # Forbid, а не Allow: два pg_dump одной базы одновременно бессмысленны, а два tar по тому MinIO ещё и
+  # подерутся за диск. Если предыдущий запуск не закончился, следующий пропускается.
+  concurrencyPolicy: Forbid
+  # Час на то, чтобы запуск, пропущенный из-за выключенной машины или перегруженного планировщика,
+  # всё-таки состоялся. Больше ставить нельзя не из осторожности, а из механики: контроллер считает
+  # пропущенные слоты внутри этого окна и при сотне пропусков вообще отказывается запускать CronJob
+  # ("too many missed start times"). При суточном расписании в час укладывается ровно один слот.
+  startingDeadlineSeconds: 3600
+  # История: три последних успеха и три последних провала. Это единственный способ утром узнать, что было
+  # ночью, — логи живут ровно столько, сколько живёт под.
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # Двое суток, то есть заведомо больше суточного интервала: подчищать историю расписания должны
+      # лимиты выше, а не ttl, иначе к утру от ночного запуска не останется ни пода, ни логов. Смысл ttl
+      # в другом: Job, созданный руками через "kubectl create job --from=cronjob/flow-backup", не имеет
+      # ownerReference на CronJob, и лимиты истории его не видят вообще — он останется в namespace
+      # навсегда. Вот его и убирает ttl.
+      ttlSecondsAfterFinished: 172800
+      # Одна повторная попытка: она покрывает разовую осечку вроде перезапуска постгреса ровно в момент
+      # дампа. Честная оговорка — каждая попытка создаёт в /backups свой каталог со своей отметкой
+      # времени, а ротация в backup.sh считает каталоги, а не удачные бэкапы: серия падений вытеснит
+      # хорошие копии. Поэтому попытка одна, а не пять.
+      backoffLimit: 1
+      # Верхняя граница на весь запуск. При concurrencyPolicy: Forbid зависший pg_dump молча заблокировал
+      # бы все последующие бэкапы, и заметили бы это через неделю по отсутствию файлов.
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: backup
+            app.kubernetes.io/part-of: flow
+        spec:
+          restartPolicy: Never
+          # Под прибит к рабочей ноде, и это не дань единообразию, а условие работоспособности: том
+          # flow-minio-data монтируется сюда же, а он ReadWriteOnce. RWO в Kubernetes означает "один узел",
+          # а не "один под": пока оба пода на одной ноде, второе монтирование (у нас — только на чтение)
+          # разрешено. Уехал бы бэкап на другую ноду — получили бы под, вечно висящий в ContainerCreating
+          # с FailedAttachVolume. Подробности выбора — в комментарии к тому ниже.
+          nodeSelector:
+            kubernetes.io/hostname: ${WORKER_NODE}
+          imagePullSecrets:
+            # Здесь regcred действительно нужен: образ pgvector тянется из Docker Hub, где анонимные
+            # pull'ы ограничены по IP, а домашний кластер сидит за одним адресом.
+            - name: regcred
+          containers:
+            - name: backup
+              # Тот же образ, что у самой БД, и это обязательное условие, а не удобство: pg_dump обязан
+              # быть не старше сервера, иначе он отказывается работать с ошибкой про версию сервера.
+              # Держим оба образа в одной переменной POSTGRES_IMAGE и обновляем вместе.
+              image: pgvector/pgvector:pg16
+              imagePullPolicy: IfNotPresent
+              # Скрипт запускается через sh явно: файл приезжает из ConfigMap, и так его работоспособность
+              # не зависит от бита исполнения на смонтированном файле.
+              command:
+                - /bin/sh
+                - /scripts/backup.sh
+              env:
+                # Имена переменных — те, что читает сам backup.sh и libpq (PGHOST, PGUSER, PGPASSWORD).
+                # Значения приходят из ConfigMap flow-config и Secret flow-secrets, которые кладёт джоба
+                # deploy-platform: пароль не должен светиться ни в манифесте, ни в kubectl get cm.
+                - name: PGHOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: flow-config
+                      key: POSTGRES_HOST
+                # Порт внутри кластера фиксирован контрактом: публикация портов — забота compose, в
+                # Kubernetes её заменяет Service, и переменной здесь быть нечему.
+                - name: PGPORT
+                  value: "5432"
+                - name: PGUSER
+                  valueFrom:
+                    configMapKeyRef:
+                      name: flow-config
+                      key: POSTGRES_USER
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: flow-secrets
+                      key: POSTGRES_PASSWORD
+                - name: POSTGRES_DB
+                  valueFrom:
+                    configMapKeyRef:
+                      name: flow-config
+                      key: POSTGRES_DB
+                # Вторая база (учётные записи Flow.Auth) дампится тем же скриптом отдельным вызовом.
+                - name: BACKUP_KEEP
+                  valueFrom:
+                    configMapKeyRef:
+                      name: flow-config
+                      key: BACKUP_KEEP
+                      # optional потому, что BACKUP_KEEP — необязательная Variable (§7.2 ТЗ): если её не
+                      # задали, ключа в ConfigMap не будет, а без optional под не стартует вовсе с
+                      # CreateContainerConfigError. Пустая переменная тут безопаснее падения: backup.sh
+                      # сам подставит свой дефолт в семь копий.
+                      optional: true
+                # Часовой пояс контейнера. Без него имена каталогов в /backups считаются в UTC, и ночной
+                # запуск по московскому расписанию превращается в каталог с вчерашней датой — при разборе
+                # инцидента это стоит дороже, чем строка манифеста.
+                - name: TZ
+                  value: "${BACKUP_TZ}"
+              resources:
+                # pg_dump пишет потоком и от размера базы по памяти почти не растёт; основной расход —
+                # gzip внутри tar, а он однопоточный, отсюда лимит ровно в одно ядро: ночной бэкап не
+                # должен отбирать процессор у постгреса и MinIO, которые живут на этой же ноде.
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+              securityContext:
+                # runAsNonRoot здесь нет по факту: том MinIO наполняет процесс от root, и прочитать его
+                # целиком (включая служебный каталог .minio.sys) может тоже только root. Плюс каталоги
+                # томов от local-path принадлежат root, а /backups скрипт создаёт сам.
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backups
+                  mountPath: /backups
+                - name: minio-data
+                  mountPath: /minio-data
+                  readOnly: true
+          volumes:
+            - name: scripts
+              configMap:
+                # Имя без хвоста: суффикс-хэш добавляет configMapGenerator, а ссылку здесь kustomize
+                # переписывает сам. Подробности — в kustomization.yaml слоя.
+                name: flow-backup-scripts
+                defaultMode: 0755
+            - name: backups
+              persistentVolumeClaim:
+                claimName: flow-backups
+            # Объекты S3 копируются с диска, а не по сети — так же, как в compose, и это осознанный выбор
+            # из двух, названных в §4 ТЗ. Что он даёт: backup.sh остаётся дословно тем же файлом, что и в
+            # локальном стеке (один tar по /minio-data), и процедура восстановления для обоих стендов одна.
+            # Чем за это платим — честно, четырьмя пунктами:
+            #   1. Копия снимается на ходу, MinIO в этот момент пишет. Это признано в самом скрипте:
+            #      строгая консистентность требует остановленного хранилища. Для трекера задач допустимо —
+            #      в худшем случае в архив попадёт недописанный объект, а не испорченный бакет.
+            #   2. tar завершается кодом 1, если файл изменился во время чтения ("file changed as we read
+            #      it"). Под set -e это уронит весь Job уже ПОСЛЕ того, как оба дампа БД записаны: дампы
+            #      на месте, а Job красный. Лечится либо остановкой MinIO на время копии, либо правкой
+            #      backup.sh — сознательно не делаем ни того, ни другого, чтобы копия скрипта оставалась
+            #      дословной; знать про это надо.
+            #   3. Работает, только пока оба пода на одной ноде (см. nodeSelector выше). Появится вторая
+            #      рабочая нода или сетевое RWO-хранилище — этот том придётся заменить на "mc mirror" по
+            #      сети, и тогда backup.sh перестанет быть общим с compose.
+            #   4. readOnly защищает бэкап от записи в бакет, но не наоборот: MinIO продолжает писать, и
+            #      бэкап конкурирует с ним за один и тот же диск.
+            - name: minio-data
+              persistentVolumeClaim:
+                claimName: flow-minio-data
+                readOnly: true

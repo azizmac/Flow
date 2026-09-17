@@ -1,0 +1,162 @@
+# Composite action: собрать образ одного модуля (api|auth|client) и, если просят, опубликовать его в реестр.
+#
+# Почему composite, а не reusable workflow (которым был .github/workflows/docker.yml): вложенные джобы
+# reusable workflow показываются в UI составными именами вида «Образ · flow-api / docker», и эти имена
+# меняются при любом рефакторинге файлов, а пропущенный вызов не создаёт вложенных чеков вовсе. Composite
+# action выполняется шагами ВНУТРИ вызывающей джобы, поэтому в списке запуска остаётся ровно одна строка
+# с тем именем, которое задал оркестратор (.github/workflows/ci.yml) — по красному крестику сразу видно,
+# какой именно модуль не собрался.
+#
+# Чекаут здесь намеренно не делается: action работает в рабочем каталоге вызывающей джобы, а context: '.'
+# ниже — это корень репозитория. Оркестратор обязан сделать actions/checkout до вызова, иначе сборка не
+# найдёт ни Dockerfile, ни исходников (все три Dockerfile копируют пути вида src/Flow.Api/... от корня).
+# Для публикации в GHCR вызывающей джобе нужно permissions: packages: write — встроенный GITHUB_TOKEN
+# без этого права получит 403 уже на логине.
+
+name: Собрать образ модуля
+description: >-
+  Сборка и публикация одного Docker-образа Flow (api|auth|client): свой scope кэша на модуль,
+  явная платформа linux/amd64, digest на выходе и строка отчёта в Job Summary.
+
+inputs:
+  module:
+    description: Модуль — api, auth или client. Задаёт scope кэша сборки и подпись строки в Job Summary.
+    required: true
+  dockerfile:
+    description: Путь к Dockerfile от корня репозитория, например src/Flow.Api/Dockerfile.
+    required: true
+  push:
+    # У composite action нет типов: любой input приходит строкой, поэтому ниже везде сравнение с 'true',
+    # а не `if: inputs.push`. Строка "false" непустая, а значит в `if` истинна — классические грабли,
+    # на которых публикация включилась бы в каждой ветке.
+    description: Публиковать образ в реестр — строка 'true' или 'false'. При 'false' образ только собирается.
+    required: false
+    default: 'false'
+  registry:
+    description: Реестр для логина. По умолчанию Docker Hub — образы проекта живут там (§1.2 ТЗ).
+    required: false
+    default: docker.io
+  image:
+    description: Полное имя образа без тега, например docker.io/not2ilya2work/flow-api. Теги добавляет metadata-action.
+    required: true
+  username:
+    # Реестр внешний, поэтому встроенный GITHUB_TOKEN здесь не применим вовсе: логин идёт парой секретов
+    # REGISTRY_USERNAME/REGISTRY_PASSWORD, которые оркестратор передаёт только в джобы публикации.
+    description: Логин в реестре (секрет REGISTRY_USERNAME). Нужен только при push='true'.
+    required: false
+    default: ''
+  password:
+    description: Пароль или access token реестра (секрет REGISTRY_PASSWORD). Нужен только при push='true'.
+    required: false
+    default: ''
+
+outputs:
+  digest:
+    # Именно этот digest забирает джоба resolve-images: в манифестах кластера стоят только digest'ы,
+    # поэтому «какой образ выкатили» должно быть известно точно, а не «тот, на который сейчас смотрит тег».
+    description: sha256-digest собранного образа. Пуст при push=false — образ никуда не уехал, брать нечего.
+    value: ${{ steps.build.outputs.digest }}
+  tags:
+    description: Теги, которые получил образ, по одному в строке (вывод docker/metadata-action).
+    value: ${{ steps.meta.outputs.tags }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Логин в реестр
+      if: inputs.push == 'true'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ inputs.username }}
+        password: ${{ inputs.password }}
+
+    - name: Теги и метки образа
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ inputs.image }}
+        # latest=false отключает «авторежим»: единственный источник тега latest — правило ниже с
+        # is_default_branch. Иначе тег мог бы приехать ещё и с события тега — из ветки, которая не main.
+        flavor: latest=false
+        tags: |
+          type=sha,prefix=sha-,format=short
+          type=ref,event=branch
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Засечь время сборки
+      id: timer
+      shell: bash
+      run: echo "started=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+    - name: Сборка образа${{ inputs.push == 'true' && ' и публикация' || '' }}
+      id: build
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ${{ inputs.dockerfile }}
+        push: ${{ inputs.push }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        # Платформа задаётся явно. Сегодня и раннеры, и нода — amd64, так что разницы не видно; разница
+        # появится в день, когда в кластер добавят arm64-ноду: kubelet выдаст «exec format error» на
+        # образе, собранном под платформу раннера (§9, правка 4).
+        platforms: linux/amd64
+        # Свой scope кэша на каждый модуль. С общим scope (как было в docker.yml) три сборки пишут в один
+        # и тот же кэш и перетирают друг друга — выигрыш от кэша съедается почти полностью. Плюс mode=max
+        # на .NET SDK-сборках быстро выедает лимит Actions Cache (10 ГБ на репозиторий, вытеснение по LRU)
+        # и выселяет оттуда NuGet-кэш тестовых джоб (§9, правка 3).
+        cache-from: type=gha,scope=${{ inputs.module }}
+        cache-to: type=gha,mode=max,scope=${{ inputs.module }}
+        # Без provenance-аттестации: с ней buildx кладёт в реестр не образ, а индекс манифестов (образ плюс
+        # аттестация), и digest на выходе указывает на индекс. Кластер такой индекс переварит, но сверять
+        # digest'ы один в один в resolve-images проще, когда digest — это ровно один образ под одну платформу.
+        provenance: false
+
+    - name: Строка отчёта в Job Summary
+      # always(): строка нужна и на упавшей сборке — тогда по ней видно, сколько она успела прогореть
+      # и с какими тегами шла.
+      if: always()
+      shell: bash
+      # Значения передаются через env, а не подстановкой ${{ }} прямо в текст скрипта: в теги попадает имя
+      # ветки, а ветку называет автор pull request — подстановка такой строки в тело shell была бы дырой
+      # для выполнения произвольных команд на раннере.
+      env:
+        MODULE: ${{ inputs.module }}
+        TAGS: ${{ steps.meta.outputs.tags }}
+        DIGEST: ${{ steps.build.outputs.digest }}
+        STARTED: ${{ steps.timer.outputs.started }}
+      run: |
+        set -euo pipefail
+
+        # Если шаг с таймером не успел отработать (сборка упала раньше), считаем длительность нулевой,
+        # а не роняем отчёт на арифметике по пустой строке.
+        now=$(date +%s)
+        started="${STARTED:-$now}"
+        elapsed=$(( now - started ))
+        duration=$(printf '%dм %02dс' $(( elapsed / 60 )) $(( elapsed % 60 )))
+
+        # metadata-action отдаёт теги по одному в строке; в ячейку таблицы они складываются через <br>.
+        tags=$(printf '%s\n' "${TAGS:-}" | awk 'NF { printf "%s%s", sep, $0; sep = "<br>" }')
+        if [ -z "$tags" ]; then
+          tags='—'
+        fi
+
+        # Пустой digest — не ошибка: при push=false образ остаётся на раннере и digest'а у него нет.
+        if [ -n "${DIGEST:-}" ]; then
+          digest="\`$DIGEST\`"
+        else
+          digest='— (без публикации)'
+        fi
+
+        # Шапка таблицы пишется здесь же, а не оркестратором: $GITHUB_STEP_SUMMARY у каждой джобы свой,
+        # и одинокая строка без шапки в markdown таблицей не становится.
+        {
+          echo "| Модуль | Теги | Digest | Время |"
+          echo "|---|---|---|---|"
+          echo "| \`$MODULE\` | $tags | $digest | $duration |"
+        } >> "$GITHUB_STEP_SUMMARY"
