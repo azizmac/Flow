@@ -1,0 +1,11 @@
+# Слой платформы: только namespace'ы.
+#
+# Поля `namespace:` здесь нет и быть не должно — и это не забывчивость. Трансформер namespace в kustomize
+# применяется в том числе к объектам Kind: Namespace: он переименовал бы все три объекта в одно имя, и
+# `kubectl apply` создал бы один namespace вместо трёх. Namespace — объект кластерного уровня, ему namespace
+# не назначают. По той же причине поля нет и в оверлее k8s/overlays/home/platform.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespaces.yaml

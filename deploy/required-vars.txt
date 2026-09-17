@@ -1,0 +1,123 @@
+# Машиночитаемый список GitHub Variables и Secrets, от которых зависит выкатка Flow в Kubernetes.
+# Он же источник таблиц §7 docs/TZ_cicd_k8s.md: правим здесь, документ пересказывает.
+#
+# Кто читает файл:
+#   scripts/check-vars.sh        — джоба «Проверка · переменные» в .github/workflows/ci.yml;
+#   scripts/check-compose-env.sh — сверка ${VAR} из обоих compose-файлов со списком объявленных имён.
+#
+# Зачем список вообще нужен. Забытая переменная ничего не роняет: ASP.NET подставляет дефолт из
+# appsettings.json, под стартует зелёным, rollout рапортует успех — и прод уезжает с паролем «flow»
+# и localhost-адресами. Симптом при этом не похож на причину (забытый INTERNAL_AUTH_URL выглядит как
+# «401 на всё»), поэтому состав переменных дешевле проверить до того, как что-то соберётся.
+#
+# Формат строки:  ИМЯ|тип|этап|описание
+#   тип   — var (GitHub Variables) либо secret (GitHub Secrets);
+#   этап  — номер из §12 ТЗ: с какого этапа переменная обязана быть задана. Этап выбран по первому
+#           потребителю — переменную, которую читает только слой данных, незачем требовать раньше
+#           этапа 3, даже если она объявлена в этом файле с самого начала;
+#   «-» вместо номера — переменная не обязательна никогда: либо у неё есть разумный дефолт (§7.2),
+#           либо законным значением является пустое (EMBEDDINGS_INDEXING_ENDPOINT: пустота означает
+#           «тот же адрес, что для запросов», и отличить её от «забыли» нечем). Такие строки
+#           check-vars.sh не проверяет, но держит в отчёте: неполным списком нельзя пользоваться как
+#           справочником, а §7 ТЗ пересказывает именно его.
+#
+#   1 — порядок в CI, кластер ещё не нужен: всё, что нужно публикации образов
+#   2 — манифесты: kustomize build оверлея и офлайн-проверки, выкатки ещё нет
+#   3 — слой данных: раннер, платформа (Secret, ConfigMap, regcred), postgres, MinIO, бэкап
+#   4 — слой приложения: auth, api, client
+#   5 — AI-слой: эмбеддер, реранкер, визуальный поиск
+#   6 — эксплуатация (сторож, SOPS, бэкапы наружу) — своих переменных пока не приносит
+#
+# Разделитель — вертикальная черта, поэтому в описаниях её быть не должно.
+
+# ---- §7.1 Реестр, кластер, домены ----
+REGISTRY|var|1|Реестр образов: docker.io. Вместе с IMAGE_PREFIX это всё из переменных, что нужно этапу 1
+IMAGE_PREFIX|var|1|Владелец образов в реестре (учётка Docker Hub, например not2ilya2work): образы становятся REGISTRY/IMAGE_PREFIX/flow-api, -auth, -client. Заменяет три прежние переменные IMAGE_NAME. Дефолта нет намеренно: с владельцем репозитория на GitHub не совпадает
+K8S_NAMESPACE|var|2|Namespace приложения
+K8S_NAMESPACE_DATA|var|2|Namespace данных: postgres, MinIO, бэкап
+K8S_NAMESPACE_AI|var|2|Namespace моделей. Тоже переменной, иначе при втором контуре половина имён меняется кликом, а половина остаётся зашитой в манифестах
+WORKER_NODE|var|2|nodeSelector kubernetes.io/hostname подам с диском. PV от local-path и так несёт nodeAffinity, прибиваем явно — чтобы диагноз был понятен
+STORAGE_CLASS|var|2|Класс для всех PVC
+INGRESS_CLASS|var|2|ingressClassName в Ingress-манифестах
+PUBLIC_CLIENT_ORIGIN|var|2|Адрес клиента для браузера. Из него собираются RedirectUris, PostLogoutRedirectUris и Cors__Origins__0 — один источник вместо пяти ручных подстановок
+PUBLIC_API_URL|var|2|Адрес API для браузера, он же API_BASE_URL пода клиента
+PUBLIC_AUTH_URL|var|2|Адрес Flow.Auth для браузера: одновременно Auth__Issuer (claim iss и discovery) и AUTH_BASE_URL клиента. Обязан совпадать в обоих местах, иначе валидация токена в браузере провалится
+
+# ---- §7.1 Внутрикластерные адреса ----
+# Самый дорогой блок списка: у каждой настройки в appsettings.json лежит localhost-дефолт, поэтому под
+# поднимется зелёным, rollout отрапортует успех, а сервис будет молча нерабочим.
+INTERNAL_AUTH_URL|var|4|Auth__BaseUrl у Flow.Api: discovery, JWKS и admin-API. В кластере это http://flow-auth.flow.svc.cluster.local:8080 — имя совпадает с именем Service в k8s/base/auth. Дефолт http://localhost:5100, а симптом ошибки — «401 на всё»
+POSTGRES_HOST|var|3|Хост БД в обеих строках подключения. В кластере ровно flow-postgres.flow-data.svc.cluster.local: имя Service совпадает с именем StatefulSet, а короткого postgres из namespace flow не существует. Туда же ходят Job создания базы и CronJob бэкапа
+POSTGRES_INTERNAL_PORT|var|-|Порт БД в обеих строках подключения compose. В кластере переменной больше нет: публикацию портов заменяет Service, он всегда слушает 5432, и манифесты api, auth, backup и Job создания базы пишут 5432 числом. Строка остаётся ради compose и check-compose-env.sh
+S3_ENDPOINT|var|3|S3__Endpoint у Flow.Api и адрес для Job создания бакета. В кластере http://flow-s3.flow-data.svc.cluster.local:9000 — Service назван flow-s3, а не s3. Дефолт http://localhost:9000
+EMBEDDINGS_QUERY_ENDPOINT|var|5|Search__Embeddings__QueryEndpoint. В кластере http://flow-ai.flow-ai.svc.cluster.local:8081/v1 — с префиксом flow-, как назван Service. Повтор flow-ai.flow-ai не опечатка: сервис и namespace
+EMBEDDINGS_INDEXING_ENDPOINT|var|-|Search__Embeddings__IndexingEndpoint. Пусто = тот же адрес, что для запросов, поэтому проверять её нечем (см. «-» в шапке)
+RERANK_ENDPOINT|var|5|Search__Rerank__Endpoint. Адрес ТОТ ЖЕ, что у эмбеддера: обе текстовые модели держит один llama-server в router-режиме, а различает их по полю model. Задавать даже при RERANK_ENABLED=false, иначе в ConfigMap уедет localhost
+VISION_ENDPOINT|var|5|Search__Embeddings__Vision__Endpoint. В кластере http://flow-vision.flow-ai.svc.cluster.local:8083/v1: в compose сервис зовётся embeddings-vl, в кластере — flow-vision
+
+# ---- §7.1 TLS-зависимые ----
+AUTH_ALLOW_INSECURE_HTTP|var|4|За ingress без TLS — true. В образе окружение Production, где Auth:AllowInsecureHttp по умолчанию false, то есть требует https
+AUTH_REQUIRE_HTTPS_METADATA|var|4|false, пока Auth__BaseUrl остаётся внутрикластерным http: в коде requireHttps = RequireHttpsMetadata ?? !IsDevelopment()
+
+# ---- §7.1 Данные, S3, bootstrap ----
+POSTGRES_USER|var|3|Несекретная часть строк подключения. Обязан быть суперпользователем: миграция делает CREATE EXTENSION vector
+POSTGRES_DB|var|3|База приложения
+AUTH_DB|var|3|База учётных записей Flow.Auth, отдельная от POSTGRES_DB
+S3_BUCKET|var|3|Бакет вложений, создаётся Job внутри deploy-s3
+S3_USE_SSL|var|3|false: внутри кластера MinIO ходит по http
+EMBEDDINGS_ENABLED|var|4|Главный выключатель нейросетевого слоя: false гасит разом векторы, реранкер и визуальную половину, AI-джобы пропускаются целиком
+POSTGRES_IMAGE|var|3|pgvector/pgvector:pg16, а не postgres:16 — миграция делает CREATE EXTENSION vector, в модели есть halfvec(512). В переменной, чтобы смена мажорной версии была осознанной
+MINIO_IMAGE|var|3|Образ MinIO с quay.io: из Docker Hub образы MinIO CE сняты
+MC_IMAGE|var|3|Образ mc с quay.io для Job создания бакета
+BOOTSTRAP_ENABLED|var|4|Сидер первичной учётной записи. После первого входа — false
+BOOTSTRAP_ID|var|4|Один и тот же Guid у api и auth: Auth создаёт учётку, Api — профиль с тем же Id, поэтому лежит в общем ConfigMap
+BOOTSTRAP_EMAIL|var|4|Почта первичной учётной записи
+BOOTSTRAP_USERNAME|var|4|Логин первичной учётной записи
+
+# ---- §7.2 Variables — необязательные (есть разумный дефолт) ----
+AUTO_DEPLOY|var|-|true включает стадии 3 и 4 на push в main. Пока пайплайн не обкатан, выкатка только вручную
+K8S_CONTEXT|var|-|Контекст kubeconfig раннера. Если контекст там ровно один, можно не задавать
+GPU_NODE|var|-|Нода с картой. На домашнем кластере обычно совпадает с WORKER_NODE
+DEPLOY_TIMEOUT|var|-|--timeout у rollout status для api, auth и client. Не меньше 600: отсчёт идёт от apply и включает скачивание образа, а бюджет startupProbe у api уже 300 с и у auth 240 с. Парой к нему в манифесте стоит progressDeadlineSeconds = 600
+AI_DEPLOY_TIMEOUT|var|-|--timeout у rollout status для AI-слоя. Не меньше 1500: бюджет startupProbe у модуля vision — 1200 с, и ограничитель обязан его покрывать, иначе выкатка краснеет на исправном сервисе, который просто ещё грузит модель
+BOOTSTRAP_FIRST_NAME|var|-|Имя владельца в общем ConfigMap. Забыть — тихо получить владельца «Admin Flow» навсегда
+BOOTSTRAP_LAST_NAME|var|-|Фамилия владельца, там же
+SEARCH_ENABLED|var|-|Выключатель поиска целиком: false убирает и эндпоинты, и воркер индексации
+SEARCH_INDEXING_ENABLED|var|-|Выключатель фонового индексатора отдельно от самого поиска
+RERANK_ENABLED|var|-|Вторая ступень выдачи (кнопка «Точнее»). Отдельной джобы и отдельного пода у неё больше нет: модель живёт в сервисе ai и грузится по первому обращению, то есть при false не занимает памяти
+VISION_ENABLED|var|-|Гейт GPU-джобы визуального поиска — единственной части ИИ, которой нужна карта NVIDIA. Вместе с профилем AI_BACKEND=cuda включать нельзя: nvidia.com/gpu неделим, и без time-slicing второй под навсегда останется в Pending
+AI_BACKEND|var|-|Профиль железа для текстового ИИ: cpu (по умолчанию) или cuda. Выбирает, какой оверлей выкатывать — k8s/overlays/home/ai или ai-cuda. Других значений пока нет: ROCm и Vulkan отложены
+AI_CPU_LIMIT|var|5|Сколько ядер отдать моделям: подставляется в limits.cpu модуля ai и оттуда же через Downward API в --threads, так что разъехаться им негде. Ниже четырёх ставить нельзя — на боевых чанках (1536 символов) четыре ядра дают батч индексации 60.9 с при таймауте клиента 60 с, то есть отказ. Замер на 32 ядрах: 16 ядер — 33.2 с
+AI_IMAGE|var|-|Образ llama.cpp для локального стенда. В кластере вариант образа задаёт не эта переменная, а AI_BACKEND через оверлей
+VISION_IMAGE|var|-|Образ vLLM. Тег зафиксировать обязательно: дефолт в compose — latest, с ним выкатка недетерминированна
+EMBEDDINGS_MODEL|var|-|Имя модели эмбеддера. Обязано совпадать с именем секции в docker/ai/models.ini: его Api кладёт в поле model, по нему роутер и выбирает модель
+EMBEDDINGS_MODEL_FILE|var|-|Имя файла GGUF. Обязано совпадать со скачанным, иначе llama-server не стартует
+EMBEDDINGS_MODEL_URL|var|-|Откуда Job качает веса эмбеддера. Ссылки вида /resolve/main/ указывают на изменяемую ревизию, лучше пинить revision-SHA
+RERANKER_MODEL|var|-|Именно bge-reranker-v2-m3: Qwen3-Reranker — causal LM без классификационной головы, ранжирует мусором. Тоже обязано совпадать с именем секции в models.ini
+RERANKER_MODEL_FILE|var|-|Имя файла GGUF реранкера, требования те же
+RERANKER_MODEL_URL|var|-|Откуда Job качает веса реранкера
+EMBEDDINGS_MODEL_SHA256|var|-|Эталон для сверки в Job закачки. Приём файла через .part ловит обрыв, но не подмену и не битый файл
+RERANKER_MODEL_SHA256|var|-|То же для весов реранкера
+VISION_MODEL_REPO|var|-|Что vLLM качает с HuggingFace (--model)
+VISION_MODEL|var|-|--served-model-name у vLLM и Search__Embeddings__Vision__Model у Api. Обязано совпадать в обоих местах
+VISION_MAX_LEN|var|-|--max-model-len у vLLM
+VISION_GPU_FRACTION|var|-|--gpu-memory-utilization. Критичен: time-slicing решает планирование, но не изолирует VRAM, и сумма долей обязана физически влезать в карту
+BACKUP_CRON|var|-|Становится полем schedule у CronJob
+BACKUP_TZ|var|-|Без timeZone расписание CronJob считается в UTC
+BACKUP_KEEP|var|-|Сколько копий держать
+
+# ---- §7.4 Secrets ----
+# Значения секретов не печатает ни один скрипт: в отчёт идут только имена.
+REGISTRY_USERNAME|secret|1|Логин Docker Hub для публикации образов из CI. Уже заведён. Лучше access token с правами на запись, а не пароль учётки: отзывается одной кнопкой
+REGISTRY_PASSWORD|secret|1|Пароль или access token Docker Hub для публикации. Уже заведён
+REGISTRY_PULL_USERNAME|secret|3|Логин для imagePullSecret regcred в кластере. Отдельная read-only пара: токен, лежащий в кластере, не должен уметь публиковать. Не нужен, если образы публичные
+REGISTRY_PULL_PASSWORD|secret|3|Read-only access token Docker Hub для imagePullSecret. Не нужен, если образы публичные
+GH_RUNNERS_READ_TOKEN|secret|3|Fine-grained PAT с правом Administration read на этот репозиторий, только для джобы runner-check. Встроенный GITHUB_TOKEN этот эндпоинт не отдаёт
+POSTGRES_PASSWORD|secret|3|Строки подключения api и auth плюс PGPASSWORD у CronJob бэкапа. Не должен совпадать с дев-дефолтом flow
+MINIO_ROOT_USER|secret|3|Он же S3__AccessKey. Api ходит в хранилище root-учёткой, отдельный пользователь на бакет — в бэклоге
+MINIO_ROOT_PASSWORD|secret|3|Он же S3__SecretKey
+AUTH_API_CLIENT_SECRET|secret|4|Нужен обоим сервисам одновременно. Пустой — ClientSeeder бросает InvalidOperationException, и под уходит в CrashLoopBackOff
+AUTH_CERT_PASSWORD|secret|4|Пароль PFX. Меняешь пароль — меняй вместе с самими файлами: при существующих PFX Flow.Auth падает с CryptographicException в CrashLoopBackOff
+BOOTSTRAP_PASSWORD|secret|4|Пароль первичной учётной записи
+AUTH_SIGNING_PFX_B64|secret|4|base64 от signing.pfx. Формально необязателен, фактически нужен: без файла Flow.Auth молча создаёт новый самоподписанный, ключ теряется вместе с PVC, а симптом — «всех разлогинило» без единой ошибки
+AUTH_ENCRYPTION_PFX_B64|secret|4|base64 от encryption.pfx, ровно та же история

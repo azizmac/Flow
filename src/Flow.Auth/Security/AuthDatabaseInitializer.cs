@@ -6,6 +6,12 @@ namespace Flow.Auth.Security;
 /// <summary>
 /// При старте: миграции → клиенты и scope'ы OpenIddict → базовый пользователь. Один hosted service вместо трёх,
 /// чтобы порядок был детерминирован (сидеры зависят от схемы).
+///
+/// Флага готовности инициализатор больше не поднимает: Kestrel (GenericWebHostService) регистрируется внутри
+/// builder.Build(), то есть после этого hosted service, поэтому до возврата из StartAsync сокет не открыт и
+/// увидеть нас недоделанными некому — ни одна проба не получит ответа. Обратная сторона — до конца этого метода
+/// молчит и /health/live, из-за чего манифест обязан объявлять startupProbe (см. комментарий рядом
+/// с AddHealthChecks в Program.cs).
 /// </summary>
 public sealed class AuthDatabaseInitializer(
     IServiceProvider services,

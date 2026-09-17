@@ -1,0 +1,213 @@
+# Закачка весов моделей в том flow-models. Построчный порт docker/data/pull-models.sh в Job кластера:
+# тот скрипт качает контейнером, потому что на новой машине из инструментов гарантирован только Docker, —
+# здесь ровно та же идея, только контейнер запускает не docker run, а сам кластер.
+#
+# Почему это отдельный модуль, а не initContainer у эмбеддера. Закачка — событие, а не часть жизненного
+# цикла сервиса: гигабайты тянут один раз и осознанно, а initContainer выполнялся бы при каждом
+# пересоздании пода и превращал бы перезапуск эмбеддера в лотерею «а вдруг HuggingFace сегодня недоступен».
+# Отдельный модуль запускается только вручную (workflow_dispatch с pull_models=true) — и это единственный
+# способ отличить «выкатываю сервис» от «качаю гигабайты».
+#
+# Визуальную модель Job не качает: vLLM тянет Qwen/Qwen3-VL-Embedding-2B сам при первом старте в /models/hf,
+# репозиторий открытый и токен HuggingFace не нужен.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # Имя с ${RELEASE_SHA} — не украшение. Spec у Job иммутабелен: повторный kubectl apply поверх
+  # завершившегося объекта с другим содержимым падает с «field is immutable», и выкатка встаёт на ровном
+  # месте. Уникальное имя на релиз снимает это целиком, а ttlSecondsAfterFinished ниже не даёт копить
+  # завершённые объекты.
+  name: flow-pull-models-${RELEASE_SHA}
+  labels:
+    app.kubernetes.io/name: models
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: ai
+spec:
+  # Час после завершения — и кластер убирает объект вместе с подом. Логи к этому моменту уже в артефактах
+  # прогона, а Job'ы от старых релизов иначе живут вечно.
+  ttlSecondsAfterFinished: 3600
+  # Две повторные попытки. Не больше: повтор начинает закачку с нуля (докачки нет — см. про .part ниже),
+  # и десяток попыток по паре гигабайт превратился бы в способ забить диск и канал, а не в отказоустойчивость.
+  backoffLimit: 2
+  # Верхняя граница на весь Job, включая повторы. Домашний канал умеет «висеть» на скорости в килобайты,
+  # и без этого ограничителя Job держал бы том часами, не приближаясь к результату.
+  activeDeadlineSeconds: 7200
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: models
+        app.kubernetes.io/part-of: flow
+        app.kubernetes.io/component: ai
+    spec:
+      # Never, а не OnFailure: при OnFailure контейнер перезапускается внутри того же пода и логи прошлой
+      # попытки затираются. С Never каждая попытка — отдельный под со своим логом, и «почему не сошёлся
+      # хэш» можно прочитать после факта, а не ловить в момент падения.
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: regcred
+      # Та же нода, где лежит том: у local-path PVC — это каталог на диске конкретной машины.
+      nodeSelector:
+        kubernetes.io/hostname: "${WORKER_NODE}"
+      containers:
+        - name: pull-models
+          # alpine с зафиксированной версией. В образе busybox wget, который умеет https (через ssl_client
+          # из базового образа) и запускается root'ом, то есть может писать в том; у alpine/curl
+          # пользователь без прав на /models. Та же мотивация, что в docker/data/pull-models.sh, только
+          # тег там был плавающий — для кластера фиксируем.
+          image: alpine:3.21
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            # ВАЖНО ПРО РЕНДЕР. Ниже обычный shell-скрипт, и переменные в нём ($file, $want) раскрывает sh
+            # внутри пода, а не envsubst джобы рендера. Поэтому envsubst обязан вызываться со списком
+            # плейсхолдеров (envsubst '${RELEASE_SHA} ${WORKER_NODE} …'), а не без аргументов: без списка
+            # он подставил бы в скрипт пустые строки с раннера, и Job тихо скачал бы файл с пустым именем.
+            # Единственная подстановка рендера в этом манифесте — ${RELEASE_SHA} в имени и ${WORKER_NODE}
+            # в nodeSelector, обе снаружи скрипта.
+            - |
+              set -eu
+
+              # Значения приезжают из ConfigMap flow-config (его создаёт джоба deploy-platform). Форма
+              # ${VAR:?текст} проверяет и «ключа нет», и «ключ есть, но пустой» — вместе с optional: true
+              # ниже это даёт человеческую строку в логе Job вместо события CreateContainerConfigError,
+              # за которым надо лезть в describe pod.
+              file_embeddings="${EMBEDDINGS_MODEL_FILE:?не задан EMBEDDINGS_MODEL_FILE: имя файла обязано совпадать с секцией эмбеддера в models.ini}"
+              url_embeddings="${EMBEDDINGS_MODEL_URL:?не задан EMBEDDINGS_MODEL_URL: качать неоткуда}"
+              sha_embeddings="${EMBEDDINGS_MODEL_SHA256:?не задан EMBEDDINGS_MODEL_SHA256: без эталона сверка целостности невозможна}"
+              file_reranker="${RERANKER_MODEL_FILE:?не задан RERANKER_MODEL_FILE: имя файла обязано совпадать с секцией реранкера в models.ini}"
+              url_reranker="${RERANKER_MODEL_URL:?не задан RERANKER_MODEL_URL: качать неоткуда}"
+              sha_reranker="${RERANKER_MODEL_SHA256:?не задан RERANKER_MODEL_SHA256: без эталона сверка целостности невозможна}"
+
+              # Место на томе проверяем ДО закачки, и это не педантизм. Заявка PVC в 50Gi у local-path
+              # ничего не резервирует: провижнер раздаёт каталоги на диске ноды, и доступно ровно то, что
+              # осталось. А осталось — общее с postgres, MinIO и образами: забив диск гигабайтами весов,
+              # мы получим DiskPressure и выселение соседей, то есть уроним базу закачкой модели.
+              # Порог с запасом на оба GGUF (порядка 0.7 и 0.6 ГБ) и на то, что при обрыве .part-файл
+              # какое-то время лежит рядом с готовым.
+              free_kib=$(df -P /models | awk 'NR == 2 { print $4 }')
+              need_kib=4194304
+              if [ "$free_kib" -lt "$need_kib" ]; then
+                  echo "на томе flow-models свободно $free_kib КиБ, требуется хотя бы $need_kib КиБ — закачка не начата" >&2
+                  echo "освободите место на worker-ноде: забитый диск на ней кладёт заодно postgres" >&2
+                  exit 1
+              fi
+
+              # Приём с .part из исходного скрипта сохранён: имя готовой модели получает только файл,
+              # скачанный целиком, — оборванная закачка не должна выглядеть готовой моделью, llama-server
+              # принял бы её за битый файл и падал бы на старте.
+              #
+              # Сверка sha256 — то, чего в docker/data/pull-models.sh нет. Она закрывает ровно ту дыру,
+              # которую .part не закрывает: обрыв соединения он ловит, а подмену содержимого, тихо битый
+              # файл и «ссылка /resolve/main теперь указывает на другую ревизию» — нет.
+              # Порядок принципиален: проверяем .part и только потом переименовываем. Значит, неудачная
+              # перекачка НИКОГДА не портит уже лежащую рабочую модель.
+              download() {
+                  name=$1
+                  url=$2
+                  want=$3
+
+                  if [ -s "/models/$name" ]; then
+                      have=$(sha256sum "/models/$name" | cut -d ' ' -f 1)
+                      if [ "$have" = "$want" ]; then
+                          echo "$name уже на месте и хэш сошёлся — пропускаем"
+                          return 0
+                      fi
+                      echo "$name уже есть, но хэш не сошёлся (ожидали $want, на диске $have) — перекачиваем"
+                  fi
+
+                  # Остаток от прерванной попытки: держать его смысла нет, докачки busybox wget всё равно
+                  # не делает.
+                  rm -f "/models/$name.part"
+
+                  echo "качаем $name"
+                  # -T 60: без сетевого таймаута зависший сокет молчит до activeDeadlineSeconds, и вместо
+                  # понятной ошибки мы получаем Job, убитый через два часа без единой строки диагноза.
+                  wget -T 60 -O "/models/$name.part" "$url"
+
+                  have=$(sha256sum "/models/$name.part" | cut -d ' ' -f 1)
+                  if [ "$have" != "$want" ]; then
+                      rm -f "/models/$name.part"
+                      echo "$name: хэш не сошёлся (ожидали $want, скачали $have) — файл удалён" >&2
+                      echo "проверьте EMBEDDINGS_MODEL_SHA256/RERANKER_MODEL_SHA256 и ссылку: /resolve/main указывает на изменяемую ревизию, в URL лучше пинить revision-SHA" >&2
+                      return 1
+                  fi
+
+                  # mv в пределах одного тома — атомарное переименование. Практическое следствие: если
+                  # в этот момент llama-server работает со старым файлом, он держит открытым его inode и
+                  # не заметит подмены — падения на лету не будет, новые веса подхватятся при перезапуске.
+                  mv "/models/$name.part" "/models/$name"
+                  echo "$name готов ($(du -h "/models/$name" | cut -f 1))"
+              }
+
+              download "$file_embeddings" "$url_embeddings" "$sha_embeddings"
+              download "$file_reranker" "$url_reranker" "$sha_reranker"
+
+              echo
+              echo "содержимое тома flow-models:"
+              ls -l /models
+          env:
+            # optional: true в паре с проверками ${VAR:?…} в скрипте — так отсутствующий ключ виден
+            # строкой в логе Job, а не событием на поде.
+            - name: EMBEDDINGS_MODEL_FILE
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: EMBEDDINGS_MODEL_FILE
+                  optional: true
+            - name: EMBEDDINGS_MODEL_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: EMBEDDINGS_MODEL_URL
+                  optional: true
+            - name: EMBEDDINGS_MODEL_SHA256
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: EMBEDDINGS_MODEL_SHA256
+                  optional: true
+            - name: RERANKER_MODEL_FILE
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: RERANKER_MODEL_FILE
+                  optional: true
+            - name: RERANKER_MODEL_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: RERANKER_MODEL_URL
+                  optional: true
+            - name: RERANKER_MODEL_SHA256
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: RERANKER_MODEL_SHA256
+                  optional: true
+          resources:
+            # Закачка упирается в сеть, а не в процессор; заметная нагрузка здесь ровно одна — sha256sum
+            # по паре гигабайт, и она однопоточная. Памяти нужны крохи: и wget, и sha256sum читают потоком.
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          securityContext:
+            # Root здесь не по недосмотру: именно этот Job создаёт файлы в пустом томе, и от того, каким
+            # пользователем он их создаёт, зависит, прочитают ли их соседние поды. Root + права по
+            # умолчанию (644) — единственный вариант, который читается всеми.
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            # Единственное место в слое, где том монтируется на запись ради записи (у vLLM это побочный
+            # эффект того, что он качает веса сам).
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: flow-models

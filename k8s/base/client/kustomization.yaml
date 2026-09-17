@@ -1,0 +1,11 @@
+# Слой приложения, модуль client: Deployment и Service Flow.Client.
+#
+# `namespace:` и `images:` задаёт оверлей (в базе стоит заглушка flow-client:local). Ни ConfigMap, ни
+# Secret модулю не нужны вовсе: клиент читает ровно две env-переменные с внешними адресами, и обе
+# подставляются на рендере.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment.yaml
+  - service.yaml

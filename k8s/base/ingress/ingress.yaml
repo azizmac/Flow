@@ -1,0 +1,145 @@
+# Единственная дверь снаружи: три имени → три Service в namespace flow.
+#
+# Почему три объекта, а не один с тремя правилами. Аннотации у ingress-nginx действуют на весь объект
+# целиком, а не на правило: положив все три хоста в один Ingress, мы отдали бы лимит тела в 32 МБ и
+# увеличенный таймаут заодно клиенту и Flow.Auth, которым они не нужны. Плюс отдельные объекты дают
+# отдельные строки в `kubectl get ingress` и позволяют перевести на TLS по одному.
+#
+# ХОСТЫ. В поле host допустимо только имя — без схемы, без порта и без пути, это требование схемы
+# (там ожидается DNS-имя или wildcard). А переменные PUBLIC_CLIENT_ORIGIN, PUBLIC_API_URL и PUBLIC_AUTH_URL
+# содержат URL целиком (http://flow.home.lan), потому что в приложениях они используются именно как URL:
+# issuer, redirect_uri, origin для CORS, адреса в appsettings.json клиента. Отрезать схему на рендере
+# было бы тихой магией: разошлись бы переменная и то, что реально попало в манифест, а диагноз при ошибке
+# («ingress не тот хост») не указывал бы на причину.
+#
+# Поэтому здесь используются ТРИ ОТДЕЛЬНЫЕ ПЕРЕМЕННЫЕ: PUBLIC_CLIENT_HOST, PUBLIC_API_HOST,
+# PUBLIC_AUTH_HOST. Заводить их в GitHub Variables НЕ надо и не следует: джоба рендера выводит их из
+# уже существующих PUBLIC_*_URL прямо в шаге подстановки, отрезая схему и путь
+# (sed -E 's#^[a-z]+://##; s#/.*$##'), и экспортирует наравне с остальными именами. Так пара
+# «URL и хост» физически не может разъехаться — хост всегда является хвостом своего URL.
+#
+# Практическое следствие для того, кто будет править: имена PUBLIC_CLIENT_HOST, PUBLIC_API_HOST и
+# PUBLIC_AUTH_HOST обязаны присутствовать в списке имён envsubst в джобе рендера. Забыть их там — не
+# ошибка сборки: envsubst оставит плейсхолдер, а следующий за ним grep на неподставленные плейсхолдеры
+# честно покрасит джобу. А вот если бы хост приезжал пустым, Ingress принял бы его молча — пустой host
+# означает «любой хост», и kubeconform такой манифест считает валидным. То есть страхует нас именно
+# проверка рендера, а не схема Kubernetes.
+#
+# TLS: на этапе 1 его нет вовсе, блоки tls ниже закомментированы. Включается он не здесь и не сам по себе —
+# см. комментарий в конце файла.
+
+# ---------- клиент ----------
+# Корень всего: по этому имени пользователь открывает Flow. Никаких аннотаций: статика, маленькие запросы.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flow-client
+  labels:
+    app.kubernetes.io/name: ingress
+    app.kubernetes.io/part-of: flow
+    # component различает три объекта модуля: метка name у всех одна и та же — имя модуля, как и
+    # в слоях platform и storage.
+    app.kubernetes.io/component: client
+spec:
+  ingressClassName: "${INGRESS_CLASS}"
+  # tls:
+  #   - hosts: ["${PUBLIC_CLIENT_HOST}"]
+  #     secretName: flow-client-tls
+  rules:
+    - host: "${PUBLIC_CLIENT_HOST}"
+      http:
+        paths:
+          - path: /
+            # Prefix, а не Exact: Blazor — SPA, и за index.html идут /_framework/*.wasm, /css, /js и
+            # собственные маршруты приложения. Разбор путей делает nginx внутри пода (SPA-fallback
+            # в docker/client/nginx.conf), Ingress только отдаёт ему весь хост целиком.
+            pathType: Prefix
+            backend:
+              service:
+                name: flow-client
+                port:
+                  number: 80
+---
+# ---------- API ----------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flow-api
+  labels:
+    app.kubernetes.io/name: ingress
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: api
+  annotations:
+    # ОБЯЗАТЕЛЬНАЯ аннотация, а не оптимизация. Дефолт ingress-nginx — proxy-body-size 1m, а
+    # Attachments:MaxFileBytes в appsettings.json Flow.Api равен 26214400 байт (25 МБ). Без неё вложение
+    # больше мегабайта обрывается на 413 ещё до приложения: в логах Flow.Api нет ничего, приложение
+    # исправно, а файлы не прикрепляются. 32m — 25 МБ полезной нагрузки плюс запас на служебные части
+    # multipart и base64-обвязку.
+    nginx.ingress.kubernetes.io/proxy-body-size: "32m"
+    # Дефолтные 60 с чтения ответа от бэкенда малы для двух сценариев Flow.Api: заливки вложения на
+    # медленном канале (тело едет через тот же таймаут) и поиска со включённой второй ступенью — реранкер
+    # превращает мгновенный ответ в секундный, а холодная модель отвечает и дольше. 120 с — компромисс:
+    # достаточно, чтобы не рвать честную работу, и достаточно мало, чтобы зависший запрос не держал
+    # соединение бесконечно.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+spec:
+  ingressClassName: "${INGRESS_CLASS}"
+  # tls:
+  #   - hosts: ["${PUBLIC_API_HOST}"]
+  #     secretName: flow-api-tls
+  rules:
+    - host: "${PUBLIC_API_HOST}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flow-api
+                port:
+                  number: 8080
+---
+# ---------- Flow.Auth ----------
+# Отдельное имя нужно не ради красоты: этот адрес попадает в claim iss и в discovery-документ, и браузер
+# обязан приходить сюда по тому же адресу, который Flow.Auth объявляет своим issuer. Любое расхождение
+# (лишний порт, другое имя, http против https) ломает валидацию токена уже на стороне клиента.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flow-auth
+  labels:
+    app.kubernetes.io/name: ingress
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: auth
+spec:
+  ingressClassName: "${INGRESS_CLASS}"
+  # tls:
+  #   - hosts: ["${PUBLIC_AUTH_HOST}"]
+  #     secretName: flow-auth-tls
+  rules:
+    - host: "${PUBLIC_AUTH_HOST}"
+      http:
+        paths:
+          - path: /
+            # Именно весь хост: Flow.Auth раздаёт и /connect/*, и /.well-known/openid-configuration, и
+            # страницы входа со своей статикой. Перечислять пути по одному — способ однажды забыть новый.
+            pathType: Prefix
+            backend:
+              service:
+                name: flow-auth
+                port:
+                  number: 8080
+# ---------------------------------------------------------------------------------------------------
+# ПЕРЕКЛЮЧЕНИЕ НА TLS — одной операцией, и раскомментировать три блока tls выше недостаточно.
+# Вместе с ними меняются:
+#   PUBLIC_CLIENT_ORIGIN, PUBLIC_API_URL, PUBLIC_AUTH_URL   → https://… (хостовые переменные не меняются);
+#   AUTH_ALLOW_INSECURE_HTTP                                 → false;
+#   три Secret с сертификатами (flow-client-tls, flow-api-tls, flow-auth-tls) должны существовать
+#   в namespace flow — их кладёт cert-manager или руками оператор, kustomize их не создаёт.
+# Половинчатая смена ломает вход: Auth__Issuer попадает в claim iss и в discovery, и если он разъедется
+# с адресом, по которому пришёл браузер, валидация токена провалится. После переключения обязателен
+# рестарт пода auth (ClientSeeder идемпотентен, redirect URI перечитаются) и прогон smoke.
+# Отдельно: ForwardedHeaders в коде не настраиваются, поэтому за TLS-терминатором ASP.NET видит запрос как
+# http. Если после включения TLS ссылки в discovery окажутся с http://, потребуется UseForwardedHeaders
+# в Program.cs — это известная точка, а не сюрприз (docs/TZ_cicd_k8s.md §10.1).

@@ -1,0 +1,142 @@
+# MinIO — S3-совместимое хранилище вложений. Перенос сервиса s3 из docker-compose.data.yml.
+#
+# Почему StatefulSet, а не Deployment. Том flow-minio-data — ReadWriteOnce, и двум подам одновременно он
+# не достанется. StatefulSet никогда не держит два пода одного ординала сразу: сначала гасит старый, потом
+# создаёт новый. У Deployment того же пришлось бы добиваться через strategy: Recreate, и забытый (то есть
+# дефолтный) RollingUpdate дал бы второй под, вечно висящий в ContainerCreating на уже занятом томе.
+# volumeClaimTemplates при этом нет намеренно — PVC приходит из слоя k8s/base/storage, чтобы удаление
+# StatefulSet не уносило бакет вместе с собой.
+#
+# Главная ловушка переноса — args, а не command. В compose строка "command: server /data --console-address"
+# подменяет CMD, а ENTRYPOINT образа (/usr/bin/docker-entrypoint.sh) остаётся на месте: он видит, что первый
+# аргумент не minio, и сам подставляет бинарь. В Kubernetes command — это как раз ENTRYPOINT, а args — CMD.
+# Написав command: [server, /data], мы бы запускали несуществующую программу server и получили
+# CrashLoopBackOff с диагнозом "exec: server: not found", совсем не похожим на причину.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: flow-s3
+  labels:
+    app.kubernetes.io/name: s3
+    app.kubernetes.io/part-of: flow
+spec:
+  # Имя Service для DNS подов. Service у нас обычный ClusterIP, а не headless (и внутрь, и наружу ходят по
+  # одному адресу flow-s3, а не по именам ординалов), поэтому flow-s3-0.flow-s3... не резолвится. Для
+  # одноузлового MinIO это ничего не меняет: распределённый режим здесь не используется.
+  serviceName: flow-s3
+  # Строго одна реплика: одиночный диск, режим SNSD. Вторая реплика с тем же RWO-томом не поднимется вовсе,
+  # а настоящий распределённый MinIO требует четырёх дисков и отдельного разговора.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: s3
+      app.kubernetes.io/part-of: flow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: s3
+        app.kubernetes.io/part-of: flow
+    spec:
+      # Под прибит к той же ноде, где лежит том. PV от local-path и так несёт nodeAffinity на свою ноду, так
+      # что на чужой ноде под просто не запустится, — но диагноз "volume node affinity conflict" читается
+      # хуже, чем честное отсутствие ноды с таким hostname. Вторая причина явного nodeSelector важнее: на эту
+      # же ноду обязан попасть CronJob бэкапа, иначе он не примонтирует том MinIO (см. k8s/base/backup).
+      nodeSelector:
+        kubernetes.io/hostname: ${WORKER_NODE}
+      # Secret regcred создаёт джоба deploy-platform, не kustomize: в репозитории нет ни одного секрета.
+      # Для quay.io эта пара бесполезна (секрет привязан к docker.io) и kubelet тянет образ анонимно — но
+      # imagePullSecrets ставим единообразно всем модулям, чтобы не держать в голове, у кого он есть.
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: minio
+          # Именно quay.io: из Docker Hub образы MinIO CE сняты, оттуда pull даёт access denied. Тег
+          # зафиксирован — публикация MinIO CE прекращена, latest давно не двигается. Здесь стоит осмысленная
+          # заглушка: в релизе тот же образ приезжает по digest через kustomize edit set image.
+          image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+          # С digest в манифесте перекачивать уже скачанный слой незачем, а лимиты Docker Hub на домашнем
+          # кластере выбираются быстрее, чем кажется.
+          imagePullPolicy: IfNotPresent
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          env:
+            # Ключи — из Secret flow-secrets (его кладёт deploy-platform). Они же уезжают в Flow.Api как
+            # S3__AccessKey и S3__SecretKey, то есть значения обязаны совпадать в двух местах: разъехались —
+            # получим 403 на загрузке вложения при полностью здоровых подах.
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: MINIO_ROOT_PASSWORD
+          # Пробы — родные HTTP-эндпоинты MinIO на порту API, а не "mc ready local" из compose: exec-проба
+          # каждые несколько секунд дороже HTTP-запроса и зависит от наличия mc внутри образа сервера.
+          startupProbe:
+            # На старте MinIO разбирает каталог с объектами; пока это идёт, liveness трогать под нельзя.
+            # 30 x 5 с = две с половиной минуты запаса, после чего включаются обычные пробы.
+            httpGet:
+              path: /minio/health/live
+              port: s3
+            periodSeconds: 5
+            # timeoutSeconds задан явно и равен трём, как у liveness и readiness ниже. Без этой строки
+            # действует дефолт в 1 с — то есть стартовая проба оказывается СТРОЖЕ тех, что работают
+            # после неё, и именно в тот момент, когда хранилище сканирует диск рядом с работающим
+            # postgres на той же ноде. Промахи по таймауту едят тот самый бюджет в 150 с ни за что.
+            timeoutSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: s3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            # Отдельный эндпоинт, а не тот же live: readiness снимает под с Service, пока хранилище не готово
+            # отвечать на запросы к объектам, и именно её ждёт Job создания бакета.
+            httpGet:
+              path: /minio/health/ready
+              port: s3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            # В покое одноузловой MinIO занимает десятки мегабайт: расход растёт от числа одновременных
+            # загрузок, а вложение ограничено 25 МБ (Attachments:MaxFileBytes). 1Gi — это десятки
+            # параллельных загрузок с запасом. Лимит по CPU нужен потому, что нода одна: фоновое сканирование
+            # бакета не должно отбирать процессор у постгреса, который живёт рядом.
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            # runAsNonRoot здесь нет, и это решение по факту, а не по привычке: в образе MinIO нет инструкции
+            # USER, каталог тома от local-path принадлежит root, а смена пользователя в самом образе сделана
+            # переменными MINIO_USERNAME/MINIO_GROUPNAME через su-exec — задать их значило бы потребовать
+            # CAP_SETUID и CAP_SETGID, которые мы строкой ниже как раз выбрасываем.
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            # PVC объявлен в k8s/base/storage и применяется отдельно, только вручную (module=storage).
+            claimName: flow-minio-data

@@ -1,0 +1,142 @@
+# Все постоянные тома проекта — одним слоем и отдельно от модулей.
+#
+# Почему отдельно. Это единственное в кластере, что нельзя починить перезапуском: под пересоздаётся за
+# секунды, а удалённый PVC уносит с собой PGDATA, бакет вложений и скачанные веса. Поэтому слой применяется
+# только вручную (`module=storage`), в оверлее модулей его нет, и `--prune` не используется нигде и никогда:
+# один неверный путь в kustomization удалил бы базу.
+#
+# Почему не volumeClaimTemplates у StatefulSet. Шаблон привязывает жизнь тома к жизни контроллера: пересоздать
+# StatefulSet (а это приходится делать — у него иммутабельны selector, serviceName и сам шаблон тома) значит
+# либо удалить его с `--cascade=orphan` и не ошибиться, либо потерять данные. Готовый PVC с собственным именем
+# переживает любое пересоздание StatefulSet, а модули просто ссылаются на claimName.
+#
+# Про Pending. При StorageClass с режимом WaitForFirstConsumer (а `local-path` именно такой) свежесозданный
+# PVC остаётся в состоянии Pending до первого пода: провижнер обязан сначала узнать, на какую ноду под
+# запланирован, и только потом создать каталог и PV с nodeAffinity на эту ноду. То есть Pending сразу после
+# `module=storage` — норма, а не ошибка; тома физически появятся на шаге `module=data`. Тревожиться стоит,
+# если PVC остался Pending после того, как под уже создан: тогда это либо отсутствующий StorageClass, либо
+# нехватка места на ноде.
+#
+# Про размеры. `local-path` квоту не режет — он раздаёт каталоги на диске ноды, и любой том может съесть всё
+# свободное место. Цифры ниже поэтому не ограничение, а заявка: они описывают ожидаемый порядок величины,
+# нужны при переезде на провижнер, который квоту соблюдает (Longhorn, Ceph, облачные диски), и служат
+# документацией «сколько места надо иметь на worker-ноде», где все эти тома живут одновременно.
+#
+# Про ReadWriteOnce. Режим у всех пяти одинаковый и выбран не по привычке: `local-path` физически не умеет
+# ничего другого — том это каталог на конкретной ноде. Практическое следствие, которое всплывает в CronJob
+# бэкапа: RWO-том MinIO нельзя примонтировать вторым подом, пока он занят первым, если поды оказались на
+# разных нодах. На домашнем кластере с одной worker-нодой они всегда на одной, и монтирование в режиме ro
+# работает; на кластере побольше копию объектов придётся снимать `mc mirror` по сети.
+#
+# Всё, что можно потерять, здесь отсутствует намеренно: сертификаты Flow.Auth приезжают Secret'ом
+# flow-auth-certs (джоба deploy-platform кладёт в него signing.pfx и encryption.pfx из GitHub Secrets),
+# а не томом, поэтому PVC под /certs нет — есть только PVC под /keys, где лежат ключи DataProtection.
+
+# ---------- namespace flow-data ----------
+
+# PGDATA: сами таблицы, WAL и индексы поиска. 20Gi — с запасом на HNSW-индекс по halfvec(512), который
+# при росте числа задач заметно тяжелее самих данных.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flow-postgres-data
+  namespace: flow-data
+  labels:
+    app.kubernetes.io/name: storage
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: "${STORAGE_CLASS}"
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Бакет вложений MinIO. Самый быстрорастущий том: при лимите Attachments:MaxFileBytes в 25 МБ на файл
+# 50Gi — это порядка двух тысяч вложений предельного размера.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flow-minio-data
+  namespace: flow-data
+  labels:
+    app.kubernetes.io/name: storage
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: s3
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: "${STORAGE_CLASS}"
+  resources:
+    requests:
+      storage: 50Gi
+---
+# Копии, которые снимает CronJob бэкапа: два дампа pg_dump плюс tar объектов S3, и всё это в BACKUP_KEEP
+# экземплярах. 20Gi исходит из того, что дампы жмутся, а объекты за счёт tar — почти нет.
+# Честная оговорка из §11 ТЗ: том лежит на том же единственном диске, что и данные, — это защита от
+# «уронил базу», а не от «умер диск». Внешний сток для копий пока не сделан.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flow-backups
+  namespace: flow-data
+  labels:
+    app.kubernetes.io/name: storage
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: "${STORAGE_CLASS}"
+  resources:
+    requests:
+      storage: 20Gi
+---
+
+# ---------- namespace flow ----------
+
+# Ключи ASP.NET DataProtection (/keys у Flow.Auth): там килобайты XML, и 1Gi взят как разумный минимум —
+# меньше просить смысла нет. Ценность тома не в объёме: потеря этих ключей разлогинивает всех
+# пользователей разом, без единой ошибки в логах, потому что cookie и токены перестают расшифровываться.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flow-auth-keys
+  namespace: flow
+  labels:
+    app.kubernetes.io/name: storage
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: auth
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: "${STORAGE_CLASS}"
+  resources:
+    requests:
+      storage: 1Gi
+---
+
+# ---------- namespace flow-ai ----------
+
+# Веса моделей: два GGUF (эмбеддер и реранкер) плюс HF-кэш vLLM, который качает веса сам и в разы
+# крупнее GGUF. Том общий для трёх AI-модулей — это оправдано тем, что кэш HuggingFace имеет смысл ровно
+# один на кластер, а поды всё равно прибиты к одной ноде. Отдельный жизненный цикл у него по той же причине,
+# что и у данных: перекачивать гигабайты при каждой выкатке недопустимо, поэтому веса не в образе и не в
+# emptyDir. Джоба закачки (deploy-models-pull) запускается только вручную.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flow-models
+  namespace: flow-ai
+  labels:
+    app.kubernetes.io/name: storage
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: models
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: "${STORAGE_CLASS}"
+  resources:
+    requests:
+      storage: 50Gi

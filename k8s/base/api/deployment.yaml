@@ -1,0 +1,369 @@
+# Flow.Api — основное приложение: задачи, доски, вложения, поиск.
+#
+# Что здесь важно понимать прежде, чем править:
+#
+# 1. replicas: 1 и strategy: Recreate — по той же причине, что у Flow.Auth. Миграции и сидер владельца
+#    выполняются внутри процесса при старте (BootstrapOwnerSeeder — hosted service), а не отдельной джобой.
+#    Две реплики при RollingUpdate пошли бы мигрировать одновременно.
+# 2. Томов у Flow.Api нет вовсе, и заводить их не надо: вложения лежат в S3 (MinIO), состояние — в Postgres.
+#    Отсюда же отсутствие nodeSelector: под без диска волен ехать на любую ноду, и прибивать его к worker
+#    значило бы отнимать у планировщика единственную свободу, которая тут есть.
+# 3. runAsNonRoot: true — по факту, а не по привычке: в src/Flow.Api/Dockerfile стоит USER $APP_UID, то есть
+#    образ уже собран под непривилегированного пользователя, и флаг лишь фиксирует это как требование.
+#    Если однажды кто-то уберёт USER из Dockerfile, под честно не стартует вместо того, чтобы тихо
+#    поехать от root.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flow-api
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: flow
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  # См. тот же комментарий в auth: дедлайн со стороны кластера должен быть заведомо больше бюджета
+  # startupProbe плюс времени на скачивание образа. У Flow.Api бюджет больше, чем у Flow.Auth
+  # (300 с против 240 с: среди миграций есть построение HNSW-индекса), поэтому 600 с здесь — это
+  # 300 с пробы плюс запас на pull образа по домашнему каналу, а не круглое число.
+  progressDeadlineSeconds: 600
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+      app.kubernetes.io/part-of: flow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api
+        app.kubernetes.io/part-of: flow
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      automountServiceAccountToken: false
+      containers:
+        - name: api
+          # Заглушка, digest подставляет джоба render — см. комментарий в k8s/base/auth/deployment.yaml.
+          image: flow-api:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          # Список длинный, и это правильно: каждая строка отвечает на вопрос «откуда сервис возьмёт это
+          # значение в кластере». Пропущенная строка не роняет под — ASP.NET подставит дефолт из
+          # appsettings.json, то есть localhost-адрес или дев-пароль, и сервис будет молча нерабочим при
+          # зелёном rollout. Именно поэтому envFrom не используется: явный список видно в diff.
+          env:
+            # ---- Postgres ----
+            # Пароль отдельной строкой из Secret, склейка — механизмом $(VAR) самого Kubernetes.
+            # В ConfigMap строка подключения целиком не кладётся никогда: там она читалась бы любым,
+            # у кого есть get configmap.
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: POSTGRES_HOST
+            # База приложения, не база учёток: у Flow.Auth своя, AUTH_DB.
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: POSTGRES_PASSWORD
+            # Порт числом: 5432 зафиксирован контрактом Service постгреса (подробности — в auth).
+            - name: ConnectionStrings__Postgres
+              value: "Host=$(POSTGRES_HOST);Port=5432;Database=$(POSTGRES_DB);Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"
+
+            # ---- Flow.Auth: пара «внутренний адрес + внешний issuer» ----
+            # Это самое лёгкое место, чтобы всё сломать, поэтому распишу механизм целиком.
+            # Auth__BaseUrl — адрес, по которому Flow.Api физически ходит за discovery и JWKS. Он
+            # внутрикластерный (http://flow-auth.flow.svc.cluster.local:8080), потому что гонять служебный
+            # трафик через ingress и внешний DNS незачем, а в домашней сети внешнее имя изнутри кластера
+            # может и не резолвиться вовсе.
+            # Auth__Issuer — значение claim iss в токенах, то есть внешний адрес: токен выдан браузеру и им
+            # же предъявлен. IssuerRewritingConfigurationRetriever в Program.cs рассчитан ровно на эту пару:
+            # документ discovery скачивается по внутреннему адресу, а issuer в нём подменяется на внешний.
+            # Перепутать их местами — получить «401 на всё» с сообщением о несовпадении issuer.
+            - name: INTERNAL_AUTH_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: INTERNAL_AUTH_URL
+            - name: Auth__BaseUrl
+              value: "$(INTERNAL_AUTH_URL)"
+            # Внешние адреса подставляет envsubst на рендере, а не configMapKeyRef: их видит браузер, они
+            # обязаны совпадать у api, auth, client и в хостах Ingress, и их изменение обязано вызывать
+            # rollout. Правка ConfigMap под не перезапускает — значение молча осталось бы прежним.
+            - name: Auth__Issuer
+              value: "${PUBLIC_AUTH_URL}"
+            # В коде requireHttps = RequireHttpsMetadata ?? !IsDevelopment(), а в контейнере окружение
+            # Production — то есть по умолчанию Flow.Api потребует https у документа discovery, который
+            # лежит по внутреннему http-адресу. Значение остаётся false и после включения TLS снаружи:
+            # Auth__BaseUrl как был внутрикластерным http, так и останется.
+            - name: Auth__RequireHttpsMetadata
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: AUTH_REQUIRE_HTTPS_METADATA
+            # Секрет клиента flow-api: по нему Flow.Api получает токен к admin-API Flow.Auth
+            # (client_credentials, scope auth:admin). Обязан совпадать со значением у Flow.Auth.
+            - name: Auth__ApiClient__Secret
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: AUTH_API_CLIENT_SECRET
+
+            # ---- CORS ----
+            # Blazor-клиент живёт на своём origin, поэтому браузер требует разрешения. Индекс __0
+            # перекрывает единственный элемент массива из appsettings.json целиком.
+            - name: Cors__Origins__0
+              value: "${PUBLIC_CLIENT_ORIGIN}"
+
+            # ---- S3 (MinIO в namespace flow-data) ----
+            # Адрес и бакет несекретны и лежат в ConfigMap, ключи доступа — в Secret. Бакет приложение само
+            # не создаёт: его делает Job внутри deploy-s3, и при отсутствии бакета падают именно загрузки
+            # вложений, а не старт сервиса.
+            - name: S3__Endpoint
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: S3_ENDPOINT
+            - name: S3__Bucket
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: S3_BUCKET
+            # Внутри кластера MinIO слушает http, поэтому false. Это про соединение api → MinIO, а не про
+            # внешний TLS: переключение PUBLIC_* на https этого значения не касается.
+            - name: S3__UseSsl
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: S3_USE_SSL
+            # Сейчас Flow.Api ходит в хранилище root-учёткой MinIO — отсюда и имена ключей. Отдельный
+            # пользователь с правами только на бакет остаётся в бэклоге, и менять имена придётся здесь же.
+            - name: S3__AccessKey
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: MINIO_ROOT_USER
+            - name: S3__SecretKey
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: MINIO_ROOT_PASSWORD
+
+            # ---- Поиск ----
+            # Три выключателя разной грубости, и переносить их надо все: Search__Enabled гасит поиск целиком,
+            # Search__Embeddings__Enabled оставляет поиск по словам без единой модели, а Vision и Rerank —
+            # отдельные ступени со своими GPU-сервисами. На этапе 1 AI-слой не поднят вовсе, и правильное
+            # поведение — деградация в полнотекстовый поиск, а не отказ: значения приходят из ConfigMap,
+            # чтобы включение моделей не требовало пересборки манифестов.
+            - name: Search__Enabled
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: SEARCH_ENABLED
+            - name: Search__Indexing__Enabled
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: SEARCH_INDEXING_ENABLED
+            - name: Search__Embeddings__Enabled
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: EMBEDDINGS_ENABLED
+            - name: Search__Embeddings__QueryEndpoint
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: EMBEDDINGS_QUERY_ENDPOINT
+            # Единственный ключ во всём слое приложения с optional: true, и это не послабление, а разбор
+            # двух разных состояний. Пустое значение здесь законно и означает «индексация ходит туда же,
+            # куда и запросы» — отличить его от «забыли задать» нечем. При обычной ссылке отсутствие ключа
+            # в ConfigMap дало бы CreateContainerConfigError, то есть падение пода из-за настройки, законное
+            # значение которой — пустота. С optional переменная просто не появится, и в силе останется
+            # дефолт из appsettings.json, равный той же пустой строке.
+            - name: Search__Embeddings__IndexingEndpoint
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: EMBEDDINGS_INDEXING_ENDPOINT
+                  optional: true
+            # Имя модели уходит в запрос к llama-server как поле model и обязано совпадать с --alias,
+            # с которым поднят сервис эмбеддингов. Отсюда и общий ConfigMap: значение читают оба модуля.
+            - name: Search__Embeddings__Model
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: EMBEDDINGS_MODEL
+            # Реранкер и визуальный поиск выключены на этапе 1, но адреса и имена моделей переносим всё
+            # равно: иначе при включении флага в ConfigMap сервис пошёл бы на localhost-дефолт из
+            # appsettings.json и получил бы отказ соединения вместо работающей второй ступени.
+            - name: Search__Rerank__Enabled
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: RERANK_ENABLED
+            - name: Search__Rerank__Endpoint
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: RERANK_ENDPOINT
+            - name: Search__Rerank__Model
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: RERANKER_MODEL
+            - name: Search__Embeddings__Vision__Enabled
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: VISION_ENABLED
+            - name: Search__Embeddings__Vision__Endpoint
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: VISION_ENDPOINT
+            # У vLLM это --served-model-name, и совпадение обязательно в обоих местах: иначе запрос уйдёт
+            # с именем модели, которой сервер не знает.
+            - name: Search__Embeddings__Vision__Model
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: VISION_MODEL
+
+            # ---- Первичный владелец ----
+            # Тот же Bootstrap__Id, что у Flow.Auth: там создаётся учётная запись, здесь — профиль с этим Id.
+            # Пароля в этом списке нет и быть не должно: Flow.Api его не читает.
+            - name: Bootstrap__Enabled
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_ENABLED
+            - name: Bootstrap__Id
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_ID
+            - name: Bootstrap__Username
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_USERNAME
+            - name: Bootstrap__Email
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_EMAIL
+            # Имя и фамилия владельца есть только у Flow.Api (в профиле), у Flow.Auth таких полей нет.
+            # optional: true — потому что у обоих значений есть осмысленный дефолт в appsettings.json
+            # («Admin Flow»), и требовать их от оператора при первом запуске не за что.
+            - name: Bootstrap__FirstName
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_FIRST_NAME
+                  optional: true
+            - name: Bootstrap__LastName
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_LAST_NAME
+                  optional: true
+          # ---- Пробы ----
+          # Три пробы и та же логика, что у Flow.Auth (там разобрано, почему их именно три).
+          # Здесь повторено главное требование, потому что цена его потери — убитый посреди миграции под:
+          #
+          # startupProbe ОБЯЗАТЕЛЕН и удалён быть не может. Проверено экспериментом: GenericWebHostService
+          # (сам Kestrel) регистрируется как hosted service внутри WebApplicationBuilder.Build(), то есть ПОСЛЕ всех
+          # AddHostedService из Program.cs, а хост запускает их строго в порядке регистрации. Значит сокет не открывается
+          # вообще, пока StartAsync у BootstrapOwnerSeeder не вернулся: запуск Flow.Api с недоступной БД даёт
+          # за 25 секунд ожидания ноль строк «Now listening», а curl на /health/live не устанавливает соединение вовсе.
+          # Следствие, которое и делает требование жёстким: во время ожидания БД и миграций недоступен не
+          # только /health/ready, но и /health/live — лёгкая проба «процесс жив» здесь не спасает ничего. Без
+          # startupProbe livenessProbe с этими числами (3 промаха по 10 с) убила бы контейнер через полминуты после
+          # старта — то есть посреди первой же миграции, и каждая следующая попытка начиналась бы заново.
+          # Пока startupProbe не прошла, kubelet не выполняет ни liveness, ни readiness — именно это и закрывает окно.
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            # 3 с — не стиль, а нижняя граница: у /health/live нет ни одной проверки (Predicate = _ => false),
+            # то есть ответ упирается только в планировщик потоков .NET под нагрузкой.
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+            # timeoutSeconds ОБЯЗАН быть больше внутреннего таймаута самой проверки (AddCheck(…, timeout:)
+            # в Program.cs, сейчас 2 с). Порядок важен практически: при зависшем запросе к БД приложение
+            # само отдаёт 503 за 2 с, и это честный ответ с причиной в логе; если же раньше сработает таймаут
+            # kubelet, проба оборвёт соединение и в событиях останется безликое «context deadline exceeded».
+            # 3 с при внутренних 2 с — минимальный запас в секунду; уменьшать нельзя.
+            timeoutSeconds: 3
+            # Единичная неудача не должна выдёргивать под из Endpoints: у CanConnectAsync бывают одиночные
+            # срывы при пересоединении к БД.
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            # БЮДЖЕТ: 60 × 5 с = 300 с. Считается он не от первого ответа сервиса, а от старта контейнера:
+            # сокет закрыт всё это время, и каждая попытка заканчивается отказом в соединении, то есть таким же
+            # промахом, как 503. Раскладка: 60 с ожидания Postgres (Startup:DatabaseWaitTimeoutSeconds) плюс 240 с
+            # запаса на миграции и сидер владельца.
+            #
+            # Почему больше, чем у Flow.Auth (там 48 × 5 с = 240 с). Раньше здесь стояло то же число 48,
+            # хотя соседний комментарий сам же говорил, что миграций у Flow.Api заметно больше: число было
+            # скопировано, а не пересчитано. Среди миграций есть CREATE EXTENSION vector и построение
+            # HNSW-индекса по halfvec(512) — на уже наполненной базе это минуты, а не секунды, и провал
+            # бюджета здесь значит не «чуть дольше ждём», а перезапуск посреди построения индекса и вторая
+            # попытка с нуля — то тело петли, из которой выкатка сама не выберется.
+            #
+            # Цепочка ограничителей, которую нельзя нарушать ни в одну сторону:
+            #   бюджет startupProbe (300 с)  <  DEPLOY_TIMEOUT  ≤  progressDeadlineSeconds (600 с).
+            # Правое неравенство очевидно, а левое легко просмотреть: kubectl rollout status --timeout
+            # отсчитывает время от apply, то есть в него входит ещё и скачивание образа. С DEPLOY_TIMEOUT = 300
+            # (пример из §7.2 ТЗ) джоба выкатки покраснела бы раньше, чем проба вынесла вердикт, и
+            # отчёт сказал бы «выкатка не удалась» про здоровый под, которому оставалось полминуты. Поэтому
+            # DEPLOY_TIMEOUT для api и auth обязан быть не меньше 600 (§7.2 ТЗ поправлен).
+            failureThreshold: 60
+          resources:
+            # Запрос памяти выше, чем у auth: здесь EF Core с большой моделью, фоновый воркер индексации и
+            # буферизация вложений (Attachments:MaxFileBytes = 25 МБ на файл). Лимит в 1Gi выбран так, чтобы
+            # несколько параллельных загрузок не упирались в OOMKilled, но и не выедали worker-ноду, на
+            # которой одновременно живут Postgres и MinIO.
+            requests:
+              cpu: 200m
+              memory: 384Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          securityContext:
+            # Образ уже собран под непривилегированного пользователя (USER $APP_UID), поэтому требование
+            # честное и ничего не ломает.
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # readOnlyRootFilesystem намеренно НЕ включён. Загрузка вложения до 25 МБ идёт multipart, и
+            # ASP.NET буферизует такие запросы во временный файл, как только тело перестаёт помещаться в
+            # память. На read-only корне это упало бы не при старте, а при первой большой загрузке — то есть
+            # выкатка была бы зелёной, а вложения перестали бы прикрепляться. Включать его можно только
+            # вместе с emptyDir на /tmp и проверкой загрузки файла в smoke.

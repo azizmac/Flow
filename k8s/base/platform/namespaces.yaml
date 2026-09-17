@@ -1,0 +1,49 @@
+# Три namespace проекта — и это всё содержимое слоя платформы.
+#
+# Почему три, а не один. Разделение стоит один вечер и снимает единственный необратимый класс ошибок:
+# опечатка в джобе приложения не достанет до PVC постгреса (docs/TZ_cicd_k8s.md §3). Цена разделения —
+# межнеймспейсные адреса: короткое имя из соседнего namespace не резолвится, поэтому во всех
+# внутренних адресах стоит FQDN. Важно: имена объектов несут префикс flow-, то есть адрес
+# — flow-postgres.flow-data.svc.cluster.local, а не postgres.flow-data.…; то же у flow-s3, flow-ai
+# и flow-vision. Полный список — в §7.1 ТЗ и deploy/required-vars.txt.
+#
+# Почему здесь нет ни Secret, ни ConfigMap. Значения приходят из GitHub Secrets и Variables, а в репозиторий
+# не коммитится ни один секрет. Объекты flow-secrets, flow-auth-certs, regcred и flow-config создаёт джоба
+# deploy-platform прямо в кластере; манифесты модулей только ссылаются на них через envFrom и *KeyRef.
+# Из этого следует порядок выкатки: deploy-platform идёт до preflight, иначе серверный dry-run следующего
+# шага падает с `namespaces "flow" not found`.
+#
+# Имена namespace намеренно зашиты, а не вынесены в плейсхолдер под K8S_NAMESPACE: переменные с этими именами
+# нужны джобам выкатки (kubectl -n), а в самих манифестах подстановка имени namespace означала бы, что
+# межнеймспейсные FQDN в соседних модулях надо собирать той же подстановкой — три адреса превратились бы
+# в шесть мест, которые обязаны совпасть. Второй контур поднимается отдельным оверлеем, а не переменной.
+#
+# Метка app.kubernetes.io/name здесь — имя модуля (platform), а не имя namespace: по ней слой платформы
+# отбирается целиком (`kubectl get ns -l app.kubernetes.io/name=platform`). Различать сами namespace удобнее
+# по component.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flow
+  labels:
+    app.kubernetes.io/name: platform
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: app
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flow-data
+  labels:
+    app.kubernetes.io/name: platform
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: data
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flow-ai
+  labels:
+    app.kubernetes.io/name: platform
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: ai

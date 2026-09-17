@@ -1,0 +1,29 @@
+# Service хранилища. Имя совпадает с именем StatefulSet, поэтому внутрикластерный адрес —
+# flow-s3.flow-data.svc.cluster.local. Именно он обязан лежать в ConfigMap flow-config под ключом
+# S3_ENDPOINT: http://flow-s3.flow-data.svc.cluster.local:9000. §7.1 ТЗ и deploy/required-vars.txt приведены
+# к этому же имени (раньше там стояло короткое s3). Ошибка в этом
+# адресе не роняет ни один под: Flow.Api поднимется зелёным и молча уронит первую же загрузку вложения.
+#
+# Наружу не выставляем ни одним Ingress: в compose оба порта слушали 127.0.0.1, и менять это незачем —
+# вложения ходят через Flow.Api, а консоль нужна человеку, а не сети. Посмотреть консоль:
+#   kubectl -n flow-data port-forward svc/flow-s3 9001:9001
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-s3
+  labels:
+    app.kubernetes.io/name: s3
+    app.kubernetes.io/part-of: flow
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: s3
+    app.kubernetes.io/part-of: flow
+  ports:
+    # targetPort по имени, а не по числу: номер порта тогда живёт в одном месте — в StatefulSet.
+    - name: s3
+      port: 9000
+      targetPort: s3
+    - name: console
+      port: 9001
+      targetPort: console

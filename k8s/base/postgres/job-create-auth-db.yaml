@@ -1,0 +1,145 @@
+# Вторая база — flow_auth для Flow.Auth (Identity + OpenIddict). В Compose её создавал
+# docker/postgres/init.sql, примонтированный в /docker-entrypoint-initdb.d.
+#
+# Почему этого недостаточно в кластере. Скрипты из initdb.d выполняются ровно один раз — при инициализации
+# пустого PGDATA. Как только том с данными переносят из docker-тома или просто пересоздают StatefulSet
+# поверх существующего PVC, entrypoint видит готовый каталог и весь initdb.d пропускает молча. База
+# flow_auth при этом не появляется, Flow.Auth уходит в CrashLoopBackOff, а в логах — ошибка соединения,
+# которая выглядит как сетевая проблема между namespace'ами. Искать это можно долго.
+#
+# Поэтому создание вынесено в отдельный идемпотентный Job: он отрабатывает и на пустом томе, и на любом
+# существующем, и его результат виден в UI выкатки отдельной строкой.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # Имя с ${RELEASE_SHA} — вынужденная мера, а не версионирование ради версионирования. Spec у Job
+  # иммутабелен: повторный `kubectl apply` поверх уже завершившегося объекта падает с «field is immutable»,
+  # и выкатка краснеет на шаге, который на самом деле нечего делать. Новое имя на каждый релиз снимает
+  # вопрос, а ttlSecondsAfterFinished ниже не даёт кластеру копить завершённые объекты.
+  name: flow-create-auth-db-${RELEASE_SHA}
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: flow
+    # component отличает этот под от подов самой БД — иначе он попадёт в Endpoints headless-сервиса
+    # flow-postgres. См. комментарий к селектору в service.yaml.
+    app.kubernetes.io/component: create-auth-db
+spec:
+  # Час после завершения — и объект вместе с подом убирает сам кластер. Логи после этого недоступны,
+  # поэтому джоба выкатки обязана забрать их сразу (`kubectl logs job/...`) и положить в артефакт.
+  ttlSecondsAfterFinished: 3600
+  # Шесть попыток с экспоненциальной паузой. Смысл ретраев ровно один: postgres мог ещё не подняться,
+  # а у Job нет аналога depends_on. Ошибка прав или опечатка в имени БД повторится все шесть раз и
+  # закончится Failed — это правильный исход, такое чинится руками, а не ожиданием.
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: flow
+        app.kubernetes.io/component: create-auth-db
+    spec:
+      # OnFailure перезапускает контейнер в том же поде — для короткой задачи это дешевле, чем
+      # пересоздавать под целиком, и не плодит десяток объектов Pod в истории namespace.
+      restartPolicy: OnFailure
+      imagePullSecrets:
+        - name: regcred
+      # nodeSelector здесь намеренно нет: поду нужна только сеть, тома он не монтирует, и прибивать его
+      # к worker-ноде значило бы усложнять манифест без единого выигрыша.
+      containers:
+        - name: create-auth-db
+          # Тот же образ, что у самой БД, — чтобы клиент psql гарантированно совпадал по мажорной версии
+          # с сервером и чтобы в релизе не появлялся десятый образ ради одной команды CREATE DATABASE.
+          # Тег-заглушка; digest подставляет kustomize в джобе рендера.
+          image: pgvector/pgvector:pg16
+          imagePullPolicy: IfNotPresent
+          env:
+            # Значения — из ConfigMap flow-config и Secret flow-secrets, которые создаёт джоба
+            # deploy-platform. Адрес берём из той же переменной POSTGRES_HOST, что и приложение, а не
+            # из короткого имени сервиса: если POSTGRES_HOST задан неверно, это выяснится здесь, на
+            # десятисекундной джобе с понятным логом, а не через полчаса на CrashLoopBackOff у Flow.Api.
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: POSTGRES_HOST
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: POSTGRES_USER
+            - name: AUTH_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: AUTH_DB
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: POSTGRES_PASSWORD
+            # Дальше — стандартные переменные libpq, собранные подстановкой $(VAR). Это механизм самого
+            # Kubernetes: env-переменная может ссылаться на объявленную выше env-переменную этого же
+            # контейнера. Выигрыш прикладной: пароль остаётся в Secret и не превращается в аргумент
+            # командной строки, который виден в `kubectl describe pod` и в ps внутри контейнера.
+            - name: PGHOST
+              value: "$(POSTGRES_HOST)"
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: "$(POSTGRES_USER)"
+            # Подключаемся к основной базе: она существует с первого старта тома, а к создаваемой
+            # подключиться, очевидно, ещё нельзя.
+            - name: PGDATABASE
+              value: "$(POSTGRES_DB)"
+            - name: PGPASSWORD
+              value: "$(POSTGRES_PASSWORD)"
+          command:
+            - sh
+            - -c
+          args:
+            # Про форму ${VAR:?} вместо $VAR. Манифесты перед сборкой прогоняются через envsubst — он
+            # подставляет ${RELEASE_SHA} в имя этого Job. envsubst не различает, кому адресована
+            # переменная, и заменил бы $AUTH_DB и $POSTGRES_USER своими значениями с машины рендера
+            # (а незаданное — пустой строкой, что тише и хуже). Запись ${VAR:?} для envsubst
+            # подстановкой не является и доезжает до контейнера дословно, а POSIX-шелл трактует её как
+            # «подставить или упасть, если переменная пуста» — то есть потерянный ключ в ConfigMap
+            # даёт честную ошибку вместо CREATE DATABASE "" .
+            #
+            # Имя базы именно из переменной, а не строкой: при смене AUTH_DB зашитое имя создало бы
+            # не ту базу, Flow.Auth ушёл бы в CrashLoopBackOff, а Job при этом рапортовал бы Completed.
+            - |
+              set -eu
+
+              # Ожидание БД. У Job нет depends_on: он стартует одновременно со StatefulSet, и первые
+              # попытки подключения почти наверняка придутся на инициализацию тома. Пять минут — тот же
+              # порядок, что у startupProbe постгреса; дальше честно падаем и отдаём попытку backoffLimit.
+              echo "Ждём postgres по адресу ${PGHOST:?}:${PGPORT:?} (до 5 минут)..."
+              timeout 300 sh -c 'until pg_isready -q -t 3; do sleep 5; done'
+
+              # Идемпотентность: сначала спрашиваем каталог, потом создаём. CREATE DATABASE IF NOT EXISTS
+              # в postgres не существует, а безусловный CREATE DATABASE на повторной выкатке вернул бы
+              # ошибку и покрасил бы джобу на совершенно нормальной ситуации.
+              if psql -tAc "SELECT 1 FROM pg_database WHERE datname='${AUTH_DB:?}'" | grep -q 1; then
+                echo "База ${AUTH_DB:?} уже есть — ничего не делаем."
+              else
+                # Имя в двойных кавычках: без них postgres приводит идентификатор к нижнему регистру,
+                # и AUTH_DB=Flow_Auth дал бы базу flow_auth — а строка подключения Flow.Auth искала бы
+                # ту, что написана в переменной.
+                psql -c "CREATE DATABASE \"${AUTH_DB:?}\" OWNER \"${POSTGRES_USER:?}\""
+                echo "База ${AUTH_DB:?} создана, владелец ${POSTGRES_USER:?}."
+              fi
+          resources:
+            # Под живёт секунды и делает один запрос. Requests/limits нужны не ради экономии, а потому
+            # что без них под попадает в класс BestEffort и выселяется первым при нехватке памяти на
+            # ноде — то есть ровно в тот момент, когда выкатка данных и так идёт тяжело.
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

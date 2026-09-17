@@ -89,13 +89,15 @@ services:
       # а индексация продолжает работать и пишет чанки без векторов. Заодно гаснут визуальная
       # половина и реранкер: держать GPU-сайдкары ради выключенного поиска смысла нет.
       Search__Embeddings__Enabled: ${EMBEDDINGS_ENABLED:-true}
-      Search__Embeddings__QueryEndpoint: ${EMBEDDINGS_QUERY_ENDPOINT:-http://embeddings:8081/v1}
+      Search__Embeddings__QueryEndpoint: ${EMBEDDINGS_QUERY_ENDPOINT:-http://ai:8081/v1}
       Search__Embeddings__IndexingEndpoint: ${EMBEDDINGS_INDEXING_ENDPOINT:-}
       Search__Embeddings__Model: ${EMBEDDINGS_MODEL:-Qwen3-Embedding-0.6B}
-      # Вторая ступень выключена по умолчанию: она требует GPU и превращает поиск из мгновенного
-      # в секундный. RERANK_ENABLED=true включает кнопку «Точнее» в интерфейсе.
+      # Вторая ступень выключена по умолчанию: она превращает поиск из мгновенного в секундный,
+      # и это решение продукта. RERANK_ENABLED=true включает кнопку «Точнее» в интерфейсе.
+      # Адрес тот же, что у эмбеддера, и это не опечатка: обе текстовые модели держит один сервис ai,
+      # а различает он их по полю "model" в запросе — оно берётся из Search__Rerank__Model.
       Search__Rerank__Enabled: ${RERANK_ENABLED:-false}
-      Search__Rerank__Endpoint: ${RERANK_ENDPOINT:-http://reranker:8082/v1}
+      Search__Rerank__Endpoint: ${RERANK_ENDPOINT:-http://ai:8081/v1}
       Search__Rerank__Model: ${RERANKER_MODEL:-bge-reranker-v2-m3}
       # Визуальная половина: тоже выключена по умолчанию и тоже требует GPU.
       Search__Embeddings__Vision__Enabled: ${VISION_ENABLED:-false}

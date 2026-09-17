@@ -78,28 +78,43 @@ services:
     networks:
       - flow-network
 
-  # Эмбеддер поиска: llama-server с Qwen3-Embedding по OpenAI-совместимому /v1/embeddings.
+  # Текстовая половина поиска: один llama-server отдаёт и эмбеддинги, и реранк.
   # Профиль ai включается явно:
   #   docker compose -f docker-compose.data.yml --profile ai up -d
+  # С видеокартой NVIDIA — тем же способом плюс оверлей железа:
+  #   docker compose -f docker-compose.data.yml -f docker/ai/nvidia.yml --profile ai up -d
+  #
+  # Почему один сервис на две модели. llama-server умеет router-режим: запускается без --model, читает
+  # docker/ai/models.ini и сам поднимает отдельный процесс под каждую модель, маршрутизируя запросы по
+  # полю "model" в теле. Отсюда два следствия. Первое: адрес один, и EMBEDDINGS_QUERY_ENDPOINT с
+  # RERANK_ENDPOINT указывают на один и тот же порт. Второе: модель грузится по первому обращению,
+  # поэтому при RERANK_ENABLED=false реранкер не занимает ни байта.
+  #
+  # Ни --embedding, ни --reranking, ни --pooling здесь быть не должно. Аргументы командной строки
+  # наследуются всеми процессами моделей и имеют высший приоритет, поэтому глобальный --reranking
+  # форсит pooling_type=4, и эмбеддер начинает молча отдавать нули — ошибка без единой записи в логе.
+  # Режимы задаются пер-модельно в models.ini, и только там.
+  #
   # Веса кладут во внешний том flow-models-data (создаёт docker/data/init-env.sh, путь задаёт MODELS_ROOT):
-  # это тяжёлые данные со своим жизненным циклом, пересборка приложения их не трогает.
-  # Если модель крутится на другой машине (GPU), сервис не поднимают вовсе — EMBEDDINGS_QUERY_ENDPOINT
-  # просто указывает наружу. Межстековых depends_on нет: недоступность модели — деградация поиска, не сбой старта.
-  embeddings:
-    image: ${EMBEDDINGS_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+  # это тяжёлые данные со своим жизненным циклом, пересборка приложения их не трогает. Если модели
+  # крутятся на другой машине, сервис не поднимают вовсе — эндпоинты просто указывают наружу.
+  # Межстековых depends_on нет: недоступность модели — деградация поиска, а не сбой старта.
+  ai:
+    image: ${AI_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
     profiles: ["ai"]
     restart: unless-stopped
-    # --pooling last обязателен для Qwen3-Embedding: пулинг по последнему токену делает сам сервер.
     command: >
-      --model /models/${EMBEDDINGS_MODEL_FILE:-Qwen3-Embedding-0.6B-Q8_0.gguf}
-      --alias ${EMBEDDINGS_MODEL:-Qwen3-Embedding-0.6B}
-      --embedding --pooling last
-      --ctx-size 8192 --batch-size 8192 --ubatch-size 8192
+      --models-preset /config/models.ini
+      --models-max 2
+      --no-webui
+      --threads ${AI_THREADS:-4}
       --host 0.0.0.0 --port 8081
     volumes:
       - models-data:/models
+      # Одним файлом, а не каталогом: рядом лежит оверлей железа, и монтировать его контейнеру незачем.
+      - ./docker/ai/models.ini:/config/models.ini:ro
     ports:
-      - "${EMBEDDINGS_BIND:-127.0.0.1}:${EMBEDDINGS_PORT:-8081}:8081"
+      - "${AI_BIND:-127.0.0.1}:${AI_PORT:-8081}:8081"
     # Свой healthcheck: встроенный в образ стучится на 8080, а сервер поднят на 8081 —
     # без переопределения контейнер вечно «unhealthy» при исправно работающей модели.
     healthcheck:
@@ -109,48 +124,6 @@ services:
       retries: 10
       # Веса грузятся с диска: на холодном старте первая проба не должна считаться провалом.
       start_period: 60s
-    networks:
-      - flow-network
-
-  # Вторая ступень поиска: cross-encoder переупорядочивает два десятка отобранных кандидатов.
-  # Тот же профиль ai, но образ с CUDA и видеокарта: на CPU прогон пар занимает десятки секунд,
-  # и ступень теряет смысл. Нет GPU — не поднимайте сервис, поиск останется одноступенчатым
-  # (Search:Rerank:Enabled=false, кнопка «Точнее» в интерфейсе не появится).
-  #
-  #   docker compose -f docker-compose.data.yml --profile ai up -d reranker
-  reranker:
-    image: ${RERANKER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
-    profiles: ["ai"]
-    restart: unless-stopped
-    # Модель не из ТЗ: там назван Qwen3-Reranker-0.6B, но это causal LM без классификационной головы —
-    # llama.cpp честно пишет «model default pooling_type is [-1]» и считает оценки по последнему токену,
-    # то есть ранжирует мусором (проверено: правильный документ получал оценку на три порядка ниже
-    # постороннего). Режим --reranking рассчитан на cross-encoder с головой, каким и является
-    # bge-reranker-v2-m3: многоязычный, сильный на русском, того же размера.
-    command: >
-      --model /models/${RERANKER_MODEL_FILE:-bge-reranker-v2-m3-Q8_0.gguf}
-      --alias ${RERANKER_MODEL:-bge-reranker-v2-m3}
-      --reranking --pooling rank
-      --ctx-size 8192 --batch-size 8192 --ubatch-size 8192
-      --gpu-layers ${RERANKER_GPU_LAYERS:-99}
-      --host 0.0.0.0 --port 8082
-    volumes:
-      - models-data:/models
-    ports:
-      - "${RERANKER_BIND:-127.0.0.1}:${RERANKER_PORT:-8082}:8082"
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8082/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 60s
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     networks:
       - flow-network
 

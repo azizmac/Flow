@@ -1,0 +1,266 @@
+# Composite action: restore + build решения в Release и, если задан project, прогон одного тестового проекта.
+#
+# Откуда взялся. В .github/workflows/build.yml пять тестовых проектов шли шагами одной джобы, причём Domain
+# и Application — двумя командами внутри одного шага. Первый упавший dotnet test обрывал шаг, и остальные
+# проекты не запускались вообще: чтобы увидеть вторую поломку, приходилось чинить первую и гонять CI заново.
+# Теперь каждый проект — своя джоба, и по красному крестику сразу видно, что именно сломалось.
+#
+# Почему composite, а не reusable workflow. У вложенных джоб reusable workflow имя в интерфейсе составное
+# («Тесты · Auth / run») и меняется при любом переименовании внутренней джобы, а такие имена попадают
+# в branch protection. Composite подставляет шаги прямо в джобу вызывающего, и имя джобы остаётся тем,
+# которое задал оркестратор.
+#
+# Чего этот action не делает — намеренно:
+# - не делает checkout: его делает вызывающая джоба (actions/checkout@v4), как и во всех остальных workflow;
+# - не поднимает Docker: демон нужен только проектам на Testcontainers (Infrastructure, Auth, Api),
+#   и это забота вызывающего — ubuntu-latest даёт его сам, self-hosted раннер может и не дать;
+# - не знает ни одного секрета: тесты поднимают свои контейнеры и ходят только в них.
+name: Сборка и тесты .NET
+description: Restore и build решения в Release плюс прогон одного тестового проекта с trx, аннотациями и строкой в Job Summary.
+
+inputs:
+  project:
+    description: Путь к тестовому проекту — каталог (tests/Flow.Api.Tests) или сам .csproj. Пустой — только restore и build решения.
+    required: false
+    default: ''
+  filter:
+    description: Значение для dotnet test --filter, например "Category!=Model&Category!=Golden". Пустое — гоняются все тесты проекта.
+    required: false
+    default: ''
+  title:
+    description: Человеческое имя прогона для таблицы в Job Summary. Пустое — подставится путь к проекту.
+    required: false
+    default: ''
+
+outputs:
+  passed:
+    description: Сколько тестов прошло (по trx). Пусто, если project не задан.
+    value: ${{ steps.summary.outputs.passed }}
+  failed:
+    description: Сколько тестов упало (по trx).
+    value: ${{ steps.summary.outputs.failed }}
+  skipped:
+    description: Сколько тестов пропущено (по trx) — сюда попадают и Skip-атрибуты, и отсев по --filter.
+    value: ${{ steps.summary.outputs.skipped }}
+  duration:
+    description: Время прогона человеческой строкой, например «42.7 с».
+    value: ${{ steps.summary.outputs.duration }}
+  trx:
+    description: Путь к файлу trx внутри рабочего каталога.
+    value: ${{ steps.prep.outputs.trx }}
+  artifact:
+    description: Имя артефакта, в который уехал trx, — чтобы следующая джоба могла его скачать.
+    value: ${{ steps.prep.outputs.artifact }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: Setup .NET (версия из global.json)
+      uses: actions/setup-dotnet@v4
+      with:
+        global-json-file: global.json
+
+    # Ключ по всем csproj и global.json: состав пакетов меняется только вместе с ними, а смена SDK тянет
+    # за собой другие ref-паки. restore-keys оставляют частичное попадание — при добавлении одного пакета
+    # докачивается он, а не весь граф заново.
+    - name: Кэш пакетов NuGet
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'global.json') }}
+        restore-keys: |
+          nuget-${{ runner.os }}-
+
+    # Переменные DOTNET_* задаём на каждом шаге: у composite action нет общего блока env, а полагаться
+    # на env вызывающего workflow нельзя — action должен работать и в чужой джобе.
+    #
+    # Собираем всё решение, а не один тестовый проект. Тестовый проект тянет src через ProjectReference,
+    # так что сборка «только своего» сэкономила бы минуты, но лишила бы дешёвой проверки: решение обязано
+    # собираться целиком в каждой джобе. С прогретым кэшем NuGet разница невелика.
+    - name: Restore
+      shell: bash
+      env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: true
+        DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      run: dotnet restore Flow.slnx
+
+    # Собираем не всё решение, а ровно то, что нужно этой джобе: dotnet build тестового проекта тянет за
+    # собой его ProjectReference и ничего сверх. Разница заметна там, где тестов на сорок миллисекунд, а
+    # сборка всего решения занимала бы минуту: джоба Domain перестаёт ждать компиляции Api и Client.
+    # Пустой project — это джоба «Сборка .NET (Release)», и вот ей нужно именно всё решение целиком.
+    - name: Build (Release)
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: true
+        DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      run: dotnet build "${PROJECT:-Flow.slnx}" -c Release --no-restore
+
+    # Значения инпутов передаём через env, а не подставляем ${{ }} прямо в текст скрипта: подстановка
+    # склеивает чужую строку с кодом, а $PROJECT приходит в shell уже одним значением.
+    - name: Параметры прогона
+      id: prep
+      if: inputs.project != ''
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        FILTER: ${{ inputs.filter }}
+      run: |
+        set -euo pipefail
+
+        # Принимаем и каталог, и .csproj — вызывающему не нужно помнить, что именно ждёт action.
+        dir="$PROJECT"
+        if [ "${dir##*.}" = "csproj" ]; then dir="$(dirname "$dir")"; fi
+
+        # Имя артефакта и trx делаем из имени проекта: Flow.Api.Tests → flow-api-tests.
+        slug="$(basename "$dir" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | sed 's/-\{1,\}/-/g; s/^-//; s/-$//')"
+
+        # Один проект может гоняться двумя джобами с разными --filter — так разнесены Model и Golden
+        # в Infrastructure. Имена артефактов у upload-artifact@v4 обязаны различаться, иначе вторая джоба
+        # падает на дубликате уже после зелёных тестов. Хвост от фильтра это разводит.
+        if [ -n "$FILTER" ]; then
+          slug="$slug-$(printf '%s' "$FILTER" | sha1sum | cut -c1-6)"
+        fi
+
+        {
+          echo "dir=$dir"
+          echo "slug=$slug"
+          echo "trx=TestResults/$slug.trx"
+          echo "artifact=test-results-$slug"
+        } >> "$GITHUB_OUTPUT"
+
+        # Ловушка: логгера GitHubActions в VSTest нет — это NuGet-пакет GitHubActionsTestLogger. Без него
+        # dotnet test падает с «Could not find a test logger with URI or FriendlyName GitHubActions», то есть
+        # мы получаем красную джобу на зелёных тестах. Поэтому проверяем логгер явно: если его нет, теряются
+        # только аннотации в diff, а результаты всё равно приезжают в trx.
+        # Смотрим в выхлоп сборки, а не в csproj: при Central Package Management PackageReference и версия
+        # могут жить в Directory.Packages.props, а в bin логгер либо есть, либо его нет.
+        logger=''
+        if [ -n "$(find "$dir/bin/Release" -name 'GitHubActionsTestLogger.dll' -print -quit 2>/dev/null)" ]; then
+          logger='GitHubActions'
+        else
+          echo "::warning title=Нет логгера аннотаций::В $dir не найден GitHubActionsTestLogger — прогон идёт без аннотаций в diff, результаты смотрите в trx-артефакте"
+        fi
+        echo "logger=$logger" >> "$GITHUB_OUTPUT"
+
+    - name: Тесты — ${{ inputs.title || inputs.project }}
+      if: inputs.project != ''
+      shell: bash
+      env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: true
+        DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+        PROJECT: ${{ inputs.project }}
+        FILTER: ${{ inputs.filter }}
+        SLUG: ${{ steps.prep.outputs.slug }}
+        LOGGER: ${{ steps.prep.outputs.logger }}
+      run: |
+        set -euo pipefail
+
+        # Аргументы собираем массивом: значение --filter уходит одним словом, даже если в нём появятся пробелы.
+        # --no-build обязателен — решение уже собрано шагом выше, пересборка съела бы выигрыш от разнесения
+        # проектов по джобам.
+        args=(-c Release --no-build --results-directory TestResults --logger "trx;LogFileName=$SLUG.trx")
+        if [ -n "$FILTER" ]; then
+          args+=(--filter "$FILTER")
+        fi
+        if [ -n "$LOGGER" ]; then
+          args+=(--logger "$LOGGER")
+        fi
+
+        dotnet test "$PROJECT" "${args[@]}"
+
+    # always(): строка в отчёте нужна именно тогда, когда тесты упали. Сам шаг ничего не решает и джобу
+    # не роняет — её уже уронил (или не уронил) dotnet test.
+    - name: Итог в Job Summary
+      id: summary
+      if: always() && inputs.project != ''
+      shell: bash
+      env:
+        TRX: ${{ steps.prep.outputs.trx }}
+        TITLE: ${{ inputs.title || inputs.project }}
+      run: |
+        set -euo pipefail
+
+        # Разбираем trx питоном, а не grep'ом: счётчики лежат готовыми в ResultSummary/Counters, время
+        # приходится считать из Times, и обе вещи живут в XML-неймспейсе — регуляркой это ловится плохо.
+        # Питон отдаёт голые числа без единиц: подписи дописывает bash, и отчёт не зависит от того,
+        # в какой кодировке у питона на раннере оказался stdout.
+        row="$(python3 - "$TRX" <<'PY'
+        import re
+        import sys
+        import xml.etree.ElementTree as ET
+        from datetime import datetime
+
+        passed = failed = skipped = duration = ''
+        try:
+            root = ET.parse(sys.argv[1]).getroot()
+
+            def first(tag):
+                # Элементы trx идут с неймспейсом, сравниваем по локальной части имени.
+                return next((e for e in root.iter() if e.tag.rsplit('}', 1)[-1] == tag), None)
+
+            counters = first('Counters')
+            if counters is not None:
+                total = int(counters.get('total', 0))
+                executed = int(counters.get('executed', 0))
+                passed = counters.get('passed', '0')
+                failed = counters.get('failed', '0')
+                # Пропущенные считаем как «всего минус выполненные»: отдельного счётчика, который покрывал
+                # бы и Skip-атрибут, и отсев по --filter, в trx нет.
+                skipped = str(max(total - executed, int(counters.get('notExecuted', 0) or 0)))
+
+            times = first('Times')
+            if times is not None:
+                def moment(value):
+                    # В trx семь знаков после запятой, а fromisoformat переваривает максимум шесть.
+                    return datetime.fromisoformat(re.sub(r'(\.\d{6})\d+', r'\1', value))
+
+                duration = '%.1f' % (moment(times.get('finish')) - moment(times.get('start'))).total_seconds()
+        except Exception as error:
+            # Отчёт — не повод ронять джобу: не разобрали trx, значит в таблице будут прочерки.
+            print('::warning title=Не разобрался trx::%s: %s' % (sys.argv[1], error), file=sys.stderr)
+
+        print('\t'.join([str(passed), str(failed), str(skipped), duration]))
+        PY
+        )"
+        IFS=$'\t' read -r passed failed skipped duration <<< "$row"
+
+        # Пустое значение — это «прогон не состоялся, trx нет», и в таблице оно обязано выглядеть прочерком,
+        # а не нулём: ноль прошедших тестов и отсутствие отчёта — разные новости.
+        if [ -n "$duration" ]; then duration="$duration с"; else duration='—'; fi
+        [ -n "$passed" ] || passed='—'
+        [ -n "$failed" ] || failed='—'
+        [ -n "$skipped" ] || skipped='—'
+
+        {
+          echo "passed=$passed"
+          echo "failed=$failed"
+          echo "skipped=$skipped"
+          echo "duration=$duration"
+        } >> "$GITHUB_OUTPUT"
+
+        # Шапку печатаем один раз на джобу: action можно вызвать и дважды (например, прогнать один проект
+        # двумя фильтрами), и тогда строки должны лечь в одну таблицу, а не в две.
+        if ! grep -q 'flow-tests-table' "$GITHUB_STEP_SUMMARY" 2>/dev/null; then
+          {
+            echo '<!-- flow-tests-table -->'
+            echo '| Проверка | Прошло | Упало | Пропущено | Время |'
+            echo '|----------|-------:|------:|----------:|------:|'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        printf '| %s | %s | %s | %s | %s |\n' "$TITLE" "$passed" "$failed" "$skipped" "$duration" >> "$GITHUB_STEP_SUMMARY"
+
+    # always() и здесь: trx с упавшего прогона нужнее, чем с зелёного. retention-days: 7 — отчёт живёт,
+    # пока чинят конкретный прогон, дефолтные 90 дней просто занимают квоту репозитория.
+    - name: Артефакт с trx
+      if: always() && inputs.project != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.prep.outputs.artifact }}
+        path: TestResults/*.trx
+        if-no-files-found: ignore
+        retention-days: 7

@@ -1,0 +1,20 @@
+# Оверлей домашнего кластера, модуль api. Рендерится в manifests/api.yaml.
+#
+# Содержание то же, что у оверлея auth, и это хорошо: одинаковые слои должны выглядеть одинаково.
+# namespace — потому что в базе его нет; images — объявление точки, куда джоба render впишет digest
+# командой `kustomize edit set image flow-api=$REGISTRY/$IMAGE_PREFIX/flow-api@sha256:...`
+# (подробный разбор — в k8s/overlays/home/auth/kustomization.yaml).
+#
+# Ни патчей, ни replicas, ни ресурсов здесь нет: всё, что зависит от кластера, в базе стоит плейсхолдерами
+# ${PUBLIC_*}, а замена образа делается секцией images, а не патчем.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: flow
+
+resources:
+  - ../../../base/api
+
+images:
+  - name: flow-api
+    newTag: local

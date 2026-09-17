@@ -1,0 +1,24 @@
+# Внутрикластерный адрес Flow.Api: http://flow-api.flow.svc.cluster.local:8080.
+#
+# Единственный его потребитель — Ingress api: браузер ходит в Flow.Api по внешнему имени, а изнутри кластера
+# в него не ходит никто (зависимость обратная — это Flow.Api ходит в auth, postgres и MinIO). Service всё
+# равно нужен: Ingress умеет отправлять трафик только в Service, не в под.
+#
+# Метки релиза в селекторе нет — см. комментарий в k8s/base/auth/service.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-api
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: flow
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: flow
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
