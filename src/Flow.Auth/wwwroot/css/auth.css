@@ -1,49 +1,13 @@
-/* Страница входа Flow.Auth. Копия нужных токенов из Flow.Client/wwwroot/css/tokens.css —
-   сервисы не ссылаются друг на друга, поэтому палитра продублирована. Менять вместе с клиентом. */
+/* ════════════════════════════════════════════════════════════════════
+   Страницы входа и смены пароля Flow.Auth.
 
-:root {
-    --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --font-text: var(--font-display);
+   Палитра и шкала — в tokens.css рядом (копия клиентских токенов), здесь только вёрстка этих двух
+   страниц и те же контролы, что у клиента: поле-подчёркивание (.ds-field) и pill-кнопка (.ds-btn).
+   Значения контролов повторяют src/Flow.Client/wwwroot/css/app.css — правим их парой.
 
-    --fw-medium: 500;
-    --fw-semibold: 600;
-    --fw-black: 900;
-
-    --text-h3: 22px;
-    --text-body: 15px;
-    --text-sm: 14px;
-
-    --space-2: 10px;
-    --space-3: 15px;
-    --space-4: 20px;
-    --space-6: 30px;
-    --space-8: 40px;
-
-    --radius-pill: 999px;
-    --r-xl: 16px;
-    --control-h-md: 40px;
-    --control-h: 50px;
-
-    --bg-deep: #082019;
-    --bg-content: #153E32;
-    --surface: #1B4A3B;
-    --surface-raised: #245A48;
-
-    --accent: #FFBA00;
-    --accent-hover: #FFCB40;
-    --accent-pressed: #E8A900;
-    --on-accent: #0C3B2E;
-    --brand-blue: #2451D6;
-    --danger: #E2604F;
-
-    --text-primary: #FFFFFF;
-    --text-secondary: rgba(255, 255, 255, 0.68);
-    --text-tertiary: rgba(255, 255, 255, 0.42);
-    --border: rgba(255, 255, 255, 0.10);
-
-    --shadow-card: 0 40px 80px -30px rgba(0, 0, 0, 0.35);
-    --tracking-tight: -0.4px;
-}
+   MudBlazor здесь намеренно нет: ради двух серверных форм тянуть Blazor в сервис аутентификации
+   неоправданно, а нужный вид даёт обычный CSS (см. docs/TZ_client_mudblazor.md, раздел 8).
+   ════════════════════════════════════════════════════════════════════ */
 
 * { box-sizing: border-box; }
 
@@ -54,17 +18,18 @@ html, body {
     color: var(--text-primary);
     font-family: var(--font-text);
     font-size: var(--text-body);
+    font-weight: var(--fw-medium);
     -webkit-font-smoothing: antialiased;
 }
 
+/* ---------- Экран ----------
+   Тот же экран, что у служебных состояний клиента (.auth-screen в app.css): тёмный фон, карточка по центру. */
 .login {
     min-height: 100vh;
     display: grid;
     place-items: center;
     padding: var(--space-6) var(--space-4);
-    background:
-        radial-gradient(1200px 600px at 20% -10%, rgba(255, 186, 0, 0.10), transparent 60%),
-        var(--bg-deep);
+    background: var(--bg-deep);
 }
 
 .login-card {
@@ -81,40 +46,103 @@ html, body {
 }
 
 .login-brand { display: flex; align-items: center; gap: var(--space-2); }
+
 /* Знак Flow: верхняя доля наследует color, нижняя — фирменный синий.
    Копия из Flow.Client/Components/BrandMark.razor — сервисы не ссылаются друг на друга. */
 .login-mark {
-    width: 30px; height: 30px;
+    width: 30px;
+    height: 30px;
     display: block;
     flex: none;
     color: #F2F2EF;
 }
-.login-mark svg { width: 100%; height: 100%; display: block; }
-.login-name { font-weight: var(--fw-semibold); font-size: 16px; letter-spacing: var(--tracking-tight); }
 
+.login-mark svg { width: 100%; height: 100%; display: block; }
+
+.login-name {
+    font-weight: var(--fw-semibold);
+    font-size: 16px;
+    letter-spacing: var(--tracking-tight);
+}
+
+/* Размер заголовка — как .auth-title у клиента, чтобы «Вход» и «Не удалось войти» выглядели одним экраном. */
 .login-title {
     margin: 0;
-    font-size: 28px;
-    font-weight: var(--fw-black);
-    letter-spacing: -0.02em;
-    line-height: 1;
+    font: var(--fw-black) 24px var(--font-display);
+    letter-spacing: var(--tracking-display);
+    line-height: 1.15;
 }
 
 .login-form { display: flex; flex-direction: column; gap: var(--space-4); }
 
-.ds-field { display: flex; flex-direction: column; gap: var(--space-2); width: 100%; }
-.ds-field-label { font-weight: var(--fw-medium); font-size: var(--text-body); color: var(--text-secondary); }
+.login-hint {
+    margin: 0;
+    color: var(--text-tertiary);
+    font-size: var(--text-sm);
+}
+
+/* ---------- Поле ----------
+   Копия .ds-field из app.css, включая линию, которая наливается из центра, и тряску при ошибке:
+   иначе вход выглядел бы «почти как Flow», а это заметно именно на мелочах. */
+.ds-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    width: 100%;
+}
+
+.ds-field-label {
+    font-weight: var(--fw-medium);
+    font-size: var(--text-body);
+    color: var(--text-secondary);
+}
+
 .ds-field-row {
-    display: flex; align-items: center; gap: var(--space-2);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     padding-bottom: var(--space-2);
     border-bottom: 1px solid var(--border);
     transition: border-color 0.18s ease;
+    position: relative;
 }
+
 .ds-field:focus-within .ds-field-row { border-bottom-color: var(--text-primary); }
-.ds-field.error .ds-field-row { border-bottom-color: var(--danger); }
+
+.ds-field-row::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform 220ms var(--ease-out);
+}
+
+.ds-field:focus-within .ds-field-row::after { transform: scaleX(1); }
+
+.ds-field.error .ds-field-row::after { background: var(--danger); transform: scaleX(1); }
+
+.ds-field.error .ds-field-row,
+.ds-field.error:focus-within .ds-field-row { border-bottom-color: var(--danger); }
+
+.ds-field.error .ds-field-row { animation: field-shake 220ms ease-in-out; }
+
+@keyframes field-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+}
+
 .ds-field-row input {
-    flex: 1; min-width: 0;
-    background: transparent; border: none; outline: none;
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
     color: var(--text-primary);
     font-family: var(--font-text);
     font-size: var(--text-h3);
@@ -122,26 +150,59 @@ html, body {
     letter-spacing: var(--tracking-tight);
     padding: 0;
 }
-.ds-field-row input::placeholder { color: var(--text-tertiary); font-weight: var(--fw-medium); }
-.ds-field-error { font-weight: var(--fw-medium); font-size: var(--text-sm); color: var(--danger); }
 
+.ds-field-row input::placeholder {
+    color: var(--text-tertiary);
+    font-weight: var(--fw-medium);
+}
+
+.ds-field-error {
+    font-weight: var(--fw-medium);
+    font-size: var(--text-sm);
+    color: var(--danger);
+}
+
+/* ---------- Кнопка ----------
+   Копия .ds-btn (primary, size lg) из app.css. Press-эффект и hover — те же значения. */
 .ds-btn {
-    display: inline-flex; align-items: center; justify-content: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
     font-family: var(--font-display);
     font-weight: var(--fw-medium);
     font-size: var(--text-body);
     line-height: 1;
-    border: none; cursor: pointer;
+    border: none;
+    cursor: pointer;
     border-radius: var(--radius-pill);
     height: var(--control-h);
     padding: 0 var(--space-6);
     background: var(--accent);
     color: var(--on-accent);
-    transition: background 0.15s ease, transform 0.1s ease;
+    transition: background-color 0.18s ease, color 0.18s ease, transform 160ms var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
 }
-.ds-btn:hover { background: var(--accent-hover); }
-.ds-btn:active { background: var(--accent-pressed); transform: scale(0.98); }
-.ds-btn:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+
+.ds-btn:active { transform: scale(0.97); }
+
 .ds-btn.full { width: 100%; }
 
-.login-hint { margin: 0; color: var(--text-tertiary); font-size: var(--text-sm); }
+/* Hover — только для настоящих указателей, как в app.css. */
+@media (hover: hover) and (pointer: fine) {
+    .ds-btn:hover { background: var(--accent-hover); }
+}
+
+/* ---------- Фокус с клавиатуры ----------
+   Кольцо акцентом — то же правило, что у клиента: на тёмном фоне белое кольцо сливается с текстом. */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ds-btn:active { transform: none; }
+    .ds-field.error .ds-field-row { animation: none; }
+    .ds-field-row::after { transition: none; }
+}

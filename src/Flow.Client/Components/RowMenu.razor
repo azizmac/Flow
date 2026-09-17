@@ -1,26 +1,36 @@
-@* Меню «…» задачи: Открыть · Переименовать · Скопировать код · — · Удалить. *@
+﻿@* Меню «…» задачи: Открыть · Переименовать · Скопировать код · — · Удалить.
 
-<DsIconButton Id="@_id" Icon="more" Size="@Size" Title="Действия" OnClick="Toggle" Style="@Style"
-              AriaHasPopup="menu" AriaExpanded="_open" />
-@if (_open)
-{
-    <Popover AnchorId="@_id" Align="right" Width="190" Offset="4" OnClose="Close">
+   Слой — MudMenu: позиция пересчитывается при скролле и ресайзе, клавиатура и закрытие по Esc
+   работают без нашего JS. Вид остаётся прежним: .flow-pop у слоя, .pop-item у пунктов.
+
+   Открытием управляем сами (@bind-Open), а не встроенным активатором: строка задачи кликабельна,
+   и кнопке нужен собственный обработчик, гасящий всплытие, — иначе клик по «…» открыл бы ещё и задачу.
+   Фокус при этом остаётся на кнопке — так и надо: перехватчик клавиш MudMenu слушает активатор,
+   и стрелки, Enter и Esc работают сами. Если увести фокус внутрь поповера, стрелки перестают ходить. *@
+
+<MudMenu @bind-Open="_open" PopoverClass="flow-pop" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomRight"
+         TransformOrigin="Origin.TopRight" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Действия">
+    <ActivatorContent>
+        <DsIconButton Icon="more" Size="@Size" Title="Действия" Style="@Style"
+                      AriaHasPopup="menu" AriaExpanded="_open" OnClick="Toggle" />
+    </ActivatorContent>
+    <ChildContent>
         @if (ShowOpen)
         {
-            <button type="button" class="pop-item" role="menuitem" @onclick="() => Fire(OnOpen)"><Icon Name="view" Size="15" />Открыть</button>
+            <MudMenuItem Class="pop-item" OnClick="OnOpen"><Icon Name="view" Size="15" />Открыть</MudMenuItem>
         }
         @if (ShowRename)
         {
-            <button type="button" class="pop-item" role="menuitem" @onclick="() => Fire(OnRename)"><Icon Name="edit" Size="15" />Переименовать</button>
+            <MudMenuItem Class="pop-item" OnClick="OnRename"><Icon Name="edit" Size="15" />Переименовать</MudMenuItem>
         }
-        <button type="button" class="pop-item" role="menuitem" @onclick="() => Fire(OnCopy)"><Icon Name="copy" Size="15" />Скопировать код</button>
-        <div class="pop-sep" role="separator"></div>
+        <MudMenuItem Class="pop-item" OnClick="OnCopy"><Icon Name="copy" Size="15" />Скопировать код</MudMenuItem>
         @if (ShowDelete)
         {
-            <button type="button" class="pop-item danger" role="menuitem" @onclick="() => Fire(OnDelete)"><Icon Name="trash" Size="15" />Удалить</button>
+            <div class="pop-sep" role="separator"></div>
+            <MudMenuItem Class="pop-item danger" OnClick="OnDelete"><Icon Name="trash" Size="15" />Удалить</MudMenuItem>
         }
-    </Popover>
-}
+    </ChildContent>
+</MudMenu>
 
 @code {
     [Parameter] public bool ShowOpen { get; set; } = true;
@@ -34,16 +44,7 @@
     [Parameter] public EventCallback OnCopy { get; set; }
     [Parameter] public EventCallback OnDelete { get; set; }
 
-    private readonly string _id = "rm-" + Guid.NewGuid().ToString("N")[..8];
     private bool _open;
 
     private void Toggle() => _open = !_open;
-
-    private void Close() => _open = false;
-
-    private async Task Fire(EventCallback cb)
-    {
-        _open = false;
-        await cb.InvokeAsync();
-    }
 }

@@ -1,26 +1,31 @@
-@* Селект статуса «в строке»: триггер-пилюля с точкой + поповер со статусами проекта.
-   Выбор → OnChange(statusId). Открытие/закрытие — локальное состояние. *@
+@* Селект статуса «в строке»: триггер-пилюля с точкой + меню со статусами проекта.
+   Выбор → OnChange(statusId).
 
-<div class="status-sel @(Disabled ? "disabled" : "")" id="@_id" @onclick="Toggle" @onclick:stopPropagation
-     @onkeydown="OnKey" @onkeydown:stopPropagation
-     role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-disabled="@(Disabled ? "true" : "false")"
-     aria-expanded="@(_open ? "true" : "false")" title="@(Disabled ? "Сохраняем…" : "Сменить статус")">
-    <span class="sd" style="background:@StatusColors.For(Current)"></span>
-    <span class="lbl">@(Current?.Name ?? "—")</span>
-    <Icon Name="chevrons" Size="12" />
-</div>
-@if (_open)
-{
-    <Popover AnchorId="@_id" Align="left" Width="200" Role="listbox" OnClose="Close">
+   Слой — MudMenu (позиция, закрытие, стрелки и Esc). Открытием управляем сами: триггер лежит внутри
+   кликабельной строки задачи, поэтому клик по нему не должен всплывать. Фокус остаётся на триггере —
+   перехватчик клавиш библиотеки слушает активатор. *@
+
+<MudMenu @bind-Open="_open" PopoverClass="flow-pop" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomLeft"
+         TransformOrigin="Origin.TopLeft" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Сменить статус">
+    <ActivatorContent>
+        <div class="status-sel @(Disabled ? "disabled" : "")" @onclick="Toggle" @onclick:stopPropagation
+             @onkeydown="OnKey" @onkeydown:stopPropagation
+             role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-disabled="@(Disabled ? "true" : "false")"
+             aria-expanded="@(_open ? "true" : "false")" title="@(Disabled ? "Сохраняем…" : "Сменить статус")">
+            <span class="sd" style="background:@StatusColors.For(Current)"></span>
+            <span class="lbl">@(Current?.Name ?? "—")</span>
+            <Icon Name="chevrons" Size="12" />
+        </div>
+    </ActivatorContent>
+    <ChildContent>
         @foreach (var s in Statuses)
         {
-            <button type="button" class="pop-item @(s.Id == Value ? "cur" : "")" role="option"
-                    aria-selected="@((s.Id == Value).ToString().ToLowerInvariant())" @onclick="() => Select(s)">
+            <MudMenuItem Class="@($"pop-item {(s.Id == Value ? "cur" : "")}")" OnClick="() => Select(s)">
                 <span class="sd" style="background:@StatusColors.For(s)"></span>@s.Name
-            </button>
+            </MudMenuItem>
         }
-    </Popover>
-}
+    </ChildContent>
+</MudMenu>
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<StatusResponse> Statuses { get; set; } = [];
@@ -29,8 +34,9 @@
     /// <summary>Пока летит PATCH — селект не принимает новые клики.</summary>
     [Parameter] public bool Disabled { get; set; }
 
-    private readonly string _id = "ss-" + Guid.NewGuid().ToString("N")[..8];
     private bool _open;
+
+    private StatusResponse? Current => Statuses.FirstOrDefault(s => s.Id == Value);
 
     // Enter/Space/↓ открывают список — как у нативного select.
     private void OnKey(KeyboardEventArgs e)
@@ -39,15 +45,11 @@
             _open = true;
     }
 
-    private StatusResponse? Current => Statuses.FirstOrDefault(s => s.Id == Value);
-
     private void Toggle()
     {
         if (!Disabled)
             _open = !_open;
     }
-
-    private void Close() => _open = false;
 
     private async Task Select(StatusResponse s)
     {

@@ -1,4 +1,4 @@
-# Джоба: restore → build (Release) → юнит-тесты → интеграционные тесты.
+﻿# Джоба: restore → build (Release) → юнит-тесты → интеграционные тесты.
 name: Build & test
 
 on:
@@ -30,6 +30,23 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'global.json') }}
           restore-keys: |
             nuget-${{ runner.os }}-
+
+      # Бандл Markdown-редактора лежит в репозитории (клиент должен запускаться без Node), но собирается
+      # из editor/flow-editor.src.js. Пересобираем и сравниваем: если исходник правили, а бандл не обновили,
+      # шаг падает и показывает разницу — иначе редактор в браузере жил бы по старому коду.
+      - name: Setup Node (сборка редактора)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/Flow.Client/editor/package-lock.json
+
+      - name: Editor bundle is up to date
+        working-directory: src/Flow.Client/editor
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          git diff --stat --exit-code -- ../wwwroot/js/flow-editor.js
 
       - name: Restore
         run: dotnet restore Flow.slnx

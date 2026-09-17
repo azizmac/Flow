@@ -1,25 +1,32 @@
-@* Меню «…» человека: Открыть профиль · Скопировать @username · (Owner) Деактивировать / Активировать. *@
+﻿@* Меню «…» человека: Открыть профиль · Скопировать @username · (Owner) Деактивировать / Активировать.
 
-<DsIconButton Id="@_id" Icon="more" Size="@Size" Title="Действия" OnClick="Toggle" Style="@Style" />
-@if (_open)
-{
-    <Popover AnchorId="@_id" Align="right" Width="230" Offset="4" OnClose="Close">
-        <button type="button" class="pop-item" @onclick="() => Fire(OnOpen)"><Icon Name="view" Size="15" />Открыть профиль</button>
-        <button type="button" class="pop-item" @onclick="() => Fire(OnCopy)"><Icon Name="at" Size="15" />Скопировать @@username</button>
+   Слой — MudMenu, как у RowMenu: вид от .flow-pop / .pop-item, поведение от библиотеки.
+   Открытием управляем сами — строка человека кликабельна, и клик по «…» не должен её открывать.
+   Фокус остаётся на кнопке: перехватчик клавиш MudMenu слушает активатор (см. RowMenu). *@
+
+<MudMenu @bind-Open="_open" PopoverClass="flow-pop" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomRight"
+         TransformOrigin="Origin.TopRight" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Действия">
+    <ActivatorContent>
+        <DsIconButton Icon="more" Size="@Size" Title="Действия" Style="@Style"
+                      AriaHasPopup="menu" AriaExpanded="_open" OnClick="Toggle" />
+    </ActivatorContent>
+    <ChildContent>
+        <MudMenuItem Class="pop-item" OnClick="OnOpen"><Icon Name="view" Size="15" />Открыть профиль</MudMenuItem>
+        <MudMenuItem Class="pop-item" OnClick="OnCopy"><Icon Name="at" Size="15" />Скопировать @@username</MudMenuItem>
         @if (CanDeactivate)
         {
-            <div class="pop-sep"></div>
+            <div class="pop-sep" role="separator"></div>
             @if (User.IsActive)
             {
-                <button type="button" class="pop-item danger" @onclick="() => Fire(OnDeactivate)"><Icon Name="user-off" Size="15" />Деактивировать</button>
+                <MudMenuItem Class="pop-item danger" OnClick="OnDeactivate"><Icon Name="user-off" Size="15" />Деактивировать</MudMenuItem>
             }
             else
             {
-                <button type="button" class="pop-item" @onclick="() => Fire(OnActivate)"><Icon Name="user" Size="15" />Активировать</button>
+                <MudMenuItem Class="pop-item" OnClick="OnActivate"><Icon Name="user" Size="15" />Активировать</MudMenuItem>
             }
         }
-    </Popover>
-}
+    </ChildContent>
+</MudMenu>
 
 @code {
     [Parameter, EditorRequired] public UserResponse User { get; set; } = default!;
@@ -32,16 +39,7 @@
     [Parameter] public EventCallback OnDeactivate { get; set; }
     [Parameter] public EventCallback OnActivate { get; set; }
 
-    private readonly string _id = "um-" + Guid.NewGuid().ToString("N")[..8];
     private bool _open;
 
     private void Toggle() => _open = !_open;
-
-    private void Close() => _open = false;
-
-    private async Task Fire(EventCallback cb)
-    {
-        _open = false;
-        await cb.InvokeAsync();
-    }
 }

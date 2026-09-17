@@ -206,6 +206,35 @@ jobs:
       - name: Переменные compose объявлены
         run: sh scripts/check-compose-env.sh
 
+  lint-editor:
+    name: Проверка · бандл редактора
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Эта проверка пришла из .github/workflows/build.yml, который после переработки пайплайна больше
+      # никто не вызывает: он остался reusable-воркфлоу без единого вызывающего. Оставить её там значило бы
+      # тихо потерять гарантию — файл на месте, шаг написан, а не выполняется никогда.
+      #
+      # Что она стережёт: бандл CodeMirror лежит в репозитории, чтобы клиент запускался без Node, но
+      # собирается из editor/flow-editor.src.js. Правка исходника без пересборки бандла не ломает ни сборку,
+      # ни тесты — редактор просто продолжает работать по старому коду, и обнаруживается это в браузере.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/Flow.Client/editor/package-lock.json
+
+      - name: Бандл собран из текущего исходника
+        working-directory: src/Flow.Client/editor
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          git diff --stat --exit-code -- ../wwwroot/js/flow-editor.js
+
   lint-sdk:
     name: Проверка · версия SDK
     runs-on: ubuntu-latest
@@ -745,6 +774,7 @@ jobs:
       - lint-actions
       - lint-docker
       - lint-compose
+      - lint-editor
       - lint-sdk
       - check-vars
       - build

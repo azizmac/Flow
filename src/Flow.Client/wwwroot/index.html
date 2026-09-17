@@ -10,8 +10,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap" rel="stylesheet" />
+    <!-- Порядок важен: стили MudBlazor идут первыми, наши токены и app.css перебивают их, а mud-overrides.css
+         правит форму контролов библиотеки под Flow (pill-кнопки, круглые icon-кнопки, поля-подчёркивания). -->
+    <link rel="stylesheet" href="_content/MudBlazor/MudBlazor.min.css" />
     <link rel="stylesheet" href="css/tokens.css" />
     <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="css/mud-overrides.css" />
     <link rel="icon" type="image/svg+xml" href="brand/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
@@ -33,6 +37,7 @@
         <span class="dismiss">🗙</span>
     </div>
     <script src="js/flow.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="_content/Microsoft.AspNetCore.Components.WebAssembly.Authentication/AuthenticationService.js"></script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
 </body>

@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Domain.Entities;
 
 namespace Flow.Application.Tests.Fakes;
@@ -22,12 +22,18 @@ public sealed class FakeTaskItemRepository : ITaskItemRepository
             .Where(t => assigneeId is null || t.AssigneeId == assigneeId)
             .ToList());
 
-    public Task<IReadOnlyList<TaskItem>> SearchAsync(TaskListFilter filter, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<TaskItem>>(Filtered(filter)
+    public Task<IReadOnlyList<TaskItem>> SearchAsync(TaskListFilter filter, CancellationToken cancellationToken)
+    {
+        var ordered = Filtered(filter)
             .OrderByDescending(t => t.CreatedAt)
-            .ThenByDescending(t => t.Id)
-            .Take(filter.Limit)
-            .ToList());
+            .ThenByDescending(t => t.Id);
+
+        // Сортировку по колонкам фейк не воспроизводит — её проверяют интеграционные тесты на настоящем
+        // Postgres (порядок задают подзапросы к доскам, статусам и людям). Здесь важно только листание.
+        var page = filter.Offset is { } offset ? ordered.Skip(offset) : ordered;
+
+        return Task.FromResult<IReadOnlyList<TaskItem>>(page.Take(filter.Limit).ToList());
+    }
 
     public Task<TaskCounts> CountAsync(TaskListFilter filter, CancellationToken cancellationToken)
     {
@@ -38,7 +44,9 @@ public sealed class FakeTaskItemRepository : ITaskItemRepository
 
         // Фейк не знает типов статусов (их держит FakeBoardRepository), поэтому разбивка по типу здесь пуста:
         // её проверяют интеграционные тесты на настоящем Postgres.
-        return Task.FromResult(new TaskCounts(byStatus.Sum(x => x.Count), [], byStatus));
+        var matched = Filtered(filter).Count();
+
+        return Task.FromResult(new TaskCounts(byStatus.Sum(x => x.Count), matched, [], byStatus));
     }
 
     private IEnumerable<TaskItem> Filtered(TaskListFilter filter) => _tasks

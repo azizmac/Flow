@@ -1,22 +1,29 @@
-@* Выбор исполнителя «в строке»: триггер (аватар + имя или «Не назначена») + поповер с поиском по @username/имени
+@* Выбор исполнителя «в строке»: триггер (аватар + имя или «Не назначена») + меню с поиском по @username/имени
    и пунктом «Снять исполнителя». Список — из UserDirectory (только активные: деактивированных назначать нельзя).
-   Выбор → OnChange(userId | null). Печать в поле фильтрует локально; Enter — первый результат, Esc — закрыть. *@
+   Выбор → OnChange(userId | null). Печать в поле фильтрует локально; Enter — первый результат, Esc — закрыть.
+
+   Слой — MudMenu. Здесь фокус намеренно уходит в поле поиска: печатать важнее, чем ходить стрелками,
+   а первый результат выбирается по Enter. *@
 @implements IDisposable
 @inject UserDirectory Users
 @inject BrowserInterop Browser
 
-<div class="assignee-sel @(Compact ? "compact" : "") @(Current is null ? "none" : "")" id="@_id" @onclick="Toggle" @onclick:stopPropagation title="@(Disabled ? "" : "Назначить исполнителя")">
-    <Avatar User="Current" Size="@(Compact ? 20 : 22)" />
-    @if (!Compact)
-    {
-        <span class="lbl">@(Current?.FullName ?? "Не назначена")</span>
-        <Icon Name="chevrons" Size="12" />
-    }
-</div>
-@if (_open)
-{
-    <Popover AnchorId="@_id" Align="@Align" Width="260" OnClose="Close">
-        <label class="pop-search">
+<MudMenu @bind-Open="_open" PopoverClass="flow-pop flow-pop-wide" ListClass="flow-pop-list" AnchorOrigin="@AnchorOrigin"
+         TransformOrigin="@TransformOrigin" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Назначить исполнителя">
+    <ActivatorContent>
+        <div class="assignee-sel @(Compact ? "compact" : "") @(Current is null ? "none" : "")" @onclick="Toggle" @onclick:stopPropagation
+             role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-expanded="@(_open ? "true" : "false")"
+             title="@(Disabled ? "" : "Назначить исполнителя")">
+            <Avatar User="Current" Size="@(Compact ? 20 : 22)" />
+            @if (!Compact)
+            {
+                <span class="lbl">@(Current?.FullName ?? "Не назначена")</span>
+                <Icon Name="chevrons" Size="12" />
+            }
+        </div>
+    </ActivatorContent>
+    <ChildContent>
+        <label class="pop-search" @onclick:stopPropagation>
             <Icon Name="search" Size="14" />
             <input id="@_inputId" placeholder="Имя или @@username" value="@_query" autocomplete="off" spellcheck="false"
                    @oninput="e => _query = e.Value?.ToString() ?? string.Empty" @onkeydown="OnKey" />
@@ -35,39 +42,45 @@
             }
             @foreach (var u in list)
             {
-                <button type="button" class="pop-item user @(u.Id == Value ? "cur" : "")" @onclick="() => Select(u.Id)">
+                <MudMenuItem Class="@($"pop-item user {(u.Id == Value ? "cur" : "")}")" OnClick="() => Select(u.Id)">
                     <Avatar User="u" Size="22" />
                     <span class="pop-user">
                         <span class="pop-user-name">@u.FullName</span>
                         <span class="pop-user-un">@@@u.Username@(string.IsNullOrEmpty(u.JobTitle) ? "" : $" · {u.JobTitle}")</span>
                     </span>
-                </button>
+                </MudMenuItem>
             }
         }
         @if (Value is not null)
         {
             <div class="pop-sep"></div>
-            <button type="button" class="pop-item" @onclick="() => Select(null)"><Icon Name="user-off" Size="15" />Снять исполнителя</button>
+            <MudMenuItem Class="pop-item" OnClick="() => Select(null)">
+                <Icon Name="user-off" Size="15" />Снять исполнителя
+            </MudMenuItem>
         }
-    </Popover>
-}
+    </ChildContent>
+</MudMenu>
 
 @code {
     [Parameter] public Guid? Value { get; set; }
     [Parameter] public EventCallback<Guid?> OnChange { get; set; }
     /// <summary>Только аватар — для строки списка.</summary>
     [Parameter] public bool Compact { get; set; }
+    /// <summary>"left" — меню под левым краем триггера, "right" — под правым.</summary>
     [Parameter] public string Align { get; set; } = "left";
     [Parameter] public bool Disabled { get; set; }
     /// <summary>Ограничить выбор одним пользователем (Member — только себя); null — все активные.</summary>
     [Parameter] public Guid? OnlyUserId { get; set; }
 
-    private readonly string _id = "as-" + Guid.NewGuid().ToString("N")[..8];
     private readonly string _inputId = "asq-" + Guid.NewGuid().ToString("N")[..8];
     private bool _open;
     private string _query = "";
 
     private UserResponse? Current => Users.Find(Value);
+
+    private Origin AnchorOrigin => Align == "right" ? Origin.BottomRight : Origin.BottomLeft;
+
+    private Origin TransformOrigin => Align == "right" ? Origin.TopRight : Origin.TopLeft;
 
     protected override async Task OnInitializedAsync()
     {
@@ -86,12 +99,13 @@
         {
             _query = "";
             StateHasChanged();
-            await Task.Yield();
+            // Меню рендерится в портал провайдера — поле появляется в DOM на кадр позже.
+            await Task.Delay(FocusDelayMs);
             await Browser.FocusAsync(_inputId);
         }
     }
 
-    private void Close() => _open = false;
+    private const int FocusDelayMs = 50;
 
     private async Task OnKey(KeyboardEventArgs e)
     {

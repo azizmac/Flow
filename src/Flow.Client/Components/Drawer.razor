@@ -1,14 +1,18 @@
 @* Слайдер справа поверх main (сайдбар не затемняется). Всегда смонтирован — открытие/закрытие через класс,
    чтобы CSS-переходы (translateX) можно было прервать. Контент остаётся на время выходной анимации (160ms).
-   Фокус: при открытии уходит внутрь и не выпускается Tab'ом (см. flow.js), при закрытии возвращается на
-   элемент, с которого дровер открыли. *@
+
+   Фокус держит MudFocusTrap: при открытии уходит внутрь и не выпускается Tab'ом — раньше это делал
+   самописный обход фокусируемых элементов в flow.js. Возврат фокуса на элемент, с которого открыли,
+   остаётся за нами (стек в flow.js): у ловушки библиотеки такого поведения нет. *@
 @inject BrowserInterop Browser
 
 <div class="drawer-scrim @(Open ? "in" : "")" @onclick="RequestClose"></div>
 <div class="drawer @(Open ? "in" : "") @(_closing ? "closing" : "")" role="dialog" aria-modal="true" aria-hidden="@(!Open)">
     @if (Open || _closing)
     {
-        @ChildContent
+        <MudFocusTrap Disabled="@(!Open)" DefaultFocus="DefaultFocus.FirstChild">
+            @ChildContent
+        </MudFocusTrap>
     }
 </div>
 
@@ -19,13 +23,12 @@
 
     private bool _wasOpen;
     private bool _closing;
-    private bool _needFocus;
     private CancellationTokenSource? _closeCts;
 
     protected override void OnParametersSet()
     {
         if (!_wasOpen && Open)
-            _needFocus = true;
+            _ = Browser.PushFocusAsync();
 
         if (_wasOpen && !Open)
         {
@@ -44,16 +47,7 @@
         _wasOpen = Open;
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!_needFocus)
-            return;
-
-        _needFocus = false;
-        await Browser.PushFocusAsync();
-        await Browser.FocusFirstInAsync(".drawer.in");
-    }
-
+    /// <summary>Контент живёт до конца выходной анимации, иначе панель уезжала бы пустой.</summary>
     private async Task EndClosing(CancellationToken ct)
     {
         try

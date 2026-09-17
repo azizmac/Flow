@@ -1,5 +1,9 @@
 @* Поле с подчёркиванием: label сверху, значение крупным semibold, линия 1px
-   (focus → белая, ошибка → danger), строка ошибки под полем. *@
+   (focus → белая, ошибка → danger), строка ошибки под полем.
+
+   Фасад над MudTextField: снаружи API прежний, внутри — поле библиотеки (фокус, маски, счётчик,
+   работа внутри MudForm). Подчёркивание Mud выключено (Underline="false") — линию рисует наш
+   .ds-field-row, она наливается из центра; сбросы отступов Material — в mud-overrides.css. *@
 
 <label class="ds-field @(Error is null ? "" : "error") @Class" style="@Style">
     @if (!string.IsNullOrEmpty(Label))
@@ -11,9 +15,10 @@
         {
             <Icon Name="@Icon" Size="20" />
         }
-        <input id="@Id" type="@Type" placeholder="@Placeholder" value="@Value" maxlength="@MaxLength"
-               autocomplete="off" spellcheck="false"
-               @oninput="OnInput" @onkeydown="OnKeyDown" />
+        <MudTextField T="string" InputId="@Id" InputType="@InputType" Value="@Value" ValueChanged="OnInput"
+                      Placeholder="@Placeholder" MaxLength="@(MaxLength ?? 524288)"
+                      Immediate="true" Underline="false" Variant="Variant.Text" Margin="Margin.None"
+                      OnKeyDown="OnKeyDown" autocomplete="off" spellcheck="false" />
     </span>
     @if (Error is not null)
     {
@@ -24,6 +29,7 @@
 @code {
     [Parameter] public string? Label { get; set; }
     [Parameter] public string? Icon { get; set; }
+    /// <summary>text | password | email — как у атрибута type нативного поля.</summary>
     [Parameter] public string Type { get; set; } = "text";
     [Parameter] public string? Placeholder { get; set; }
     [Parameter] public string Value { get; set; } = "";
@@ -35,5 +41,13 @@
     [Parameter] public string? Class { get; set; }
     [Parameter] public EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
 
-    private Task OnInput(ChangeEventArgs e) => ValueChanged.InvokeAsync(e.Value?.ToString() ?? "");
+    private InputType InputType => Type switch
+    {
+        "password" => MudBlazor.InputType.Password,
+        "email" => MudBlazor.InputType.Email,
+        "number" => MudBlazor.InputType.Number,
+        _ => MudBlazor.InputType.Text
+    };
+
+    private Task OnInput(string? value) => ValueChanged.InvokeAsync(value ?? "");
 }

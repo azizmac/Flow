@@ -5,6 +5,8 @@
 @implements IDisposable
 @inject FlowApi Api
 @inject NavigationManager Nav
+@inject HotkeyService Hotkeys
+@inject BrowserInterop Browser
 
 <div class="sb-search-wrap">
     <label class="sb-search @(_open ? "open" : "")">
@@ -118,6 +120,21 @@
     private string? _error;
     private int _active = -1;
     private CancellationTokenSource? _cts;
+    private IDisposable? _hotkeys;
+
+    protected override void OnInitialized()
+    {
+        // «/» — курсор в строку поиска, как в почте и трекерах. В полях ввода хоткей не срабатывает:
+        // flow.js отдаёт в .NET флаг InEditable.
+        _hotkeys = Hotkeys.Subscribe(async e =>
+        {
+            if (e.Key != "/" || e.Ctrl || e.InEditable)
+                return;
+
+            e.Handled = true;
+            await Browser.FocusAsync(_inputId, select: true);
+        });
+    }
 
     private IEnumerable<IGrouping<SearchSourceType, SearchResultItem>> Groups =>
         _items.GroupBy(item => item.SourceType).OrderBy(group => Array.IndexOf(GroupOrder, group.Key));
@@ -257,6 +274,7 @@
 
     public void Dispose()
     {
+        _hotkeys?.Dispose();
         _cts?.Cancel();
         _cts?.Dispose();
     }

@@ -1,25 +1,29 @@
-@* Модалка подтверждения (удаление проекта/задачи). Enter — подтвердить, Esc — закрыть.
-   Фокус при открытии — на кнопке действия (совпадает с Enter-хоткеем), Tab заперт внутри,
-   при закрытии возвращается на вызвавший элемент. *@
+﻿@* Модалка подтверждения (удаление проекта/задачи/файла/комментария). Enter — подтвердить, Esc — закрыть.
+
+   Слой — MudDialog: затемнение, захват фокуса, Esc и клик по фону берёт на себя библиотека.
+   Вид прежний — класс .flow-modal (mud-overrides.css). Enter остаётся на нашем HotkeyService:
+   у диалога Mud подтверждения по Enter нет, а хоткей в Flow привычен.
+   Компонент по-прежнему монтируется условием на странице (@if (_deleting is not null)), поэтому
+   открыт он всегда — за видимость отвечает вызывающая сторона, как и раньше. *@
 @implements IDisposable
 @inject HotkeyService Hotkeys
-@inject BrowserInterop Browser
 
-<div class="modal-scrim @(_in ? "in" : "")" @onclick="Cancel">
-    <div class="modal" role="dialog" aria-modal="true" @onclick:stopPropagation>
-        <div>
-            <h3>@Title</h3>
-            @if (!string.IsNullOrEmpty(Text))
-            {
-                <p>@Text</p>
-            }
-        </div>
-        <div class="modal-actions">
-            <DsButton Variant="secondary" Size="md" OnClick="Cancel" Disabled="_busy">Отмена</DsButton>
-            <DsButton Id="@_confirmId" Variant="danger" Size="md" OnClick="Confirm" Busy="_busy" Icon="trash">@ConfirmLabel</DsButton>
-        </div>
-    </div>
-</div>
+<MudDialog Visible="true" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>@Title</h3>
+    </TitleContent>
+    <DialogContent>
+        @if (!string.IsNullOrEmpty(Text))
+        {
+            <p>@Text</p>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Cancel" Disabled="_busy">Отмена</DsButton>
+        <DsButton Id="@_confirmId" Variant="danger" Size="md" OnClick="Confirm" Busy="_busy" Icon="trash">@ConfirmLabel</DsButton>
+    </DialogActions>
+</MudDialog>
 
 @code {
     [Parameter, EditorRequired] public string Title { get; set; } = "";
@@ -29,29 +33,33 @@
     [Parameter] public EventCallback OnCancel { get; set; }
 
     private readonly string _confirmId = "cd-" + Guid.NewGuid().ToString("N")[..8];
-    private bool _in;
     private bool _busy;
     private IDisposable? _hotkeys;
+
+    // Заголовок и кнопки у нас свои, поэтому шапку и крестик Mud не показываем.
+    private readonly DialogOptions _options = new()
+    {
+        MaxWidth = MaxWidth.ExtraSmall,
+        CloseButton = false,
+        CloseOnEscapeKey = true,
+        BackdropClick = true,
+        DefaultFocus = DefaultFocus.LastChild
+    };
 
     protected override void OnInitialized()
     {
         _hotkeys = Hotkeys.Subscribe(async e =>
         {
-            if (e.Key == "Escape") { e.Handled = true; await Cancel(); }
-            else if (e.Key == "Enter" && !e.InEditable) { e.Handled = true; await Confirm(); }
+            if (e.Key == "Enter" && !e.InEditable)
+            {
+                e.Handled = true;
+                await Confirm();
+            }
         });
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!firstRender)
-            return;
-
-        _in = true;
-        StateHasChanged();
-        await Browser.PushFocusAsync();
-        await Browser.FocusAsync(_confirmId);
-    }
+    /// <summary>Esc или клик по фону — закрытие идёт тем же путём, что и кнопка «Отмена».</summary>
+    private Task OnVisibleChanged(bool visible) => visible ? Task.CompletedTask : Cancel();
 
     private Task Cancel() => _busy ? Task.CompletedTask : OnCancel.InvokeAsync();
 
@@ -69,9 +77,5 @@
         }
     }
 
-    public void Dispose()
-    {
-        _hotkeys?.Dispose();
-        _ = Browser.PopFocusAsync();
-    }
+    public void Dispose() => _hotkeys?.Dispose();
 }

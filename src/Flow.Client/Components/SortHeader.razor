@@ -1,0 +1,29 @@
+@* Заголовок сортируемой колонки списка задач.
+
+   Почему свой, а не встроенный в MudDataGrid: в серверном режиме её переключатель сортировки меняет только
+   вид заголовка (aria-sort и иконку), но повторный запрос данных не делает и в GridState ничего не кладёт —
+   список остаётся в прежнем порядке. Поэтому колонки объявлены Sortable="false", а клик обрабатываем здесь
+   и перезапрашиваем страницу сами. *@
+
+<span class="sort-header @(IsCurrent ? "on" : "")" role="button" tabindex="0" @onclick="Fire" @onkeydown="OnKey"
+      aria-sort="@(IsCurrent ? (Descending ? "descending" : "ascending") : "none")">
+    @ChildContent
+    <Icon Name="@(IsCurrent && !Descending ? "chevron-down" : "chevron-down")" Size="11"
+          Class="@(IsCurrent && !Descending ? "sort-arrow up" : "sort-arrow")" />
+</span>
+
+@code {
+    [Parameter, EditorRequired] public TaskSortField Field { get; set; }
+    /// <summary>Поле, по которому список отсортирован сейчас.</summary>
+    [Parameter] public TaskSortField Current { get; set; }
+    [Parameter] public bool Descending { get; set; }
+    [Parameter] public EventCallback<TaskSortField> OnSort { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsCurrent => Current == Field;
+
+    private Task Fire() => OnSort.InvokeAsync(Field);
+
+    private Task OnKey(KeyboardEventArgs e) =>
+        e.Key is "Enter" or " " ? Fire() : Task.CompletedTask;
+}
