@@ -29,7 +29,7 @@ on:
         type: boolean
         default: false
       deploy_ai:
-        description: Выкатить AI-слой (llama.cpp CPU). Требует уже скачанных весов — сперва прогнать с pull_models
+        description: Выкатить AI-слой llama.cpp. Профиль железа берётся из AI_BACKEND (cpu или cuda). Требует уже скачанных весов — сперва прогнать с pull_models
         type: boolean
         default: false
 
@@ -1061,10 +1061,28 @@ jobs:
         with:
           name: manifests-${{ github.sha }}
           path: manifests
+      # Профиль железа выбирается здесь, а не в манифесте: оверлея два (ai — процессор, ai-cuda — карта),
+      # и это один и тот же Deployment flow-ai в разных профилях. Без этого шага карта не задействуется,
+      # даже когда она есть в кластере: применялся бы всегда процессорный оверлей.
+      - name: Профиль по AI_BACKEND
+        id: profile
+        shell: bash
+        env:
+          AI_BACKEND: ${{ vars.AI_BACKEND || 'cpu' }}
+        run: |
+          set -euo pipefail
+          case "$AI_BACKEND" in
+            cpu)  file=manifests/ai.yaml ;;
+            cuda) file=manifests/ai-cuda.yaml ;;
+            *) echo "::error title=AI_BACKEND::значение «$AI_BACKEND» не поддерживается, допустимы cpu и cuda"; exit 1 ;;
+          esac
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+          echo "профиль $AI_BACKEND -> $file" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: ./.github/actions/kube-apply
         with:
           kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
-          file: manifests/ai.yaml
+          file: ${{ steps.profile.outputs.file }}
           namespace: flow-ai
           wait: deployment/flow-ai
           timeout: 900s
