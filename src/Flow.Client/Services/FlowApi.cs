@@ -30,9 +30,9 @@ public sealed record ApiResult<T>(T? Value, string? Error, HttpStatusCode Status
 }
 
 /// <summary>
-/// Тонкий типизированный клиент Flow.Api поверх HttpClient (с Bearer-токеном Flow.Auth — см. FlowAuthorizationMessageHandler).
+/// Тонкий типизированный клиент Flow.Api поверх HttpClient (с Bearer-токеном Auth-модуля — см. FlowAuthorizationMessageHandler).
 /// DTO — из Flow.Shared, ничего не дублируется. Маршруты соответствуют BoardsController / TasksController / UsersController.
-/// Нет токена → AccessTokenNotAvailableException → редирект на вход; 401/403/502 → человекочитаемая ошибка.
+/// Нет токена → AccessTokenNotAvailableException → редирект на вход; 401/403 → человекочитаемая ошибка.
 /// </summary>
 public sealed class FlowApi(HttpClient http)
 {
@@ -400,9 +400,6 @@ public sealed class FlowApi(HttpClient http)
 
         if (response.StatusCode == HttpStatusCode.Forbidden)
             return await ReadMessage(response, ct) ?? "Нет прав на это действие.";
-
-        if (response.StatusCode == HttpStatusCode.BadGateway)
-            return await ReadMessage(response, ct) ?? "Сервис входа недоступен. Попробуйте позже.";
 
         return await ReadMessage(response, ct) ?? $"Ошибка сервера ({(int)response.StatusCode}).";
     }

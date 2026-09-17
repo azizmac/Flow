@@ -26,8 +26,6 @@ services:
       - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # Создаёт вторую базу flow_auth при инициализации тома (только при первом старте).
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flow} -d ${POSTGRES_DB:-flow}"]
       interval: 5s
@@ -215,7 +213,6 @@ services:
       PGUSER: ${POSTGRES_USER:-flow}
       PGPASSWORD: ${POSTGRES_PASSWORD:-flow}
       POSTGRES_DB: ${POSTGRES_DB:-flow}
-      AUTH_DB: ${AUTH_DB:-flow_auth}
       BACKUP_CRON: ${BACKUP_CRON:-0 3 * * *}
       BACKUP_KEEP: ${BACKUP_KEEP:-7}
     volumes:

@@ -1,10 +1,11 @@
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
+using Flow.Auth.Contracts;
 using MediatR;
 
 namespace Flow.Application.Features.Users.Commands.UserChangePasswordCommand;
 
-/// <summary>Пароль хранит только Flow.Auth — в Users ничего не меняется, поэтому SaveChanges не нужен.</summary>
+/// <summary>Пароль хранит только Auth-модуль — в Users ничего не меняется, поэтому SaveChanges не нужен.</summary>
 internal sealed class UserChangePasswordCommandHandler(IUserRepository users, IAccountService accounts, ActorResolver actors, IPermissionService permissions)
     : IRequestHandler<UserChangePasswordCommand, UserUpdateResult>
 {
@@ -25,7 +26,7 @@ internal sealed class UserChangePasswordCommandHandler(IUserRepository users, IA
 
         var account = await accounts.ChangePasswordAsync(user.Id, isSelf ? request.CurrentPassword : null, request.NewPassword, cancellationToken);
         if (!account.IsSuccess)
-            throw new ArgumentException(account.Error ?? "Flow.Auth rejected the password.", nameof(request.NewPassword));
+            throw new ArgumentException(account.Error ?? "Auth rejected the password.", nameof(request.NewPassword));
 
         return UserUpdateResult.Success(user.ToResponse());
     }

@@ -105,7 +105,9 @@ public sealed partial class Board
             resolvedStatusId = statusId.Value;
         }
 
+        // DESK-1
         NextTaskNumber++;
+        
         var code = TaskCode.Create(Key, NextTaskNumber);
         var task = new TaskItem(Id, code, title, description, resolvedStatusId, createdById);
         _tasks.Add(task);

@@ -18,10 +18,11 @@ public sealed class AuthDbContextFactory : IDesignTimeDbContextFactory<AuthDbCon
             .Build();
 
         var connectionString = configuration.GetConnectionString("Postgres")
-            ?? "Host=localhost;Port=5432;Database=flow_auth;Username=flow;Password=flow";
+            ?? "Host=localhost;Port=5432;Database=flow;Username=flow;Password=flow";
 
         var options = new DbContextOptionsBuilder<AuthDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql(connectionString, npgsql =>
+                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "auth"))
             .UseOpenIddict()
             .Options;
 

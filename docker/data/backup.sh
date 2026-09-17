@@ -1,5 +1,5 @@
 #!/bin/sh
-# Бэкап данных Flow: дампы обеих баз и объекты S3. Работает внутри сервиса backup стека данных —
+# Бэкап данных Flow: дамп базы и объекты S3. Работает внутри сервиса backup стека данных —
 # и по расписанию (scheduler.sh), и разово:
 #
 #   docker compose -f docker-compose.data.yml --profile backup run --rm backup /scripts/backup.sh
@@ -9,7 +9,6 @@
 set -eu
 
 DB=${POSTGRES_DB:-flow}
-AUTH_DB=${AUTH_DB:-flow_auth}
 KEEP=${BACKUP_KEEP:-7}
 STAMP=$(date +%Y-%m-%dT%H-%M-%S)
 DEST=/backups/$STAMP
@@ -19,9 +18,6 @@ echo "[$(date +%H:%M:%S)] бэкап в $DEST"
 
 pg_dump --format=custom --dbname="$DB" --file="$DEST/$DB.dump"
 echo "  база $DB — $(du -h "$DEST/$DB.dump" | cut -f1)"
-
-pg_dump --format=custom --dbname="$AUTH_DB" --file="$DEST/$AUTH_DB.dump"
-echo "  база $AUTH_DB — $(du -h "$DEST/$AUTH_DB.dump" | cut -f1)"
 
 # Объекты копируются с диска. Для строгой консистентности хранилище лучше остановить
 # (docker compose -f docker-compose.data.yml stop s3), но для дев-стенда снимка на ходу достаточно.

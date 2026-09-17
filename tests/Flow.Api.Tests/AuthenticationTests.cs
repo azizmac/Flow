@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Json;
-using Flow.Application.Exceptions;
 using Flow.Shared.Contracts.Users;
 using Xunit;
 
@@ -111,25 +110,4 @@ public sealed class AuthenticationTests(ApiFixture api)
         Assert.Equal("admin", call.CurrentPassword);
     }
 
-    [Fact]
-    public async Task Auth_Unavailable_Should_Return502()
-    {
-        using var client = api.CreateClientAs();
-        using var created = await client.PostAsJsonAsync("/users", new CreateUserRequest("todisable", "todisable@example.com", "A", "B", "correct horse battery"));
-        var user = await created.Content.ReadFromJsonAsync<UserResponse>();
-        api.Accounts.DisableEnableException = new AuthUnavailableException("down");
-
-        try
-        {
-            using var response = await client.PostAsync($"/users/{user!.Id}/deactivate", null);
-
-            Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
-            var stillActive = await client.GetFromJsonAsync<UserResponse>($"/users/{user.Id}");
-            Assert.True(stillActive!.IsActive);
-        }
-        finally
-        {
-            api.Accounts.DisableEnableException = null;
-        }
-    }
 }

@@ -1,5 +1,6 @@
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
+using Flow.Auth.Contracts;
 using Flow.Shared.Contracts.Search;
 using MediatR;
 
@@ -19,7 +20,7 @@ internal sealed class UserChangeUsernameCommandHandler(IUserRepository users, IS
         permissions.EnsureCanEditCredentials(actor, user);
 
         // Нормализация (trim + lower) живёт в домене: применяем, чтобы узнать итоговое значение, и сразу откатываем —
-        // проверять занятость и ходить в Flow.Auth надо до того, как копия в Users изменится.
+        // проверять занятость и ходить в Auth-модуль надо до того, как копия в Users изменится.
         var previous = user.Username;
         user.ChangeUsername(request.Username);
         var candidate = user.Username;
@@ -31,10 +32,10 @@ internal sealed class UserChangeUsernameCommandHandler(IUserRepository users, IS
         if (await users.ExistsByUsernameAsync(candidate, cancellationToken))
             return UserUpdateResult.UsernameTaken(candidate);
 
-        // Источник истины — Flow.Auth: копия в Users меняется только после его согласия.
+        // Источник истины — Auth-модуль: копия в Users меняется только после его согласия.
         var account = await accounts.ChangeUsernameAsync(user.Id, candidate, cancellationToken);
         if (account.Status == AccountResultStatus.Invalid)
-            throw new ArgumentException(account.Error ?? "Flow.Auth rejected the username.", nameof(request.Username));
+            throw new ArgumentException(account.Error ?? "Auth rejected the username.", nameof(request.Username));
 
         if (!account.IsSuccess)
             return UserUpdateResult.UsernameTaken(candidate);

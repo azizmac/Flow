@@ -1,16 +1,14 @@
 namespace Flow.Auth.Options;
 
-/// <summary>Секция "Auth" в appsettings / env (Auth__Issuer, Auth__Client__RedirectUris__0, ...). См. docs/TZ_auth.md.</summary>
+/// <summary>Секция "Auth" в appsettings / env (Auth__Issuer, Auth__Client__RedirectUris__0, ...). См. docs/TZ_modular_monolith.md.</summary>
 public sealed class AuthOptions
 {
     public const string SectionName = "Auth";
 
-    /// <summary>Внешний адрес сервиса — попадает в claim iss и в discovery. В Docker — тот, что видит браузер.</summary>
-    public string Issuer { get; set; } = "http://localhost:5100";
+    /// <summary>Внешний адрес backend — попадает в claim iss и в discovery. В Docker — тот, что видит браузер.</summary>
+    public string Issuer { get; set; } = "http://localhost:5000";
 
     public ClientOptions Client { get; set; } = new();
-
-    public ApiClientOptions ApiClient { get; set; } = new();
 
     public BCryptOptions BCrypt { get; set; } = new();
 
@@ -38,14 +36,6 @@ public sealed class AuthOptions
         public string[] RedirectUris { get; set; } = [];
 
         public string[] PostLogoutRedirectUris { get; set; } = [];
-    }
-
-    /// <summary>Конфиденциальный клиент Flow.Api для admin-API (client_credentials, scope auth:admin).</summary>
-    public sealed class ApiClientOptions
-    {
-        public string ClientId { get; set; } = "flow-api";
-
-        public string Secret { get; set; } = string.Empty;
     }
 
     public sealed class BCryptOptions

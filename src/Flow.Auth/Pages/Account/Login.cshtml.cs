@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
-using Flow.Auth.Controllers;
 using Flow.Auth.Data;
+using Flow.Auth.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace Flow.Auth.Pages.Account;
 
 /// <summary>
-/// Единственная страница сервиса: логин (username или email) + пароль. Сюда редиректит cookie-схема
+/// Страница Auth-модуля: логин (username или email) + пароль. Сюда редиректит cookie-схема
 /// из /connect/authorize; после входа — обратно на ReturnUrl (тот же authorize), дальше OpenIddict выдаёт код.
 /// Что именно неверно — логин или пароль — не сообщаем.
 /// </summary>
@@ -63,7 +63,7 @@ public sealed class LoginModel(SignInManager<ApplicationUser> signIn, UserManage
         var result = await signIn.CheckPasswordSignInAsync(user, Input.Password, lockoutOnFailure: true);
         if (result.IsLockedOut)
         {
-            Error = AccountsController.IsDisabled(user)
+            Error = LockoutPolicy.IsDisabled(user)
                 ? "Доступ закрыт. Обратитесь к основателю workspace."
                 : "Слишком много попыток. Подождите 5 минут и попробуйте снова.";
             return Page();

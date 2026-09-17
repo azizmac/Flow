@@ -22,7 +22,7 @@
         <!-- Векторы поискового индекса: тип halfvec в БД (Pgvector) и его маппинг в EF (o.UseVector()). -->
         <PackageReference Include="Pgvector" Version="0.3.2" />
         <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
-        <!-- IAccountService → Flow.Auth по HTTP (IHttpClientFactory) и биндинг секции Auth. -->
+        <!-- Именованные HTTP-клиенты эмбеддера и реранкера поиска. -->
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
         <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
         <!-- Вложения: объектное хранилище S3-совместимое (Storage/S3FileStorage). -->

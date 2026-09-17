@@ -1,8 +1,8 @@
 namespace Flow.Api.Bootstrap;
 
 /// <summary>
-/// Секция "Bootstrap" — та же, что у Flow.Auth (в Docker — общий якорь x-bootstrap). Flow.Auth по ней создаёт учётную
-/// запись, Flow.Api — профиль с тем же Id. Password здесь не читается: пароль хранит только Flow.Auth.
+/// Секция "Bootstrap" — общая для модулей одного хоста (в Docker — якорь x-bootstrap). Auth-модуль создаёт учётную
+/// запись, ядро — профиль с тем же Id. Password здесь не читается: пароль хранит только Auth-модуль.
 /// </summary>
 public sealed class BootstrapOptions
 {

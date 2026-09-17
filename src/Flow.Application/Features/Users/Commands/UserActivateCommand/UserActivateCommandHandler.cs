@@ -1,11 +1,12 @@
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
+using Flow.Auth.Contracts;
 using Flow.Shared.Contracts.Search;
 using MediatR;
 
 namespace Flow.Application.Features.Users.Commands.UserActivateCommand;
 
-/// <summary>Зеркало деактивации: сначала снять блокировку входа в Flow.Auth, потом статус в Users.</summary>
+/// <summary>Зеркало деактивации: сначала снять блокировку входа в Auth-модуле, потом статус в Users.</summary>
 internal sealed class UserActivateCommandHandler(IUserRepository users, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IAccountService accounts, IUnitOfWork unitOfWork)
     : IRequestHandler<UserActivateCommand, UserUpdateResult>
 {

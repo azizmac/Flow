@@ -1,5 +1,6 @@
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-USER $APP_UID
+# Без USER $APP_UID: Auth-модуль пишет сертификаты (/certs) и ключи Data Protection (/keys) в volumes,
+# которые Docker создаёт от root. При переходе на non-root нужно chown этих каталогов.
 WORKDIR /app
 EXPOSE 8080
 
@@ -8,6 +9,8 @@ ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["src/Flow.Api/Flow.Api.csproj", "src/Flow.Api/"]
 COPY ["src/Flow.Application/Flow.Application.csproj", "src/Flow.Application/"]
+COPY ["src/Flow.Auth/Flow.Auth.csproj", "src/Flow.Auth/"]
+COPY ["src/Flow.Auth.Contracts/Flow.Auth.Contracts.csproj", "src/Flow.Auth.Contracts/"]
 COPY ["src/Flow.Domain/Flow.Domain.csproj", "src/Flow.Domain/"]
 COPY ["src/Flow.Shared/Flow.Shared.csproj", "src/Flow.Shared/"]
 COPY ["src/Flow.Infrastructure/Flow.Infrastructure.csproj", "src/Flow.Infrastructure/"]
