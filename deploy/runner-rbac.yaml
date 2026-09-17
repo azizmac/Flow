@@ -1,0 +1,116 @@
+# Права раннера на кластер. Применяется ОДИН РАЗ и вручную, админским доступом — не пайплайном:
+# пайплайн ходит в кластер именно этим ServiceAccount'ом, то есть не может выдать права сам себе.
+#
+#   kubectl apply -f deploy/runner-rbac.yaml
+#
+# Зачем так узко. Репозиторий публичный, а раннер self-hosted и стоит на кластере, где рядом живёт чужое
+# приложение. Админский kubeconfig в такой связке — это «утёк раннер, потерян весь кластер», и хуже того:
+# клиентский сертификат k3s отозвать нельзя, только перевыпуском CA. Токен этого SA, наоборот, узкий
+# (три неймспейса, конкретные ресурсы) и отзывается удалением одного объекта. Поэтому после применения
+# админский KUBECONFIG_B64 и файл ~/.kube/config с раннера убираются, а деплой ходит этим SA.
+#
+# Namespace'ы создаются ЗДЕСЬ, а не пайплайном, намеренно: создание namespace — операция кластерного
+# уровня, и чтобы её не пришлось разрешать деплой-роли, три неймспейса заводятся один раз тут. Дальше
+# SA работает только внутри них.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flow
+  labels: { app.kubernetes.io/part-of: flow }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flow-data
+  labels: { app.kubernetes.io/part-of: flow }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flow-ai
+  labels: { app.kubernetes.io/part-of: flow }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flow-deployer
+  namespace: flow
+---
+# Токен-секрет создаётся явно: с k8s 1.24 ServiceAccount больше не заводит долгоживущий токен сам, а
+# TokenRequest выдаёт короткоживущий. Деплою нужен стабильный токен, который не протухнет между выкатками,
+# поэтому просим кластер положить его сюда (тип kubernetes.io/service-account-token — контроллер сам
+# впишет token и ca.crt).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flow-deployer-token
+  namespace: flow
+  annotations:
+    kubernetes.io/service-account.name: flow-deployer
+type: kubernetes.io/service-account-token
+---
+# Один и тот же набор прав в каждом из трёх неймспейсов. Список ресурсов — ровно то, что применяет и ждёт
+# выкатка: рабочие нагрузки, их сеть и конфигурация, разовые джобы, тома, плюс чтение подов и их логов
+# (rollout status смотрит на поды и replicaset'ы, а разбор падений — на логи). Ничего кластерного,
+# никаких node/namespace/clusterrole — то, что не в списке, недоступно.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flow-deployer
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+# ClusterRole определён один раз, а привязан RoleBinding'ами в каждом неймспейсе — так права остаются
+# строго внутри flow / flow-data / flow-ai, несмотря на «Cluster» в имени роли: RoleBinding сужает
+# область действия ClusterRole до своего неймспейса. Это стандартный приём «общий набор правил,
+# локальная область».
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flow-deployer
+  namespace: flow
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: flow-deployer }
+subjects:
+  - kind: ServiceAccount
+    name: flow-deployer
+    namespace: flow
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flow-deployer
+  namespace: flow-data
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: flow-deployer }
+subjects:
+  - kind: ServiceAccount
+    name: flow-deployer
+    namespace: flow
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flow-deployer
+  namespace: flow-ai
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: flow-deployer }
+subjects:
+  - kind: ServiceAccount
+    name: flow-deployer
+    namespace: flow
