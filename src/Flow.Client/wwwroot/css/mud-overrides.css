@@ -1,0 +1,461 @@
+﻿/* ════════════════════════════════════════════════════════════════════
+   Flow × MudBlazor — слой переопределений.
+
+   Здесь и только здесь мы правим внешний вид компонентов библиотеки под дизайн Flow.
+   Причина отдельного файла: когда после обновления MudBlazor что-то поедет, смотреть надо сюда,
+   а не искать правки по 2000 строк app.css.
+
+   Что где живёт:
+   · цвета, шрифт, радиус по умолчанию — Services/FlowTheme.cs (тема, переменные --mud-palette-*);
+   · форма контролов (pill, круги, подчёркивания) — этот файл;
+   · собственная вёрстка Flow (сайдбар, карточки, лента, вложения) — app.css.
+
+   Подключается последним (wwwroot/index.html), поэтому перебивает и MudBlazor, и app.css.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ---------- База ----------
+   MudBlazor приносит собственный reboot и ждёт Roboto. Шрифт задан темой, но html/body библиотека
+   трогает напрямую — возвращаем наши значения из tokens.css. */
+html,
+body {
+    font-family: var(--font-text);
+    font-size: var(--text-sm);
+    font-weight: var(--fw-medium);
+    line-height: var(--lh-normal);
+    background: var(--bg-content);
+    color: var(--text-primary);
+}
+
+/* Библиотека раскрашивает ссылки цветом Primary с подчёркиванием — у Flow ссылка без подчёркивания. */
+.mud-link,
+a.mud-link:hover {
+    text-decoration: none;
+}
+
+/* ---------- Слои ----------
+   Свои слои Flow живут на z-index 30…100 (drawer 30/31, popover 40/41, modal 60, toasts 100),
+   слои MudBlazor — от 1100. На время миграции это удобно: новые меню и диалоги всегда поверх старых.
+   Когда старые слои уйдут (этап 3), правило можно будет убрать. */
+
+/* ---------- Кнопки ----------
+   Вид pill-кнопок и круглых icon-кнопок остаётся в app.css (.ds-btn / .ds-iconbtn) — здесь только то,
+   что MudBlazor задаёт сам и что иначе перебило бы наш макет. */
+
+/* Material резервирует кнопке минимум 64px ширины — у Flow кнопка ровно по содержимому. */
+.mud-button-root.ds-btn {
+    min-width: 0;
+}
+
+/* Press-эффект Flow: библиотека своего transform не ставит, но её transition перебивает наш. */
+.mud-button-root.ds-btn:active:not(:disabled) {
+    transform: scale(0.97);
+}
+
+.mud-button-root.ds-iconbtn:active:not(:disabled) {
+    transform: scale(0.94);
+}
+/* ---------- Поля ----------
+   Значение в поле Flow крупное (22px semibold), отступов сверху и снизу у него нет: линию и воздух
+   задаёт .ds-field-row. Material ставит своё — перебиваем точечно, сама разметка остаётся от MudTextField. */
+/* Размер поле наследует от обёртки (правило библиотеки — font-size: inherit), поэтому задаём его там;
+   вертикальные отступы приходят из `.mud-input > input.mud-input-root`, его и перебиваем. */
+.ds-field-row .mud-input {
+    font-family: var(--font-text);
+    font-size: var(--text-h3);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-tight);
+    line-height: var(--lh-normal);
+    color: var(--text-primary);
+}
+
+.ds-field-row .mud-input > input.mud-input-root {
+    padding: 0;
+    color: var(--text-primary);
+}
+
+.ds-field-row .mud-input-root::placeholder {
+    color: var(--text-tertiary);
+    font-weight: var(--fw-medium);
+    opacity: 1;
+}
+
+/* Обёртки Mud внутри строки поля не должны добавлять собственную ширину и отступы. */
+.ds-field-row .mud-input-control,
+.ds-field-row .mud-input {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+}
+/* ---------- Скелетоны ----------
+   Ширину и высоту полос задаёт Components/Skeleton.razor, цвет — Palette.Skeleton из темы.
+   Здесь: радиус как у остальной вёрстки Flow и выравнивание в строке-сетке списка задач. */
+.mud-skeleton {
+    border-radius: var(--radius-sm);
+}
+
+.skel-row .mud-skeleton {
+    justify-self: start;
+}
+
+/* Правило из app.css для .skel: при выключенных анимациях полоса просто стоит. */
+@media (prefers-reduced-motion: reduce) {
+    .mud-skeleton::after,
+    .mud-skeleton {
+        animation: none;
+    }
+}
+
+/* ---------- Уведомления ----------
+   Очередь и таймеры — за ISnackbar, вид — прежний тост Flow: тёмная пилюля снизу по центру,
+   наш глиф слева (его подставляет ToastService), цвет глифа по смыслу. Класс .toast приходит
+   из SnackbarTypeClass. */
+.mud-snackbar.toast {
+    min-width: 0;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 10px 16px;
+    font: var(--fw-semibold) 13px var(--font-display);
+    color: #fff;
+    box-shadow: var(--shadow-popover);
+}
+
+.mud-snackbar.toast .mud-snackbar-content-message {
+    padding: 0;
+}
+
+.mud-snackbar.toast .mud-snackbar-icon {
+    color: var(--text-secondary);
+    margin-right: 10px;
+}
+
+.mud-snackbar.toast.ok .mud-snackbar-icon {
+    color: var(--sage);
+}
+
+.mud-snackbar.toast.error {
+    border-color: rgba(226, 96, 79, 0.5);
+}
+
+.mud-snackbar.toast.error .mud-snackbar-icon {
+    color: var(--danger);
+}
+
+/* ---------- Меню ----------
+   .flow-pop — слой Flow поверх MudPopover: тот же вид, что у прежнего .pop в app.css, но без
+   position/opacity — позицию и появление считает библиотека. Отдельное имя нужно, пока свой
+   Popover.razor ещё жив у селектов (уходит на этапе 4).
+   Пункты остаются на .pop-item, у них гасим геометрию Material. */
+.mud-popover.flow-pop {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-popover);
+    padding: 6px;
+    overflow: visible;
+}
+
+.flow-pop .flow-pop-list,
+.flow-pop .mud-menu-list-wrapper,
+.flow-pop .mud-list {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: transparent;
+}
+
+.flow-pop .pop-item.mud-menu-item {
+    min-height: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    transition: background-color 120ms ease, color 120ms ease;
+}
+
+/* Текст пункта библиотека заворачивает в <p class="mud-menu-item-text"> — строку с иконкой
+   собираем именно там, иначе глиф встанет над подписью. */
+.flow-pop .pop-item .mud-menu-item-text {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font: var(--fw-semibold) 12.5px var(--font-display);
+    color: var(--text-secondary);
+    letter-spacing: normal;
+}
+
+.flow-pop .pop-item.mud-menu-item:hover,
+.flow-pop .pop-item.mud-menu-item:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.flow-pop .pop-item.mud-menu-item:hover .mud-menu-item-text,
+.flow-pop .pop-item.mud-menu-item:focus-visible .mud-menu-item-text {
+    color: #fff;
+}
+
+.flow-pop .pop-item.danger .mud-menu-item-text {
+    color: var(--danger);
+}
+
+/* Обёртка активатора меню: не должна занимать место в сетке строки. */
+.menu-anchor {
+    display: inline-flex;
+}
+
+/* Разделитель между обычными пунктами и опасным действием. */
+.flow-pop .pop-sep {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 2px;
+}
+
+/* ---------- Диалоги ----------
+   Карточка модалки Flow: 440px, тёмная поверхность, крупный заголовок, кнопки справа.
+   Шапку и крестик Mud мы не показываем (CloseButton = false), поэтому вся геометрия — здесь. */
+.mud-dialog.flow-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 440px;
+    max-width: calc(100vw - 32px);
+    padding: 28px 32px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-modal);
+}
+
+.flow-modal .flow-modal-title {
+    padding: 0;
+}
+
+.flow-modal .flow-modal-title h3 {
+    margin: 0 0 4px;
+    font: var(--fw-extrabold) 20px var(--font-display);
+    letter-spacing: -0.3px;
+    color: #fff;
+}
+
+/* Внутри контента — та же вертикальная стопка полей, что была у .modal. */
+.flow-modal .flow-modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 0;
+    overflow: visible;
+}
+
+.flow-modal .flow-modal-content p {
+    margin: 0;
+    font: var(--fw-medium) 13.5px/1.5 var(--font-text);
+    color: var(--text-secondary);
+}
+
+.flow-modal .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 0;
+}
+/* ---------- Селекты ----------
+   Ширину прежний Popover получал параметром (200/260/300px) — теперь это классы на слое.
+   Списки длинные (сто человек, восемь проектов), поэтому ограничиваем высоту и включаем прокрутку. */
+.mud-popover.flow-pop {
+    max-height: min(60vh, 420px);
+    overflow-y: auto;
+}
+
+.mud-popover.flow-pop-wide {
+    width: 260px;
+}
+
+.mud-popover.flow-pop-boards {
+    width: 300px;
+}
+
+.mud-popover.flow-pop-card {
+    width: 300px;
+    max-height: none;
+    overflow: visible;
+}
+
+/* Поле поиска внутри меню (исполнитель, проект): клик по нему меню не закрывает. */
+.flow-pop .pop-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 2px 6px;
+}
+
+.flow-pop .pop-search input {
+    width: 100%;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.12);
+    color: #fff;
+    font: var(--fw-medium) 12.5px var(--font-text);
+    outline: 0;
+}
+
+.flow-pop .pop-search input:focus {
+    border-color: var(--accent);
+}
+
+/* Карточка человека висит на своём якоре: MudPopover считает позицию по ближайшему
+   позиционированному предку, поэтому кнопка и карточка лежат в одной обёртке. */
+.ucard-anchor {
+    position: relative;
+    display: inline-flex;
+}
+
+.ucard-anchor.block {
+    display: block;
+}
+/* ---------- Таблица задач ----------
+   Список задач — MudDataGrid (сортировка по колонкам и страницы приходят от библиотеки).
+   Раньше это была сетка из div'ов (.list-cols), теперь настоящая таблица, поэтому ширины колонок
+   задаются по порядку ячеек, а вид строки остаётся прежним (.task-row в app.css). */
+.flow-grid.panel {
+    padding: 0;
+}
+
+.flow-grid .mud-table-container {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+.flow-grid .mud-table-root {
+    background: transparent;
+    table-layout: fixed;
+    width: 100%;
+}
+
+/* Шапка: те же мелкие прописные, что были у .list-head. */
+.flow-grid .mud-table-head th {
+    padding: 12px 20px;
+    background: transparent;
+    border-bottom: 1px solid var(--border);
+    font: var(--fw-bold) 10.5px var(--font-display);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.flow-grid .mud-table-head th .mud-button-root {
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+}
+
+/* Заголовок-сортировщик — свой (Components/SortHeader.razor): стрелка справа, активная колонка акцентом. */
+.flow-grid .sort-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    user-select: none;
+    color: inherit;
+    transition: color 120ms ease;
+}
+
+.flow-grid .sort-header:hover {
+    color: var(--text-secondary);
+}
+
+.flow-grid .sort-header.on {
+    color: var(--accent);
+}
+
+/* Стрелка появляется только у активной колонки и разворачивается по направлению. */
+.flow-grid .sort-header .sort-arrow {
+    opacity: 0;
+    transition: opacity 120ms ease, transform 160ms var(--ease-out);
+}
+
+.flow-grid .sort-header:hover .sort-arrow,
+.flow-grid .sort-header.on .sort-arrow {
+    opacity: 1;
+}
+
+.flow-grid .sort-header .sort-arrow.up {
+    transform: rotate(180deg);
+}
+
+.flow-grid .mud-table-body td {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    color: var(--text-primary);
+}
+
+.flow-grid .mud-table-body tr:last-child td {
+    border-bottom: none;
+}
+
+/* Ширины колонок: код · задача · кто · статус · создана · меню — как в прежней сетке. */
+.flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: 92px; }
+.flow-grid th:nth-child(3), .flow-grid td:nth-child(3) { width: 56px; }
+.flow-grid th:nth-child(4), .flow-grid td:nth-child(4) { width: 170px; }
+.flow-grid th:nth-child(5), .flow-grid td:nth-child(5) { width: 110px; }
+.flow-grid th:nth-child(6), .flow-grid td:nth-child(6) { width: 44px; }
+
+/* Строка: hover, выбранная и подсветка новой — прежние правила .task-row из app.css,
+   здесь только гасим фон таблицы Material. */
+.flow-grid .mud-table-body tr.task-row {
+    background: transparent;
+    cursor: pointer;
+}
+
+.flow-grid .mud-table-body tr.task-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.flow-grid .mud-table-body tr.task-row.sel {
+    background: var(--accent-soft);
+}
+
+.flow-grid .mud-table-body tr.task-row.done .task-title {
+    color: var(--text-tertiary);
+}
+
+/* Пагинация: тёмная полоса под списком вместо прежней кнопки «показать ещё». */
+.flow-grid .mud-table-pagination {
+    border-top: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    font: var(--fw-medium) 12px var(--font-text);
+}
+
+.flow-grid .mud-table-pagination .mud-select-input .mud-input-root {
+    font: var(--fw-medium) 12px var(--font-text);
+    color: var(--text-secondary);
+}
+
+/* Код задачи — точка входа строки с клавиатуры: выглядит как текст, но получает фокус и кольцо. */
+.flow-grid .row-key {
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.flow-grid .row-key:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Ниже 1200px колонка «Создана» уходит: дата видна в карточке задачи, а ширина нужнее названию. */
+@media (max-width: 1200px) {
+    .flow-grid th:nth-child(5),
+    .flow-grid td:nth-child(5) {
+        display: none;
+    }
+}
+
+/* Пустой список и индикатор загрузки занимают всю ширину таблицы. */
+.flow-grid .mud-table-body .empty {
+    padding: 40px 20px;
+}

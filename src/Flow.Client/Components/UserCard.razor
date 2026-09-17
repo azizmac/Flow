@@ -1,9 +1,14 @@
 @* Карточка пользователя в поповере (макет: «показать карточку с полной информацией по клику»):
-   аватар, имя, @username, должность, контакты, внешние ссылки, ссылка на профиль. Открывается по клику на якорь. *@
+   аватар, имя, @username, должность, контакты, внешние ссылки, ссылка на профиль. Открывается по клику на якорь.
+
+   Слой — MudPopover: он позиционируется по своему месту в разметке, поэтому вызывающая сторона кладёт
+   карточку рядом с якорем внутрь .ucard-anchor (position: relative). Клик мимо ловит прозрачный MudOverlay. *@
 @inject BrowserInterop Browser
 @inject ToastService Toasts
 
-<Popover AnchorId="@AnchorId" Align="@Align" Width="300" Offset="8" OnClose="OnClose">
+<MudOverlay Visible="true" DarkBackground="false" ZIndex="1200" OnClick="OnClose" />
+<MudPopover Open="true" Paper="false" Fixed="false" AnchorOrigin="@AnchorOrigin" TransformOrigin="@TransformOrigin"
+            OverflowBehavior="OverflowBehavior.FlipAlways" Class="flow-pop flow-pop-card">
     <div class="ucard">
         <div class="ucard-head">
             <Avatar User="User" Size="44" />
@@ -42,13 +47,17 @@
         }
         <a class="ucard-open" href="@($"users/{User.Id}")"><Icon Name="user" Size="14" />Открыть профиль</a>
     </div>
-</Popover>
+</MudPopover>
 
 @code {
     [Parameter, EditorRequired] public UserResponse User { get; set; } = default!;
-    [Parameter, EditorRequired] public string AnchorId { get; set; } = "";
+    /// <summary>"left" — карточка под левым краем якоря, "right" — под правым.</summary>
     [Parameter] public string Align { get; set; } = "left";
     [Parameter] public EventCallback OnClose { get; set; }
+
+    private Origin AnchorOrigin => Align == "right" ? Origin.BottomRight : Origin.BottomLeft;
+
+    private Origin TransformOrigin => Align == "right" ? Origin.TopRight : Origin.TopLeft;
 
     private async Task Copy(string text)
     {

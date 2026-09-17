@@ -1,0 +1,22 @@
+{
+  "name": "flow-editor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Сборка Markdown-редактора Flow (CodeMirror 6) в ../wwwroot/js/flow-editor.js",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild flow-editor.src.js --bundle --minify --format=iife --target=es2020 --outfile=../wwwroot/js/flow-editor.js",
+    "check": "npm run build && git diff --exit-code -- ../wwwroot/js/flow-editor.js"
+  },
+  "dependencies": {
+    "@codemirror/commands": "6.8.1",
+    "@codemirror/lang-markdown": "6.3.4",
+    "@codemirror/language": "6.11.3",
+    "@codemirror/state": "6.5.2",
+    "@codemirror/view": "6.38.6",
+    "@lezer/highlight": "1.2.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}

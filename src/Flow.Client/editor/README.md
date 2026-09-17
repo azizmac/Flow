@@ -1,25 +1,36 @@
 # Редактор Markdown (CodeMirror 6)
 
 `flow-editor.src.js` — исходник, `../wwwroot/js/flow-editor.js` — собранный бандл, который отдаётся браузеру.
-Бандл закоммичен намеренно: у клиента нет фронтового пайплайна, и держать ради одного файла npm-сборку в
-Dockerfile дороже, чем пересобирать его руками в те редкие разы, когда меняется сам редактор.
+
+Бандл закоммичен намеренно: клиент должен запускаться одной командой `dotnet run`, без Node на машине.
+Чтобы закоммиченный файл не разошёлся с исходником, сборка воспроизводима и проверяется автоматически:
+
+- зависимости зафиксированы в `package.json` и `package-lock.json`;
+- образ клиента собирает бандл сам (стадия `node:22-alpine` в `../Dockerfile`) и кладёт свежий поверх
+  закоммиченного — образ с отставшим бандлом собрать нельзя;
+- CI (`.github/workflows/build.yml`, шаг «Editor bundle is up to date») пересобирает бандл и сравнивает
+  с тем, что в репозитории: правка исходника без пересборки роняет сборку.
 
 Бандл грузится лениво — только когда на странице впервые понадобился редактор (`flow.loadEditor()` в `flow.js`),
 поэтому экраны без ввода Markdown за него не платят.
 
 ## Пересборка
 
-Нужен Node 20+. Из корня репозитория:
+Нужен Node 22. Из этой папки:
 
 ```bash
-mkdir -p /tmp/flow-editor && cd /tmp/flow-editor
-npm init -y
-npm install @codemirror/state@6 @codemirror/view@6 @codemirror/commands@6 \
-            @codemirror/language@6 @codemirror/lang-markdown@6 @lezer/highlight@1 esbuild@0.24
-cp <repo>/src/Flow.Client/editor/flow-editor.src.js entry.js
-./node_modules/.bin/esbuild entry.js --bundle --minify --format=iife --target=es2020 \
-  --outfile=<repo>/src/Flow.Client/wwwroot/js/flow-editor.js
+npm ci
+npm run build
 ```
 
-Размер бандла — около 500 КБ (≈140 КБ после gzip). Проверять после пересборки: набор текста, тулбар,
+`npm run check` делает то же самое и сразу сверяет результат с закоммиченным файлом — то же, что делает CI.
+
+Размер бандла — около 490 КБ (≈140 КБ после gzip). Проверять после пересборки: набор текста, тулбар,
 `Ctrl+B/I/K`, `Ctrl+Enter`, автодополнение `@`, `Esc` при открытом списке упоминаний.
+
+## Обновление CodeMirror
+
+Версии подняты точечно (`npm install @codemirror/view@latest` и так далее), потом `npm run build` и прогон
+по списку выше. Наружу торчит `window.flowEditor` — набор операций, который вызывает `MarkdownEditor.razor`
+через `Services/BrowserInterop.cs`: `mount`, `destroy`, `focus`, `setReadOnly`, `state`, `setValue`, `wrap`,
+`prefixLines`, `insertMention`. Менять их имена и сигнатуры нельзя, не поправив обе стороны.

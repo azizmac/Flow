@@ -79,15 +79,26 @@ input, textarea { font-family: inherit; }
     display: flex;
     height: 100vh;
     background: var(--bg-content);
-    overflow: hidden;
+    /* По вертикали скроллится внутренний .content, поэтому здесь скролл гасим. По горизонтали —
+       наоборот, разрешаем: ниже min-width рабочей области (900px) пусть появится полоса, иначе правый
+       край топбара с кнопкой «Создать задачу» просто обрезался бы. */
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
+/* Рабочая область. min-width держит нижнюю границу вёрстки: целевой минимум — 1280px, но до 900px всё
+   читается (сайдбар уходит в иконки, колонка «Создана» прячется). Ниже 900px ужимать уже нечего —
+   заголовок проекта начинает наезжать на поиск, — поэтому страница получает горизонтальный скролл.
+   Скролл честнее мятой вёрстки: ничего не наползает и не исчезает. */
 .main {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-width: 0;
+    min-width: 900px;
     position: relative;   /* drawer позиционируется относительно main — сайдбар не затемняется */
+    /* Закрытый слайдер стоит за правым краем (translateX) — без обрезки он давал бы горизонтальную
+       полосу на любом экране. Поповеры не пострадают: MudBlazor рисует их порталом в body. */
+    overflow: hidden;
 }
 
 .topbar {
@@ -116,6 +127,7 @@ input, textarea { font-family: inherit; }
     align-items: center;
     gap: 10px;
     min-width: 0;
+    overflow: hidden;   /* ключ проекта и название не вылезают за свою половину топбара */
     padding: 4px 8px;
     margin-left: -8px;
     border-radius: 9px;
@@ -144,7 +156,7 @@ input, textarea { font-family: inherit; }
     background: rgba(255, 255, 255, 0.12);
     color: var(--text-secondary);
 }
-.topbar-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+.topbar-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; min-width: 0; }
 .topbar-back { display: flex; color: var(--text-tertiary); transition: color 150ms ease; }
 .topbar-crumbs {
     display: flex;
@@ -339,19 +351,6 @@ input, textarea { font-family: inherit; }
 }
 @keyframes err-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
-/* ---------- Tag (pill) ---------- */
-.ds-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    height: 34px;
-    padding: 0 15px;
-    border-radius: var(--radius-pill);
-    background: rgba(255, 255, 255, 0.10);
-    font: var(--fw-medium) var(--text-body) var(--font-display);
-    color: var(--text-primary);
-    white-space: nowrap;
-}
 
 /* ---------- Spinner ---------- */
 .ds-spin {
@@ -377,6 +376,20 @@ input, textarea { font-family: inherit; }
     flex-shrink: 0;
     box-shadow: var(--shadow-sidebar);
 }
+/* Шапка сайдбара: знак и кнопка сворачивания в одну строку. */
+.sb-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 16px 26px;
+}
+
+.sb-top .sb-brand { padding: 0; }
+
+/* Иконка поиска показывается только в иконочном режиме — в развёрнутом там полноценная строка. */
+.sb-search-icon { display: none; }
+
 /* color задаёт верхнюю долю знака (BrandMark рисует её currentColor) — на тёмном сайдбаре светлую. */
 .sb-brand {
     display: flex;
@@ -406,6 +419,42 @@ input, textarea { font-family: inherit; }
 .sb-ws .sb-soon { margin-left: auto; }
 .sb-ws-name { font: var(--fw-bold) 12.5px var(--font-display); color: #fff; }
 .sb-ws-sub { font: var(--fw-medium) 10.5px var(--font-text); color: rgba(255, 255, 255, 0.45); }
+/* ---------- Иконочный сайдбар ----------
+   Ниже 1366px места на подписи уже нет: оставляем колонку иконок 68px. Решение человека (кнопка)
+   важнее ширины — классы .collapsed / .expanded перебивают медиазапрос в обе стороны.
+   Тексты убираем через display:none, а не прозрачностью: иначе они продолжают занимать ширину. */
+@media (max-width: 1365px) {
+    .sb:not(.expanded) { width: 68px; padding: 22px 0; }
+    .sb:not(.expanded) .sb-word,
+    .sb:not(.expanded) .sb-ws,
+    .sb:not(.expanded) .sb-section,
+    .sb:not(.expanded) .sb-search-wrap,
+    .sb:not(.expanded) .sb-soon,
+    .sb:not(.expanded) .sb-item span:not(.ds-icon),
+    .sb:not(.expanded) .sb-un,
+    .sb:not(.expanded) .sb-ur { display: none; }
+    .sb:not(.expanded) .sb-search-icon { display: flex; }
+    .sb:not(.expanded) .sb-top { flex-direction: column; gap: 10px; padding: 0 0 18px; }
+    .sb:not(.expanded) .sb-item { justify-content: center; padding: 10px 0; margin: 0 10px 4px; }
+    .sb:not(.expanded) .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px 0; }
+    .sb:not(.expanded) .sb-me { justify-content: center; }
+}
+
+.sb.collapsed { width: 68px; }
+.sb.collapsed .sb-word,
+.sb.collapsed .sb-ws,
+.sb.collapsed .sb-section,
+.sb.collapsed .sb-search-wrap,
+.sb.collapsed .sb-soon,
+.sb.collapsed .sb-item span:not(.ds-icon),
+.sb.collapsed .sb-un,
+.sb.collapsed .sb-ur { display: none; }
+.sb.collapsed .sb-search-icon { display: flex; }
+.sb.collapsed .sb-top { flex-direction: column; gap: 10px; padding: 0 0 18px; }
+.sb.collapsed .sb-item { justify-content: center; padding: 10px 0; margin: 0 10px 4px; }
+.sb.collapsed .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px 0; }
+.sb.collapsed .sb-me { justify-content: center; }
+
 /* ---------- Поиск: строка в сайдбаре ---------- */
 /* Обёртка — якорь дропдауна. Он шире сайдбара и ложится поверх контента, поэтому позиционируется
    абсолютно, а не участвует в потоке колонки. */
@@ -674,7 +723,7 @@ a.sb-me:active { transform: scale(0.98); }
 /* ---------- Auth screen (вход/выход через Flow.Auth, «нет доступа») ---------- */
 .auth-screen { min-height: 100vh; display: grid; place-items: center; padding: 30px 20px; background: var(--bg-deep); }
 .auth-card { width: 100%; max-width: 400px; background: var(--bg-content); border: 1px solid var(--border); border-radius: var(--r-xl); box-shadow: var(--shadow-card); padding: 40px 30px; display: flex; flex-direction: column; gap: 15px; }
-.auth-title { font: var(--fw-black) 24px var(--font-display); letter-spacing: -0.02em; color: var(--text-primary); }
+.auth-title { font: var(--fw-black) 24px var(--font-display); letter-spacing: var(--tracking-display); color: var(--text-primary); }
 .auth-text { font: var(--fw-medium) var(--text-body) var(--font-text); color: var(--text-secondary); }
 .auth-link { color: var(--accent); font: var(--fw-semibold) var(--text-body) var(--font-display); }
 
@@ -825,18 +874,6 @@ a.sb-me:active { transform: scale(0.98); }
     flex-shrink: 0;
 }
 .task-row:last-child { border-bottom: none; }
-/* Появление строк: анимируем только прозрачность — transform превратил бы строку
-   в containing block для fixed-поповера меню «…» внутри неё. */
-.rows-in > .task-row { animation: row-in 220ms var(--ease-out) backwards; }
-.rows-in > .task-row:nth-child(1) { animation-delay: 0ms; }
-.rows-in > .task-row:nth-child(2) { animation-delay: 25ms; }
-.rows-in > .task-row:nth-child(3) { animation-delay: 50ms; }
-.rows-in > .task-row:nth-child(4) { animation-delay: 75ms; }
-.rows-in > .task-row:nth-child(5) { animation-delay: 100ms; }
-.rows-in > .task-row:nth-child(6) { animation-delay: 125ms; }
-.rows-in > .task-row:nth-child(7) { animation-delay: 150ms; }
-.rows-in > .task-row:nth-child(n+8) { animation-delay: 170ms; }
-@keyframes row-in { from { opacity: 0; } to { opacity: 1; } }
 .task-row.done .task-title { color: var(--text-tertiary); }
 .task-row.sel { background: var(--accent-soft); }
 .task-row.flash { animation: row-flash 1.5s ease-out; }
@@ -907,24 +944,9 @@ a.sb-me:active { transform: scale(0.98); }
 .status-sel .ds-icon { color: rgba(255, 255, 255, 0.4); margin-left: 2px; }
 .status-sel .lbl { overflow: hidden; text-overflow: ellipsis; }
 
-/* ---------- Popover (status-menu / row-menu) ---------- */
-.pop-scrim { position: fixed; inset: 0; z-index: 40; }
-.pop {
-    position: fixed;
-    z-index: 41;
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    padding: 6px;
-    box-shadow: var(--shadow-popover);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    opacity: 0;
-    transform: scale(0.96);
-    transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out);
-}
-.pop.in { opacity: 1; transform: scale(1); }
+/* ---------- Пункты списков в слоях ----------
+   Сам слой рисует MudPopover (см. mud-overrides.css, .flow-pop). Здесь остались пункты: они те же
+   в меню задач, в селектах и в списке упоминаний Markdown-редактора, который слоем не пользуется. */
 .pop-item {
     display: flex;
     align-items: center;
@@ -1000,14 +1022,6 @@ a.sb-me:active { transform: scale(0.98); }
 /* Служебная группа (кастомные статусы): показывает число, но фильтром не является. */
 .seg-btn.muted { cursor: default; opacity: 0.7; }
 .filter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.list-more {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 14px 20px;
-    border-top: 1px solid var(--border);
-}
 
 /* ---------- Empty states ---------- */
 .empty {
@@ -1026,37 +1040,9 @@ a.sb-me:active { transform: scale(0.98); }
 .empty { animation: empty-in 260ms var(--ease-out) backwards; }
 @keyframes empty-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-/* ---------- Modal ---------- */
-.modal-scrim {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 60;
-    opacity: 0;
-    transition: opacity 180ms var(--ease-out);
-}
-.modal-scrim.in { opacity: 1; }
-.modal {
-    width: 440px;
-    max-width: calc(100vw - 32px);
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: var(--r-xl);
-    padding: 28px 32px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    box-shadow: var(--shadow-modal);
-    transform: scale(0.96);
-    transition: transform 180ms var(--ease-out);
-}
-.modal-scrim.in .modal { transform: none; }
-.modal h3 { font: var(--fw-extrabold) 20px var(--font-display); margin: 0 0 4px; letter-spacing: -0.3px; color: #fff; }
-.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
-.modal p { margin: 0; font: var(--fw-medium) 13.5px/1.5 var(--font-text); color: var(--text-secondary); }
+/* ---------- Modal ----------
+   Слой и затемнение — MudDialog; вид карточки живёт в mud-overrides.css (.flow-modal).
+   Здесь остались только правила, общие с другими местами. */
 
 /* ---------- Drawer ---------- */
 .drawer-scrim {
@@ -1074,7 +1060,9 @@ a.sb-me:active { transform: scale(0.98); }
     top: 0;
     right: 0;
     bottom: 0;
-    width: 560px;
+    /* На широком экране — привычные 560px, на ноутбуке уступает список: доля от окна, но не уже 380px,
+       иначе мета-сетка и лента комментариев начинают переноситься по одному слову. */
+    width: clamp(380px, 46vw, 560px);
     max-width: 100%;
     background: var(--surface);
     border-left: 1px solid var(--border);
@@ -1472,7 +1460,6 @@ a.sb-me:active { transform: scale(0.98); }
 .profile-name { margin: 0; font: var(--fw-black) 24px/1.15 var(--font-display); letter-spacing: -0.5px; color: #fff; word-break: break-word; }
 .profile-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font: var(--fw-medium) 13px var(--font-text); color: var(--text-secondary); }
 .profile-sub .dot { color: var(--text-tertiary); }
-.profile-actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; }
 .tabs { display: flex; gap: 4px; padding: 0 40px; border-bottom: 1px solid var(--border); }
 .tab {
     position: relative;
@@ -1544,31 +1531,6 @@ a.sb-me:active { transform: scale(0.98); }
 .who-sub { font: var(--fw-medium) 11.5px var(--font-text); color: var(--text-tertiary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.task-row { color: inherit; text-decoration: none; }
 
-/* ---------- Toast ---------- */
-.toasts { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-.toast {
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
-    padding: 10px 16px;
-    font: var(--fw-semibold) 13px var(--font-display);
-    color: #fff;
-    box-shadow: var(--shadow-popover);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    pointer-events: auto;
-    /* Класс приходит вместе с элементом, поэтому появление — анимацией, а не transition:
-       переход из :начального состояния браузер бы не проиграл. */
-    animation: toast-in 220ms var(--ease-out) both;
-}
-.toast.out { animation: toast-out 180ms var(--ease-in-out) both; }
-@keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }
-@keyframes toast-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(6px) scale(0.98); } }
-.toast.error { border-color: rgba(226, 96, 79, 0.5); }
-.toast.error .ds-icon { color: var(--danger); }
-.toast.ok .ds-icon { color: var(--sage); }
-
 /* ---------- Stagger entrance (декоративно) ---------- */
 .stagger > * { animation: rise 250ms var(--ease-out) backwards; }
 .stagger > *:nth-child(1) { animation-delay: 0ms; }
@@ -1585,22 +1547,11 @@ a.task-row { color: inherit; text-decoration: none; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 /* ---------- Skeletons (состояние загрузки) ----------
-   Форма повторяет реальный контент; мерцание — сдвигом градиента,
-   без transform, чтобы не плодить containing block'ов для fixed-слоёв. */
+   Форма повторяет реальный контент. Сами полосы рисует MudSkeleton (Components/Skeleton.razor),
+   здесь остаётся только раскладка карточки и строки. */
 .skel-wrap { display: contents; }
-.skel {
-    background-image: linear-gradient(90deg,
-        rgba(255, 255, 255, 0.05) 25%,
-        rgba(255, 255, 255, 0.11) 37%,
-        rgba(255, 255, 255, 0.05) 63%);
-    background-size: 400% 100%;
-    border-radius: var(--radius-sm);
-    animation: skel-shimmer 1.4s ease-in-out infinite;
-}
-@keyframes skel-shimmer { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
 .skel-card { cursor: default; pointer-events: none; }
 .skel-row { cursor: default; pointer-events: none; display: grid; align-items: center; }
-.skel-row .skel { justify-self: start; }
 
 /* Читается скринридером, не видно глазами. */
 .sr-only {
@@ -1644,6 +1595,16 @@ a.task-row { color: inherit; text-decoration: none; }
 /* ---------- Scrollbars ---------- */
 .content::-webkit-scrollbar, .panel-rows::-webkit-scrollbar, .drawer-body::-webkit-scrollbar { width: 8px; }
 .content::-webkit-scrollbar-thumb, .panel-rows::-webkit-scrollbar-thumb, .drawer-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 4px; }
+
+/* ---------- Ноутбучные ширины ----------
+   Целевой минимум — 1280px (docs/TZ_client_mudblazor.md, раздел 6). Ниже 1280 ужимаем поля экрана,
+   ниже 1200 — прячем в списке задач колонку «Создана»: дата есть в карточке, а место нужнее названию.
+   Вёрстка не рассыпается и на 1024, но обещанного вида там не гарантируем. */
+@media (max-width: 1280px) {
+    .topbar { padding: 0 20px; gap: 12px; }
+    .content { padding: 20px 20px; }
+    .task-page { padding: 24px 24px; gap: 20px; }
+}
 
 /* ---------- Hover — только для настоящих указателей ---------- */
 @media (hover: hover) and (pointer: fine) {
@@ -1692,15 +1653,11 @@ a.task-row { color: inherit; text-decoration: none; }
     .tab::after, .tab.on::after { transform: none; transition: opacity 150ms ease; }
     .user-row.flash { animation: none; }
     .pop, .pop.in { transform: none; }
-    .modal, .modal-scrim.in .modal { transform: none; }
     .drawer, .drawer.in { transition: none; }
     .stagger > * { animation: none; }
-    .rows-in > .task-row { animation: none; }
     .seg-btn.on { animation: none; }
     .seg-btn.on .sd { transform: none; }
     .task-row.flash { animation: none; }
-    .toast, .toast.out { animation: none; }
-    .skel { animation: none; }
     .empty { animation: none; }
     .sb-item.active::before { animation: none; }
     .sb-item.active .ds-icon { transform: none; }
@@ -1752,7 +1709,6 @@ a.task-row { color: inherit; text-decoration: none; }
     background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--r-lg);
     padding: 6px; box-shadow: var(--shadow-popover); display: flex; flex-direction: column; gap: 2px;
 }
-.md-preview.desc-box { border-style: dashed; }
 .md-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .md-foot .hint { white-space: nowrap; }
 .md-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }

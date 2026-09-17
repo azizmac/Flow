@@ -144,6 +144,8 @@ else if (_task is not null && _board is not null)
             </div>
             @if (_task.AssigneeId is { } aid && Users.Find(aid) is { } who)
             {
+                @* Обёртка — якорь карточки человека (MudPopover в UserCard считает позицию по ней). *@
+                <div class="ucard-anchor block">
                 <div class="side-card who-card" id="tp-who" @onclick="() => _whoOpen = true" role="button" tabindex="0">
                     <Avatar User="who" Size="36" />
                     <div style="min-width:0;">
@@ -154,8 +156,9 @@ else if (_task is not null && _board is not null)
                 </div>
                 @if (_whoOpen)
                 {
-                    <UserCard User="who" AnchorId="tp-who" OnClose="() => _whoOpen = false" />
+                    <UserCard User="who" OnClose="() => _whoOpen = false" />
                 }
+                </div>
             }
             <SimilarTasks TaskId="_task.Id" />
             @if (CanEdit)

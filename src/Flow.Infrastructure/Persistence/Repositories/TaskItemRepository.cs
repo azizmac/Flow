@@ -1,4 +1,6 @@
+﻿using System.Linq.Expressions;
 using Flow.Application.Abstractions;
+using Flow.Shared.Contracts.Tasks;
 using Flow.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,7 +22,18 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
     {
         var query = Filtered(filter);
 
+        // Offset — для таблицы со страницами и сортировкой по колонке.
+        if (filter.Offset is { } offset)
+        {
+            return await Ordered(query, filter)
+                .Skip(offset)
+                .Take(filter.Limit)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+        }
+
         // Keyset вместо OFFSET: страницы не разъезжаются, когда во время листания добавляют задачу.
+        // Он работает только с порядком по умолчанию — курсор кодирует именно пару (CreatedAt, Id).
         if (filter.BeforeCreatedAt is { } at && filter.BeforeId is { } id)
             query = query.Where(t => t.CreatedAt < at || (t.CreatedAt == at && t.Id.CompareTo(id) < 0));
 
@@ -32,10 +45,51 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
             .ToListAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Порядок для offset-режима. Навигационных свойств у TaskItem нет (только идентификаторы),
+    /// поэтому соседние таблицы подтягиваются подзапросом — по одному скалярному на строку сортировки.
+    /// Код задачи хранится строкой ("WEB-42"), и лексикографически WEB-10 встал бы перед WEB-2; номера
+    /// внутри проекта выдаются последовательно, поэтому вместо разбора строки сортируем по времени
+    /// создания внутри ключа проекта — порядок тот же, а запрос остаётся простым.
+    /// Id в конце — чтобы страницы не разъезжались при одинаковых значениях (импорт создаёт задачи пачкой).
+    /// </summary>
+    private IQueryable<TaskItem> Ordered(IQueryable<TaskItem> query, TaskListFilter filter)
+    {
+        var desc = filter.Descending;
+
+        IOrderedQueryable<TaskItem> ordered = filter.Sort switch
+        {
+            // Внутри проекта разворачиваем и номера: при обратной сортировке ожидается WEB-9, WEB-8, …
+            TaskSortField.Code => Order(
+                Order(query, t => db.Boards.Where(b => b.Id == t.BoardId).Select(b => b.Key).FirstOrDefault(), desc),
+                t => t.CreatedAt, desc),
+            TaskSortField.Title => Order(query, t => t.Title, desc),
+            TaskSortField.Status => Order(query, t => db.Statuses.Where(s => s.Id == t.StatusId).Select(s => s.SortOrder).FirstOrDefault(), desc),
+            // Без исполнителя — в конец при любом направлении: пустые строки иначе всплывали бы наверх.
+            TaskSortField.Assignee => Order(
+                query.OrderBy(t => t.AssigneeId == null),
+                t => db.Users.Where(u => u.Id == t.AssigneeId).Select(u => u.LastName + " " + u.FirstName).FirstOrDefault(),
+                desc),
+            TaskSortField.Due => Order(query.OrderBy(t => t.DueDate == null), t => t.DueDate, desc),
+            _ => Order(query, t => t.CreatedAt, desc)
+        };
+
+        return ordered.ThenBy(t => t.Id);
+    }
+
+    private static IOrderedQueryable<TaskItem> Order<TKey>(IQueryable<TaskItem> query, Expression<Func<TaskItem, TKey>> key, bool desc) =>
+        desc ? query.OrderByDescending(key) : query.OrderBy(key);
+
+    private static IOrderedQueryable<TaskItem> Order<TKey>(IOrderedQueryable<TaskItem> query, Expression<Func<TaskItem, TKey>> key, bool desc) =>
+        desc ? query.ThenByDescending(key) : query.ThenBy(key);
+
     public async Task<TaskCounts> CountAsync(TaskListFilter filter, CancellationToken cancellationToken)
     {
         // Счётчики показывают, сколько задач найдётся в каждом статусе, поэтому сам фильтр статуса здесь снят.
         var query = Filtered(filter with { StatusId = null, StatusType = null });
+
+        // Matched — число задач с учётом всех фильтров: по нему таблица считает количество страниц.
+        var matched = await Filtered(filter).CountAsync(cancellationToken);
 
         // Группируем по статусу задачи, а тип подтягиваем к нему же: один проход вместо двух GROUP BY.
         var byStatus = await query
@@ -55,6 +109,7 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
 
         return new TaskCounts(
             byStatus.Sum(x => x.Count),
+            matched,
             byType,
             byStatus.Select(x => (x.StatusId, x.Count)).ToList());
     }

@@ -1,11 +1,15 @@
-@* Круглая кнопка с иконкой. Variant: ghost | accent | solid | glass. Иконка = size × 0.5. *@
+@* Круглая кнопка с иконкой. Variant: ghost | accent | solid | glass. Иконка = size × 0.5.
 
-<button type="button" id="@Id" class="ds-iconbtn @Variant @Class" title="@Title" aria-label="@Title"
-        style="@($"width:{Size}px;height:{Size}px;{Style}")" disabled="@Disabled"
-        aria-haspopup="@AriaHasPopup" aria-expanded="@(AriaHasPopup is null ? null : AriaExpanded ? "true" : "false")"
-        @onclick="OnClick" @onclick:stopPropagation="StopPropagation">
+   Фасад над MudIconButton: API прежний, поведение (фокус, disabled, отмена всплытия клика) — от библиотеки.
+   Размер задаётся в пикселях, поэтому иконка кладётся в ChildContent, а не в параметр Icon: перечисление
+   Size у MudBlazor (Small/Medium/Large) не даёт нужных 24/30/34. *@
+
+<MudIconButton id="@Id" Class="@($"ds-iconbtn {Variant} {Class}")" Style="@($"width:{Size}px;height:{Size}px;{Style}")"
+               Disabled="@Disabled" title="@Title" aria-label="@Title"
+               aria-haspopup="@AriaHasPopup" aria-expanded="@(AriaHasPopup is null ? null : AriaExpanded ? "true" : "false")"
+               Ripple="false" ClickPropagation="@(!StopPropagation)" OnClick="OnClick">
     <Icon Name="@Icon" Size="@IconSize" />
-</button>
+</MudIconButton>
 
 @code {
     [Parameter, EditorRequired] public string Icon { get; set; } = "";

@@ -22,6 +22,7 @@ The longer-term goal is an AI assistant inside the tracker: grounded in the team
 - **Authentication.** The `Flow.Auth` module is hosted by `Flow.Api`: ASP.NET Core Identity with BCrypt and OpenIddict (authorization code + PKCE, refresh, client credentials). The client signs in over OIDC; the API validates Bearer JWTs locally. The initial password must be changed at first sign-in.
 - **Attachments.** Files on a task: stored in S3-compatible storage, size and type limits, downloads only over an authorised request. Listing, upload, image previews and deletion live in the task card and the drawer. A file can be dropped onto the card or straight into a comment (screenshots paste from the clipboard too): it is attached to the task, and the text gets an inline image or a download link.
 - **Search.** Hybrid vector and full-text search over tasks, comments, projects, people and the contents of attached files (PDF, docx, xlsx, pptx, plain text) on pgvector: it finds by meaning, not by substring. A sidebar box with live suggestions and a results page with filters; the index is updated in the same transaction as the edit.
+- **Interface.** A Blazor WebAssembly client built on the MudBlazor UI kit: the dark Flow theme, a task list with server-side sorting across six fields and paging, a task drawer, keyboard shortcuts and full keyboard navigation, a CodeMirror Markdown editor. Aimed at desktops and laptops (1280 px and up); the sidebar collapses to icons on narrow screens.
 - **Infrastructure.** PostgreSQL 16, EF Core, migrations applied on backend startup. Build, tests and image publishing run in GitHub Actions.
 
 ![Tasks of a project](docs/images/board.png)
@@ -276,6 +277,7 @@ Project documentation is written in Russian.
 - [`docs/TZ_attachments.md`](docs/TZ_attachments.md) — attachments: storage, drag & drop, search by content
 - [`docs/TZ_search_vector.md`](docs/TZ_search_vector.md) — vector and smart search: model, storage, indexing, stages
 - [`docs/TZ_search_stage1-3.md`](docs/TZ_search_stage1-3.md) — index schema, embedder and indexing (stages 1–3)
+- [`docs/TZ_client_mudblazor.md`](docs/TZ_client_mudblazor.md) — web client: the MudBlazor UI kit, design system, server-side task sorting
 - [`docs/Struktura_board_task_status.md`](docs/Struktura_board_task_status.md) — domain model structure
 - [`docs/Sravnenie_DbContext_podhodov.md`](docs/Sravnenie_DbContext_podhodov.md) — DbContext approaches compared
 

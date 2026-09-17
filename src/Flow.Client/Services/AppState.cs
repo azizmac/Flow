@@ -1,4 +1,4 @@
-namespace Flow.Client.Services;
+﻿namespace Flow.Client.Services;
 
 /// <summary>
 /// Состояние сессии клиента: последний открытый проект (для пункта «Задачи» в сайдбаре) и текущий пользователь —
@@ -7,6 +7,18 @@ namespace Flow.Client.Services;
 public sealed class AppState
 {
     public Guid? LastBoardId { get; private set; }
+
+    /// <summary>
+    /// Иконочный режим сайдбара. null — «как решит ширина окна» (ниже 1366px он сворачивается сам,
+    /// правило в app.css); true/false — выбор человека кнопкой, он важнее ширины и живёт до перезагрузки.
+    /// </summary>
+    public bool? SidebarCollapsed { get; private set; }
+
+    public void ToggleSidebar(bool collapsed)
+    {
+        SidebarCollapsed = collapsed;
+        Changed?.Invoke();
+    }
 
     public Guid? CurrentUserId { get; private set; }
 

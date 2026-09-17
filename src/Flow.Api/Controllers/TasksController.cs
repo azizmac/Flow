@@ -1,4 +1,4 @@
-using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
+﻿using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
@@ -52,6 +52,9 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     /// <summary>
     /// Сводный список задач: без boardId — по всем проектам, с boardId — по одному.
     /// Страница отдаётся вместе со счётчиками по типам статусов и курсором следующей страницы.
+    /// Листать можно двумя способами: cursor (кнопка «показать ещё») или offset (таблица со страницами);
+    /// сортировку задают sort и dir, и она применима только к offset-режиму — курсор кодирует
+    /// порядок по умолчанию (новые сверху).
     /// </summary>
     [HttpGet("tasks")]
     public async Task<IActionResult> SearchTasks(
@@ -63,10 +66,20 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         [FromQuery] string? q,
         [FromQuery] int? limit,
         [FromQuery] string? cursor,
+        [FromQuery] int? offset,
+        [FromQuery] TaskSortField? sort,
+        [FromQuery] string? dir,
         CancellationToken cancellationToken)
     {
+        var sortField = sort ?? TaskSortField.Created;
+        // По умолчанию новые сверху, для остальных колонок — по возрастанию: так ожидают от списка.
+        var descending = dir is null
+            ? sortField == TaskSortField.Created
+            : string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+
         var response = await mediator.Send(
-            new TaskSearchQuery(boardId, assigneeId, unassigned == true, statusId, statusType, q, limit, cursor),
+            new TaskSearchQuery(boardId, assigneeId, unassigned == true, statusId, statusType, q, limit, cursor,
+                offset, sortField, descending),
             cancellationToken);
 
         return Ok(response);

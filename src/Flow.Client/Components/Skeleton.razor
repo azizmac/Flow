@@ -1,5 +1,8 @@
 @* Скелетоны на время загрузки: Kind="cards" — сетка карточек проектов, Kind="rows" — строки списка задач.
-   Форма повторяет реальный контент, чтобы при подстановке данных ничего не прыгало. *@
+   Форма повторяет реальный контент, чтобы при подстановке данных ничего не прыгало.
+
+   Полосы — MudSkeleton (волна и цвет приходят из темы, Palette.Skeleton); компоновка под наши экраны
+   остаётся здесь, потому что повторяет конкретную вёрстку карточки, строки и карточки задачи. *@
 
 <div class="skel-wrap" role="status" aria-busy="true" aria-live="polite">
     <span class="sr-only">Загрузка…</span>
@@ -8,12 +11,12 @@
     {
         <div class="task-page-main" aria-hidden="true">
             <div>
-                <div class="skel" style="width:64px;height:12px;"></div>
-                <div class="skel" style="width:44%;height:30px;margin-top:12px;"></div>
+                <MudSkeleton Width="64px" Height="12px" />
+                <MudSkeleton Width="44%" Height="30px" Style="margin-top:12px;" />
             </div>
             <div>
-                <div class="skel" style="width:88px;height:14px;"></div>
-                <div class="skel" style="height:180px;margin-top:10px;border-radius:var(--r-lg);"></div>
+                <MudSkeleton Width="88px" Height="14px" />
+                <MudSkeleton Height="180px" Style="margin-top:10px;border-radius:var(--r-lg);" />
             </div>
         </div>
         <div class="task-page-side" aria-hidden="true">
@@ -21,8 +24,8 @@
                 @for (var i = 0; i < 4; i++)
                 {
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-                        <div class="skel" style="width:64px;height:12px;"></div>
-                        <div class="skel" style="width:110px;height:16px;"></div>
+                        <MudSkeleton Width="64px" Height="12px" />
+                        <MudSkeleton Width="110px" Height="16px" />
                     </div>
                 }
             </div>
@@ -34,19 +37,19 @@
             @for (var i = 0; i < Count; i++)
             {
                 <div class="board-card skel-card" aria-hidden="true">
-                    <div class="skel" style="width:52px;height:22px;border-radius:var(--radius-pill);"></div>
+                    <MudSkeleton Width="52px" Height="22px" Style="border-radius:var(--radius-pill);" />
                     <div>
-                        <div class="skel" style="width:62%;height:17px;"></div>
-                        <div class="skel" style="width:38%;height:12px;margin-top:8px;"></div>
+                        <MudSkeleton Width="62%" Height="17px" />
+                        <MudSkeleton Width="38%" Height="12px" Style="margin-top:8px;" />
                     </div>
                     <div class="board-card-pills">
-                        <div class="skel" style="width:78px;height:22px;border-radius:var(--radius-pill);"></div>
-                        <div class="skel" style="width:66px;height:22px;border-radius:var(--radius-pill);"></div>
-                        <div class="skel" style="width:88px;height:22px;border-radius:var(--radius-pill);"></div>
+                        <MudSkeleton Width="78px" Height="22px" Style="border-radius:var(--radius-pill);" />
+                        <MudSkeleton Width="66px" Height="22px" Style="border-radius:var(--radius-pill);" />
+                        <MudSkeleton Width="88px" Height="22px" Style="border-radius:var(--radius-pill);" />
                     </div>
                     <div class="board-card-foot">
-                        <div class="skel" style="width:64px;height:12px;"></div>
-                        <div class="skel" style="width:96px;height:12px;"></div>
+                        <MudSkeleton Width="64px" Height="12px" />
+                        <MudSkeleton Width="96px" Height="12px" />
                     </div>
                 </div>
             }
@@ -60,11 +63,11 @@
                 @for (var i = 0; i < Count; i++)
                 {
                     <div class="task-row list-cols skel-row" aria-hidden="true">
-                        <div class="skel" style="width:52px;height:12px;"></div>
-                        <div class="skel" style="width:@(RowWidths[i % RowWidths.Length])%;height:13px;"></div>
-                        <div class="skel" style="width:24px;height:24px;border-radius:50%;"></div>
-                        <div class="skel" style="width:104px;height:24px;border-radius:8px;"></div>
-                        <div class="skel" style="width:44px;height:12px;"></div>
+                        <MudSkeleton Width="52px" Height="12px" />
+                        <MudSkeleton Width="@($"{RowWidths[i % RowWidths.Length]}%")" Height="13px" />
+                        <MudSkeleton SkeletonType="SkeletonType.Circle" Width="24px" Height="24px" />
+                        <MudSkeleton Width="104px" Height="24px" Style="border-radius:8px;" />
+                        <MudSkeleton Width="44px" Height="12px" />
                         <div></div>
                     </div>
                 }
