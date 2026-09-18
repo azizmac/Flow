@@ -31,7 +31,17 @@ internal sealed class HttpVisionEmbeddingGenerator(
     SearchOptions options,
     ILogger<HttpVisionEmbeddingGenerator> logger) : IVisionEmbeddingGenerator
 {
-    public const string HttpClientName = "flow-embeddings-vl";
+    /// <summary>
+    /// Клиентов два, как у текстовой половины, и по той же причине: запрос пользователя ждать нельзя,
+    /// прогон индекса — можно. Только развилка здесь острее. Замер на боевом поде: ПЕРВАЯ картинка
+    /// после загрузки модели занимает 31.2 с (сборка вычислительного графа CUDA), все следующие —
+    /// 0.58 с. С одним клиентом и бюджетом запроса в 30 с это означало бы гарантированный отказ
+    /// первой же картинки после каждого перезапуска пода — с повтором, который потом отработает,
+    /// и записью в логе, которая выглядит как поломка модели.
+    /// </summary>
+    public const string QueryClientName = "flow-embeddings-vl";
+
+    public const string IndexingClientName = "flow-embeddings-vl-indexing";
 
     /// <summary>
     /// Маркер медиа llama-server выдаёт в <c>/props</c>, и путь именно такой — в корне сервера,
@@ -68,18 +78,24 @@ internal sealed class HttpVisionEmbeddingGenerator(
     /// поэтому текст запроса и картинка оказываются в одном векторном пространстве.
     /// </summary>
     public Task<float[]> EmbedQueryAsync(string query, CancellationToken cancellationToken) =>
-        SendAsync(new { model = _options.Model, input = query }, "запрос", cancellationToken);
+        SendAsync(new { model = _options.Model, input = query }, "запрос", QueryClientName, cancellationToken);
 
     public async Task<float[]> EmbedImageAsync(byte[] image, string contentType, CancellationToken cancellationToken)
     {
         // contentType в теле не участвует: llama-server определяет формат по самим байтам. Параметр
         // остаётся в интерфейсе, потому что вызывающая сторона отсеивает по нему неподдерживаемые типы.
+        // Проверка здесь, а не только в SendAsync: за маркером мы ходим ПЕРЕД отправкой картинки,
+        // и у ненастроенной половины этот запрос ушёл бы в HttpClient без BaseAddress — диагноз
+        // получился бы про относительный адрес, а не про выключенную настройку.
+        if (!IsConfigured)
+            throw new InvalidOperationException("Визуальная модель не настроена (Search:Embeddings:Vision).");
+
         var payload = Convert.ToBase64String(image);
         var marker = await GetMediaMarkerAsync(cancellationToken);
 
         try
         {
-            return await SendAsync(BuildImageRequest(marker, payload), "картинку", cancellationToken);
+            return await SendAsync(BuildImageRequest(marker, payload), "картинку", IndexingClientName, cancellationToken);
         }
         catch (HttpRequestException)
         {
@@ -95,7 +111,7 @@ internal sealed class HttpVisionEmbeddingGenerator(
                 throw;
 
             logger.LogInformation("Маркер медиа визуальной модели сменился — повторяем запрос с новым.");
-            return await SendAsync(BuildImageRequest(fresh, payload), "картинку", cancellationToken);
+            return await SendAsync(BuildImageRequest(fresh, payload), "картинку", IndexingClientName, cancellationToken);
         }
     }
 
@@ -114,7 +130,10 @@ internal sealed class HttpVisionEmbeddingGenerator(
         if (_mediaMarker is { Length: > 0 } cached)
             return cached;
 
-        var client = factory.CreateClient(HttpClientName);
+        // Клиент индексации: этот запрос не только читает свойства, он же ГРУЗИТ модель, если она
+        // ещё не поднята, — а чтение полутора гигабайт с диска домашней ноды в бюджет запроса
+        // пользователя не укладывается и укладываться не обязано.
+        var client = factory.CreateClient(IndexingClientName);
 
         // model в query обязателен: в router-режиме /props без него описывает сам роутер, а маркер
         // принадлежит процессу конкретной модели. Побочный эффект запроса полезный — он же и грузит
@@ -135,12 +154,12 @@ internal sealed class HttpVisionEmbeddingGenerator(
         return marker;
     }
 
-    private async Task<float[]> SendAsync(object request, string what, CancellationToken cancellationToken)
+    private async Task<float[]> SendAsync(object request, string what, string clientName, CancellationToken cancellationToken)
     {
         if (!IsConfigured)
             throw new InvalidOperationException("Визуальная модель не настроена (Search:Embeddings:Vision).");
 
-        var client = factory.CreateClient(HttpClientName);
+        var client = factory.CreateClient(clientName);
 
         HttpResponseMessage response;
         try

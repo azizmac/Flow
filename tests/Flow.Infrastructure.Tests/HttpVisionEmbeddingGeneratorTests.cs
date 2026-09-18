@@ -121,6 +121,37 @@ public class HttpVisionEmbeddingGeneratorTests
     }
 
     [Fact]
+    public async Task Images_Use_The_Indexing_Budget_And_Queries_The_Query_One()
+    {
+        // Разные клиенты — разные таймауты. Первая картинка после загрузки модели идёт 31 с,
+        // а запрос пользователя столько ждать не может, поэтому промах здесь стоит дорого.
+        var factory = new StubHttpClientFactory(new StubHandler());
+        var generator = new HttpVisionEmbeddingGenerator(factory, Options(), NullLogger<HttpVisionEmbeddingGenerator>.Instance);
+
+        await generator.EmbedQueryAsync("красный квадрат", CancellationToken.None);
+        Assert.Equal([HttpVisionEmbeddingGenerator.QueryClientName], factory.Names);
+
+        factory.Names.Clear();
+        await generator.EmbedImageAsync(Image, "image/png", CancellationToken.None);
+        Assert.All(factory.Names, name => Assert.Equal(HttpVisionEmbeddingGenerator.IndexingClientName, name));
+    }
+
+    [Fact]
+    public async Task Disabled_Half_Does_Not_Touch_The_Network()
+    {
+        // За маркером клиент ходит ПЕРЕД отправкой картинки, поэтому у выключенной половины запрос
+        // ушёл бы раньше любой проверки — и упал бы на отсутствующем BaseAddress, а не на настройке.
+        var handler = new StubHandler();
+        var options = Options();
+        options.Embeddings.Vision.Enabled = false;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Create(handler, options).EmbedImageAsync(Image, "image/png", CancellationToken.None));
+
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public void Model_Version_Follows_The_Weights_File()
     {
         // Имя модели в роутере переживает смену квантизации, а вектор — нет. Если версия не поедет
@@ -151,8 +182,14 @@ public class HttpVisionEmbeddingGeneratorTests
 
     private sealed class StubHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
     {
-        public HttpClient CreateClient(string name) =>
-            new(handler, disposeHandler: false) { BaseAddress = new Uri("http://ai:8081/v1/") };
+        /// <summary>Имена запрошенных клиентов: у картинок и запросов бюджеты разные.</summary>
+        public List<string> Names { get; } = [];
+
+        public HttpClient CreateClient(string name)
+        {
+            Names.Add(name);
+            return new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://ai:8081/v1/") };
+        }
     }
 
     private sealed class StubHandler : HttpMessageHandler
