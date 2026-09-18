@@ -7,7 +7,7 @@
 @inject BrowserInterop Browser
 
 <div class="drawer-scrim @(Open ? "in" : "")" @onclick="RequestClose"></div>
-<div class="drawer @(Open ? "in" : "") @(_closing ? "closing" : "") @(Wide ? "wide" : "")" role="dialog" aria-modal="true" aria-hidden="@(!Open)">
+<div class="drawer @(Open ? "in" : "") @(_closing ? "closing" : "")" role="dialog" aria-modal="true" aria-hidden="@(!Open)">
     @if (Open || _closing)
     {
         <MudFocusTrap Disabled="@(!Open)" DefaultFocus="DefaultFocus.FirstChild">
@@ -18,8 +18,6 @@
 
 @code {
     [Parameter] public bool Open { get; set; }
-    /// <summary>Раскрыт на всю ширину рабочей области (кнопка в шапке слайдера).</summary>
-    [Parameter] public bool Wide { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
