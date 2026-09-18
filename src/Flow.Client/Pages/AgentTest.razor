@@ -1,0 +1,134 @@
+@page "/agents/test"
+@inject FlowApi Api
+
+<PageTitle>Проверка агента — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        <span class="agent-test-top-icon"><Icon Name="send" Size="18" /></span>
+        <div>
+            <h2>Локальный агент</h2>
+            <div class="agent-test-top-subtitle">OpenCode · рабочий каталог</div>
+        </div>
+    </div>
+</div>
+
+<div class="content">
+    <div class="agent-test">
+        <div class="agent-test-hero">
+            <div class="agent-test-hero-icon"><Icon Name="message" Size="22" /></div>
+            <div>
+                <div class="agent-test-kicker">Проверка интеграции</div>
+                <h1>Спросите о кодовой базе</h1>
+                <p>Агент получит вопрос и изучит выбранный рабочий каталог в OpenCode.</p>
+            </div>
+        </div>
+
+        <div class="agent-test-layout">
+            <section class="panel agent-test-composer">
+                <div class="agent-test-panel-head">
+                    <div>
+                        <h3>Новый вопрос</h3>
+                        <p>Нажмите <kbd>Ctrl</kbd> + <kbd>Enter</kbd>, чтобы отправить.</p>
+                    </div>
+                    <span class="agent-test-status @(_sending ? "working" : "ready")">
+                        <span></span>@(_sending ? "Агент работает" : "Готов к вопросу")
+                    </span>
+                </div>
+
+                <DsInput Id="agent-workspace" Label="Рабочий каталог" Icon="code" Value="@_workspaceDirectory"
+                         ValueChanged="v => _workspaceDirectory = v" MaxLength="500" />
+
+                <label class="agent-test-question-label" for="agent-question">Что нужно узнать?</label>
+                <textarea id="agent-question" class="agent-test-question" rows="7" maxlength="10000"
+                          placeholder="Например: что хранится в этом репозитории?" @bind="_question"
+                          @onkeydown="OnQuestionKeyDown"></textarea>
+
+                <div class="agent-test-composer-foot">
+                    <span class="hint">Ответ будет получен в отдельной сессии OpenCode.</span>
+                    <DsButton Variant="primary" Size="md" Icon="send" OnClick="Ask" Busy="_sending" Disabled="@string.IsNullOrWhiteSpace(_question)">
+                        Отправить вопрос
+                    </DsButton>
+                </div>
+            </section>
+
+            <aside class="panel agent-test-info">
+                <div class="agent-test-info-icon"><Icon Name="code" Size="19" /></div>
+                <h3>Рабочий каталог</h3>
+                <p>Flow передаёт агенту только каталог внутри общего тома репозиториев.</p>
+                <div class="agent-test-path"><span>/workspaces</span></div>
+                <div class="agent-test-info-rule"></div>
+                <div class="agent-test-info-note">
+                    <Icon Name="message" Size="15" />
+                    <span>Ответ не сохраняется в задаче — это техническая проверка подключения.</span>
+                </div>
+            </aside>
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="agent-test-error" role="alert">
+                <Icon Name="danger" Size="18" />
+                <div><strong>Не удалось получить ответ</strong><span>@_error</span></div>
+            </div>
+        }
+
+        @if (_answer is { } answer)
+        {
+            <section class="panel agent-test-answer has-answer">
+                <div class="agent-test-answer-head">
+                    <div class="agent-test-answer-title">
+                        <span class="agent-test-answer-icon"><Icon Name="message" Size="18" /></span>
+                        <div><h3>Ответ агента</h3><span>Сессия OpenCode</span></div>
+                    </div>
+                    <span class="code" title="Идентификатор сессии OpenCode">@answer.SessionId</span>
+                </div>
+                <pre>@answer.Text</pre>
+            </section>
+        }
+        else if (_error is null)
+        {
+            <section class="panel agent-test-answer agent-test-answer-empty">
+                @if (_sending)
+                {
+                    <span class="agent-test-waiting"><span></span><span></span><span></span></span>
+                    <div><strong>Агент изучает кодовую базу</strong><span>Это может занять некоторое время.</span></div>
+                }
+                else
+                {
+                    <span class="agent-test-answer-icon muted"><Icon Name="message" Size="19" /></span>
+                    <div><strong>Ответ появится здесь</strong><span>Начните с вопроса о содержимом репозитория.</span></div>
+                }
+            </section>
+        }
+    </div>
+</div>
+
+@code {
+    private string _workspaceDirectory = "/workspaces";
+    private string _question = "Что хранится в этом репозитории?";
+    private AgentTestResponse? _answer;
+    private string? _error;
+    private bool _sending;
+
+    private async Task Ask()
+    {
+        if (_sending || string.IsNullOrWhiteSpace(_question))
+            return;
+
+        _sending = true;
+        _error = null;
+        _answer = null;
+
+        var result = await Api.AskAgent(new AgentTestRequest(_question, _workspaceDirectory));
+        _sending = false;
+
+        if (result.Ok)
+            _answer = result.Value;
+        else
+            _error = result.Error;
+    }
+
+    private Task OnQuestionKeyDown(KeyboardEventArgs e) =>
+        e.CtrlKey && e.Key == "Enter" ? Ask() : Task.CompletedTask;
+}
