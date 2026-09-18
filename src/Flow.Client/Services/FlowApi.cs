@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text;
+using Flow.Shared.Contracts.Agents;
 using Flow.Shared.Contracts.Attachments;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
@@ -49,6 +50,9 @@ public sealed class FlowApi(HttpClient http)
 
     public Task<ApiResult<BoardResponse>> RenameBoard(Guid id, RenameBoardRequest request, CancellationToken ct = default) =>
         Send<BoardResponse>(HttpMethod.Patch, $"boards/{id}/name", request, ct);
+
+    public Task<ApiResult<AgentTestResponse>> AskAgent(AgentTestRequest request, CancellationToken ct = default) =>
+        Send<AgentTestResponse>(HttpMethod.Post, "agents/test", request, ct);
 
     public Task<ApiResult<bool>> DeleteBoard(Guid id, CancellationToken ct = default) =>
         Delete($"boards/{id}", ct);

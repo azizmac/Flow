@@ -4,6 +4,7 @@ using Flow.Application.Abstractions;
 using Flow.Application.Features.Attachments;
 using Flow.Infrastructure.Persistence;
 using Flow.Infrastructure.Persistence.Repositories;
+using Flow.Infrastructure.OpenCode;
 using Flow.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -48,12 +49,32 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<ICodeRepositoryRepository, CodeRepositoryRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
+        AddOpenCode(services, configuration);
         AddAttachments(services, configuration);
 
         // Поисковый индекс: очередь нужна хендлерам всегда (при Search:Enabled=false она молча
         // ничего не пишет), поэтому регистрируется здесь, а не только из Flow.Api/Program.cs.
         services.AddFlowSearch(configuration);
         return services;
+    }
+
+    private static void AddOpenCode(IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<OpenCodeOptions>(configuration.GetSection(OpenCodeOptions.SectionName));
+        services.AddSingleton(provider => provider.GetRequiredService<IOptions<OpenCodeOptions>>().Value);
+
+        services.AddHttpClient(OpenCodeClient.HttpClientName, (provider, client) =>
+        {
+            var options = provider.GetRequiredService<OpenCodeOptions>();
+            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds));
+
+            var credentials = Convert.ToBase64String(
+                System.Text.Encoding.UTF8.GetBytes($"{options.Username}:{options.Password}"));
+            client.DefaultRequestHeaders.Authorization = new("Basic", credentials);
+        });
+
+        services.AddScoped<IFlowAgentClient, OpenCodeClient>();
     }
 
     /// <summary>

@@ -52,6 +52,12 @@ services:
       S3__SecretKey: ${MINIO_ROOT_PASSWORD:-flow12345}
       S3__Bucket: ${S3_BUCKET:-flow}
       S3__UseSsl: ${S3_USE_SSL:-false}
+      OpenCode__BaseUrl: ${OPENCODE_API_URL:-http://opencode:4096}
+      OpenCode__Username: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OpenCode__Password: ${OPENCODE_SERVER_PASSWORD:-flow-opencode-local}
+      OpenCode__ProviderId: ${OPENCODE_PROVIDER_ID:-lmstudio}
+      OpenCode__ModelId: ${OPENCODE_MODEL_ID:-qwen3.6-35b-a3b}
+      OpenCode__TimeoutSeconds: ${OPENCODE_TIMEOUT_SECONDS:-300}
       # Поиск включён по умолчанию: без модели он деградирует в полнотекстовый (GET /search
       # отвечает degraded: true), а очередь индексации копится до её появления. SEARCH_ENABLED=false
       # отключает и эндпоинты, и воркер — поведение приложения становится в точности прежним.

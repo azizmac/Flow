@@ -30,6 +30,7 @@
     <a class="sb-item @(IsBoards ? "active" : "")" href="boards"><Icon Name="grid" Size="18" />Проекты</a>
     <a class="sb-item @(IsTasks ? "active" : "")" href="@TasksHref"><Icon Name="check" Size="18" />Задачи</a>
     <a class="sb-item @(IsUsers ? "active" : "")" href="users"><Icon Name="users" Size="18" />Люди</a>
+    <a class="sb-item @(IsAgentTest ? "active" : "")" href="agents/test"><Icon Name="send" Size="18" />Проверка агента</a>
     <span class="sb-item disabled" aria-disabled="true" title="Раздел появится позже"><Icon Name="chart" Size="18" />Дашборды<span class="sb-soon">скоро</span></span>
     <span class="sb-item disabled" aria-disabled="true" title="Раздел появится позже"><Icon Name="settings" Size="18" />Настройки<span class="sb-soon">скоро</span></span>
 
@@ -71,6 +72,8 @@
                             || Path.StartsWith("tasks/", StringComparison.OrdinalIgnoreCase);
 
     private bool IsUsers => Path is "users" || Path.StartsWith("users/", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsAgentTest => Path is "agents/test";
 
     // Раньше пункт вёл в последний открытый проект; теперь это отдельный экран со всеми задачами,
     // а проект выбирается селектором в его топбаре.
