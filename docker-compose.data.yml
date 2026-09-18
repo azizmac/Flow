@@ -85,11 +85,13 @@ services:
     command: serve --hostname 0.0.0.0 --port 4096
     working_dir: /workspaces
     environment:
+      OPENCODE_CONFIG: /config/opencode.jsonc
       OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-flow-opencode-local}
     volumes:
       # Flow.Api клонирует и обновляет репозитории; OpenCode только читает их.
       - repository-workspaces:/workspaces:ro
+      - ./docker/opencode/opencode.jsonc:/config/opencode.jsonc:ro
     ports:
       # HTTP API доступен с хоста для диагностики, но не из локальной сети.
       - "${OPENCODE_BIND:-127.0.0.1}:${OPENCODE_PORT:-4096}:4096"
