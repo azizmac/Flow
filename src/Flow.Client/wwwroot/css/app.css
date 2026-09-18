@@ -387,8 +387,23 @@ input, textarea { font-family: inherit; }
 
 .sb-top .sb-brand { padding: 0; }
 
-/* Иконка поиска показывается только в иконочном режиме — в развёрнутом там полноценная строка. */
-.sb-search-icon { display: none; }
+/* Кнопка сворачивания: раньше это был безымянный глиф «открыть во внешнем окне» — в иконочном режиме
+   его принимали за ссылку. Теперь это явная кнопка с рамкой и стрелкой в сторону движения панели.
+   Кнопки две (свернуть / развернуть), и видна всегда ровно одна — см. правила иконочного режима ниже. */
+.sb-toggle {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--r-md);
+    flex: none;
+}
+.sb-toggle:hover { background: rgba(255, 255, 255, 0.14); }
+.sb-toggle.sb-toggle-expand .ds-icon { transform: rotate(180deg); }
+.sb-toggle.sb-toggle-expand { display: none; }
+
+/* Иконка поиска показывается только в иконочном режиме — в развёрнутом там полноценная строка.
+   Селектор с двумя классами: одного .sb-search-icon мало — .sb-item ниже по файлу вернул бы display:flex
+   и в развёрнутом сайдбаре получалось два поиска сразу (строка и иконка). */
+.sb-item.sb-search-icon { display: none; }
 
 /* color задаёт верхнюю долю знака (BrandMark рисует её currentColor) — на тёмном сайдбаре светлую. */
 .sb-brand {
@@ -434,6 +449,8 @@ input, textarea { font-family: inherit; }
     .sb:not(.expanded) .sb-un,
     .sb:not(.expanded) .sb-ur { display: none; }
     .sb:not(.expanded) .sb-search-icon { display: flex; }
+    .sb:not(.expanded) .sb-toggle.sb-toggle-collapse { display: none; }
+    .sb:not(.expanded) .sb-toggle.sb-toggle-expand { display: inline-flex; }
     .sb:not(.expanded) .sb-top { flex-direction: column; gap: 10px; padding: 0 0 18px; }
     .sb:not(.expanded) .sb-item { justify-content: center; padding: 10px 0; margin: 0 10px 4px; }
     .sb:not(.expanded) .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px 0; }
@@ -450,6 +467,8 @@ input, textarea { font-family: inherit; }
 .sb.collapsed .sb-un,
 .sb.collapsed .sb-ur { display: none; }
 .sb.collapsed .sb-search-icon { display: flex; }
+.sb.collapsed .sb-toggle.sb-toggle-collapse { display: none; }
+.sb.collapsed .sb-toggle.sb-toggle-expand { display: inline-flex; }
 .sb.collapsed .sb-top { flex-direction: column; gap: 10px; padding: 0 0 18px; }
 .sb.collapsed .sb-item { justify-content: center; padding: 10px 0; margin: 0 10px 4px; }
 .sb.collapsed .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px 0; }

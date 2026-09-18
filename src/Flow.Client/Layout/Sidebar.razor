@@ -13,10 +13,14 @@
 <nav class="sb @SidebarModeClass">
     <div class="sb-top">
         <a class="sb-brand" href="boards" title="К проектам" aria-label="Flow — к проектам"><BrandMark Size="34" /><div class="sb-word">FLOW</div></a>
-        @* Ниже 1366px сайдбар сворачивается сам; кнопка нужна, чтобы это решение можно было отменить в обе стороны. *@
-        <DsIconButton Icon="@(Collapsed ? "expand" : "arrow-left")" Size="26" Class="sb-toggle"
-                      Title="@(Collapsed ? "Развернуть меню" : "Свернуть меню")"
-                      Style="color:rgba(255,255,255,0.4)" OnClick="ToggleSidebar" />
+        @* Ниже 1366px сайдбар сворачивается сам; кнопка нужна, чтобы это решение можно было отменить в обе стороны.
+           Кнопок две, и показывает их тот же CSS, что решает режим: иначе в автоматически свёрнутом сайдбаре
+           (ширина < 1366px, выбора ещё не было) кнопка предлагала бы «свернуть» уже свёрнутое и клик ничего
+           не менял бы. Стрелка одна и та же, у «развернуть» она повёрнута — видно, куда поедет панель. *@
+        <DsIconButton Icon="arrow-left" Size="28" Class="sb-toggle sb-toggle-collapse" Title="Свернуть меню"
+                      Style="color:rgba(255,255,255,0.65)" OnClick="() => State.ToggleSidebar(true)" />
+        <DsIconButton Icon="arrow-left" Size="28" Class="sb-toggle sb-toggle-expand" Title="Развернуть меню"
+                      Style="color:rgba(255,255,255,0.65)" OnClick="() => State.ToggleSidebar(false)" />
     </div>
 
     @* Шеврон обещает выпадающий список, которого ещё нет: помечаем блок как «скоро», чтобы клик по нему не выглядел сломанным. *@
@@ -77,9 +81,6 @@
         null => ""
     };
 
-    private bool Collapsed => State.SidebarCollapsed ?? false;
-
-    private void ToggleSidebar() => State.ToggleSidebar(!Collapsed);
     private string? _meError;
 
     private string Path => Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimEnd('/');
