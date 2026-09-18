@@ -8,8 +8,13 @@
 # Отдельный модуль запускается только вручную (workflow_dispatch с pull_models=true) — и это единственный
 # способ отличить «выкатываю сервис» от «качаю гигабайты».
 #
-# Визуальную модель Job не качает: vLLM тянет Qwen/Qwen3-VL-Embedding-2B сам при первом старте в /models/hf,
-# репозиторий открытый и токен HuggingFace не нужен.
+# Визуальную модель Job качает наравне с текстовыми: отдельного сервиса на vLLM у неё больше нет,
+# она третья секция того же пресета llama-server. Файлов у неё два — веса и отдельно проектор (mmproj),
+# и без второго сервер поднимет только текстовую половину модели.
+#
+# Закачка визуальной пары условная: полтора гигабайта нужны только при VISION_ENABLED=true, и качать их
+# «на всякий случай» на домашнем канале — плохая сделка. Проверка внутри скрипта, а не отдельный Job:
+# том, нода и вся обвязка у них общие, а различие ровно в двух строках.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -83,10 +88,10 @@ spec:
               # ничего не резервирует: провижнер раздаёт каталоги на диске ноды, и доступно ровно то, что
               # осталось. А осталось — общее с postgres, MinIO и образами: забив диск гигабайтами весов,
               # мы получим DiskPressure и выселение соседей, то есть уроним базу закачкой модели.
-              # Порог с запасом на оба GGUF (порядка 0.7 и 0.6 ГБ) и на то, что при обрыве .part-файл
-              # какое-то время лежит рядом с готовым.
+              # Порог с запасом на все GGUF (0.7 и 0.6 ГБ текстовые, 1.1 и 0.45 ГБ визуальные) и на то,
+              # что при обрыве .part-файл какое-то время лежит рядом с готовым.
               free_kib=$(df -P /models | awk 'NR == 2 { print $4 }')
-              need_kib=4194304
+              need_kib=8388608
               if [ "$free_kib" -lt "$need_kib" ]; then
                   echo "на томе flow-models свободно $free_kib КиБ, требуется хотя бы $need_kib КиБ — закачка не начата" >&2
                   echo "освободите место на worker-ноде: забитый диск на ней кладёт заодно postgres" >&2
@@ -143,6 +148,15 @@ spec:
               download "$file_embeddings" "$url_embeddings" "$sha_embeddings"
               download "$file_reranker" "$url_reranker" "$sha_reranker"
 
+              # Визуальная пара — только когда визуальный поиск включён. Значения проверяем теми же
+              # ${VAR:?…}, но уже внутри ветки: при VISION_ENABLED=false их отсутствие нормально.
+              if [ "${VISION_ENABLED:-false}" = "true" ]; then
+                  download                       "${VISION_MODEL_FILE:?не задан VISION_MODEL_FILE: имя файла обязано совпадать с секцией визуальной модели в models.ini}"                       "${VISION_MODEL_URL:?не задан VISION_MODEL_URL: качать неоткуда}"                       "${VISION_MODEL_SHA256:?не задан VISION_MODEL_SHA256: без эталона сверка целостности невозможна}"
+                  download                       "${VISION_MMPROJ_FILE:?не задан VISION_MMPROJ_FILE: без проектора модель принимает только текст}"                       "${VISION_MMPROJ_URL:?не задан VISION_MMPROJ_URL: качать неоткуда}"                       "${VISION_MMPROJ_SHA256:?не задан VISION_MMPROJ_SHA256: без эталона сверка целостности невозможна}"
+              else
+                  echo "VISION_ENABLED=false — визуальную модель и её проектор не качаем"
+              fi
+
               echo
               echo "содержимое тома flow-models:"
               ls -l /models
@@ -184,6 +198,48 @@ spec:
                 configMapKeyRef:
                   name: flow-config
                   key: RERANKER_MODEL_SHA256
+                  optional: true
+            - name: VISION_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: VISION_ENABLED
+                  optional: true
+            - name: VISION_MODEL_FILE
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: VISION_MODEL_FILE
+                  optional: true
+            - name: VISION_MODEL_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: VISION_MODEL_URL
+                  optional: true
+            - name: VISION_MODEL_SHA256
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: VISION_MODEL_SHA256
+                  optional: true
+            - name: VISION_MMPROJ_FILE
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: VISION_MMPROJ_FILE
+                  optional: true
+            - name: VISION_MMPROJ_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: VISION_MMPROJ_URL
+                  optional: true
+            - name: VISION_MMPROJ_SHA256
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: VISION_MMPROJ_SHA256
                   optional: true
           resources:
             # Закачка упирается в сеть, а не в процессор; заметная нагрузка здесь ровно одна — sha256sum

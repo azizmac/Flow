@@ -4,8 +4,8 @@
 # опечатка в джобе приложения не достанет до PVC постгреса (docs/TZ_cicd_k8s.md §3). Цена разделения —
 # межнеймспейсные адреса: короткое имя из соседнего namespace не резолвится, поэтому во всех
 # внутренних адресах стоит FQDN. Важно: имена объектов несут префикс flow-, то есть адрес
-# — flow-postgres.flow-data.svc.cluster.local, а не postgres.flow-data.…; то же у flow-s3, flow-ai
-# и flow-vision. Полный список — в §7.1 ТЗ и deploy/required-vars.txt.
+# — flow-postgres.flow-data.svc.cluster.local, а не postgres.flow-data.…; то же у flow-s3 и flow-ai.
+# Полный список — в §7.1 ТЗ и deploy/required-vars.txt.
 #
 # Почему здесь нет ни Secret, ни ConfigMap. Значения приходят из GitHub Secrets и Variables, а в репозиторий
 # не коммитится ни один секрет. Объекты flow-secrets, flow-auth-certs, regcred и flow-config создаёт джоба

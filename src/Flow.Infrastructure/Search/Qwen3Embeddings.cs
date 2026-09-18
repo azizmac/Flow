@@ -74,13 +74,17 @@ internal static class Qwen3Embeddings
         string.IsNullOrWhiteSpace(instruction) ? query : $"Instruct: {instruction}\nQuery: {query}";
 
     /// <summary>
-    /// {модель}:{размерность}:{8 символов SHA-256 от инструкции}. Смена любой части означает, что
+    /// {модель}:{размерность}:{8 символов SHA-256 от третьей части}. Смена любой части означает, что
     /// старые векторы несравнимы с новыми: поиск читает только текущую версию, старые чанки удаляются
     /// после переиндексации.
+    ///
+    /// В <paramref name="discriminator"/> кладут всё остальное, что меняет вектор при неизменных имени
+    /// и размерности. У текстовой половины это инструкция запроса, у визуальной — имя файла весов:
+    /// имя модели в роутере переживает смену квантизации, а вектор — нет.
     /// </summary>
-    public static string BuildModelVersion(string model, int dimensions, string instruction)
+    public static string BuildModelVersion(string model, int dimensions, string discriminator)
     {
-        var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(instruction ?? string.Empty)));
+        var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(discriminator ?? string.Empty)));
         return $"{model}:{dimensions}:{hash[..8]}";
     }
 }

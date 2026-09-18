@@ -819,11 +819,16 @@ jobs:
           RERANKER_MODEL_URL: ${{ vars.RERANKER_MODEL_URL || 'https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF/resolve/main/bge-reranker-v2-m3-Q8_0.gguf' }}
           RERANKER_MODEL_SHA256: ${{ vars.RERANKER_MODEL_SHA256 }}
           VISION_ENABLED: ${{ vars.VISION_ENABLED || 'false' }}
-          VISION_ENDPOINT: http://flow-vision.flow-ai.svc.cluster.local:8083/v1
+          # Тот же адрес, что у эмбеддера и реранкера: визуальная модель — третья секция пресета
+          # одного llama-server, а не отдельный сервис. Роутер различает их по полю "model" в теле.
+          VISION_ENDPOINT: http://flow-ai.flow-ai.svc.cluster.local:8081/v1
           VISION_MODEL: ${{ vars.VISION_MODEL || 'Qwen3-VL-Embedding-2B' }}
-          VISION_MODEL_REPO: ${{ vars.VISION_MODEL_REPO || 'Qwen/Qwen3-VL-Embedding-2B' }}
-          VISION_MAX_LEN: ${{ vars.VISION_MAX_LEN || '8192' }}
-          VISION_GPU_FRACTION: ${{ vars.VISION_GPU_FRACTION || '0.35' }}
+          VISION_MODEL_FILE: ${{ vars.VISION_MODEL_FILE || 'Qwen3-VL-Embedding-2B.Q4_K_M.gguf' }}
+          VISION_MODEL_URL: ${{ vars.VISION_MODEL_URL || 'https://huggingface.co/mradermacher/Qwen3-VL-Embedding-2B-GGUF/resolve/main/Qwen3-VL-Embedding-2B.Q4_K_M.gguf' }}
+          VISION_MODEL_SHA256: ${{ vars.VISION_MODEL_SHA256 }}
+          VISION_MMPROJ_FILE: ${{ vars.VISION_MMPROJ_FILE || 'Qwen3-VL-Embedding-2B.mmproj-Q8_0.gguf' }}
+          VISION_MMPROJ_URL: ${{ vars.VISION_MMPROJ_URL || 'https://huggingface.co/mradermacher/Qwen3-VL-Embedding-2B-GGUF/resolve/main/Qwen3-VL-Embedding-2B.mmproj-Q8_0.gguf' }}
+          VISION_MMPROJ_SHA256: ${{ vars.VISION_MMPROJ_SHA256 }}
           AUTH_ALLOW_INSECURE_HTTP: ${{ vars.AUTH_ALLOW_INSECURE_HTTP || 'true' }}
           BOOTSTRAP_ENABLED: ${{ vars.BOOTSTRAP_ENABLED || 'true' }}
           BOOTSTRAP_ID: ${{ vars.BOOTSTRAP_ID }}
@@ -851,7 +856,8 @@ jobs:
             EMBEDDINGS_INDEXING_ENDPOINT EMBEDDINGS_MODEL EMBEDDINGS_MODEL_FILE EMBEDDINGS_MODEL_URL
             EMBEDDINGS_MODEL_SHA256 RERANK_ENABLED RERANK_ENDPOINT RERANKER_MODEL RERANKER_MODEL_FILE
             RERANKER_MODEL_URL RERANKER_MODEL_SHA256 VISION_ENABLED VISION_ENDPOINT VISION_MODEL
-            VISION_MODEL_REPO VISION_MAX_LEN VISION_GPU_FRACTION AUTH_ALLOW_INSECURE_HTTP
+            VISION_MODEL_FILE VISION_MODEL_URL VISION_MODEL_SHA256
+            VISION_MMPROJ_FILE VISION_MMPROJ_URL VISION_MMPROJ_SHA256 AUTH_ALLOW_INSECURE_HTTP
             BOOTSTRAP_ENABLED BOOTSTRAP_ID BOOTSTRAP_EMAIL BOOTSTRAP_USERNAME BOOTSTRAP_FIRST_NAME
             BOOTSTRAP_LAST_NAME BACKUP_KEEP"
           : > cfg.env
