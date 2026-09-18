@@ -101,11 +101,17 @@ services:
     image: ${AI_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
     profiles: ["ai"]
     restart: unless-stopped
+    # Размеры буферов — аргументами, а не ключами в models.ini: пресет общий у стенда и кластера,
+    # а буфер зависит от машины. Дефолты процессорные; профиль карты (docker/ai/nvidia.yml) ставит свои,
+    # потому что ubatch-size 8192 требует почти 5 ГиБ видеопамяти и на картах до 8 ГБ это отказ.
     command: >
       --models-preset /config/models.ini
       --models-max 2
       --no-webui
       --threads ${AI_THREADS:-4}
+      --ctx-size ${AI_CTX_SIZE:-8192}
+      --batch-size ${AI_BATCH_SIZE:-8192}
+      --ubatch-size ${AI_UBATCH_SIZE:-8192}
       --host 0.0.0.0 --port 8081
     volumes:
       - models-data:/models
