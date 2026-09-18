@@ -20,6 +20,21 @@ public sealed class AppState
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Слайдер задачи раскрыт на всю ширину рабочей области. Выбор человека кнопкой в шапке слайдера;
+    /// как и режим сайдбара, живёт до перезагрузки — следующая задача открывается так же, как прошлая.
+    /// </summary>
+    public bool DrawerWide { get; private set; }
+
+    public void ToggleDrawerWide(bool wide)
+    {
+        if (DrawerWide == wide)
+            return;
+
+        DrawerWide = wide;
+        Changed?.Invoke();
+    }
+
     public Guid? CurrentUserId { get; private set; }
 
     public void SetCurrentUser(Guid? id)

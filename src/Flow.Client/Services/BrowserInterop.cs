@@ -152,6 +152,19 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
+    /// <summary>Ссылка тулбара и Ctrl K: [подпись](адрес) с выделением того, что осталось дописать.</summary>
+    public async Task<string?> EditorLinkAsync(string elementId, string textPlaceholder)
+    {
+        try
+        {
+            return await js.InvokeAsync<string?>("flowEditor.link", elementId, textPlaceholder);
+        }
+        catch (JSException)
+        {
+            return null;
+        }
+    }
+
     public async Task<string?> EditorPrefixLinesAsync(string elementId, string prefix, bool ordered = false)
     {
         try

@@ -2,13 +2,16 @@
    начальный пароль (генерируется, показывается один раз — сообщить человеку лично; учётная запись создаётся в Flow.Auth).
    409 → ошибка под занятым полем (сервер говорит, что именно занято). Enter — создать, Esc — закрыть.
 
-   Слой — MudDialog (затемнение, захват фокуса, Esc, клик по фону), вид — .flow-modal в mud-overrides.css. *@
+   Слой — MudDialog (затемнение, захват фокуса, Esc, клик по фону), вид — .flow-modal в mud-overrides.css.
+   Диалог живёт в портале MudDialogProvider и сам не закрывается, когда страница снимает компонент
+   условием, — убираем его с экрана явно (CloseDialog), иначе модалка остаётся поверх страницы. *@
+@implements IAsyncDisposable
 @inject FlowApi Api
 @inject BrowserInterop Browser
 @inject UserDirectory Users
 @inject AppState State
 
-<MudDialog Visible="true" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
            TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
     <TitleContent>
         <h3>Новый человек</h3>
@@ -67,6 +70,10 @@
 
     private const int FocusDelayMs = 50;
 
+    private MudDialog? _dialog;
+    /// <summary>Открыт, пока страница держит компонент; false — закрываемся (см. CloseDialog).</summary>
+    private bool _visible = true;
+    private bool _closing;
     private bool _busy;
     private string _first = "";
     private string _last = "";
@@ -106,7 +113,28 @@
     };
 
     /// <summary>Esc или клик по фону — тот же путь, что и кнопка «Отмена».</summary>
-    private Task OnVisibleChanged(bool visible) => visible ? Task.CompletedTask : Cancel();
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Cancel();
+
+    /// <summary>
+    /// Убирает диалог с экрана. Сам MudDialog этого не делает: страница снимает компонент условием,
+    /// а ссылка, выданная MudDialogProvider, живёт дальше — модалка осталась бы висеть поверх списка.
+    /// </summary>
+    private async Task CloseDialog()
+    {
+        if (_closing)
+            return;
+
+        // Visible гасим раньше самого закрытия: иначе ре-рендер компонента, случившийся до того,
+        // как страница его снимет, снова передал бы Visible=true и диалог открылся бы заново.
+        _closing = true;
+        _visible = false;
+
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    /// <summary>Страховка на случай, когда компонент убрали не через «Отмена» (уход со страницы).</summary>
+    public ValueTask DisposeAsync() => new(CloseDialog());
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -163,7 +191,14 @@
         if (e.Key == "Enter") await Submit();
     }
 
-    private Task Cancel() => _busy ? Task.CompletedTask : OnCancel.InvokeAsync();
+    private async Task Cancel()
+    {
+        if (_busy)
+            return;
+
+        await CloseDialog();
+        await OnCancel.InvokeAsync();
+    }
 
     private async Task Submit()
     {
@@ -181,6 +216,7 @@
 
         if (result.Ok)
         {
+            await CloseDialog();
             await OnCreated.InvokeAsync(result.Value!);
             return;
         }

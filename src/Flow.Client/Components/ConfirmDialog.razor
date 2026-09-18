@@ -4,11 +4,12 @@
    Вид прежний — класс .flow-modal (mud-overrides.css). Enter остаётся на нашем HotkeyService:
    у диалога Mud подтверждения по Enter нет, а хоткей в Flow привычен.
    Компонент по-прежнему монтируется условием на странице (@if (_deleting is not null)), поэтому
-   открыт он всегда — за видимость отвечает вызывающая сторона, как и раньше. *@
-@implements IDisposable
+   открыт он всегда — за видимость отвечает вызывающая сторона, как и раньше. Но снятие компонента
+   диалог с экрана не убирает: ссылку, выданную MudDialogProvider, закрываем сами (CloseDialog). *@
+@implements IAsyncDisposable
 @inject HotkeyService Hotkeys
 
-<MudDialog Visible="true" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
            TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
     <TitleContent>
         <h3>@Title</h3>
@@ -33,6 +34,10 @@
     [Parameter] public EventCallback OnCancel { get; set; }
 
     private readonly string _confirmId = "cd-" + Guid.NewGuid().ToString("N")[..8];
+    private MudDialog? _dialog;
+    /// <summary>Открыт, пока страница держит компонент; false — закрываемся (см. CloseDialog).</summary>
+    private bool _visible = true;
+    private bool _closing;
     private bool _busy;
     private IDisposable? _hotkeys;
 
@@ -59,9 +64,34 @@
     }
 
     /// <summary>Esc или клик по фону — закрытие идёт тем же путём, что и кнопка «Отмена».</summary>
-    private Task OnVisibleChanged(bool visible) => visible ? Task.CompletedTask : Cancel();
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Cancel();
 
-    private Task Cancel() => _busy ? Task.CompletedTask : OnCancel.InvokeAsync();
+    /// <summary>
+    /// Убирает диалог с экрана. Сам MudDialog этого не делает: страница снимает компонент условием,
+    /// а его ссылка в MudDialogProvider живёт дальше — модалка осталась бы висеть поверх страницы.
+    /// </summary>
+    private async Task CloseDialog()
+    {
+        if (_closing)
+            return;
+
+        // Visible гасим раньше самого закрытия: иначе ре-рендер компонента, случившийся до того,
+        // как страница его снимет, снова передал бы Visible=true и диалог открылся бы заново.
+        _closing = true;
+        _visible = false;
+
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    private async Task Cancel()
+    {
+        if (_busy)
+            return;
+
+        await CloseDialog();
+        await OnCancel.InvokeAsync();
+    }
 
     private async Task Confirm()
     {
@@ -77,5 +107,10 @@
         }
     }
 
-    public void Dispose() => _hotkeys?.Dispose();
+    /// <summary>Снимают компонент со страницы и после подтверждения, и по «Отмена» — закрываем диалог здесь.</summary>
+    public ValueTask DisposeAsync()
+    {
+        _hotkeys?.Dispose();
+        return new ValueTask(CloseDialog());
+    }
 }

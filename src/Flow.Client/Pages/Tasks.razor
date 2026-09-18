@@ -228,11 +228,12 @@
     }
 </div>
 
-<Drawer Open="DrawerOpen" OnClose="CloseDrawer">
+<Drawer Open="DrawerOpen" Wide="State.DrawerWide" OnClose="CloseDrawer">
     @if (DrawerBoard is { } drawerBoard && (_createOpen || SelectedTask is not null))
     {
         <TaskDrawer Board="drawerBoard" Boards="_boards" OnBoardChanged="SetCreateBoard" Item="@(_createOpen ? null : SelectedTask)"
                     CanEdit="@(SelectedTask is { } sel && Permissions.CanEditTask(Me, sel))" CanAssign="@(SelectedTask is { } sel2 && Permissions.CanAssign(Me, sel2))" OnlyAssigneeId="OnlyAssigneeId"
+                    Wide="State.DrawerWide" OnToggleWide="ToggleDrawerWide"
                     OnClose="CloseDrawer" OnCreated="OnTaskCreated" OnUpdated="OnTaskUpdated" OnDelete="AskDeleteTask" />
     }
 </Drawer>
@@ -660,6 +661,9 @@
         _createOpen = false;
         Nav.NavigateTo(Nav.GetUriWithQueryParameter("task", t.Id.ToString()));
     }
+
+    /// <summary>Ширина слайдера — выбор человека: держим его в AppState, чтобы следующая задача открылась так же.</summary>
+    private void ToggleDrawerWide() => State.ToggleDrawerWide(!State.DrawerWide);
 
     private void CloseDrawer()
     {
