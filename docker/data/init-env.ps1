@@ -6,7 +6,7 @@
 $ErrorActionPreference = "Stop"
 
 $network = "flow-network"
-$volumes = @{ "flow-postgres-data" = "postgres"; "flow-minio-data" = "minio"; "flow-models-data" = "models" }
+$volumes = @{ "flow-postgres-data" = "postgres"; "flow-minio-data" = "minio"; "flow-models-data" = "models"; "flow-repository-workspaces" = "repositories" }
 $dataRoot = $env:DATA_ROOT
 # Веса моделей поиска (профиль ai) обычно живут не там, где данные: их не бэкапят и переиспользуют
 # между установками. Сами файлы качает docker/data/pull-models.ps1.
