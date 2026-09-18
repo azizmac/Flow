@@ -1,0 +1,80 @@
+name: Инструменты для манифестов
+description: >-
+  kustomize и kubeconform нужных версий на PATH, с кэшем между прогонами. Две джобы — lint-manifests
+  и render — качали их по отдельности, то есть четыре загрузки с GitHub Releases на каждый прогон CI.
+
+# Версии — инпуты с дефолтами, а не константы внутри: они прибиты намеренно (разный kustomize даёт
+# разный рендер), но прибиты они в одном месте — здесь, — а не продублированы в двух джобах, где
+# первым же обновлением разъехались бы. Вызывающему остаётся не задавать их вовсе.
+inputs:
+  kustomize_version:
+    description: Версия kustomize с ведущей v, например v5.5.0
+    required: false
+    default: v5.5.0
+  kubeconform_version:
+    description: Версия kubeconform с ведущей v, например v0.6.7
+    required: false
+    default: v0.6.7
+
+outputs:
+  kustomize_version:
+    description: Версия kustomize, оказавшаяся на PATH — чтобы вызывающий мог напечатать её в отчёте.
+    value: ${{ inputs.kustomize_version }}
+  kubeconform_version:
+    description: Версия kubeconform, оказавшаяся на PATH.
+    value: ${{ inputs.kubeconform_version }}
+
+runs:
+  using: composite
+
+  steps:
+    # Кладём в каталог пользователя, а не в /usr/local/bin: actions/cache восстанавливает пути правами
+    # текущего пользователя, а под sudo кэш пришлось бы ещё и переносить после восстановления.
+    - name: Куда класть
+      id: where
+      shell: bash
+      run: echo "dir=$RUNNER_TOOL_CACHE/flow-k8s-tools" >> "$GITHUB_OUTPUT"
+
+    # Ключ по обеим версиям: обновили одну — скачиваются обе, и это правильно. Частичных попаданий
+    # здесь быть не должно, поэтому restore-keys нет: набор из двух бинарников либо тот, что заказан,
+    # либо никакой. Полукэш с одним старым бинарником — это молчаливо другой рендер манифестов.
+    - name: Кэш инструментов
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.where.outputs.dir }}
+        key: k8s-tools-${{ runner.os }}-kustomize-${{ inputs.kustomize_version }}-kubeconform-${{ inputs.kubeconform_version }}
+
+    - name: Загрузка (только при промахе кэша)
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        DIR: ${{ steps.where.outputs.dir }}
+        KUSTOMIZE_VERSION: ${{ inputs.kustomize_version }}
+        KUBECONFORM_VERSION: ${{ inputs.kubeconform_version }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$DIR"
+        # %2F в ссылке — это слэш в теге kustomize/vX.Y.Z, его нельзя раскрывать.
+        curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" | tar -xz -C "$DIR" kustomize
+        curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | tar -xz -C "$DIR" kubeconform
+        chmod +x "$DIR/kustomize" "$DIR/kubeconform"
+
+    # Проверяем ПОСЛЕ восстановления, а не только после загрузки: битый или частичный кэш обязан
+    # обнаружиться здесь строкой про инструмент, а не через двадцать шагов «command not found»
+    # посреди рендера.
+    - name: На PATH и проверка
+      shell: bash
+      env:
+        DIR: ${{ steps.where.outputs.dir }}
+      run: |
+        set -euo pipefail
+        for tool in kustomize kubeconform; do
+          if [ ! -x "$DIR/$tool" ]; then
+            echo "::error title=k8s-tools::$tool не оказался в $DIR — кэш восстановился неполным. Смените ключ кэша или удалите его в Actions → Caches"
+            exit 1
+          fi
+        done
+        echo "$DIR" >> "$GITHUB_PATH"
+        "$DIR/kustomize" version
+        "$DIR/kubeconform" -v

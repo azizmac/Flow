@@ -494,22 +494,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      # Версии инструментов прибиты намеренно: разные версии kustomize дают разный рендер, и «локально
-      # не воспроизводится» на одном домашнем раннере потом ищут часами.
-      KUSTOMIZE_VERSION: v5.5.0
-      KUBECONFORM_VERSION: v0.6.7
       K8S_VERSION: ${{ vars.K8S_VERSION || '1.32.0' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Инструменты
+      # Версии инструментов живут внутри action'а: они прибиты намеренно (разные версии kustomize дают
+      # разный рендер), но прибиты в одном месте, а не продублированы здесь и в джобе рендера.
+      - uses: ./.github/actions/k8s-tools
+
+      - name: pyyaml
         shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" | sudo tar -xz -C /usr/local/bin kustomize
-          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | sudo tar -xz -C /usr/local/bin kubeconform
-          python3 -m pip install --quiet pyyaml
+        run: python3 -m pip install --quiet pyyaml
 
       # Плейсхолдеры ${...} тут намеренно не подставляются: на этом шаге проверяется структура, а не
       # значения кластера. Джоба офлайновая и быстрая — красный крестик должен появляться на первой
@@ -632,20 +628,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      KUSTOMIZE_VERSION: v5.5.0
-      KUBECONFORM_VERSION: v0.6.7
       K8S_VERSION: ${{ vars.K8S_VERSION || '1.32.0' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Инструменты
+      # Тот же action, что у lint-manifests, — и это важнее экономии на загрузке: рендер, который
+      # уезжает в кластер, обязан собираться той же версией kustomize, какой его проверяли.
+      - uses: ./.github/actions/k8s-tools
+
+      - name: pyyaml
         shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" | sudo tar -xz -C /usr/local/bin kustomize
-          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | sudo tar -xz -C /usr/local/bin kubeconform
-          python3 -m pip install --quiet pyyaml
+        run: python3 -m pip install --quiet pyyaml
 
       - name: release.json
         uses: actions/download-artifact@v4
