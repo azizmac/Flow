@@ -79,8 +79,8 @@ Token-signing certificates are generated on first start. Migrations create one `
 `docker/up.sh` (and its Windows twin `docker/up.ps1`) is the same three commands in the right order, because Compose has no `depends_on` across projects and the data stack has to come up separately. Step by step:
 
 1. **`.env`** — copied from `.env.example` if missing. Both stacks read it; without it the compose defaults apply.
-2. **`docker/data/init-env.sh`** — the shared `flow-network` network and the external `flow-postgres-data`, `flow-minio-data` volumes. `DATA_ROOT` puts the volumes on a directory of your choice: `DATA_ROOT=/mnt/flow sh docker/up.sh` (only honoured when the volumes are created).
-3. **Data stack** — `docker compose -f docker-compose.data.yml up -d`: PostgreSQL and S3.
+2. **`docker/data/init-env.sh`** — the shared `flow-network` network and the external `flow-postgres-data`, `flow-minio-data`, `flow-repository-workspaces` volumes. `DATA_ROOT` puts the volumes on a directory of your choice: `DATA_ROOT=/mnt/flow sh docker/up.sh` (only honoured when the volumes are created).
+3. **Data stack** — `docker compose -f docker-compose.data.yml up -d`: PostgreSQL and S3. OpenCode is an optional `agent` profile in the same stack.
 4. **Application stack** — `docker compose up -d --build`: api (including authentication) and client.
 
 | Flag | What it does |
@@ -95,7 +95,7 @@ You don't need the script if the data lives elsewhere: point `POSTGRES_HOST` and
 
 ### Two stacks, and why
 
-Data lives in its own Compose project (`docker-compose.data.yml`, project `flow-data`) on external volumes `flow-postgres-data` and `flow-minio-data`. The application stack owns no project data at all, so `docker compose down -v` cannot touch it — it only drops the Auth module's keys and certificates, which are recreated on the next start.
+Data and the OpenCode service live in the `flow-data` Compose project. PostgreSQL, S3 and repository workspaces use external volumes, so `docker compose down -v` in the application stack cannot touch them — it only drops the Auth module's keys and certificates, which are recreated on the next start.
 
 | What you want | Command |
 |---|---|

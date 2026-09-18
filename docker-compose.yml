@@ -1,7 +1,6 @@
-# Стек приложения: api (ядро + Auth-модуль) и client. Данные (PostgreSQL и S3) живут в отдельном стеке —
-# docker-compose.data.yml, проект flow-data. Здесь нет ни одного тома с данными проекта, поэтому
-# `docker compose down -v` безопасен: он уносит только ключи и сертификаты Auth-модуля, которые
-# пересоздаются при следующем старте. См. docs/TZ_infra_data_split.md, docs/TZ_modular_monolith.md.
+# Стек приложения: api (ядро + Auth-модуль) и client. Данные (PostgreSQL, S3 и checkout'ы репозиториев)
+# живут во внешних томах. Поэтому `docker compose down -v` уносит только ключи и сертификаты
+# Auth-модуля, которые пересоздаются при следующем старте.
 #
 #   sh docker/data/init-env.sh                       # один раз: общая сеть и тома данных
 #   docker compose -f docker-compose.data.yml up -d  # данные
@@ -77,6 +76,7 @@ services:
     volumes:
       - auth-certs:/certs
       - auth-keys:/keys
+      - repository-workspaces:/var/lib/flow/repositories
     ports:
       - "${API_PORT:-8080}:8080"
     networks:
@@ -111,6 +111,10 @@ networks:
     external: true
 
 volumes:
+  # Локальные checkout'ы исходного кода — данные проекта, поэтому это внешний том.
+  repository-workspaces:
+    name: flow-repository-workspaces
+    external: true
   # Не данные проекта, а ключи подписи и cookie Auth-модуля: при потере пересоздаются, пользователи
   # просто входят заново. Поэтому тома обычные и `down -v` их уносит.
   auth-keys:
