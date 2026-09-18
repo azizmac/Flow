@@ -75,15 +75,26 @@ public static class FlowSearchServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Визуальная модель: своё пространство, своя версия, свой сервис (vLLM). Клиент регистрируется
-    /// всегда, а включает половину флаг Search:Embeddings:Vision:Enabled вместе с адресом.
+    /// Визуальная модель: своё векторное пространство и своя версия, но сервис общий с текстовой
+    /// половиной — третья секция пресета одного llama-server. Клиент регистрируется всегда, а включает
+    /// половину флаг Search:Embeddings:Vision:Enabled вместе с адресом.
     /// </summary>
     private static void AddVisionEmbeddingGenerator(IServiceCollection services, SearchOptions options)
     {
         var vision = options.Embeddings.Vision;
+        var endpoint = Normalize(vision.Endpoint);
 
-        services.AddHttpClient(HttpVisionEmbeddingGenerator.HttpClientName, client =>
-            Configure(client, Normalize(vision.Endpoint), TimeSpan.FromSeconds(Math.Max(1, vision.TimeoutSeconds)), vision.ApiKey));
+        services.AddHttpClient(HttpVisionEmbeddingGenerator.QueryClientName, client =>
+            Configure(client, endpoint, TimeSpan.FromSeconds(Math.Max(1, vision.TimeoutSeconds)), vision.ApiKey));
+
+        // Бюджет индексации кратно больше бюджета запроса, и число взято с боевого пода, а не с потолка:
+        // первая картинка после загрузки модели занимает 31.2 с (сборка вычислительного графа CUDA),
+        // следующие — 0.58 с. Сюда же уходит загрузка самой модели по первому обращению: полтора
+        // гигабайта с диска домашней ноды. С бюджетом запроса в 30 с первая картинка после каждого
+        // перезапуска пода отказывала бы гарантированно — с повтором, который затем отработает,
+        // и записью в логе, неотличимой от настоящей поломки.
+        services.AddHttpClient(HttpVisionEmbeddingGenerator.IndexingClientName, client =>
+            Configure(client, endpoint, TimeSpan.FromSeconds(120), vision.ApiKey));
 
         services.TryAddSingleton<IVisionEmbeddingGenerator, HttpVisionEmbeddingGenerator>();
     }
