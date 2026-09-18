@@ -97,8 +97,12 @@ input, textarea { font-family: inherit; }
     min-width: 900px;
     position: relative;   /* drawer позиционируется относительно main — сайдбар не затемняется */
     /* Закрытый слайдер стоит за правым краем (translateX) — без обрезки он давал бы горизонтальную
-       полосу на любом экране. Поповеры не пострадают: MudBlazor рисует их порталом в body. */
+       полосу на любом экране. Поповеры не пострадают: MudBlazor рисует их порталом в body.
+       clip вместо hidden: hidden делает .main контейнером прокрутки, и браузер, ставя фокус внутрь
+       ещё не приехавшего дровера, прокручивал его к правому краю — экран дёргался. clip обрезает
+       так же, но прокручивать нечего. Для старых браузеров остаётся hidden строкой выше. */
     overflow: hidden;
+    overflow: clip;
 }
 
 .topbar {
@@ -453,7 +457,7 @@ input, textarea { font-family: inherit; }
     .sb:not(.expanded) .sb-toggle.sb-toggle-expand { display: inline-flex; }
     .sb:not(.expanded) .sb-top { flex-direction: column; gap: 10px; padding: 0 0 18px; }
     .sb:not(.expanded) .sb-item { justify-content: center; padding: 10px 0; margin: 0 10px 4px; }
-    .sb:not(.expanded) .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px 0; }
+    .sb:not(.expanded) .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px; }
     .sb:not(.expanded) .sb-me { justify-content: center; }
 }
 
@@ -471,7 +475,7 @@ input, textarea { font-family: inherit; }
 .sb.collapsed .sb-toggle.sb-toggle-expand { display: inline-flex; }
 .sb.collapsed .sb-top { flex-direction: column; gap: 10px; padding: 0 0 18px; }
 .sb.collapsed .sb-item { justify-content: center; padding: 10px 0; margin: 0 10px 4px; }
-.sb.collapsed .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px 0; }
+.sb.collapsed .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px; }
 .sb.collapsed .sb-me { justify-content: center; }
 
 /* ---------- Поиск: строка в сайдбаре ---------- */
@@ -728,15 +732,25 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px;
 .sb-foot {
     margin-top: auto;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 16px 16px 4px 22px;
+    /* Поля одинаковые со всех сторон: подсветку наведения носит сама строка профиля (.sb-me),
+       и перекошенные отступы превращали её в кривую полосу поперёк сайдбара. */
+    padding: 12px 12px 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.sb-me {
     display: flex;
     align-items: center;
     gap: 10px;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    border-radius: var(--r-md);
     color: inherit;
     text-decoration: none;
     transition: background-color 150ms ease, transform 160ms var(--ease-out);
 }
-.sb-me { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; color: inherit; text-decoration: none; transition: transform 160ms var(--ease-out); }
 a.sb-me:active { transform: scale(0.98); }
 
 /* ---------- Auth screen (вход/выход через Flow.Auth, «нет доступа») ---------- */
@@ -969,6 +983,9 @@ a.sb-me:active { transform: scale(0.98); }
 .pop-item {
     display: flex;
     align-items: center;
+    /* Явно: у <button> содержимое по умолчанию центрируется (стиль браузера), и строка меню
+       упоминаний получала широкие пустые поля по краям вместо ровной колонки аватаров. */
+    justify-content: flex-start;
     gap: 10px;
     padding: 8px 10px;
     border-radius: 8px;
@@ -1095,7 +1112,10 @@ a.sb-me:active { transform: scale(0.98); }
 }
 /* В открытом состоянии transform: none, а не translateX(0): любой transform у предка ломает position:fixed
    у поповеров внутри дровера (они позиционируются в координатах viewport). */
-.drawer.in { transform: none; transition: transform 240ms var(--ease-drawer); visibility: visible; }
+.drawer.in { transform: none; transition: transform 240ms var(--ease-drawer), width 200ms var(--ease-out); visibility: visible; }
+/* «Развернуть» — слайдер занимает всю рабочую область: описание и лента комментариев перестают
+   переноситься по одному слову. Кнопка в шапке слайдера, выбор держится до перезагрузки (AppState). */
+.drawer.wide { width: 100%; }
 .drawer.closing { visibility: visible; }
 .drawer-head {
     display: flex;
@@ -1199,6 +1219,9 @@ a.sb-me:active { transform: scale(0.98); }
 .desc-box pre { background: rgba(0, 0, 0, 0.25); border-radius: 8px; padding: 10px 12px; overflow: auto; margin: 0 0 10px; }
 .desc-box pre code { background: transparent; padding: 0; color: var(--text-primary); font-weight: var(--fw-medium); }
 .desc-box a { color: var(--accent); text-decoration: underline; text-decoration-color: rgba(255, 186, 0, 0.4); }
+/* Ссылка со схемой, которую браузеру нельзя открывать (javascript:, data:) — остаётся текстом:
+   подписи видно, но она никуда не ведёт (Markdown/ExternalLinks.cs). */
+.desc-box a.md-link-blocked { color: var(--text-secondary); text-decoration: none; cursor: default; }
 .desc-box blockquote { margin: 0 0 10px; padding-left: 12px; border-left: 2px solid var(--border-strong); color: var(--text-tertiary); }
 .desc-box strong { color: #fff; font-weight: var(--fw-bold); }
 .desc-box input[type="checkbox"] { accent-color: var(--accent); margin-right: 6px; }
@@ -1657,7 +1680,7 @@ a.task-row { color: inherit; text-decoration: none; }
     .assignee-sel:hover { border-color: rgba(255, 255, 255, 0.25); }
     .assignee-sel.compact:hover .avatar { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25); }
     .user-row:hover { background: rgba(255, 255, 255, 0.03); }
-    .sb-foot:hover { background: rgba(255, 255, 255, 0.04); }
+    a.sb-me:hover { background: rgba(255, 255, 255, 0.06); }
     .ucard-row.lnk:hover { color: #fff; }
     .ucard-link:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
     .ucard-open:hover { color: var(--accent); }
@@ -1668,7 +1691,7 @@ a.task-row { color: inherit; text-decoration: none; }
 
 @media (prefers-reduced-motion: reduce) {
     .ds-btn:active, .ds-iconbtn:active, .board-card:active, .sb-item:active, .status-sel:active, .seg-btn:active, .icon-lnk:active,
-    .assignee-sel:active, .sb-foot:active, .ucard-link:active, .tab:active, .who-card:active { transform: none; }
+    .assignee-sel:active, .sb-me:active, .ucard-link:active, .tab:active, .who-card:active { transform: none; }
     .tab::after, .tab.on::after { transform: none; transition: opacity 150ms ease; }
     .user-row.flash { animation: none; }
     .pop, .pop.in { transform: none; }

@@ -33,4 +33,4 @@ npm run build
 Версии подняты точечно (`npm install @codemirror/view@latest` и так далее), потом `npm run build` и прогон
 по списку выше. Наружу торчит `window.flowEditor` — набор операций, который вызывает `MarkdownEditor.razor`
 через `Services/BrowserInterop.cs`: `mount`, `destroy`, `focus`, `setReadOnly`, `state`, `setValue`, `wrap`,
-`prefixLines`, `insertMention`. Менять их имена и сигнатуры нельзя, не поправив обе стороны.
+`link`, `prefixLines`, `insertMention`. Менять их имена и сигнатуры нельзя, не поправив обе стороны.

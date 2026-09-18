@@ -16,7 +16,10 @@
             <span class="code accent">@Board.Key-@Board.NextTaskNumber</span>
             <span style="font:var(--fw-semibold) 12.5px var(--font-display);color:var(--text-tertiary);">Новая задача</span>
         </div>
-        <DsIconButton Icon="close" Size="30" Title="Закрыть (Esc)" OnClick="Close" />
+        <div style="display:flex;align-items:center;gap:4px;">
+            <DsIconButton Icon="@(Wide ? "collapse" : "expand")" Size="30" Title="@(Wide ? "Свернуть слайдер" : "Развернуть на всю ширину")" OnClick="OnToggleWide" />
+            <DsIconButton Icon="close" Size="30" Title="Закрыть (Esc)" OnClick="Close" />
+        </div>
     </div>
     <div class="drawer-body" @onkeydown="OnBodyKey">
         <input id="td-title" class="title-input" placeholder="Название задачи" value="@_title" maxlength="500"
@@ -74,6 +77,7 @@ else if (Item is not null)
                 <span class="save-state ok" aria-live="polite"><Icon Name="check" Size="13" />Сохранено</span>
             }
             <a class="icon-lnk" style="margin-right:8px;" href="@($"tasks/{Item.Id}")"><Icon Name="expand" Size="15" />На всю страницу</a>
+            <DsIconButton Icon="@(Wide ? "collapse" : "expand")" Size="30" Title="@(Wide ? "Свернуть слайдер" : "Развернуть на всю ширину")" OnClick="OnToggleWide" />
             <RowMenu ShowOpen="false" ShowRename="CanEdit" ShowDelete="CanEdit" Size="30" Style="color:rgba(255,255,255,0.5)"
                      OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => OnDelete.InvokeAsync(Item)" />
             <DsIconButton Icon="close" Size="30" Title="Закрыть (Esc)" OnClick="Close" />
@@ -176,6 +180,9 @@ else if (Item is not null)
     [Parameter] public EventCallback<Guid?> OnBoardChanged { get; set; }
     /// <summary>null — режим создания.</summary>
     [Parameter] public TaskResponse? Item { get; set; }
+    /// <summary>Слайдер раскрыт на всю ширину: кнопка в шапке, состояние держит страница (AppState.DrawerWide).</summary>
+    [Parameter] public bool Wide { get; set; }
+    [Parameter] public EventCallback OnToggleWide { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnCreated { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnUpdated { get; set; }
@@ -266,7 +273,7 @@ else if (Item is not null)
         {
             _focusTitle = false;
             // Пауза обязательна: MudFocusTrap слайдера ставит фокус на первый элемент внутри (кнопку
-            // закрытия) в своём OnAfterRender — без задержки он перебивает нас, и «N» открывает форму,
+            // в шапке) в своём OnAfterRender — без задержки он перебивает нас, и «N» открывает форму,
             // в которой нельзя сразу печатать.
             await Task.Delay(50);
             await Browser.FocusAsync("td-title");
