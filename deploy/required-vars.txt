@@ -52,7 +52,7 @@ S3_ENDPOINT|var|3|S3__Endpoint у Flow.Api и адрес для Job создан
 EMBEDDINGS_QUERY_ENDPOINT|var|5|Search__Embeddings__QueryEndpoint. В кластере http://flow-ai.flow-ai.svc.cluster.local:8081/v1 — с префиксом flow-, как назван Service. Повтор flow-ai.flow-ai не опечатка: сервис и namespace
 EMBEDDINGS_INDEXING_ENDPOINT|var|-|Search__Embeddings__IndexingEndpoint. Пусто = тот же адрес, что для запросов, поэтому проверять её нечем (см. «-» в шапке)
 RERANK_ENDPOINT|var|5|Search__Rerank__Endpoint. Адрес ТОТ ЖЕ, что у эмбеддера: обе текстовые модели держит один llama-server в router-режиме, а различает их по полю model. Задавать даже при RERANK_ENABLED=false, иначе в ConfigMap уедет localhost
-VISION_ENDPOINT|var|5|Search__Embeddings__Vision__Endpoint. В кластере http://flow-vision.flow-ai.svc.cluster.local:8083/v1: в compose сервис зовётся embeddings-vl, в кластере — flow-vision
+VISION_ENDPOINT|var|5|Search__Embeddings__Vision__Endpoint. Адрес ТОТ ЖЕ, что у эмбеддера и реранкера: визуальная модель — третья секция пресета одного llama-server, а не отдельный сервис. Отдельного модуля vision больше нет
 
 # ---- §7.1 TLS-зависимые ----
 AUTH_ALLOW_INSECURE_HTTP|var|4|За ingress без TLS — true: OpenIddict иначе откажется выдавать токены по http, и скажет об этом на старте, а не при первом входе. После §10.1 (переход на https) — false, вместе с PUBLIC_* адресами
@@ -76,17 +76,16 @@ AUTO_DEPLOY|var|-|true включает стадии 3 и 4 на push в main. �
 K8S_CONTEXT|var|-|Контекст kubeconfig раннера. Если контекст там ровно один, можно не задавать
 GPU_NODE|var|-|Нода с картой. На домашнем кластере обычно совпадает с WORKER_NODE
 DEPLOY_TIMEOUT|var|-|--timeout у rollout status для api, auth и client. Не меньше 600: отсчёт идёт от apply и включает скачивание образа, а бюджет startupProbe у api уже 300 с и у auth 240 с. Парой к нему в манифесте стоит progressDeadlineSeconds = 600
-AI_DEPLOY_TIMEOUT|var|-|--timeout у rollout status для AI-слоя. Не меньше 1500: бюджет startupProbe у модуля vision — 1200 с, и ограничитель обязан его покрывать, иначе выкатка краснеет на исправном сервисе, который просто ещё грузит модель
+AI_DEPLOY_TIMEOUT|var|-|--timeout у rollout status для AI-слоя. Не меньше 900: столько же стоит progressDeadlineSeconds у модуля ai, и ограничитель обязан покрывать холодный старт со скачиванием образа (CUDA-образ llama.cpp — 2.6 ГБ) и чтением весов с диска, иначе выкатка краснеет на исправном сервисе, который просто ещё грузится
 BOOTSTRAP_FIRST_NAME|var|-|Имя владельца в общем ConfigMap. Забыть — тихо получить владельца «Admin Flow» навсегда
 BOOTSTRAP_LAST_NAME|var|-|Фамилия владельца, там же
 SEARCH_ENABLED|var|-|Выключатель поиска целиком: false убирает и эндпоинты, и воркер индексации
 SEARCH_INDEXING_ENABLED|var|-|Выключатель фонового индексатора отдельно от самого поиска
 RERANK_ENABLED|var|-|Вторая ступень выдачи (кнопка «Точнее»). Отдельной джобы и отдельного пода у неё больше нет: модель живёт в сервисе ai и грузится по первому обращению, то есть при false не занимает памяти
-VISION_ENABLED|var|-|Гейт GPU-джобы визуального поиска — единственной части ИИ, которой нужна карта NVIDIA. Вместе с профилем AI_BACKEND=cuda включать нельзя: nvidia.com/gpu неделим, и без time-slicing второй под навсегда останется в Pending
+VISION_ENABLED|var|-|Визуальный поиск по картинкам. Он же гейт закачки визуальных весов: при false Job не тянет полтора гигабайта, а модель не грузится вовсе. Прежний запрет «вместе с AI_BACKEND=cuda включать нельзя» снят — карту больше не делят два пода, все три модели живут в одном и помещаются в 4 ГБ (замер: 2824 МиБ из 3715)
 AI_BACKEND|var|-|Профиль железа для текстового ИИ: cpu (по умолчанию) или cuda. Выбирает, какой оверлей выкатывать — k8s/overlays/home/ai или ai-cuda. Других значений пока нет: ROCm и Vulkan отложены
 AI_CPU_LIMIT|var|5|Сколько ядер отдать моделям: подставляется в limits.cpu модуля ai и оттуда же через Downward API в --threads, так что разъехаться им негде. Ниже четырёх ставить нельзя — на боевых чанках (1536 символов) четыре ядра дают батч индексации 60.9 с при таймауте клиента 60 с, то есть отказ. Замер на 32 ядрах: 16 ядер — 33.2 с
 AI_IMAGE|var|-|Образ llama.cpp для локального стенда. В кластере вариант образа задаёт не эта переменная, а AI_BACKEND через оверлей
-VISION_IMAGE|var|-|Образ vLLM. Тег зафиксировать обязательно: дефолт в compose — latest, с ним выкатка недетерминированна
 EMBEDDINGS_MODEL|var|-|Имя модели эмбеддера. Обязано совпадать с именем секции в docker/ai/models.ini: его Api кладёт в поле model, по нему роутер и выбирает модель
 EMBEDDINGS_MODEL_FILE|var|-|Имя файла GGUF. Обязано совпадать со скачанным, иначе llama-server не стартует
 EMBEDDINGS_MODEL_URL|var|-|Откуда Job качает веса эмбеддера. Ссылки вида /resolve/main/ указывают на изменяемую ревизию, лучше пинить revision-SHA
@@ -95,10 +94,13 @@ RERANKER_MODEL_FILE|var|-|Имя файла GGUF реранкера, требо�
 RERANKER_MODEL_URL|var|-|Откуда Job качает веса реранкера
 EMBEDDINGS_MODEL_SHA256|var|-|Эталон для сверки в Job закачки. Приём файла через .part ловит обрыв, но не подмену и не битый файл
 RERANKER_MODEL_SHA256|var|-|То же для весов реранкера
-VISION_MODEL_REPO|var|-|Что vLLM качает с HuggingFace (--model)
-VISION_MODEL|var|-|--served-model-name у vLLM и Search__Embeddings__Vision__Model у Api. Обязано совпадать в обоих местах
-VISION_MAX_LEN|var|-|--max-model-len у vLLM
-VISION_GPU_FRACTION|var|-|--gpu-memory-utilization. Критичен: time-slicing решает планирование, но не изолирует VRAM, и сумма долей обязана физически влезать в карту
+VISION_MODEL_FILE|var|-|Имя файла GGUF визуальной модели. Обязано совпадать с секцией в models.ini — это проверяет scripts/check-ai-preset.py. Вдобавок входит в ModelVersion визуальной половины: сменили квантизацию — картинки переиндексируются сами
+VISION_MODEL|var|-|Имя секции в docker/ai/models.ini и Search__Embeddings__Vision__Model у Api. Обязано совпадать в обоих местах: по нему роутер выбирает процесс модели
+VISION_MODEL_URL|var|-|Откуда Job качает веса визуальной модели
+VISION_MODEL_SHA256|var|-|Эталон для сверки весов визуальной модели
+VISION_MMPROJ_FILE|var|-|Имя файла проектора (mmproj) — той части модели, что превращает пиксели в токены. Без него сервер поднимет только текстовую половину, и запросы с картинкой будут падать с «Failed to tokenize prompt»
+VISION_MMPROJ_URL|var|-|Откуда Job качает веса проектора
+VISION_MMPROJ_SHA256|var|-|Эталон для сверки весов проектора
 BACKUP_CRON|var|-|Становится полем schedule у CronJob
 BACKUP_TZ|var|-|Без timeZone расписание CronJob считается в UTC
 BACKUP_KEEP|var|-|Сколько копий держать

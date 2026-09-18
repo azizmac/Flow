@@ -118,13 +118,30 @@ public sealed class SearchEmbeddingsOptions
 /// </summary>
 public sealed class SearchVisionOptions
 {
-    /// <summary>Выключено по умолчанию: нужна отдельная модель на GPU, без неё картинки индексируются именем файла.</summary>
+    /// <summary>
+    /// Выключено по умолчанию: визуальная модель — это ещё полтора гигабайта весов и заметно более
+    /// дорогой прогон, а без неё картинки индексируются именем файла, то есть поиск не ломается.
+    /// </summary>
     public bool Enabled { get; set; }
 
-    /// <summary>Адрес vLLM без /embeddings на конце: http://embeddings-vl:8083/v1.</summary>
+    /// <summary>
+    /// Адрес без /embeddings на конце. Это ТОТ ЖЕ адрес, что у текстовой половины
+    /// (http://flow-ai.flow-ai.svc.cluster.local:8081/v1): визуальная модель живёт третьей секцией
+    /// в пресете одного llama-server, а не отдельным сервисом, и роутер различает модели по полю
+    /// "model" в теле запроса.
+    /// </summary>
     public string Endpoint { get; set; } = string.Empty;
 
+    /// <summary>Имя секции в docker/ai/models.ini — по нему роутер выбирает процесс модели.</summary>
     public string Model { get; set; } = "Qwen3-VL-Embedding-2B";
+
+    /// <summary>
+    /// Имя файла весов. Приложению оно нужно ровно для одного: попасть в ModelVersion. Имя модели
+    /// в роутере не меняется при смене квантизации, а вектор меняется — без файла в версии старые
+    /// векторы остались бы в базе рядом с новыми и молча испортили бы выдачу. Совпадение с пресетом
+    /// проверяет scripts/check-ai-preset.py.
+    /// </summary>
+    public string ModelFile { get; set; } = "Qwen3-VL-Embedding-2B.Q4_K_M.gguf";
 
     public string? ApiKey { get; set; }
 

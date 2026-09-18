@@ -27,8 +27,8 @@ Docker Hub (`REGISTRY=docker.io`, `IMAGE_NAME=not2ilya2work/flow-api` и два 
 | 4 | `kubectl get ingressclass` | стоит ли ingress-контроллер и как он называется → `INGRESS_CLASS` |
 | 5 | `kubectl version` | версия кластера — под неё пинится `kubeconform` и версия `kubectl` на раннере |
 | 6 | `kubectl get runtimeclass` | есть ли `nvidia` RuntimeClass (нужно, если containerd не сделан nvidia-рантаймом по умолчанию) |
-| 7 | `df -h` на worker-ноде | хватит ли места: два GGUF + HF-кэш vLLM + PGDATA + бакет MinIO + образы (vLLM сам по себе единицы ГБ) |
-| 8 | `nvidia-smi` на worker-ноде (если есть карта) | модель карты и объём VRAM — от него зависит, влезут ли реранкер и vLLM в одну карту |
+| 7 | `df -h` на worker-ноде | хватит ли места: четыре GGUF (два текстовых, веса и проектор визуальной) + PGDATA + бакет MinIO + образы (CUDA-образ llama.cpp — 2.6 ГБ) |
+| 8 | `nvidia-smi` на worker-ноде (если есть карта) | модель карты и объём VRAM — от него зависят размеры буферов в профиле `gpu-nvidia` и то, влезут ли все модели пресета разом. На 4 ГБ влезают: замер 2824 МиБ из 3715 |
 | 9 | Как кластер получает внешний адрес: MetalLB / NodePort / `hostNetwork` у ingress | от этого зависит, куда указывают DNS-записи трёх доменов |
 
 ### 1.2. Решения, которые принимаешь ты
@@ -126,7 +126,6 @@ Docker Hub (`REGISTRY=docker.io`, `IMAGE_NAME=not2ilya2work/flow-api` и два 
 | `s3-init` | `quay.io/minio/mc:RELEASE.2025-04-16...` | не отдельный модуль, а **Job внутри `deploy-s3`**: создание бакета — часть выкатки хранилища |
 | `backup` | `pgvector/pgvector:pg16` | становится `CronJob`; `scheduler.sh` и busybox crond выбрасываются (расписание — поле `schedule`), а сам `backup.sh` остаётся и кладётся ConfigMap'ом |
 | `ai` | `ghcr.io/ggml-org/llama.cpp:server` (профиль `cpu`) или `:server-cuda` (профиль `cuda`) | ОДИН под на обе текстовые модели: llama-server в router-режиме читает `models.ini` и маршрутизирует по полю `model`. Веса с PVC |
-| `embeddings-vl` | `vllm/vllm-openai:<тег>` | GPU, тег обязательно фиксируем: `latest` в compose делает деплой недетерминированным |
 
 Про модуль `ai` подробнее, потому что он устроен иначе остальных. Оверлея у него два — `ai` и `ai-cuda`, —
 и они отличаются ровно двумя вещами: вариантом образа и компонентом `k8s/components/gpu-nvidia`, который
@@ -193,7 +192,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `flow-api` | postgres | `flow-postgres.flow-data.svc.cluster.local:5432` |
 | `flow-api` | MinIO | `http://flow-s3.flow-data.svc.cluster.local:9000` |
 | `flow-api` | эмбеддер и реранкер | `http://flow-ai.flow-ai.svc.cluster.local:8081/v1` — один адрес на обе модели, различает их поле `model` в запросе |
-| `flow-api` | vision | `http://flow-vision.flow-ai.svc.cluster.local:8083/v1` |
+| `flow-api` | vision | `http://flow-ai.flow-ai.svc.cluster.local:8081/v1` — тот же адрес, что у текста |
 | браузер | client / api / auth | внешние адреса Ingress (`PUBLIC_*`) |
 
 ---
@@ -264,7 +263,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | Джоба | Имя в UI | Особенность |
 |-------|----------|-------------|
 | `image-api` / `image-client` | Образ · flow-<модуль> | `platforms: linux/amd64` явно; `cache-to: type=gha,mode=max,scope=<модуль>` — **свой scope**, иначе сборки перетирают общий кэш. Push только с `main`. Выход джобы — digest |
-| `resolve-images` | Набор образов релиза | **Самая важная джоба для консистентности.** Для каждого своего модуля берёт digest из сборки, а если джоба была пропущена — вытаскивает digest у тега прошлого релиза (`imagetools inspect`). Тем же `imagetools inspect` резолвит **шесть чужих образов** (postgres, minio, mc, llama.cpp ×2, vllm) из тегов в digest'ы. Результат — `release.json` со всеми девятью. Состояние «api новый, client неизвестно какой» становится физически невозможным, а апстрим не может подменить базовый образ БД между двумя выкатками |
+| `resolve-images` | Набор образов релиза | **Самая важная джоба для консистентности.** Для каждого своего модуля берёт digest из сборки, а если джоба была пропущена — вытаскивает digest у тега прошлого релиза (`imagetools inspect`). Тем же `imagetools inspect` резолвит **пять чужих образов** (postgres, minio, mc, llama.cpp ×2) из тегов в digest'ы. Результат — `release.json` со всеми восемью. Состояние «api новый, client неизвестно какой» становится физически невозможным, а апстрим не может подменить базовый образ БД между двумя выкатками |
 | `publish-promote` | Публикация · тег main | `imagetools create` двигает указатель без пересборки. Тег `latest` не используется нигде: в манифестах только digest, иначе `kubectl apply` не увидит изменений и rollout не произойдёт |
 | `render` | Манифесты · рендер | `kustomize edit set image ...@<digest>`, затем `kustomize build` в отдельные файлы `postgres.yaml`, `s3.yaml`, `api.yaml`, … Повторный `kubeconform`. **Единственный артефакт, который применяют деплой-джобы** — сами они ничего не рендерят, поэтому «api из одного рендера, client из другого» невозможно |
 | `ci-ok` | CI | фиксированный агрегатор, `if: always()`, падает при любом `failure`/`cancelled`. **Только он** ставится required check в branch protection. Причина не в path-фильтрах: джоба, пропущенная по `if`, репортит **Success** и мерж не держит. Причина в том, что вложенные джобы reusable workflow отображаются составными именами вида `Тесты / test-api` — эти имена меняются при любом рефакторинге, а пропущенный вызов reusable workflow не создаёт вложенных чеков вовсе. Один стабильный required check снимает весь класс проблем. Фильтров по путям на уровне `on:` быть не должно: тогда чек не создастся и PR заблокируется навсегда |
@@ -286,7 +285,6 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `app-gate` | Приложение · итог слоя | приложение | — |
 | `deploy-models-pull` | AI · веса моделей (только вручную) | ai | — |
 | `deploy-ai` | AI · текстовые модели (llama.cpp, профиль AI_BACKEND) | ai | **выключен** |
-| `deploy-vision` | AI · embeddings-vl (vLLM, GPU) | ai | **выключен** |
 | `ai-gate` | AI · итог слоя | ai | — |
 
 Существенное по отдельным джобам:
@@ -351,9 +349,6 @@ Role деплойера выдаётся на каждый отдельно. Э�
   при `cuda`, и пишет выбор в Job Summary — иначе «почему оно на процессоре» выясняется по косвенным
   признакам. При `cuda` перед `apply` идёт проверка `allocatable.nvidia\.com/gpu`: если ресурса нет (не
   поставлен device plugin), джоба падает сразу с внятным текстом, а не оставляет под вечно `Pending`.
-- **`deploy-vision`** — та же проверка карты, и здесь она безусловна: визуальная модель единственная,
-  которой карта нужна по существу. Вместе с `AI_BACKEND=cuda` включать нельзя, пока на ноде нет
-  time-slicing: `nvidia.com/gpu` неделим, и второй под навсегда останется в `Pending`.
 - **`deploy-models-pull`** — построчный порт `download()` из `docker/data/pull-models.sh` в Job кластера,
   включая приём с `.part` (оборванная закачка не должна выглядеть готовой моделью) **плюс сверка sha256**,
   которой в скрипте нет, и проверка свободного места на PVC до начала закачки. Запускается только при
@@ -486,7 +481,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `EMBEDDINGS_QUERY_ENDPOINT` | `http://flow-ai.flow-ai.svc.cluster.local:8081/v1` | `Search__Embeddings__QueryEndpoint`. Повтор `flow-ai.flow-ai` не опечатка: сервис и namespace |
 | `EMBEDDINGS_INDEXING_ENDPOINT` | пусто | пусто = тот же адрес, что для запросов |
 | `RERANK_ENDPOINT` | `http://flow-ai.flow-ai.svc.cluster.local:8081/v1` | `Search__Rerank__Endpoint`. Адрес **тот же**, что у эмбеддера: обе модели держит один llama-server, а различает их поле `model` |
-| `VISION_ENDPOINT` | `http://flow-vision.flow-ai.svc.cluster.local:8083/v1` | `Search__Embeddings__Vision__Endpoint`. В compose сервис называется `embeddings-vl`, в кластере — `flow-vision` |
+| `VISION_ENDPOINT` | `http://flow-ai.flow-ai.svc.cluster.local:8081/v1` | `Search__Embeddings__Vision__Endpoint`. Адрес **тот же**, что у эмбеддера и реранкера: визуальная модель — третья секция пресета одного `llama-server`, а не отдельный сервис |
 
 **TLS-зависимые** — без них первый запуск за ingress без TLS гарантированно не заработает:
 
@@ -522,17 +517,16 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `BOOTSTRAP_FIRST_NAME`, `BOOTSTRAP_LAST_NAME` | `Admin`, `Flow` | тот же общий ConfigMap; забыть их — тихо получить владельца «Admin Flow» навсегда |
 | `SEARCH_ENABLED`, `SEARCH_INDEXING_ENABLED` | `true`, `true` | выключатели поиска и фонового индексатора |
 | `RERANK_ENABLED` | `false` | вторая ступень выдачи. Отдельного пода у неё больше нет: модель живёт в сервисе `ai` и грузится по первому обращению, то есть при `false` не занимает памяти. Карта ей не обязательна |
-| `VISION_ENABLED` | `false` | гейт GPU-джобы визуального поиска — единственной части ИИ, которой карта нужна по существу |
 | `AI_BACKEND` | `cpu` | профиль железа текстового ИИ: `cpu` или `cuda`. Выбирает, какой из двух оверлеев выкатывает `deploy-ai`. Других значений пока нет. Профиль `cuda` отличается не только образом: он ставит измеренные размеры буферов (`ctx-size` 2048, `batch-size` и `ubatch-size` 512) вместо процессорных 8192 — на карте с 4 ГБ процессорные значения требуют 4932 МиБ только под вычислительный буфер и роняют сервер с `cudaMalloc failed: out of memory` |
 | `AI_CPU_LIMIT` | `8` | сколько ядер отдать моделям. Уезжает в `limits.cpu` модуля `ai` и оттуда же через Downward API в `--threads`, поэтому разъехаться им негде и отдельной переменной для потоков нет. **Ниже четырёх ставить нельзя**: замер на боевых чанках (1536 символов = `ChunkTokens` 512 × `CharsPerToken` 3) дал при четырёх ядрах батч индексации 60.9 с при таймауте клиента 60 с — это отказ с повторами и растущей очередью, а не «медленно». На шестнадцати ядрах тот же батч — 33.2 с. При `AI_BACKEND=cuda` эта переменная перестаёт быть узким местом: тот же батч на GTX 1650 SUPER занимает 5.7 с, и ядра нужны только под реранкер, который на карту почти не выгружается |
 | `AI_IMAGE`, `AI_IMAGE_CUDA` | — | **в кластере не читаются вовсе**, это переменные локального стенда: вариант образа здесь выбирает `AI_BACKEND` через оверлей. Разными их держат намеренно — одна общая переменная позволила бы прибить CPU-сборку и одновременно зарезервировать карту, а такой перекос не заметят ни Docker, ни llama.cpp |
-| `VISION_IMAGE` | `ghcr.io/ggml-org/llama.cpp:server`, `vllm/vllm-openai:v0.10.1` | `AI_IMAGE` читает только локальный стенд: в кластере вариант образа задаёт `AI_BACKEND` через оверлей. **Тег vLLM зафиксировать обязательно**: дефолт в compose — `latest` |
 | `EMBEDDINGS_MODEL`, `EMBEDDINGS_MODEL_FILE`, `EMBEDDINGS_MODEL_URL` | `Qwen3-Embedding-0.6B`, `…-Q8_0.gguf`, ссылка | имя файла обязано совпадать со скачанным, иначе llama-server не стартует |
 | `RERANKER_MODEL`, `RERANKER_MODEL_FILE`, `RERANKER_MODEL_URL` | `bge-reranker-v2-m3`, `…-Q8_0.gguf`, ссылка | именно bge-reranker: Qwen3-Reranker — causal LM без классификационной головы |
 | `EMBEDDINGS_MODEL_SHA256`, `RERANKER_MODEL_SHA256` | хэш из карточки модели на HuggingFace | эталон для сверки в Job закачки. Без них проверка целостности невыполнима: приём с `.part` ловит только обрыв, но не подмену и не битый файл. Ссылки вида `/resolve/main/…` указывают на **изменяемую** ревизию — в URL лучше пинить revision-SHA |
-| `VISION_MODEL_REPO` | `Qwen/Qwen3-VL-Embedding-2B` | что vLLM качает с HuggingFace (`--model`) |
-| `VISION_MODEL` | `Qwen3-VL-Embedding-2B` | `--served-model-name` у vLLM и одновременно `Search__Embeddings__Vision__Model` у Api — **обязано совпадать в обоих местах** |
-| `VISION_MAX_LEN`, `VISION_GPU_FRACTION` | `8192`, `0.35` | `VISION_GPU_FRACTION` критичен, если карту с vLLM делит ещё и профиль `AI_BACKEND=cuda`: time-slicing решает планирование, но **не изолирует VRAM** — сумма долей обязана физически влезать. Переменной `RERANKER_GPU_LAYERS` больше нет: у llama.cpp `--gpu-layers` по умолчанию `auto`, сервер раскладывает слои сам, а на машине без карты печатает предупреждение и продолжает — одна и та же конфигурация корректна в обоих профилях |
+| `VISION_MODEL_FILE`, `VISION_MODEL_URL`, `VISION_MODEL_SHA256` | `Qwen3-VL-Embedding-2B.Q4_K_M.gguf` | веса визуальной модели. Имя файла обязано совпадать с секцией в `models.ini` (проверяет `check-ai-preset.py`) и вдобавок входит в `ModelVersion` визуальной половины: смена квантизации сама запускает переиндексацию картинок |
+| `VISION_MMPROJ_FILE`, `VISION_MMPROJ_URL`, `VISION_MMPROJ_SHA256` | `Qwen3-VL-Embedding-2B.mmproj-Q8_0.gguf` | веса проектора — той части модели, что превращает пиксели в токены. Без него сервер поднимет только текстовую половину, и запрос с картинкой упадёт с `Failed to tokenize prompt` |
+| `VISION_MODEL` | `Qwen3-VL-Embedding-2B` | имя секции в `models.ini` и одновременно `Search__Embeddings__Vision__Model` у Api — **обязано совпадать в обоих местах**: по нему роутер выбирает процесс модели |
+| `VISION_ENABLED` | `false` | визуальный поиск и одновременно гейт закачки: при `false` Job не тянет полтора гигабайта весов, а модель не грузится вовсе. Прежнего запрета «вместе с `AI_BACKEND=cuda` включать нельзя» больше нет — карту не делят два пода, все три модели живут в одном и помещаются в 4 ГБ. Переменной `RERANKER_GPU_LAYERS` тоже нет: у llama.cpp `--gpu-layers` по умолчанию `auto` |
 | `BACKUP_CRON`, `BACKUP_TZ`, `BACKUP_KEEP` | `0 3 * * *`, `Europe/Moscow`, `7` | `BACKUP_CRON` становится полем `schedule`; без `timeZone` расписание считается в UTC |
 
 **Размерность вектора переменной не является.** `Search:Embeddings:Dimensions = 512` в `appsettings.json` и
@@ -726,7 +720,7 @@ hosted service внутри `WebApplicationBuilder.Build()`, то есть **п�
    восстанавливали, бэкапом не является. Нужна отдельная процедура и раз в месяц — прогон на временном PVC.
 3. **Куда физически ложатся бэкапы.** Сейчас на тот же единственный worker: умер диск — умерли данные и
    бэкапы одновременно. Нужен внешний сток и шифрование дампа.
-4. **Давление на диск.** На одной ноде живут образы (vLLM — единицы ГБ), HF-кэш (~4 ГБ), два GGUF, PGDATA с WAL,
+4. **Давление на диск.** На одной ноде живут образы (CUDA-образ llama.cpp — 2.6 ГБ), четыре GGUF (~3 ГБ), PGDATA с WAL,
    бакет MinIO и бэкапы. `DiskPressure` и eviction — самый частый способ уронить домашний кластер.
 5. **Мониторинг между релизами** — см. сторож в §6.
 6. **Сроки жизни.** Сертификаты kubeadm живут год; classic PAT истекает; самоподписанные PFX Flow.Auth — два
@@ -743,7 +737,7 @@ hosted service внутри `WebApplicationBuilder.Build()`, то есть **п�
     без истории. Половина будущих инцидентов будет «код не менялся, а сломалось». Дешёвое лечение: артефакт
     `vars-<sha>.json` (секреты — только именами) и diff против предыдущего прогона.
 12. **Сетевые политики.** По умолчанию поды ходят куда угодно, включая домашний LAN. Нужен default-deny с
-    точечными разрешениями — но с оговоркой, что Job закачки весов и vLLM штатно ходят в интернет.
+    точечными разрешениями — но с оговоркой, что Job закачки весов штатно ходит в интернет.
 
 ---
 

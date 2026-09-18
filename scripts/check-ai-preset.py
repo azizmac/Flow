@@ -5,12 +5,16 @@
 router-режим и в каком режиме работает каждая. Он связан с тремя другими местами, и все три связи
 рвутся молча:
 
-  1. Имя секции = значение EMBEDDINGS_MODEL / RERANKER_MODEL. Именно его .NET кладёт в поле "model"
+  1. Имя секции = значение EMBEDDINGS_MODEL / RERANKER_MODEL / VISION_MODEL. Именно его .NET кладёт в "model"
      каждого запроса, и по нему роутер выбирает процесс. Разъехались — поиск отвечает ошибкой
      про неизвестную модель, а выглядит это как «сломался эмбеддер».
-  2. Путь в ключе model = /models/<файл> = EMBEDDINGS_MODEL_FILE / RERANKER_MODEL_FILE. По этим
-     переменным качают веса pull-models.sh и Job закачки; сам сервер их больше не видит. Разъехались —
-     сервер ищет файл, которого никто не скачал, и падает на старте.
+  2. Путь в ключе model = /models/<файл> = EMBEDDINGS_MODEL_FILE / RERANKER_MODEL_FILE /
+     VISION_MODEL_FILE. По этим переменным качают веса pull-models.sh и Job закачки; сам сервер их
+     больше не видит. Разъехались — сервер ищет файл, которого никто не скачал, и падает на старте.
+     У визуальной модели имя файла вдобавок входит в ModelVersion, то есть управляет переиндексацией.
+  2a. У визуальной модели обязателен ключ mmproj = /models/<VISION_MMPROJ_FILE>. Без проектора
+     сервер поднимет только текстовую половину модели: запросы с картинкой будут падать с «Failed to
+     tokenize prompt», а в /props не окажется ни media_marker, ни modalities.vision.
   3. Режимы (embedding, reranking, pooling) обязаны быть ПЕР-МОДЕЛЬНЫМИ. Глобальная секция [*]
      с любым из них форсит pooling_type на все модели сразу: эмбеддер начинает отдавать нули, ошибок
      в логе нет, поиск тихо выдаёт мусор (llama.cpp#21256, закрыт как not planned).
@@ -42,7 +46,15 @@ MODE_KEYS = {"embedding", "embeddings", "reranking", "rerank", "pooling"}
 SIZE_KEYS = {"ctx-size", "batch-size", "ubatch-size"}
 
 # Пары «переменная имени модели, переменная имени файла».
-PAIRS = [("EMBEDDINGS_MODEL", "EMBEDDINGS_MODEL_FILE"), ("RERANKER_MODEL", "RERANKER_MODEL_FILE")]
+PAIRS = [
+    ("EMBEDDINGS_MODEL", "EMBEDDINGS_MODEL_FILE"),
+    ("RERANKER_MODEL", "RERANKER_MODEL_FILE"),
+    ("VISION_MODEL", "VISION_MODEL_FILE"),
+]
+
+# Модель с проектором: имя переменной с весами проектора и ключ пресета, в котором они обязаны стоять.
+VISION_MODEL_VAR = "VISION_MODEL"
+VISION_MMPROJ_VAR = "VISION_MMPROJ_FILE"
 
 SECTION = re.compile(r"^\s*\[(?P<name>[^\]]+)\]\s*$")
 ENTRY = re.compile(r"^\s*(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)\s*=\s*(?P<value>.*?)\s*$")
@@ -145,6 +157,23 @@ def main() -> int:
                     f"разойдутся, и сервер не найдёт файл", str(PRESET))
             failed = True
 
+    # 2a. Визуальной модели нужен проектор: без mmproj картинку принять нечем.
+    vision = env.get(VISION_MODEL_VAR, "")
+    mmproj_file = env.get(VISION_MMPROJ_VAR, "")
+    if vision and vision in model_sections:
+        expected = f"/models/{mmproj_file}" if mmproj_file else ""
+        actual = model_sections[vision].get("mmproj", "")
+        if not mmproj_file:
+            problem(f"в .env.example нет {VISION_MMPROJ_VAR} — веса проектора никто не скачает, "
+                    f"а без них визуальная модель принимает только текст", str(ENV_EXAMPLE))
+            failed = True
+        elif actual != expected:
+            problem(f"в секции [{vision}] ключ mmproj — «{actual or '— его нет вовсе'}», а "
+                    f"{VISION_MMPROJ_VAR}={mmproj_file} даёт «{expected}». Без совпадения сервер "
+                    f"поднимет только текстовую половину модели: запросы с картинкой будут падать "
+                    f"с «Failed to tokenize prompt»", str(PRESET))
+            failed = True
+
     # 3. Лишняя секция — это модель, которую никто не позовёт: лимит --models-max и память она займёт,
     #    а запросов к ней не будет, потому что имя не совпадает ни с одной настройкой приложения.
     for extra in sorted(set(model_sections) - used):
@@ -156,8 +185,8 @@ def main() -> int:
     if failed:
         return 1
 
-    print(f"пресет сошёлся: {len(used)} модели, режимы пер-модельные, пути к весам совпадают "
-          f"с переменными закачки")
+    print(f"пресет сошёлся: {len(used)} модели, режимы пер-модельные, пути к весам и проектору "
+          f"совпадают с переменными закачки")
     return 0
 
 

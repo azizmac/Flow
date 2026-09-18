@@ -136,7 +136,7 @@ the request, loading a model only when something asks for it. Which models it se
 |---|---|---|---|
 | `Qwen3-Embedding-0.6B` (llama.cpp) | search by meaning rather than by substring | `ai`, port 8081 | CPU is enough |
 | `bge-reranker-v2-m3` (llama.cpp) | the second ranking stage, the "Точнее" toggle | `ai`, port 8081 | CPU is enough |
-| `Qwen3-VL-Embedding-2B` (vLLM) | search over images and scans, no OCR | `embeddings-vl`, port 8083 | needs an NVIDIA GPU |
+| `Qwen3-VL-Embedding-2B` (llama.cpp, GGUF + mmproj) | search over images and scans, no OCR | `ai`, port 8081 — same router as the text models | off by default: 1.5 GB of extra weights |
 
 With an NVIDIA card, add the hardware overlay so the text service uses the CUDA build of the same image:
 `docker compose -f docker-compose.data.yml -f docker/ai/nvidia.yml --profile ai up -d`.
@@ -161,9 +161,10 @@ powershell -ExecutionPolicy Bypass -File docker/data/pull-models.ps1
 
 Weights are the only thing that does not ship with the images: `pull-models.sh` puts two GGUF files into
 the `flow-models-data` volume (names must match `EMBEDDINGS_MODEL_FILE` and `RERANKER_MODEL_FILE`), skips
-what is already there and re-downloads with `--force`. The third model needs no download: vLLM pulls
-`Qwen/Qwen3-VL-Embedding-2B` itself on first start into `/models/hf` — another 4 GB or so, and a few
-minutes before the first answer. `MODELS_ROOT` picks the volume location: weights usually live away from
+what is already there and re-downloads with `--force`. The visual model is not part of the default set —
+it is only needed with `VISION_ENABLED=true`, and it is another 1.5 GB: `pull-models.sh vision` puts its
+weights next to the others, plus the separate projector weights (`mmproj`) without which the model accepts
+text only. `MODELS_ROOT` picks the volume location: weights usually live away from
 the data, since they are not backed up and get reused between installations.
 
 Flags belong in `.env`, not in a command prefix: a prefix lasts for one run, and `docker compose up -d`
@@ -196,11 +197,11 @@ slower than the rest — the model is warming up.
 The visual half puts the frame and the query text into one space, so a screenshot is found by a
 description of what is on it, without OCR. An image gets a second chunk under its own model version, and a
 query searches both halves at once. Scans go there too: a PDF with no extractable text is indexed page by
-page (the first three by default). The model is served by vLLM rather than llama.cpp, and the reason is narrower
-than it looks: llama.cpp does push an image through the projector on its embeddings endpoint, but only
-in its own request shape, not in the OpenAI-style one this project sends, and it has no dedicated support
-for `Qwen3-VL-Embedding` either. Under Docker Desktop the service needs `VLLM_WSL2_ENABLE_PIN_MEMORY=1`,
-already set in compose.
+page (the first three by default). The visual model lives in the same `ai` service as the text ones — a third
+preset section with an `mmproj` key — and answers on the same port: the `llama-server` router tells models
+apart by the `model` field in the request body. The request shape for images is its own, not OpenAI-style:
+a media marker holds the frame's place in the prompt, and the server hands that marker out at `/props`,
+regenerating it on every model start.
 
 After that the index fills itself: every edit of a task, comment, project or person is queued in the same
 transaction as the edit, and a background worker computes the vectors. Endpoints:

@@ -4,15 +4,18 @@
 #
 #   sh docker/data/pull-models.sh                # эмбеддер и реранкер
 #   sh docker/data/pull-models.sh embeddings     # только эмбеддер (машина без видеокарты)
+#   sh docker/data/pull-models.sh vision         # визуальная модель и её проектор
+#   sh docker/data/pull-models.sh all+vision     # все три модели
 #   sh docker/data/pull-models.sh --force        # перекачать, затерев скачанное
 #
-# Визуальную модель качать не нужно: vLLM тянет Qwen/Qwen3-VL-Embedding-2B сам при первом старте
-# в /models/hf (около 4 ГБ), репозиторий не закрытый и токен HF не требуется.
+# Визуальная модель в набор «all» не входит намеренно: это полтора гигабайта сверху, и нужны они
+# только при VISION_ENABLED=true. Отдельного сервиса у неё больше нет — она третья секция того же
+# пресета llama-server, поэтому и веса лежат рядом с остальными, а не в кэше HuggingFace.
 #
 # Качает контейнером, а не хостовым curl: на новой машине из инструментов гарантирован только Docker,
 # и тот же способ работает одинаково в Linux, WSL и Git Bash. Имена файлов должны совпадать с
-# EMBEDDINGS_MODEL_FILE и RERANKER_MODEL_FILE из .env — меняете файл, задайте и ссылку
-# (EMBEDDINGS_MODEL_URL / RERANKER_MODEL_URL).
+# EMBEDDINGS_MODEL_FILE, RERANKER_MODEL_FILE, VISION_MODEL_FILE и VISION_MMPROJ_FILE из .env —
+# меняете файл, задайте и ссылку (…_URL).
 set -eu
 
 VOLUME=${MODELS_VOLUME:-flow-models-data}
@@ -28,15 +31,23 @@ EMBEDDINGS_MODEL_URL=${EMBEDDINGS_MODEL_URL:-https://huggingface.co/Qwen/Qwen3-E
 RERANKER_MODEL_FILE=${RERANKER_MODEL_FILE:-bge-reranker-v2-m3-Q8_0.gguf}
 RERANKER_MODEL_URL=${RERANKER_MODEL_URL:-https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF/resolve/main/bge-reranker-v2-m3-Q8_0.gguf}
 
+# Визуальная модель и отдельно веса её проектора: mmproj — это та часть, что превращает пиксели
+# в токены, и без неё модель принимает только текст. Квантизация Q4_K_M выбрана по замеру на карте
+# с 4 ГБ: с ней рядом помещаются обе текстовые модели, с Q8_0 (1.8 ГБ вместо 1.1) — уже нет.
+VISION_MODEL_FILE=${VISION_MODEL_FILE:-Qwen3-VL-Embedding-2B.Q4_K_M.gguf}
+VISION_MODEL_URL=${VISION_MODEL_URL:-https://huggingface.co/mradermacher/Qwen3-VL-Embedding-2B-GGUF/resolve/main/Qwen3-VL-Embedding-2B.Q4_K_M.gguf}
+VISION_MMPROJ_FILE=${VISION_MMPROJ_FILE:-Qwen3-VL-Embedding-2B.mmproj-Q8_0.gguf}
+VISION_MMPROJ_URL=${VISION_MMPROJ_URL:-https://huggingface.co/mradermacher/Qwen3-VL-Embedding-2B-GGUF/resolve/main/Qwen3-VL-Embedding-2B.mmproj-Q8_0.gguf}
+
 what=all
 force=0
 
 for argument in "$@"; do
     case "$argument" in
-        all|embeddings|reranker) what=$argument ;;
+        all|all+vision|embeddings|reranker|vision) what=$argument ;;
         --force|-f) force=1 ;;
         -h|--help)
-            sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
@@ -80,12 +91,19 @@ size_of() {
 }
 
 case "$what" in
-    all)
+    all|all+vision)
         download "$EMBEDDINGS_MODEL_FILE" "$EMBEDDINGS_MODEL_URL"
         download "$RERANKER_MODEL_FILE" "$RERANKER_MODEL_URL"
         ;;
     embeddings) download "$EMBEDDINGS_MODEL_FILE" "$EMBEDDINGS_MODEL_URL" ;;
     reranker) download "$RERANKER_MODEL_FILE" "$RERANKER_MODEL_URL" ;;
+esac
+
+case "$what" in
+    vision|all+vision)
+        download "$VISION_MODEL_FILE" "$VISION_MODEL_URL"
+        download "$VISION_MMPROJ_FILE" "$VISION_MMPROJ_URL"
+        ;;
 esac
 
 echo

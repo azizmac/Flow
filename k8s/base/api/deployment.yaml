@@ -251,13 +251,21 @@ spec:
                 configMapKeyRef:
                   name: flow-config
                   key: VISION_ENDPOINT
-            # У vLLM это --served-model-name, и совпадение обязательно в обоих местах: иначе запрос уйдёт
-            # с именем модели, которой сервер не знает.
+            # Имя секции в models.ini: по нему роутер выбирает процесс модели. Совпадение обязательно
+            # в обоих местах, иначе запрос уйдёт с именем модели, которой сервер не знает.
             - name: Search__Embeddings__Vision__Model
               valueFrom:
                 configMapKeyRef:
                   name: flow-config
                   key: VISION_MODEL
+            # Имя файла весов приложению нужно ровно для одного: оно входит в ModelVersion визуальной
+            # половины. Имя модели в роутере переживает смену квантизации, а вектор — нет, поэтому без
+            # этого ключа старые картинки остались бы в индексе рядом с новыми и молча портили выдачу.
+            - name: Search__Embeddings__Vision__ModelFile
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: VISION_MODEL_FILE
 
             # ---- Первичный владелец ----
             # Тот же Bootstrap__Id, что у Flow.Auth: там создаётся учётная запись, здесь — профиль с этим Id.

@@ -2,13 +2,16 @@
 #
 #   powershell -ExecutionPolicy Bypass -File docker/data/pull-models.ps1
 #   powershell -ExecutionPolicy Bypass -File docker/data/pull-models.ps1 -What embeddings
+#   powershell -ExecutionPolicy Bypass -File docker/data/pull-models.ps1 -What vision
+#   powershell -ExecutionPolicy Bypass -File docker/data/pull-models.ps1 -What all+vision
 #   powershell -ExecutionPolicy Bypass -File docker/data/pull-models.ps1 -Force
 #
-# Визуальную модель качать не нужно: vLLM тянет Qwen/Qwen3-VL-Embedding-2B сам при первом старте
-# в /models/hf (около 4 ГБ). Имена файлов должны совпадать с EMBEDDINGS_MODEL_FILE и
-# RERANKER_MODEL_FILE из .env.
+# Визуальная модель в набор all не входит: это полтора гигабайта сверху, и нужны они только при
+# VISION_ENABLED=true. Файлов у неё два — веса и отдельно проектор (mmproj), без которого модель
+# принимает только текст. Имена файлов должны совпадать с EMBEDDINGS_MODEL_FILE, RERANKER_MODEL_FILE,
+# VISION_MODEL_FILE и VISION_MMPROJ_FILE из .env.
 param(
-    [ValidateSet("all", "embeddings", "reranker")]
+    [ValidateSet("all", "all+vision", "embeddings", "reranker", "vision")]
     [string]$What = "all",
     [switch]$Force
 )
@@ -28,6 +31,16 @@ $models = @{
     reranker   = @{
         File = if ($env:RERANKER_MODEL_FILE) { $env:RERANKER_MODEL_FILE } else { "bge-reranker-v2-m3-Q8_0.gguf" }
         Url  = if ($env:RERANKER_MODEL_URL) { $env:RERANKER_MODEL_URL } else { "https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF/resolve/main/bge-reranker-v2-m3-Q8_0.gguf" }
+    }
+    # Квантизация Q4_K_M по замеру на карте с 4 ГБ: рядом с ней помещаются обе текстовые модели.
+    vision     = @{
+        File = if ($env:VISION_MODEL_FILE) { $env:VISION_MODEL_FILE } else { "Qwen3-VL-Embedding-2B.Q4_K_M.gguf" }
+        Url  = if ($env:VISION_MODEL_URL) { $env:VISION_MODEL_URL } else { "https://huggingface.co/mradermacher/Qwen3-VL-Embedding-2B-GGUF/resolve/main/Qwen3-VL-Embedding-2B.Q4_K_M.gguf" }
+    }
+    # Проектор: та часть модели, что превращает пиксели в токены. Отдельным файлом, отдельной строкой.
+    mmproj     = @{
+        File = if ($env:VISION_MMPROJ_FILE) { $env:VISION_MMPROJ_FILE } else { "Qwen3-VL-Embedding-2B.mmproj-Q8_0.gguf" }
+        Url  = if ($env:VISION_MMPROJ_URL) { $env:VISION_MMPROJ_URL } else { "https://huggingface.co/mradermacher/Qwen3-VL-Embedding-2B-GGUF/resolve/main/Qwen3-VL-Embedding-2B.mmproj-Q8_0.gguf" }
     }
 }
 
@@ -69,7 +82,13 @@ function Get-Model($file, $url) {
 }
 
 foreach ($name in @("embeddings", "reranker")) {
-    if ($What -eq "all" -or $What -eq $name) {
+    if ($What -eq "all" -or $What -eq "all+vision" -or $What -eq $name) {
+        Get-Model $models[$name].File $models[$name].Url
+    }
+}
+
+if ($What -eq "vision" -or $What -eq "all+vision") {
+    foreach ($name in @("vision", "mmproj")) {
         Get-Model $models[$name].File $models[$name].Url
     }
 }
