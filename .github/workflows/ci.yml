@@ -624,7 +624,17 @@ jobs:
   render:
     name: Манифесты · рендер
     needs: [changes, resolve-images]
-    if: needs.resolve-images.result == 'success'
+    # !cancelled() тут не «на всякий случай», а обязательное условие работоспособности выкатки.
+    # Пропуск в GitHub Actions заразен: он передаётся по ВСЕЙ цепочке needs, а не только прямым
+    # потомкам. Джоба образа пропускается штатно — когда её модуль не менялся, — и этим пропуском
+    # раньше гасились рендер и все девять джоб выкатки, причём прогон оставался зелёным: изменения
+    # уезжали в реестр и не доезжали до кластера. Условие, содержащее !cancelled(), перестаёт быть
+    # «успех-только» и разрывает эту передачу; фактические результаты нужных джоб проверяются явно
+    # строками ниже. Ровно тот же приём уже стоит у resolve-images — здесь он был забыт.
+    if: >-
+      !cancelled()
+      && needs.changes.result == 'success'
+      && needs.resolve-images.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -779,8 +789,11 @@ jobs:
   deploy-platform:
     name: Выкатка · платформа (config + secrets)
     needs: render
+    # !cancelled() — см. пояснение у джобы render: пропуск передаётся по всей цепочке needs, поэтому
+    # каждое звено обязано перестать быть «успех-только» и проверять результат предшественника явно.
     if: >-
-      needs.render.result == 'success'
+      !cancelled()
+      && needs.render.result == 'success'
       && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
     runs-on: [self-hosted, flow]
     timeout-minutes: 10
@@ -875,8 +888,11 @@ jobs:
   deploy-storage:
     name: Выкатка · тома (PVC)
     needs: render
+    # !cancelled() — см. пояснение у джобы render: пропуск передаётся по всей цепочке needs, поэтому
+    # каждое звено обязано перестать быть «успех-только» и проверять результат предшественника явно.
     if: >-
-      needs.render.result == 'success'
+      !cancelled()
+      && needs.render.result == 'success'
       && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
     runs-on: [self-hosted, flow]
     timeout-minutes: 10
@@ -908,6 +924,12 @@ jobs:
   deploy-postgres:
     name: Выкатка · PostgreSQL
     needs: [deploy-platform, deploy-storage]
+    # !cancelled() — см. пояснение у джобы render. Проверка результатов предшественников
+    # здесь обязана быть явной: без неё джоба поехала бы и после их падения.
+    if: >-
+      !cancelled()
+      && needs.deploy-platform.result == 'success'
+      && needs.deploy-storage.result == 'success'
     runs-on: [self-hosted, flow]
     timeout-minutes: 15
     steps:
@@ -927,6 +949,12 @@ jobs:
   deploy-s3:
     name: Выкатка · MinIO
     needs: [deploy-platform, deploy-storage]
+    # !cancelled() — см. пояснение у джобы render. Проверка результатов предшественников
+    # здесь обязана быть явной: без неё джоба поехала бы и после их падения.
+    if: >-
+      !cancelled()
+      && needs.deploy-platform.result == 'success'
+      && needs.deploy-storage.result == 'success'
     runs-on: [self-hosted, flow]
     timeout-minutes: 15
     steps:
@@ -966,6 +994,12 @@ jobs:
   deploy-api:
     name: Выкатка · Flow.Api
     needs: [deploy-postgres, deploy-s3]
+    # !cancelled() — см. пояснение у джобы render. Проверка результатов предшественников
+    # здесь обязана быть явной: без неё джоба поехала бы и после их падения.
+    if: >-
+      !cancelled()
+      && needs.deploy-postgres.result == 'success'
+      && needs.deploy-s3.result == 'success'
     runs-on: [self-hosted, flow]
     timeout-minutes: 20
     steps:
@@ -986,6 +1020,11 @@ jobs:
   deploy-client:
     name: Выкатка · Flow.Client
     needs: deploy-api
+    # !cancelled() — см. пояснение у джобы render. Проверка результатов предшественников
+    # здесь обязана быть явной: без неё джоба поехала бы и после их падения.
+    if: >-
+      !cancelled()
+      && needs.deploy-api.result == 'success'
     runs-on: [self-hosted, flow]
     timeout-minutes: 15
     steps:
@@ -1005,6 +1044,12 @@ jobs:
   deploy-ingress:
     name: Выкатка · Ingress
     needs: [deploy-api, deploy-client]
+    # !cancelled() — см. пояснение у джобы render. Проверка результатов предшественников
+    # здесь обязана быть явной: без неё джоба поехала бы и после их падения.
+    if: >-
+      !cancelled()
+      && needs.deploy-api.result == 'success'
+      && needs.deploy-client.result == 'success'
     runs-on: [self-hosted, flow]
     timeout-minutes: 10
     steps:
@@ -1027,7 +1072,13 @@ jobs:
   deploy-models-pull:
     name: Выкатка · закачка весов (вручную)
     needs: [deploy-platform, deploy-storage]
-    if: github.event_name == 'workflow_dispatch' && inputs.pull_models
+    # !cancelled() — см. пояснение у джобы render.
+    if: >-
+      !cancelled()
+      && needs.deploy-platform.result == 'success'
+      && needs.deploy-storage.result == 'success'
+      && github.event_name == 'workflow_dispatch'
+      && inputs.pull_models
     runs-on: [self-hosted, flow]
     timeout-minutes: 120
     steps:
@@ -1052,7 +1103,13 @@ jobs:
   deploy-ai:
     name: Выкатка · AI-слой (вручную)
     needs: [deploy-platform, deploy-storage]
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy_ai
+    # !cancelled() — см. пояснение у джобы render.
+    if: >-
+      !cancelled()
+      && needs.deploy-platform.result == 'success'
+      && needs.deploy-storage.result == 'success'
+      && github.event_name == 'workflow_dispatch'
+      && inputs.deploy_ai
     runs-on: [self-hosted, flow]
     timeout-minutes: 20
     steps:
