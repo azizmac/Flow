@@ -45,6 +45,7 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();
         services.AddScoped<ITaskActivityRepository, TaskActivityRepository>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
+        services.AddScoped<ICodeRepositoryRepository, CodeRepositoryRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         AddAttachments(services, configuration);

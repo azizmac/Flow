@@ -7,10 +7,17 @@ namespace Flow.Infrastructure.Persistence.Repositories;
 public sealed class BoardRepository(FlowDbContext db) : IBoardRepository
 {
     public Task<Board?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        db.Boards.Include(b => b.Statuses).FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
+        db.Boards
+            .Include(board => board.Statuses)
+            .Include(board => board.CodeRepositories)
+            .FirstOrDefaultAsync(board => board.Id == id, cancellationToken);
 
     public async Task<IReadOnlyList<Board>> GetAllAsync(CancellationToken cancellationToken) =>
-        await db.Boards.Include(b => b.Statuses).AsNoTracking().ToListAsync(cancellationToken);
+        await db.Boards
+            .Include(board => board.Statuses)
+            .Include(board => board.CodeRepositories)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
     public Task<bool> ExistsByKeyAsync(string key, CancellationToken cancellationToken) =>
         db.Boards.AnyAsync(b => b.Key == key, cancellationToken);

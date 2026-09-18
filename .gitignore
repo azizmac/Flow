@@ -2,6 +2,7 @@ bin/
 obj/
 /packages/
 riderModule.iml
+*.sln.DotSettings.user
 /_ReSharper.Caches/
 .env
 .env.*

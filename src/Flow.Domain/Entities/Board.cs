@@ -13,6 +13,7 @@ public sealed partial class Board
 
     private readonly List<Status> _statuses = [];
     private readonly List<TaskItem> _tasks = [];
+    private readonly List<CodeRepository> _codeRepositories = [];
 
     public Guid Id { get; private set; }
 
@@ -29,6 +30,9 @@ public sealed partial class Board
     public IReadOnlyCollection<Status> Statuses => _statuses;
 
     public IReadOnlyCollection<TaskItem> Tasks => _tasks;
+
+    /// <summary>Подключённые к проекту Git-репозитории.</summary>
+    public IReadOnlyCollection<CodeRepository> CodeRepositories => _codeRepositories;
 
     private Board()
     {
