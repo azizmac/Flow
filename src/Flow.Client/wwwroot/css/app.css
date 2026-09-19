@@ -1115,7 +1115,6 @@ a.sb-me:active { transform: scale(0.98); }
 .drawer.in { transform: none; transition: transform 240ms var(--ease-drawer), width 200ms var(--ease-out); visibility: visible; }
 /* «Развернуть» — слайдер занимает всю рабочую область: описание и лента комментариев перестают
    переноситься по одному слову. Кнопка в шапке слайдера, выбор держится до перезагрузки (AppState). */
-.drawer.wide { width: 100%; }
 .drawer.closing { visibility: visible; }
 .drawer-head {
     display: flex;

@@ -16,10 +16,7 @@
             <span class="code accent">@Board.Key-@Board.NextTaskNumber</span>
             <span style="font:var(--fw-semibold) 12.5px var(--font-display);color:var(--text-tertiary);">Новая задача</span>
         </div>
-        <div style="display:flex;align-items:center;gap:4px;">
-            <DsIconButton Icon="@(Wide ? "collapse" : "expand")" Size="30" Title="@(Wide ? "Свернуть слайдер" : "Развернуть на всю ширину")" OnClick="OnToggleWide" />
-            <DsIconButton Icon="close" Size="30" Title="Закрыть (Esc)" OnClick="Close" />
-        </div>
+        <DsIconButton Icon="close" Size="30" Title="Закрыть (Esc)" OnClick="Close" />
     </div>
     <div class="drawer-body" @onkeydown="OnBodyKey">
         <input id="td-title" class="title-input" placeholder="Название задачи" value="@_title" maxlength="500"
@@ -76,8 +73,10 @@ else if (Item is not null)
             {
                 <span class="save-state ok" aria-live="polite"><Icon Name="check" Size="13" />Сохранено</span>
             }
-            <a class="icon-lnk" style="margin-right:8px;" href="@($"tasks/{Item.Id}")"><Icon Name="expand" Size="15" />На всю страницу</a>
-            <DsIconButton Icon="@(Wide ? "collapse" : "expand")" Size="30" Title="@(Wide ? "Свернуть слайдер" : "Развернуть на всю ширину")" OnClick="OnToggleWide" />
+            @* Развернуть — это и есть «открыть на всю страницу»: слайдер во всю ширину показывал ту же
+               узкую колонку, а рядом жила ссылка с тем же значком и тем же смыслом. Кнопка одна и ведёт
+               на /tasks/{id} — там раскладка страницы задачи (описание слева, мета-карточка справа). *@
+            <DsIconButton Icon="expand" Size="30" Title="На всю страницу" OnClick="OpenFullPage" />
             <RowMenu ShowOpen="false" ShowRename="CanEdit" ShowDelete="CanEdit" Size="30" Style="color:rgba(255,255,255,0.5)"
                      OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => OnDelete.InvokeAsync(Item)" />
             <DsIconButton Icon="close" Size="30" Title="Закрыть (Esc)" OnClick="Close" />
@@ -180,9 +179,6 @@ else if (Item is not null)
     [Parameter] public EventCallback<Guid?> OnBoardChanged { get; set; }
     /// <summary>null — режим создания.</summary>
     [Parameter] public TaskResponse? Item { get; set; }
-    /// <summary>Слайдер раскрыт на всю ширину: кнопка в шапке, состояние держит страница (AppState.DrawerWide).</summary>
-    [Parameter] public bool Wide { get; set; }
-    [Parameter] public EventCallback OnToggleWide { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnCreated { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnUpdated { get; set; }
@@ -284,6 +280,13 @@ else if (Item is not null)
         Board.Statuses.FirstOrDefault(s => s.IsInitial)?.Id ?? Board.Statuses.FirstOrDefault()?.Id ?? Guid.Empty;
 
     private Task Close() => OnClose.InvokeAsync();
+
+    /// <summary>«Развернуть» — переход на страницу задачи: слайдер закрывается сменой адреса.</summary>
+    private void OpenFullPage()
+    {
+        if (Item is not null)
+            Nav.NavigateTo($"tasks/{Item.Id}");
+    }
 
     private Task OnTitleActivate(KeyboardEventArgs e) =>
         e.Key is "Enter" or " " ? StartTitleEdit() : Task.CompletedTask;
