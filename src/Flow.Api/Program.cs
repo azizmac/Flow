@@ -96,8 +96,10 @@ builder.Services.AddHealthChecks()
     // должен закончиться честным 503, а не удержанием пробы до её собственного таймаута.
     .AddCheck<ReadinessHealthCheck>("ready", tags: ["ready"], timeout: TimeSpan.FromSeconds(2));
 
-// Flow.Client (Blazor WASM) хостится на другом origin (dev-сервер на :5016), поэтому браузеру нужен CORS.
-// Список origin'ов — секция "Cors:Origins" (appsettings / env Cors__Origins__0).
+// Интерфейс раздаётся этим же хостом, поэтому кросс-доменных запросов у него нет и CORS ему не нужен.
+// Политика оставлена пустой и живой только ради отката на старый образ WASM-клиента: он ходил с другого
+// origin. Список — секция "Cors:Origins" (env Cors__Origins__0); снимается вместе с ClientSeeder,
+// когда серверный рендер отработает в проде.
 const string clientCorsPolicy = "FlowClient";
 var allowedOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? [];
 builder.Services.AddCors(options => options.AddPolicy(clientCorsPolicy, policy => policy

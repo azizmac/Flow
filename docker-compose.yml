@@ -32,6 +32,9 @@ services:
     # Сервис сам дожидается БД при старте (Startup:DatabaseWaitTimeoutSeconds), иначе перезапускается.
     environment:
       <<: *bootstrap
+      # Пояс, по которому интерфейс показывает даты. При серверном рендере «локальное время» —
+      # это время процесса, а не браузера, поэтому у всех оно одно; дефолт задан в образе.
+      TZ: ${TZ:-Europe/Moscow}
       # Внешний issuer токенов и OIDC discovery — адрес backend'а, который видит браузер.
       # Api валидирует токены локально через OpenIddict и внутренний URL для discovery/JWKS не использует.
       Auth__Issuer: ${AUTH_ISSUER:-http://localhost:8080}
