@@ -964,12 +964,56 @@ jobs:
         with:
           name: manifests-${{ github.sha }}
           path: manifests
+
+      # Манифест api содержит и джобу миграций, и Deployment, но применять их одним apply нельзя:
+      # тогда под поедет параллельно с миграциями и стартует на несовместимой схеме. Поэтому файл
+      # делится по kind и применяется в два шага. Делить именно здесь, а не заводить отдельный модуль
+      # рендера: джоба обязана ехать с тем же digest образа, что и Deployment, а это гарантирует ровно
+      # общий рендер.
+      - name: Разделить манифест на джобу миграций и остальное
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import yaml
+          docs = [d for d in yaml.safe_load_all(open('manifests/api.yaml', encoding='utf-8')) if d]
+          job = [d for d in docs if d['kind'] == 'Job']
+          rest = [d for d in docs if d['kind'] != 'Job']
+          assert len(job) == 1, f'ожидалась одна джоба миграций, найдено {len(job)}'
+          yaml.safe_dump_all(job, open('manifests/api-migrate.yaml', 'w', encoding='utf-8'))
+          yaml.safe_dump_all(rest, open('manifests/api-app.yaml', 'w', encoding='utf-8'))
+          PY
+
+      # Спека Job неизменяема, поэтому повторный apply с новым образом падает на immutable field —
+      # старую джобу сносим. --ignore-not-found: на первой выкатке её просто нет.
+      - name: Миграции схемы отдельной джобой
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_DEPLOY_B64 }}
+        run: |
+          set -euo pipefail
+          export KUBECONFIG="$(mktemp)"
+          echo "$KUBECONFIG_B64" | base64 -d > "$KUBECONFIG"
+          kubectl -n flow delete job flow-api-migrate --ignore-not-found --wait=true
+          kubectl -n flow apply -f manifests/api-migrate.yaml
+          # Ждём только успеха. Провал виден по таймауту, а не отдельным условием: у kubectl wait нет
+          # «успех или провал» одной командой, а гонка двух фоновых wait'ов читается хуже, чем
+          # потерянные минуты на редком падении. Логи и describe печатаются в обоих случаях.
+          if ! kubectl -n flow wait --for=condition=complete --timeout=900s job/flow-api-migrate; then
+            kubectl -n flow logs job/flow-api-migrate --tail=100 || true
+            kubectl -n flow describe job flow-api-migrate || true
+            echo "::error title=Миграции::джоба flow-api-migrate не завершилась успехом — выкатка остановлена"
+            exit 1
+          fi
+          kubectl -n flow logs job/flow-api-migrate --tail=50 || true
+
       - uses: ./.github/actions/kube-apply
         with:
           kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
-          file: manifests/api.yaml
+          file: manifests/api-app.yaml
           namespace: flow
-          # 900с: startupProbe api до 300с (миграции) плюс скачивание образа с нуля.
+          # Миграции уже прогнала джоба выше, поэтому под стартует на готовой схеме; запас оставлен
+          # на скачивание образа с нуля и ожидание доступности БД.
           wait: deployment/flow-api
           timeout: 900s
 

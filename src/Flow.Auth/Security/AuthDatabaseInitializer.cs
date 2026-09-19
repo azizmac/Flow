@@ -20,6 +20,15 @@ public sealed class AuthDatabaseInitializer(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        // Startup:RunMigrations=false — миграции уже прогнал кто-то другой (в кластере это Job перед
+        // выкаткой, см. k8s/base/api/migrate-job.yaml). Тогда веб-хосту здесь делать нечего: он не
+        // мигрирует, не сеет и не ждёт БД — готовность проверяет проба.
+        if (!configuration.GetValue("Startup:RunMigrations", true))
+        {
+            logger.LogInformation("Startup:RunMigrations=false — миграции схемы auth пропущены.");
+            return;
+        }
+
         await using var scope = services.CreateAsyncScope();
         var provider = scope.ServiceProvider;
         var db = provider.GetRequiredService<AuthDbContext>();

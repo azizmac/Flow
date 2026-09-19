@@ -1,0 +1,126 @@
+# Миграции отдельным прогоном, перед выкаткой приложения.
+#
+# Зачем: пока миграции шли внутри веб-процесса (hosted service), Deployment обязан был быть
+# replicas: 1 + strategy: Recreate — две реплики при RollingUpdate пошли бы мигрировать одновременно.
+# Для серверного рендера это значит, что каждая выкатка рвёт все circuit'ы разом: у людей в открытых
+# вкладках всплывает «Произошла непредвиденная ошибка». С отдельной джобой схема готова ДО того, как
+# поедет новый под, и Deployment может обновляться штатно.
+#
+# Образ тот же, что у приложения — иначе миграции и код разъехались бы. Команда отличается одним
+# аргументом: `--migrate` прогоняет те же hosted-службы, что и обычный старт, и завершает процесс
+# (src/Flow.Api/Program.cs). Отдельной копии логики миграций не существует.
+#
+# Чего здесь намеренно НЕТ:
+# — томов auth-certs/auth-keys. Джоба не подписывает токены, ей нужны только схема и сидеры, поэтому
+#   Auth__UseEphemeralKeys=true: ключи в памяти, PVC не трогаются. Это важно и практически — PVC у нас
+#   ReadWriteOnce, и джоба, взявшая том, мешала бы работающему поду;
+# — воркера индексации: Search__Indexing__Enabled=false, иначе джоба успела бы начать разбирать очередь.
+#
+# Имя фиксированное, а спека Job'ы неизменяема, поэтому перед apply джобу удаляют
+# (см. .github/workflows/ci.yml, выкатка api). ttlSecondsAfterFinished убирает её за собой.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: flow-api-migrate
+  labels:
+    app.kubernetes.io/name: api-migrate
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/component: migrate
+spec:
+  # Миграции идемпотентны, но повторять их бесконечно смысла нет: если не прошли с двух попыток,
+  # выкатку надо останавливать и смотреть логи, а не крутить рестарты.
+  backoffLimit: 1
+  # Верхняя граница на всё вместе: ожидание БД (Startup:DatabaseWaitTimeoutSeconds, дефолт 60 с)
+  # плюс сами миграции. Среди них есть построение HNSW-индекса — отсюда запас.
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api-migrate
+        app.kubernetes.io/part-of: flow
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: regcred
+      automountServiceAccountToken: false
+      containers:
+        - name: migrate
+          image: flow-api:local
+          imagePullPolicy: IfNotPresent
+          args: ["--migrate"]
+          env:
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: POSTGRES_HOST
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: flow-secrets
+                  key: POSTGRES_PASSWORD
+            - name: ConnectionStrings__Postgres
+              value: "Host=$(POSTGRES_HOST);Port=5432;Database=$(POSTGRES_DB);Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"
+            # Ключи в памяти: джоба не выдаёт токены, а PVC с настоящими ключами она трогать не должна.
+            - name: Auth__UseEphemeralKeys
+              value: "true"
+            # Иначе джоба поднимет воркер и начнёт разбирать очередь индексации.
+            - name: Search__Indexing__Enabled
+              value: "false"
+            # Bootstrap-пользователь сеется здесь же: сидеры и миграции — один и тот же прогон.
+            - name: Bootstrap__Enabled
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_ENABLED
+            - name: Bootstrap__Id
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_ID
+            - name: Bootstrap__Username
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_USERNAME
+            - name: Bootstrap__Email
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_EMAIL
+            # Имя и фамилия владельца есть только у Flow.Api (в профиле), у Flow.Auth таких полей нет.
+            # optional: true — потому что у обоих значений есть осмысленный дефолт в appsettings.json
+            # («Admin Flow»), и требовать их от оператора при первом запуске не за что.
+            - name: Bootstrap__FirstName
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_FIRST_NAME
+                  optional: true
+            - name: Bootstrap__LastName
+              valueFrom:
+                configMapKeyRef:
+                  name: flow-config
+                  key: BOOTSTRAP_LAST_NAME
+                  optional: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              memory: 512Mi

@@ -16,7 +16,24 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
 
-var builder = WebApplication.CreateBuilder(args);
+// Флаг вырезается из args до создания builder'а намеренно: провайдер командной строки видит «--migrate»
+// без «=» и забирает СЛЕДУЮЩИЙ аргумент себе как значение — строка подключения, переданная после него,
+// до конфигурации не доезжала, и джоба молча шла в базу из appsettings. Поймано запуском, не рассуждением.
+var migrateOnly = args.Contains("--migrate");
+var builder = WebApplication.CreateBuilder(migrateOnly ? args.Where(a => a != "--migrate").ToArray() : args);
+
+// Режим «только миграции»: `dotnet Flow.Api.dll --migrate` прогоняет ТЕ ЖЕ hosted-службы, что и обычный
+// старт, и завершается. Именно те же — отдельной копии логики миграций не существует и разойтись ей не с чем.
+// Зачем: пока миграции шли внутри веб-процесса, деплой обязан был быть Recreate (две реплики при
+// RollingUpdate пошли бы мигрировать одновременно), а для серверного рендера это значит, что каждая
+// выкатка рвёт все circuit'ы разом. Теперь их катит Job перед выкаткой, а веб-хост стартует на готовой
+// схеме с Startup:RunMigrations=false.
+if (migrateOnly)
+{
+    // Порт эфемерный и только на loopback: Kestrel в этом режиме поднимается лишь потому, что он
+    // такая же hosted-служба, и гасится сразу. Слушать что-то наружу джобе незачем.
+    builder.WebHost.UseUrls("http://127.0.0.1:0");
+}
 
 // Порядок AddHostedService = порядок старта: хост поднимает фоновые службы строго по очереди
 // регистрации. Сначала мигрируют схемы (auth, затем public) и только потом стартует воркер
@@ -147,6 +164,15 @@ app.MapControllers();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .AddAdditionalAssemblies(typeof(MainLayout).Assembly);
+
+if (migrateOnly)
+{
+    // StartAsync поднимает hosted-службы по порядку регистрации: схема auth, затем public и профиль
+    // владельца. Исключение на этом же порядке и держится — падение любой из них валит джобу, что и нужно.
+    await app.StartAsync();
+    await app.StopAsync();
+    return;
+}
 
 app.Run();
 
