@@ -21,7 +21,7 @@ internal sealed partial class InProcessFlowApi
         int offset = 0,
         bool rerank = false,
         CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             // Внутри Guard: без сессии нужен 401, а не вылетевшее исключение посреди рендера строки поиска.
             var actor = await ActorAsync();
@@ -48,7 +48,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<IReadOnlyList<SearchResultItem>>> GetSimilarTasks(Guid taskId, int limit = 5, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
 

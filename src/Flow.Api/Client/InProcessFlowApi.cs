@@ -1,8 +1,9 @@
-using System.Net;
+﻿using System.Net;
 using System.Security.Claims;
 using Flow.Application.Exceptions;
 using Flow.Client.Services;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Components.Authorization;
 
 namespace Flow.Api.Client;
@@ -19,7 +20,7 @@ namespace Flow.Api.Client;
 /// Коды ответов повторяют контроллеры один в один (ApiExceptionFilter + их собственные catch):
 /// на Ok/NotFound/Conflict/Unauthorized/Forbidden завязаны все экраны.
 /// </summary>
-internal sealed partial class InProcessFlowApi(IMediator mediator, AuthenticationStateProvider auth) : IFlowApi
+internal sealed partial class InProcessFlowApi(IServiceScopeFactory scopes, AuthenticationStateProvider auth) : IFlowApi
 {
     /// <summary>
     /// Id текущего пользователя. sub — от токена OpenIddict (осталось для совместимости),
@@ -52,6 +53,22 @@ internal sealed partial class InProcessFlowApi(IMediator mediator, Authenticatio
     /// (ArgumentException / InvalidOperationException → 400). Без него страницы получали бы голое
     /// исключение вместо человекочитаемой ошибки в тосте.
     /// </summary>
+    /// <summary>
+    /// Один вызов — один DI-scope, как раньше был один HTTP-запрос. Без этого весь circuit делил бы
+    /// один FlowDbContext: страница задачи грузит карточку, вложения, ленту и похожие задачи
+    /// одновременно, и EF падал бы с «A second operation was started on this context instance».
+    /// По HTTP этого не было видно — там scope создавал сам конвейер, на каждый запрос свой.
+    ///
+    /// Параметр лямбды назван mediator намеренно: он перекрывает собой прежнее поле, и тела методов
+    /// в шести файлах-срезах остаются без единой правки.
+    /// </summary>
+    private Task<ApiResult<T>> Scoped<T>(Func<IMediator, Task<ApiResult<T>>> action) =>
+        Guard(async () =>
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            return await action(scope.ServiceProvider.GetRequiredService<IMediator>());
+        });
+
     private static async Task<ApiResult<T>> Guard<T>(Func<Task<ApiResult<T>>> action)
     {
         try

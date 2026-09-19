@@ -16,17 +16,17 @@ namespace Flow.Api.Client;
 internal sealed partial class InProcessFlowApi
 {
     public Task<ApiResult<IReadOnlyList<BoardResponse>>> GetBoards(CancellationToken ct = default) =>
-        Guard(async () => Ok(await mediator.Send(new BoardListQuery(), ct)));
+        Scoped(async mediator => Ok(await mediator.Send(new BoardListQuery(), ct)));
 
     public Task<ApiResult<BoardResponse>> GetBoard(Guid id, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var board = await mediator.Send(new BoardGetQuery(id), ct);
             return board is null ? NotFound<BoardResponse>() : Ok(board);
         });
 
     public Task<ApiResult<BoardResponse>> CreateBoard(CreateBoardRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
 
@@ -40,7 +40,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<BoardResponse>> RenameBoard(Guid id, RenameBoardRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
 
@@ -49,7 +49,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<bool>> DeleteBoard(Guid id, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
 

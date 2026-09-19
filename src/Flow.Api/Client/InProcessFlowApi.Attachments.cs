@@ -14,7 +14,7 @@ namespace Flow.Api.Client;
 internal sealed partial class InProcessFlowApi
 {
     public Task<ApiResult<IReadOnlyList<AttachmentResponse>>> GetAttachments(Guid taskId, CancellationToken ct = default) =>
-        Guard<IReadOnlyList<AttachmentResponse>>(async () =>
+        Scoped<IReadOnlyList<AttachmentResponse>>(async mediator =>
         {
             var attachments = await mediator.Send(new AttachmentListQuery(taskId), ct);
             return attachments is null ? NotFound<IReadOnlyList<AttachmentResponse>>() : Ok(attachments);
@@ -25,7 +25,7 @@ internal sealed partial class InProcessFlowApi
     /// те же: 409 — такой файл уже приложен, 400 — размер, тип и лимиты задачи, 403 — Reader.
     /// </summary>
     public Task<ApiResult<AttachmentResponse>> UploadAttachment(Guid taskId, IBrowserFile file, long maxBytes, CancellationToken ct = default) =>
-        Guard<AttachmentResponse>(async () =>
+        Scoped<AttachmentResponse>(async mediator =>
         {
             // Контроллер отсекал пустое тело до обращения к хендлеру — здесь ту же роль играет Size.
             if (file is null || file.Size == 0)
@@ -78,7 +78,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<bool>> DeleteAttachment(Guid id, CancellationToken ct = default) =>
-        Guard<bool>(async () =>
+        Scoped<bool>(async mediator =>
         {
             var actor = await ActorAsync();
             var deleted = await mediator.Send(new AttachmentDeleteCommand(actor, id), ct);

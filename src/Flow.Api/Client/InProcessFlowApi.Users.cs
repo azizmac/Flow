@@ -31,17 +31,17 @@ namespace Flow.Api.Client;
 internal sealed partial class InProcessFlowApi
 {
     public Task<ApiResult<IReadOnlyList<UserResponse>>> GetUsers(bool includeInactive = false, CancellationToken ct = default) =>
-        Guard(async () => Ok(await mediator.Send(new UserListQuery(includeInactive), ct)));
+        Scoped(async mediator => Ok(await mediator.Send(new UserListQuery(includeInactive), ct)));
 
     public Task<ApiResult<IReadOnlyList<UserResponse>>> SearchUsers(string query, int limit = 10, CancellationToken ct = default) =>
-        Guard(async () => Ok(await mediator.Send(new UserSearchQuery(query, limit), ct)));
+        Scoped(async mediator => Ok(await mediator.Send(new UserSearchQuery(query, limit), ct)));
 
     /// <summary>
     /// Профиля может не быть при живой учётной записи (удалён руками) — контроллер отвечал на это 401,
     /// а не 404: экраны по 401 уводят на повторный вход, и менять это вместе с транспортом нельзя.
     /// </summary>
     public Task<ApiResult<UserResponse>> GetMe(CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var me = await mediator.Send(new UserGetMeQuery(actor), ct);
@@ -52,17 +52,17 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<UserResponse>> GetUser(Guid id, CancellationToken ct = default) =>
-        Guard(async () => await mediator.Send(new UserGetQuery(id), ct) is { } user ? Ok(user) : NotFound<UserResponse>());
+        Scoped(async mediator => await mediator.Send(new UserGetQuery(id), ct) is { } user ? Ok(user) : NotFound<UserResponse>());
 
     public Task<ApiResult<UserResponse>> GetUserByUsername(string username, CancellationToken ct = default) =>
-        Guard(async () => await mediator.Send(new UserGetByUsernameQuery(username), ct) is { } user ? Ok(user) : NotFound<UserResponse>());
+        Scoped(async mediator => await mediator.Send(new UserGetByUsernameQuery(username), ct) is { } user ? Ok(user) : NotFound<UserResponse>());
 
     /// <summary>
     /// Пустой пароль контроллер отсекал до медиатора: учётную запись в Flow.Auth без начального пароля
     /// не создать, а сообщение об этом должно быть 400, а не отказом Flow.Auth где-то в глубине.
     /// </summary>
     public Task<ApiResult<UserResponse>> CreateUser(CreateUserRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             if (string.IsNullOrWhiteSpace(request.Password))
                 return Invalid<UserResponse>("Password is required.");
@@ -85,7 +85,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<UserResponse>> UpdateUserProfile(Guid id, UpdateUserProfileRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             return FromUpdate(await mediator.Send(
@@ -102,14 +102,14 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<UserResponse>> ChangeUsername(Guid id, ChangeUsernameRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             return FromUpdate(await mediator.Send(new UserChangeUsernameCommand(actor, id, request.Username), ct));
         });
 
     public Task<ApiResult<UserResponse>> ChangeEmail(Guid id, ChangeEmailRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             return FromUpdate(await mediator.Send(new UserChangeEmailCommand(actor, id, request.Email), ct));
@@ -121,7 +121,7 @@ internal sealed partial class InProcessFlowApi
     /// её Guard превращает в 400.
     /// </summary>
     public Task<ApiResult<UserResponse>> ChangeUserRole(Guid id, ChangeUserRoleRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             return FromUpdate(await mediator.Send(new UserChangeRoleCommand(actor, id, request.Role.ToDomainRole()), ct));
@@ -132,7 +132,7 @@ internal sealed partial class InProcessFlowApi
     /// Ответа с телом нет: контракт — true/false, где false означает «пользователя нет» (404 у SendNoContent).
     /// </summary>
     public Task<ApiResult<bool>> ChangePassword(Guid id, ChangePasswordRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var result = await mediator.Send(
@@ -143,14 +143,14 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<UserResponse>> SetUserLink(Guid id, UserLinkType type, SetUserLinkRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             return FromUpdate(await mediator.Send(new UserSetLinkCommand(actor, id, type, request.Url), ct));
         });
 
     public Task<ApiResult<bool>> RemoveUserLink(Guid id, UserLinkType type, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var result = await mediator.Send(new UserRemoveLinkCommand(actor, id, type), ct);
@@ -160,7 +160,7 @@ internal sealed partial class InProcessFlowApi
 
     /// <summary>Повторная деактивация — InvalidOperationException → 400; отсутствие пользователя — false, а не ошибка.</summary>
     public Task<ApiResult<bool>> DeactivateUser(Guid id, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var result = await mediator.Send(new UserDeactivateCommand(actor, id), ct);
@@ -169,7 +169,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<bool>> ActivateUser(Guid id, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var result = await mediator.Send(new UserActivateCommand(actor, id), ct);

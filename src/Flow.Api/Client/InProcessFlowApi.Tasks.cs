@@ -20,7 +20,7 @@ namespace Flow.Api.Client;
 internal sealed partial class InProcessFlowApi
 {
     public Task<ApiResult<IReadOnlyList<TaskResponse>>> GetTasks(Guid boardId, Guid? assigneeId = null, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             // GET boards/{boardId}/tasks всегда 200: несуществующая доска даёт пустой список, а не 404.
             var tasks = await mediator.Send(new TaskListQuery(boardId, assigneeId), ct);
@@ -44,7 +44,7 @@ internal sealed partial class InProcessFlowApi
         TaskSortField? sort = null,
         bool descending = false,
         CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var sortField = sort ?? TaskSortField.Created;
 
@@ -67,14 +67,14 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<TaskResponse>> GetTask(Guid id, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var task = await mediator.Send(new TaskGetQuery(id), ct);
             return task is null ? NotFound<TaskResponse>() : Ok(task);
         });
 
     public Task<ApiResult<TaskResponse>> CreateTask(Guid boardId, CreateTaskRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var response = await mediator.Send(
@@ -87,7 +87,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<TaskResponse>> UpdateTask(Guid id, UpdateTaskRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var result = await mediator.Send(
@@ -103,7 +103,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<bool>> DeleteTask(Guid id, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var deleted = await mediator.Send(new TaskDeleteCommand(actor, id), ct);
@@ -114,7 +114,7 @@ internal sealed partial class InProcessFlowApi
 
     /// <summary>UserId = null в запросе — снять исполнителя. Неизвестный или деактивированный пользователь → 400.</summary>
     public Task<ApiResult<TaskResponse>> AssignTask(Guid id, AssignTaskRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var result = await mediator.Send(new TaskAssignCommand(actor, id, request.UserId), ct);
@@ -129,7 +129,7 @@ internal sealed partial class InProcessFlowApi
 
     /// <summary>DueDate = null в запросе — снять срок.</summary>
     public Task<ApiResult<TaskResponse>> SetDueDate(Guid id, SetTaskDueDateRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var result = await mediator.Send(new TaskSetDueDateCommand(actor, id, request.DueDate), ct);

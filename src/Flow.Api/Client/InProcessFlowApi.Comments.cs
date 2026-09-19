@@ -17,7 +17,7 @@ namespace Flow.Api.Client;
 internal sealed partial class InProcessFlowApi
 {
     public Task<ApiResult<IReadOnlyList<TaskCommentResponse>>> GetComments(Guid taskId, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             // Actor не нужен: читать ленту могут все роли, запрос его и не принимает.
             var comments = await mediator.Send(new TaskCommentListQuery(taskId), ct);
@@ -25,7 +25,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<TaskCommentResponse>> AddComment(Guid taskId, CreateTaskCommentRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             // ActorAsync внутри Guard: без сессии экран должен получить 401, а не исключение в рендере.
             var actor = await ActorAsync();
@@ -36,7 +36,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<TaskCommentResponse>> UpdateComment(Guid id, UpdateTaskCommentRequest request, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var result = await mediator.Send(new TaskCommentEditCommand(actor, id, request.Body), ct);
@@ -44,7 +44,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<bool>> DeleteComment(Guid id, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var actor = await ActorAsync();
             var deleted = await mediator.Send(new TaskCommentDeleteCommand(actor, id), ct);
@@ -55,7 +55,7 @@ internal sealed partial class InProcessFlowApi
         });
 
     public Task<ApiResult<IReadOnlyList<TaskActivityResponse>>> GetActivity(Guid taskId, CancellationToken ct = default) =>
-        Guard(async () =>
+        Scoped(async mediator =>
         {
             var activity = await mediator.Send(new TaskActivityListQuery(taskId), ct);
             return activity is null ? NotFound<IReadOnlyList<TaskActivityResponse>>() : Ok(activity);
