@@ -107,6 +107,9 @@ public static class FlowAuthServiceCollectionExtensions
                 options.LoginPath = "/account/login";
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 options.SlidingExpiration = true;
+                // Деактивация и смена пароля обновляют SecurityStamp — без этой сверки он никем
+                // не проверялся, и cookie деактивированного доживала свои 8 часов. См. CookieSessionValidator.
+                options.Events.OnValidatePrincipal = CookieSessionValidator.ValidateAsync;
             });
 
         // ---- OpenIddict ----

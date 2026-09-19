@@ -25,6 +25,35 @@ public sealed class LoginTests(AuthFixture auth)
         Assert.Equal(HttpStatusCode.Redirect, r2.StatusCode);
     }
 
+    /// <summary>
+    /// Деактивация обязана гасить уже выданную cookie немедленно, а не через восемь часов.
+    /// Раньше SecurityStamp обновлялся, но никем не сверялся: деактивированный продолжал читать Flow
+    /// до истечения срока cookie, причём подзапросы страницы сами же его и продлевали.
+    /// </summary>
+    [Fact]
+    public async Task Deactivated_Account_Should_Lose_Session_Immediately()
+    {
+        var account = await auth.CreateAccountAsync("revoke-user");
+
+        using var client = auth.CreateClient();
+        using var login = await LoginPage.PostAsync(client, "revoke-user", "correct horse battery", "/");
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+
+        // Пока сессия жива, закрытая страница отдаётся, а не уводит на вход.
+        using var before = await client.GetAsync("/");
+        Assert.Equal(HttpStatusCode.OK, before.StatusCode);
+
+        await using (var scope = auth.CreateScope())
+        {
+            var accounts = scope.ServiceProvider.GetRequiredService<IAccountService>();
+            await accounts.DisableAsync(account.Id, CancellationToken.None);
+        }
+
+        using var after = await client.GetAsync("/");
+        Assert.Equal(HttpStatusCode.Redirect, after.StatusCode);
+        Assert.Contains("/account/login", after.Headers.Location!.ToString());
+    }
+
     [Fact]
     public async Task Login_WrongPassword_Should_Show_Same_Error_As_Unknown_Login()
     {
