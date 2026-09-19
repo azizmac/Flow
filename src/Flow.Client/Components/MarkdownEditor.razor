@@ -18,7 +18,7 @@
             <span class="md-sep"></span>
             <button type="button" class="md-tool" title="Код" @onclick='() => Wrap("`", "`", "код")'><Icon Name="code" Size="15" /></button>
             <button type="button" class="md-tool" title="Цитата" @onclick='() => Prefix("> ")'><Icon Name="quote" Size="15" /></button>
-            <button type="button" class="md-tool" title="Ссылка (Ctrl K)" @onclick='() => Wrap("[", "](url)", "текст ссылки")'><Icon Name="link" Size="15" /></button>
+            <button type="button" class="md-tool" title="Ссылка (Ctrl K)" @onclick="Link"><Icon Name="link" Size="15" /></button>
             <span class="md-sep"></span>
             <button type="button" class="md-tool" title="Список" @onclick='() => Prefix("- ")'><Icon Name="list" Size="15" /></button>
             <button type="button" class="md-tool" title="Нумерованный список" @onclick='() => Prefix("1. ", ordered: true)'><Icon Name="list-ordered" Size="15" /></button>
@@ -260,7 +260,7 @@
             case "Mod-i":
                 return new EditorCommand("wrap", Before: "_", After: "_", Placeholder: "курсив");
             case "Mod-k":
-                return new EditorCommand("wrap", Before: "[", After: "](url)", Placeholder: "текст ссылки");
+                return new EditorCommand("link", Placeholder: LinkText);
             case "Escape" when OnCancel.HasDelegate:
                 return new EditorCommand("action", Action: "cancel");
             default:
@@ -354,6 +354,15 @@
 
     private async Task Wrap(string before, string after, string placeholder) =>
         await SetValue(await Browser.EditorWrapAsync(Id, before, after, placeholder));
+
+    /// <summary>Подпись ссылки по умолчанию — её же подставляет Ctrl K.</summary>
+    private const string LinkText = "текст ссылки";
+
+    /// <summary>
+    /// Ссылка — не простая обёртка: адрес в заготовке должен быть настоящим. Раньше в текст попадало
+    /// «(url)», и такая ссылка вела не на сайт, а внутрь Flow, на несуществующую страницу.
+    /// </summary>
+    private async Task Link() => await SetValue(await Browser.EditorLinkAsync(Id, LinkText));
 
     private async Task Prefix(string prefix, bool ordered = false) =>
         await SetValue(await Browser.EditorPrefixLinesAsync(Id, prefix, ordered));

@@ -87,6 +87,9 @@ function runCommand(entry, id, cmd) {
         case 'wrap':
             value = window.flowEditor.wrap(id, cmd.before, cmd.after, cmd.placeholder);
             break;
+        case 'link':
+            value = window.flowEditor.link(id, cmd.placeholder);
+            break;
         case 'prefix':
             value = window.flowEditor.prefixLines(id, cmd.prefix, cmd.ordered);
             break;
@@ -249,6 +252,34 @@ window.flowEditor = {
             selection: selected.length
                 ? { anchor: sel.from + before.length + inner.length + after.length }
                 : { anchor: sel.from + before.length, head: sel.from + before.length + inner.length }
+        });
+        view.focus();
+        return view.state.doc.toString();
+    },
+
+    /**
+     * Ссылка: [подпись](адрес). Если выделен адрес — он и становится адресом, а выделение переезжает
+     * на подпись; иначе подписью становится выделенное (или подсказка), а выделение встаёт на «https://»,
+     * чтобы адрес можно было сразу вставить из буфера. Общий wrap для этого не годится: он оставлял
+     * в тексте заготовку «(url)», и ссылка вела не на сайт, а на несуществующую страницу Flow.
+     */
+    link: function (id, textPlaceholder) {
+        const entry = get(id);
+        if (!entry) return null;
+        const view = entry.view;
+        const sel = view.state.selection.main;
+        const raw = view.state.sliceDoc(sel.from, sel.to);
+        const trimmed = raw.trim();
+        const isUrl = /^(?:[a-z][a-z0-9+.-]*:\/\/|mailto:|www\.)\S+$/i.test(trimmed);
+
+        const text = isUrl || trimmed.length === 0 ? textPlaceholder : raw;
+        const url = isUrl ? trimmed : 'https://';
+        const from = isUrl ? sel.from + 1 : sel.from + text.length + 3;
+
+        view.dispatch({
+            changes: { from: sel.from, to: sel.to, insert: '[' + text + '](' + url + ')' },
+            // Выделено то, что осталось дописать: подпись или адрес.
+            selection: { anchor: from, head: from + (isUrl ? text.length : url.length) }
         });
         view.focus();
         return view.state.doc.toString();
