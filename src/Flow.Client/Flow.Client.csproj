@@ -1,36 +1,32 @@
-<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
-        <!-- Даты форматируются вручную (Services/Ru.cs), ICU-данные в загрузку не тащим. -->
-        <InvariantGlobalization>true</InvariantGlobalization>
-        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <!-- Проект перестал быть приложением и стал библиотекой компонентов: хост — Flow.Api,
+             рендер серверный (InteractiveServer). Отсюда ушли пакеты …Components.WebAssembly*,
+             wwwroot (переехал в Flow.Api/wwwroot) и index.html (его заменил Components/App.razor хоста).
+             InvariantGlobalization и OverrideHtmlAssetPlaceholders — свойства приложения, здесь не нужны. -->
+        <AddRazorSupportForMvc>false</AddRazorSupportForMvc>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
-        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0" PrivateAssets="all" />
-        <!-- OIDC-вход через Flow.Auth (code + PKCE) и Bearer в запросах к Flow.Api (AuthorizationMessageHandler). -->
-        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Authentication" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+        <!-- Библиотека компонентов не получает ASP.NET Core автоматически, в отличие от приложения:
+             без этой ссылки не находятся Components.Authorization, Components.Forms и Components.Web. -->
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
         <!-- Markdown в описании задачи. HTML внутри Markdown отключён (см. MarkdownView). -->
         <PackageReference Include="Markdig" Version="1.3.2" />
         <!-- UI-кит: меню, диалоги, селекты, таблица задач. Тема — Services/FlowTheme.cs,
-             переопределения формы контролов — wwwroot/css/mud-overrides.css. См. docs/TZ_client_mudblazor.md. -->
+             переопределения формы контролов — wwwroot/css/mud-overrides.css (в Flow.Api). -->
         <PackageReference Include="MudBlazor" Version="9.10.0" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Flow.Shared\Flow.Shared.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <Content Include="..\..\.dockerignore">
-        <Link>.dockerignore</Link>
-      </Content>
     </ItemGroup>
 
 </Project>

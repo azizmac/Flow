@@ -6,7 +6,7 @@
    запрос только по HTTP/2 с duplex, чего у нас нет), и любая цифра была бы выдумкой. Полоса
    неопределённая, зато честная: она означает «файл в полёте», и его можно отменить. *@
 @implements IAsyncDisposable
-@inject FlowApi Api
+@inject IFlowApi Api
 @inject BrowserInterop Browser
 @inject AttachmentEvents Attachments
 

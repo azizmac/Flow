@@ -1,4 +1,5 @@
-# Стек приложения: api (ядро + Auth-модуль) и client. Данные (PostgreSQL и S3) живут в отдельном стеке —
+﻿# Стек приложения: один сервис api — ядро, Auth-модуль и интерфейс (серверный рендер) в одном хосте.
+# Отдельного контейнера client больше нет. Данные (PostgreSQL и S3) живут в отдельном стеке —
 # docker-compose.data.yml, проект flow-data. Здесь нет ни одного тома с данными проекта, поэтому
 # `docker compose down -v` безопасен: он уносит только ключи и сертификаты Auth-модуля, которые
 # пересоздаются при следующем старте. См. docs/TZ_infra_data_split.md, docs/TZ_modular_monolith.md.
@@ -34,6 +35,10 @@ services:
       # Внешний issuer токенов и OIDC discovery — адрес backend'а, который видит браузер.
       # Api валидирует токены локально через OpenIddict и внутренний URL для discovery/JWKS не использует.
       Auth__Issuer: ${AUTH_ISSUER:-http://localhost:8080}
+      # Клиент OIDC flow-client и CORS ниже нужны только для отката на старый образ Blazor WASM:
+      # сам интерфейс теперь рендерится этим же хостом и ходит в Flow.Application напрямую, без
+      # браузерного OIDC и без кросс-доменных запросов. Снять вместе с ClientSeeder, когда SSR
+      # отработает в проде (docs/TZ_client_ssr.md).
       Auth__Client__RedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/login-callback
       Auth__Client__PostLogoutRedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/logout-callback
       # Локальный compose ходит по http; за TLS-терминатором оставить false.
@@ -85,26 +90,7 @@ services:
     networks:
       - flow-network
 
-  client:
-    build:
-      context: .
-      dockerfile: src/Flow.Client/Dockerfile
-    restart: unless-stopped
-    # Клиент — Blazor WASM под nginx: Rider не должен его трансформировать (WASM отлаживается в браузере).
-    # Без лейблов Rider подменяет entrypoint на .NET-дебаггер (рестарт-луп) или на Blazor dev server (нет SDK).
-    labels:
-      com.jetbrains.rider.debug: "false"
-      com.jetbrains.rider.fast.mode: "false"
-    depends_on:
-      api:
-        condition: service_started
-    environment:
-      # Адреса, которые видит браузер: порты наружу из этого же файла. Auth теперь часть Api.
-      API_BASE_URL: http://localhost:${API_PORT:-8080}
-      AUTH_BASE_URL: ${AUTH_ISSUER:-http://localhost:8080}
-    ports:
-      - "${CLIENT_PORT:-5016}:80"
-    networks:
+networks:
       - flow-network
 
 networks:

@@ -1,4 +1,4 @@
-using Flow.Application.Abstractions;
+﻿using Flow.Application.Abstractions;
 using Flow.Application.Features.Attachments.Commands.AttachmentDeleteCommand;
 using Flow.Application.Features.Attachments.Commands.AttachmentUploadCommand;
 using Flow.Application.Features.Attachments.Queries.AttachmentContentQuery;
@@ -81,7 +81,15 @@ public class AttachmentsController(IMediator mediator, IActorAccessor actor) : C
         disposition.SetHttpFileName(content.FileName);
         Response.Headers.ContentDisposition = disposition.ToString();
 
-        return File(content.Content, content.ContentType, enableRangeProcessing: true);
+        // Поток из S3 не seekable (GetObjectResponse.ResponseStream), поэтому MVC сам длину не узнает
+        // и ответ уходит chunked: браузер не показывает прогресс скачивания. Длина уже известна из
+        // строки вложения — проставляем её руками.
+        Response.ContentLength = content.SizeBytes;
+
+        // enableRangeProcessing здесь был бы обманом: диапазоны требуют seekable-потока, MVC на
+        // несеекабельном их не отдаёт (ни Accept-Ranges, ни 206). Чтобы перемотка заработала,
+        // Range надо прокидывать до S3 отдельной задачей.
+        return File(content.Content, content.ContentType);
     }
 
     [HttpDelete("attachments/{id:guid}")]

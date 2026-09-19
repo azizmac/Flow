@@ -1,4 +1,4 @@
-// Исходник редактора Markdown для Flow.Client: CodeMirror 6 + разметка Markdown, видимая прямо при наборе.
+﻿// Исходник редактора Markdown для Flow.Client: CodeMirror 6 + разметка Markdown, видимая прямо при наборе.
 // Собранный бандл лежит в wwwroot/js/flow-editor.js; как пересобрать — см. README.md рядом.
 //
 // Наружу торчит window.flowEditor с тем же набором операций, что раньше делал flow.editor.* над textarea
@@ -64,15 +64,20 @@ function get(id) {
     return editors.get(id);
 }
 
-// .NET отвечает синхронно: команда — если клавишу забрали себе, null — если это обычный ввод.
-function askDotNet(entry, key) {
-    if (!entry || !entry.ref) return null;
-    try {
-        return entry.ref.invokeMethod('HandleEditorKey', key) || null;
-    } catch (_) {
-        // Компонент уже уничтожен — клавиша принадлежит редактору.
-        return null;
-    }
+// Забирает ли компонент эту клавишу себе. Решать обязан JS, причём синхронно: CodeMirror ждёт
+// true/false, чтобы решить судьбу события, а спросить .NET синхронно нельзя — при серверном рендере
+// компонент живёт на другом конце SignalR, и invokeMethod там физически невозможен (раньше он тихо
+// бросал, catch возвращал null, и меню упоминаний просто переставало работать без единой ошибки).
+// Поэтому .NET заранее сообщает сюда своё состояние: setMentionOpen и hasCancel при mount.
+const MENU_KEYS = ['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'];
+const EDIT_KEYS = ['Mod-Enter', 'Mod-b', 'Mod-i', 'Mod-k'];
+
+function takesKey(entry, key) {
+    if (!entry || !entry.ref) return false;
+    if (entry.mentionOpen && MENU_KEYS.indexOf(key) >= 0) return true;
+    if (EDIT_KEYS.indexOf(key) >= 0) return true;
+    // Escape вне меню — только если наверху есть кому отменять (иначе это обычная клавиша редактора).
+    return key === 'Escape' && entry.hasCancel;
 }
 
 // Выполнить команду от .NET: текст правим здесь, наверх отдаём новое значение.
@@ -102,9 +107,22 @@ function runCommand(entry, id, cmd) {
 }
 
 window.flowEditor = {
+    /** Состояние меню упоминаний из .NET: по нему takesKey решает, чьи стрелки и Enter. */
+    setMentionOpen: function (id, open) {
+        const entry = get(id);
+        if (entry) entry.mentionOpen = open === true;
+    },
+
+    /** Выполнить команду, присланную .NET после асинхронного разбора клавиши. */
+    run: function (id, cmd) {
+        const entry = get(id);
+        if (entry && cmd) runCommand(entry, id, cmd);
+    },
+
     /**
      * Создать редактор внутри контейнера. options: { value, placeholder, readOnly }.
-     * dotNetRef должен иметь [JSInvokable] HandleEditorInput(string) и HandleEditorKey(string).
+     * dotNetRef должен иметь [JSInvokable] HandleEditorInput(string) и HandleEditorKeyAsync(string).
+     * options.hasCancel — есть ли наверху обработчик отмены: от него зависит, забирать ли Escape.
      */
     mount: function (id, dotNetRef, options) {
         const host = document.getElementById(id);
@@ -113,17 +131,19 @@ window.flowEditor = {
         this.destroy(id);
         const opts = options || {};
         const editable = new Compartment();
-        const entry = { view: null, ref: dotNetRef, editable: editable };
+        // mentionOpen и hasCancel — копия состояния .NET: по ним takesKey решает синхронно (см. выше).
+        const entry = { view: null, ref: dotNetRef, editable: editable, mentionOpen: false, hasCancel: opts.hasCancel === true };
 
         // Клавиши забираем через keymap наивысшего приоритета, а не через domEventHandlers: последние
         // в связке с keymap срабатывают не на всякое событие, и Enter уходил в редактор мимо списка
         // упоминаний. Возврат true = «команда выполнена»: CodeMirror сам гасит событие и дальше его
         // не несёт. Раскладку keymap разбирает сам — на русской Ctrl+B приходит как key «и».
         const ask = (key) => {
-            const cmd = askDotNet(entry, key);
-            if (!cmd) return false;
+            if (!takesKey(entry, key)) return false;
 
-            runCommand(entry, id, cmd);
+            // Клавишу гасим здесь и сейчас, а .NET разбирается с ней асинхронно и сам присылает
+            // команду обратно через flowEditor.run — см. HandleEditorKeyAsync в MarkdownEditor.
+            entry.ref.invokeMethodAsync('HandleEditorKeyAsync', key).catch(function () { });
             return true;
         };
 

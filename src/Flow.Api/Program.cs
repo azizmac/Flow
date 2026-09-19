@@ -1,23 +1,66 @@
-using Flow.Api.Auth;
+﻿using Flow.Api.Auth;
 using Flow.Api.Bootstrap;
+using Flow.Api.Client;
+using Flow.Api.Components;
+using Flow.Api.Routing;
 using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
 using Flow.Auth.DependencyInjection;
+using Flow.Client.DependencyInjection;
+using Flow.Client.Layout;
+using Flow.Client.Services;
 using Flow.Infrastructure.DependencyInjection;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.ResponseCompression;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddFlowInfrastructure(builder.Configuration);
+// Порядок AddHostedService = порядок старта: хост поднимает фоновые службы строго по очереди
+// регистрации. Сначала мигрируют схемы (auth, затем public) и только потом стартует воркер
+// индексации — он с первого прохода лезет в SearchIndexQueue, и на пустой базе до этой правки
+// сыпал ошибками в лог, пока сидер не докатывал миграции.
+builder.Services.Configure<BootstrapOptions>(builder.Configuration.GetSection(BootstrapOptions.SectionName));
+builder.Services.AddAuthModule(builder.Configuration, builder.Environment); // 1. AuthDatabaseInitializer: схема auth
+builder.Services.AddHostedService<BootstrapOwnerSeeder>();                  // 2. миграции public + профиль Owner
+builder.Services.AddFlowInfrastructure(builder.Configuration);              // 3. SearchIndexingWorker: разбор очереди
 // Поисковый индекс (секция "Search"): эмбеддер, очередь и фоновый воркер индексации.
 // AddFlowInfrastructure уже вызывает его — повтор оставлен намеренно, чтобы состав сервисов
 // читался прямо здесь; второй вызов ничего не регистрирует.
 builder.Services.AddFlowSearch(builder.Configuration);
 builder.Services.AddFlowApplication();
-builder.Services.AddAuthModule(builder.Configuration, builder.Environment);
-builder.Services.AddControllers(options => options.Filters.Add<ApiExceptionFilter>());
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<ApiExceptionFilter>();
+    // Маршруты JSON-API уезжают под /api: иначе они сталкиваются со страницами интерфейса (см. ApiPrefixConvention).
+    options.Conventions.Add(new ApiPrefixConvention("api"));
+});
 builder.Services.AddRazorPages();
+
+// ---- Интерфейс Flow: серверный рендер (docs/TZ_client_mudblazor.md) ----
+// Клиент перестал быть отдельным приложением WebAssembly и стал библиотекой компонентов этого хоста.
+// Слабые машины пользователей были причиной перехода: браузер больше не выполняет .NET, он получает
+// готовый HTML и дальше — патчи DOM по SignalR.
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddFlowClientServices();
+// Страницы ходят за данными через IFlowApi. Реализация живёт здесь, а не в Flow.Client: она
+// обращается к Flow.Application напрямую, а клиент по слоям видит только Flow.Shared.
+builder.Services.AddScoped<IFlowApi, InProcessFlowApi>();
+
+// Ответы API — JSON с повторяющимися именами полей и hex-Guid'ами, сжимается в 6-9 раз:
+// страница списка задач это десятки килобайт на каждое открытие и на каждую смену фильтра.
+// "application/json" уже входит в ResponseCompressionDefaults.MimeTypes, добавлять его не нужно.
+// EnableForHttps включён осознанно: тела ответов не содержат секретов (токен ездит в заголовке
+// Authorization), поэтому BREACH к ним не применим.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
 
 // Закрыто всё; исключения — явные [AllowAnonymous] (health, OIDC-эндпоинты, страница входа).
 builder.Services.AddAuthorization(options =>
@@ -25,9 +68,6 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IActorAccessor, ClaimsActorAccessor>();
-
-builder.Services.Configure<BootstrapOptions>(builder.Configuration.GetSection(BootstrapOptions.SectionName));
-builder.Services.AddHostedService<BootstrapOwnerSeeder>();
 
 // ---- Пробы Kubernetes: /health/live и /health/ready (docs/TZ_cicd_k8s.md §9 п.2) ----
 // Две пробы, а не одна, потому что вопросы разные. live — «процесс жив», без единого обращения к БД:
@@ -67,21 +107,44 @@ builder.Services.AddCors(options => options.AddPolicy(clientCorsPolicy, policy =
 
 var app = builder.Build();
 
-// wwwroot хоста и статика Auth-модуля (в dev — Static Web Assets, в publish — скопированный _content).
-app.UseStaticFiles();
+// Сжатие — первым в конвейере, иначе статика и ответы контроллеров уйдут мимо него.
+app.UseResponseCompression();
+
+// wwwroot хоста (css/js/brand интерфейса переехали сюда из Flow.Client) и статика RCL-модулей.
+// MapStaticAssets вместо UseStaticFiles: он сам выбирает предсжатое представление по Accept-Encoding,
+// то есть отдаёт .br там, где nginx клиента умел только gzip. AllowAnonymous обязателен — FallbackPolicy
+// ниже закрывает всё подряд, а MapStaticAssets это endpoint routing, в отличие от UseStaticFiles.
+app.MapStaticAssets().AllowAnonymous();
 app.UseCors(clientCorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
+// Обязателен для Razor Components; ставится после аутентификации.
+app.UseAntiforgery();
 
 // AllowAnonymous обязателен: FallbackPolicy выше закрывает всё подряд, а проба, получившая 401,
 // означала бы «под не готов никогда». Ответ — одно слово Healthy/Unhealthy (WriteMinimalPlaintext по умолчанию).
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") }).AllowAnonymous();
 
-app.MapGet("/", () => "Flow.Api").AllowAnonymous();
+// Выход: гасим cookie сессии. Только POST — на GET чужая страница смогла бы разлогинить человека
+// (cookie SameSite=Lax уходит при навигации верхнего уровня). Антифоржери-токен здесь не нужен и
+// выключен намеренно: кросс-сайтовый POST cookie не донесёт, а кнопка выхода живёт внутри circuit'а,
+// где токен формы взять неоткуда (её отправляет flow.submitPost).
+app.MapPost("/account/logout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(IdentityConstants.ApplicationScheme);
+    return Results.LocalRedirect("/");
+}).DisableAntiforgery().AllowAnonymous();
 
 app.MapRazorPages();
 app.MapControllers();
+
+// Страницы (@page) лежат в сборке Flow.Client, поэтому её надо назвать явно: сам по себе хост
+// знает только про свои Components. Признак живости переехал на /health/live — прежний
+// app.MapGet("/", () => "Flow.Api") удалён, иначе он дрался бы за "/" со страницей «Проекты».
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode()
+    .AddAdditionalAssemblies(typeof(MainLayout).Assembly);
 
 app.Run();
 

@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
@@ -50,12 +50,12 @@ public sealed class CodeFlowTests(AuthFixture auth)
 
         // Новый клиент не имеет login-cookie: API может принять запрос только через production Validation.UseLocalServer.
         using var api = auth.CreateApiClient();
-        using var withoutToken = await api.GetAsync("/users/me");
+        using var withoutToken = await api.GetAsync("/api/users/me");
         Assert.Equal(HttpStatusCode.Unauthorized, withoutToken.StatusCode);
         Assert.Contains("Bearer", withoutToken.Headers.WwwAuthenticate.ToString());
 
         api.DefaultRequestHeaders.Authorization = new("Bearer", tokens.GetProperty("access_token").GetString());
-        var me = await api.GetFromJsonAsync<UserResponse>("/users/me");
+        var me = await api.GetFromJsonAsync<UserResponse>("/api/users/me");
         Assert.Equal(account.Id, me!.Id);
 
         var refreshed = await RefreshAsync(client, tokens.GetProperty("refresh_token").GetString()!);
@@ -98,7 +98,7 @@ public sealed class CodeFlowTests(AuthFixture auth)
 
         using var api = auth.CreateApiClient();
         api.DefaultRequestHeaders.Authorization = new("Bearer", tokens.GetProperty("access_token").GetString());
-        using var response = await api.GetAsync("/users/me");
+        using var response = await api.GetAsync("/api/users/me");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }

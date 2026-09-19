@@ -1,4 +1,4 @@
-using Flow.Infrastructure.Search.Entities;
+﻿using Flow.Infrastructure.Search.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -31,7 +31,10 @@ internal sealed class SearchIndexRequestConfiguration : IEntityTypeConfiguration
         builder.Property(r => r.LastError);
 
         // Порядок разбора очереди: сначала живые правки, внутри приоритета — по времени постановки.
-        builder.HasIndex(r => new { r.Priority, r.NextAttemptAt });
+        // Второй столбец обязан совпадать с ORDER BY из SearchIndexingRunner (Priority, EnqueuedAt):
+        // с NextAttemptAt индекс сортировку не покрывал, и Postgres сортировал весь отфильтрованный
+        // набор перед LIMIT — на живой очереди незаметно, на POST /search/reindex квадратично.
+        builder.HasIndex(r => new { r.Priority, r.EnqueuedAt });
 
         // Повторная постановка того же источника не плодит строк — см. SearchIndexQueue (ON CONFLICT).
         builder.HasIndex(r => new { r.SourceType, r.SourceId, r.Operation }).IsUnique();

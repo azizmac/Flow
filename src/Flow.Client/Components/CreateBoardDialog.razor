@@ -4,7 +4,7 @@
 
    Слой — MudDialog (затемнение, захват фокуса, Esc, клик по фону), вид — класс .flow-modal
    в mud-overrides.css. Enter обрабатывают сами поля (OnFieldKey). *@
-@inject FlowApi Api
+@inject IFlowApi Api
 @inject BrowserInterop Browser
 
 <MudDialog Visible="true" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"

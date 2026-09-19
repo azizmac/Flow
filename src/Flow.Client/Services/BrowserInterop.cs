@@ -5,9 +5,18 @@ namespace Flow.Client.Services;
 /// <summary>Значение и выделение textarea Markdown-редактора (flow.editor.state).</summary>
 public sealed record EditorState(string Value, int Start, int End);
 
-/// <summary>Обёртка над wwwroot/js/flow.js: буфер обмена, фокус, localStorage, редактор, вложения.</summary>
+/// <summary>Обёртка над wwwroot/js/flow.js: буфер обмена, фокус, редактор, вложения, выход.</summary>
 public sealed class BrowserInterop(IJSRuntime js)
 {
+    /// <summary>
+    /// Отправляет POST на адрес хоста (выход). Именно POST: cookie сессии объявлена SameSite=Lax,
+    /// и кросс-сайтовая форма её не донесёт — принудительный разлогин чужой страницей невозможен.
+    /// </summary>
+    public async Task PostFormAsync(string url)
+    {
+        await js.InvokeVoidAsync("flow.submitPost", url);
+    }
+
     public async Task<bool> CopyAsync(string text)
     {
         try
@@ -68,18 +77,49 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
-    /// <summary>Создаёт редактор в контейнере. dotNetRef принимает ввод (HandleEditorInput) и клавиши (HandleEditorKey).</summary>
-    public async Task<bool> EditorMountAsync<T>(string elementId, DotNetObjectReference<T> dotNetRef, string? value, string? placeholder, bool readOnly)
+    /// <summary>Создаёт редактор в контейнере. dotNetRef принимает ввод (HandleEditorInput) и клавиши (HandleEditorKeyAsync).</summary>
+    /// <param name="hasCancel">Есть ли наверху обработчик отмены: от этого зависит, забирает ли редактор Escape.</param>
+    public async Task<bool> EditorMountAsync<T>(string elementId, DotNetObjectReference<T> dotNetRef, string? value, string? placeholder, bool readOnly, bool hasCancel)
         where T : class
     {
         try
         {
             return await js.InvokeAsync<bool>("flowEditor.mount", elementId, dotNetRef,
-                new { value, placeholder, readOnly });
+                new { value, placeholder, readOnly, hasCancel });
         }
         catch (JSException)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Сообщает редактору, открыто ли меню упоминаний. Нужно потому, что решение «забрать клавишу себе»
+    /// принимает JS синхронно (CodeMirror ждёт true/false), а спросить компонент синхронно нельзя:
+    /// при серверном рендере он на другом конце SignalR.
+    /// </summary>
+    public async Task EditorSetMentionOpenAsync(string elementId, bool open)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flowEditor.setMentionOpen", elementId, open);
+        }
+        catch (JSException)
+        {
+            // редактор уже размонтирован
+        }
+    }
+
+    /// <summary>Выполняет команду, которую компонент выбрал по клавише (обёртка, перенос, упоминание).</summary>
+    public async Task EditorRunCommandAsync(string elementId, object command)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flowEditor.run", elementId, command);
+        }
+        catch (JSException)
+        {
+            // редактор уже размонтирован
         }
     }
 

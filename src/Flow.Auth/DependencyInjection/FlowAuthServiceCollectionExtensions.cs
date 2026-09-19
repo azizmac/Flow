@@ -1,4 +1,4 @@
-using System.Text.Encodings.Web;
+﻿using System.Text.Encodings.Web;
 using System.Text.Unicode;
 using Flow.Auth.Contracts;
 using Flow.Auth.Data;
@@ -65,16 +65,45 @@ public static class FlowAuthServiceCollectionExtensions
         services.AddScoped<IPasswordHasher<ApplicationUser>, BCryptPasswordHasher>();
         services.AddHttpContextAccessor();
 
-        // Cookie нужна только между /account/login и /connect/authorize.
+        // Схема по умолчанию — диспетчер, а не Bearer напрямую. Раньше cookie жила только между
+        // /account/login и /connect/authorize, теперь на ней держится вся сессия серверных страниц.
+        //
+        // Почему диспетчер, а не мультисхемная политика: при нескольких схемах в одной политике
+        // challenge уходит во все сразу, и Bearer (401 + WWW-Authenticate) дерётся с cookie (302 на
+        // /account/login) за код ответа. ForwardDefaultSelector решает это однозначно: запрос с
+        // Bearer обслуживается ровно как раньше, запрос из браузера без него — по cookie и с
+        // человеческим редиректом на вход.
+        //
+        // CSRF: под /api cookie не принимается вообще — там только Bearer, поэтому подделать запрос
+        // к API чужой страницей нельзя в принципе. Для самих страниц защитой остаётся SameSite=Lax
+        // (значение по умолчанию, проставлено явно, чтобы его не потеряли при правках) и UseAntiforgery.
         services
             .AddAuthentication(options =>
             {
-                options.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+                options.DefaultScheme = AuthConstants.SmartScheme;
+                options.DefaultAuthenticateScheme = AuthConstants.SmartScheme;
+                options.DefaultChallengeScheme = AuthConstants.SmartScheme;
+            })
+            .AddPolicyScheme(AuthConstants.SmartScheme, AuthConstants.SmartScheme, options =>
+            {
+                options.ForwardDefaultSelector = context =>
+                {
+                    // Запрос к JSON-API — всегда Bearer, даже без заголовка: так неаутентифицированный
+                    // вызов получает честный 401 с WWW-Authenticate, а не 302 на страницу входа,
+                    // которую клиенту API некуда показать.
+                    if (context.Request.Path.StartsWithSegments(AuthConstants.ApiPathPrefix))
+                        return OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+
+                    return context.Request.Headers.Authorization.Any(
+                        value => value is not null && value.StartsWith("Bearer ", StringComparison.Ordinal))
+                        ? OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme
+                        : IdentityConstants.ApplicationScheme;
+                };
             })
             .AddCookie(IdentityConstants.ApplicationScheme, options =>
             {
                 options.Cookie.Name = "flow.auth";
+                options.Cookie.SameSite = SameSiteMode.Lax;
                 options.LoginPath = "/account/login";
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 options.SlidingExpiration = true;

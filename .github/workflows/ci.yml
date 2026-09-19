@@ -1,4 +1,4 @@
-# Оркестратор CI: триггеры, порядок стадий и все джобы, видимые в интерфейсе.
+﻿# Оркестратор CI: триггеры, порядок стадий и все джобы, видимые в интерфейсе.
 #
 # Почему всё в одном файле, а не в reusable workflow: вызов reusable-воркфлоу переименовывает вложенные джобы
 # в составные («Тесты · Auth / run») и ломает читаемость списка запуска — а нам важно ровно обратное, видеть
@@ -63,7 +63,6 @@ jobs:
       pull-requests: read
     outputs:
       api: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.api }}
-      client: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.client }}
       registry: ${{ steps.registry.outputs.registry }}
       prefix: ${{ steps.registry.outputs.prefix }}
     steps:
@@ -98,11 +97,10 @@ jobs:
               - 'src/Flow.Domain/**'
               - 'src/Flow.Infrastructure/**'
               - 'src/Flow.Shared/**'
-            client:
-              - *common
+              # Интерфейс с переходом на серверный рендер стал библиотекой компонентов внутри образа
+              # flow-api: отдельного образа flow-client больше нет, и его правка меняет ровно этот образ.
+              # editor/** сюда же — бандл CodeMirror собирается стадией editor в src/Flow.Api/Dockerfile.
               - 'src/Flow.Client/**'
-              - 'src/Flow.Shared/**'
-              - 'docker/client/**'
 
       # Реестр — Docker Hub (REGISTRY=docker.io), владелец образов задаётся переменной IMAGE_PREFIX и с именем
       # владельца репозитория на GitHub не совпадает, поэтому дефолта здесь нет: лучше честно упасть с текстом,
@@ -145,7 +143,6 @@ jobs:
             echo "| Модуль | Изменён | Будет собран |"
             echo "|--------|---------|--------------|"
             echo "| flow-api | ${{ steps.filter.outputs.api || '—' }} | ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.api == 'true' }} |"
-            echo "| flow-client | ${{ steps.filter.outputs.client || '—' }} | ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.client == 'true' }} |"
             echo
             echo "Ручной запуск: $manual · образы: \`${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.prefix }}/flow-*\`"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -177,8 +174,6 @@ jobs:
         include:
           - module: api
             dockerfile: src/Flow.Api/Dockerfile
-          - module: client
-            dockerfile: src/Flow.Client/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -259,7 +254,7 @@ jobs:
           set -euo pipefail
           expected="$(jq -r '.sdk.version' global.json | cut -d. -f1-2)"
           status=0
-          for file in src/Flow.Api/Dockerfile src/Flow.Client/Dockerfile; do
+          for file in src/Flow.Api/Dockerfile; do
             line="$(grep -n 'mcr.microsoft.com/dotnet/sdk:' "$file" | head -1)"
             number="${line%%:*}"
             tag="$(printf '%s' "$line" | sed -n 's|.*dotnet/sdk:\([0-9.]*\).*|\1|p')"
@@ -307,8 +302,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Единственный гейт для образа flow-client: тестового проекта у Blazor-клиента в репозитории нет,
-      # и компиляция WASM — всё, что мы можем про него проверить.
+      # Гейт для интерфейса: своего тестового проекта у него по-прежнему нет, и компиляция —
+      # всё, что мы про него проверяем. Теперь он собирается вместе с решением, как обычная библиотека.
       - name: Сборка решения
         uses: ./.github/actions/dotnet-test
         with:
@@ -450,43 +445,6 @@ jobs:
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
 
-  image-client:
-    name: Образ · flow-client
-    needs: [changes, check-vars, lint-sdk, lint-docker, build, test-unit]
-    # У клиента тестового проекта нет вовсе, поэтому его единственный содержательный гейт — компиляция WASM.
-    if: >-
-      always()
-      && needs.changes.outputs.client == 'true'
-      && needs.changes.result == 'success'
-      && needs.check-vars.result == 'success'
-      && needs.lint-sdk.result == 'success'
-      && needs.lint-docker.result == 'success'
-      && needs.build.result == 'success'
-      && (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    # Digest забирает resolve-images: в манифестах кластера стоят только digest'ы, а не теги,
-    # иначе kubectl apply не увидит изменений и rollout просто не произойдёт.
-    outputs:
-      digest: ${{ steps.image.outputs.digest }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Сборка образа
-        id: image
-        uses: ./.github/actions/build-image
-        with:
-          module: client
-          dockerfile: src/Flow.Client/Dockerfile
-          registry: ${{ needs.changes.outputs.registry }}
-          image: ${{ needs.changes.outputs.registry }}/${{ needs.changes.outputs.prefix }}/flow-client
-          push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && inputs.skip_tests != true }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
   # ---------- Стадия 2: манифесты ----------
 
   lint-manifests:
@@ -573,7 +531,7 @@ jobs:
 
   resolve-images:
     name: Набор образов релиза
-    needs: [changes, lint-manifests, image-api, image-client]
+    needs: [changes, lint-manifests, image-api]
     # Только там, где образы реально существуют в реестре: на ветке и в PR публикации нет, резолвить нечего.
     # Пропущенная джоба образа — норма (модуль не менялся), провалившаяся — нет.
     if: >-
@@ -581,7 +539,6 @@ jobs:
       && needs.changes.result == 'success'
       && needs.lint-manifests.result == 'success'
       && needs.image-api.result != 'failure'
-      && needs.image-client.result != 'failure'
       && ((github.ref == 'refs/heads/main' && github.event_name != 'pull_request') || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -610,8 +567,7 @@ jobs:
           python3 scripts/resolve-images.py rendered/ \
             --registry "${{ needs.changes.outputs.registry }}" \
             --prefix "${{ needs.changes.outputs.prefix }}" \
-            --digest "flow-api=${{ needs.image-api.outputs.digest }}" \
-            --digest "flow-client=${{ needs.image-client.outputs.digest }}"
+            --digest "flow-api=${{ needs.image-api.outputs.digest }}"
 
       - name: release.json в артефакт
         if: ${{ !cancelled() }}
@@ -1017,39 +973,14 @@ jobs:
           wait: deployment/flow-api
           timeout: 900s
 
-  deploy-client:
-    name: Выкатка · Flow.Client
+  deploy-ingress:
+    name: Выкатка · Ingress
     needs: deploy-api
     # !cancelled() — см. пояснение у джобы render. Проверка результатов предшественников
     # здесь обязана быть явной: без неё джоба поехала бы и после их падения.
     if: >-
       !cancelled()
       && needs.deploy-api.result == 'success'
-    runs-on: [self-hosted, flow]
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: manifests-${{ github.sha }}
-          path: manifests
-      - uses: ./.github/actions/kube-apply
-        with:
-          kubeconfig_b64: ${{ secrets.KUBE_DEPLOY_B64 }}
-          file: manifests/client.yaml
-          namespace: flow
-          wait: deployment/flow-client
-          timeout: 600s
-
-  deploy-ingress:
-    name: Выкатка · Ingress
-    needs: [deploy-api, deploy-client]
-    # !cancelled() — см. пояснение у джобы render. Проверка результатов предшественников
-    # здесь обязана быть явной: без неё джоба поехала бы и после их падения.
-    if: >-
-      !cancelled()
-      && needs.deploy-api.result == 'success'
-      && needs.deploy-client.result == 'success'
     runs-on: [self-hosted, flow]
     timeout-minutes: 10
     steps:
@@ -1162,7 +1093,6 @@ jobs:
       - test-auth
       - test-api
       - image-api
-      - image-client
       - lint-manifests
       - resolve-images
       - render

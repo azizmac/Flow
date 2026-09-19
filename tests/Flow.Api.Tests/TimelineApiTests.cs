@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Tasks;
@@ -13,11 +13,11 @@ public sealed class TimelineApiTests(ApiFixture api)
 {
     private static async Task<TaskResponse> CreateTaskAsync(HttpClient client, string key)
     {
-        using var boardResponse = await client.PostAsJsonAsync("/boards", new CreateBoardRequest($"Board {key}", key));
+        using var boardResponse = await client.PostAsJsonAsync("/api/boards", new CreateBoardRequest($"Board {key}", key));
         Assert.Equal(HttpStatusCode.Created, boardResponse.StatusCode);
         var board = (await boardResponse.Content.ReadFromJsonAsync<BoardResponse>())!;
 
-        using var taskResponse = await client.PostAsJsonAsync($"/boards/{board.Id}/tasks", new CreateTaskRequest("Task", null, null));
+        using var taskResponse = await client.PostAsJsonAsync($"/api/boards/{board.Id}/tasks", new CreateTaskRequest("Task", null, null));
         Assert.Equal(HttpStatusCode.Created, taskResponse.StatusCode);
         return (await taskResponse.Content.ReadFromJsonAsync<TaskResponse>())!;
     }
@@ -28,16 +28,16 @@ public sealed class TimelineApiTests(ApiFixture api)
         using var owner = api.CreateClientAs();
         var task = await CreateTaskAsync(owner, "TLA");
 
-        using var created = await owner.PostAsJsonAsync($"/tasks/{task.Id}/comments", new CreateTaskCommentRequest("Первый!"));
+        using var created = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/comments", new CreateTaskCommentRequest("Первый!"));
 
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-        Assert.Contains($"/tasks/{task.Id}/comments", created.Headers.Location!.ToString());
+        Assert.Contains($"/api/tasks/{task.Id}/comments", created.Headers.Location!.ToString());
         var comment = (await created.Content.ReadFromJsonAsync<TaskCommentResponse>())!;
         Assert.Equal(ApiFixture.BootstrapId, comment.AuthorId);
 
-        var list = await owner.GetFromJsonAsync<List<TaskCommentResponse>>($"/tasks/{task.Id}/comments");
+        var list = await owner.GetFromJsonAsync<List<TaskCommentResponse>>($"/api/tasks/{task.Id}/comments");
         Assert.Equal(comment.Id, Assert.Single(list!).Id);
-        var withCount = await owner.GetFromJsonAsync<TaskResponse>($"/tasks/{task.Id}");
+        var withCount = await owner.GetFromJsonAsync<TaskResponse>($"/api/tasks/{task.Id}");
         Assert.Equal(1, withCount!.CommentCount);
     }
 
@@ -46,14 +46,14 @@ public sealed class TimelineApiTests(ApiFixture api)
     {
         using var owner = api.CreateClientAs();
         var task = await CreateTaskAsync(owner, "TLB");
-        using var createUser = await owner.PostAsJsonAsync("/users", new CreateUserRequest("timeline.reader", "timeline.reader@example.com", "A", "B", "correct horse battery", UserRole.Reader));
+        using var createUser = await owner.PostAsJsonAsync("/api/users", new CreateUserRequest("timeline.reader", "timeline.reader@example.com", "A", "B", "correct horse battery", UserRole.Reader));
         var reader = (await createUser.Content.ReadFromJsonAsync<UserResponse>())!;
 
         using var asReader = api.CreateClientAs(reader.Id);
-        using var forbidden = await asReader.PostAsJsonAsync($"/tasks/{task.Id}/comments", new CreateTaskCommentRequest("нет"));
+        using var forbidden = await asReader.PostAsJsonAsync($"/api/tasks/{task.Id}/comments", new CreateTaskCommentRequest("нет"));
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
 
-        using var read = await asReader.GetAsync($"/tasks/{task.Id}/activity");
+        using var read = await asReader.GetAsync($"/api/tasks/{task.Id}/activity");
         Assert.Equal(HttpStatusCode.OK, read.StatusCode);
     }
 
@@ -63,13 +63,13 @@ public sealed class TimelineApiTests(ApiFixture api)
         using var owner = api.CreateClientAs();
         var task = await CreateTaskAsync(owner, "TLC");
 
-        using var patched = await owner.PatchAsJsonAsync($"/tasks/{task.Id}", new UpdateTaskRequest("Renamed", null, null));
+        using var patched = await owner.PatchAsJsonAsync($"/api/tasks/{task.Id}", new UpdateTaskRequest("Renamed", null, null));
         Assert.Equal(HttpStatusCode.OK, patched.StatusCode);
-        using var due = await owner.PatchAsJsonAsync($"/tasks/{task.Id}/due-date", new SetTaskDueDateRequest(new DateOnly(2026, 10, 1)));
+        using var due = await owner.PatchAsJsonAsync($"/api/tasks/{task.Id}/due-date", new SetTaskDueDateRequest(new DateOnly(2026, 10, 1)));
         Assert.Equal(HttpStatusCode.OK, due.StatusCode);
         Assert.Equal(new DateOnly(2026, 10, 1), (await due.Content.ReadFromJsonAsync<TaskResponse>())!.DueDate);
 
-        var activity = (await owner.GetFromJsonAsync<List<TaskActivityResponse>>($"/tasks/{task.Id}/activity"))!;
+        var activity = (await owner.GetFromJsonAsync<List<TaskActivityResponse>>($"/api/tasks/{task.Id}/activity"))!;
 
         Assert.Equal(
             new[] { TaskActivityType.Created, TaskActivityType.TitleChanged, TaskActivityType.DueDateChanged },
@@ -83,10 +83,10 @@ public sealed class TimelineApiTests(ApiFixture api)
         using var owner = api.CreateClientAs();
         var task = await CreateTaskAsync(owner, "TLD");
 
-        using var empty = await owner.PostAsJsonAsync($"/tasks/{task.Id}/comments", new CreateTaskCommentRequest("   "));
+        using var empty = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/comments", new CreateTaskCommentRequest("   "));
         Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
 
-        using var missing = await owner.GetAsync($"/tasks/{Guid.NewGuid()}/comments");
+        using var missing = await owner.GetAsync($"/api/tasks/{Guid.NewGuid()}/comments");
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 
@@ -95,18 +95,18 @@ public sealed class TimelineApiTests(ApiFixture api)
     {
         using var owner = api.CreateClientAs();
         var task = await CreateTaskAsync(owner, "TLE");
-        using var created = await owner.PostAsJsonAsync($"/tasks/{task.Id}/comments", new CreateTaskCommentRequest("v1"));
+        using var created = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/comments", new CreateTaskCommentRequest("v1"));
         var comment = (await created.Content.ReadFromJsonAsync<TaskCommentResponse>())!;
 
-        using var edited = await owner.PatchAsJsonAsync($"/comments/{comment.Id}", new UpdateTaskCommentRequest("v2"));
+        using var edited = await owner.PatchAsJsonAsync($"/api/comments/{comment.Id}", new UpdateTaskCommentRequest("v2"));
         Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
         var editedComment = (await edited.Content.ReadFromJsonAsync<TaskCommentResponse>())!;
         Assert.Equal("v2", editedComment.Body);
         Assert.NotNull(editedComment.EditedAt);
 
-        using var deleted = await owner.DeleteAsync($"/comments/{comment.Id}");
+        using var deleted = await owner.DeleteAsync($"/api/comments/{comment.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
-        using var again = await owner.DeleteAsync($"/comments/{comment.Id}");
+        using var again = await owner.DeleteAsync($"/api/comments/{comment.Id}");
         Assert.Equal(HttpStatusCode.NotFound, again.StatusCode);
     }
 }

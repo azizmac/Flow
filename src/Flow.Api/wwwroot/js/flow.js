@@ -1,5 +1,5 @@
-﻿// Минимальный JS-мост для Flow.Client: глобальные хоткеи, буфер обмена,
-// фокус, геометрия якорей для поповеров и localStorage. Всё остальное — в Razor/CSS.
+﻿// Минимальный JS-мост для интерфейса Flow: глобальные хоткеи, буфер обмена, фокус,
+// геометрия якорей для поповеров, вложения и выход. Всё остальное — в Razor/CSS.
 window.flow = (function () {
     let hotkeyRef = null;
     // Промис загрузки бандла редактора: он один на страницу, грузим по требованию.
@@ -275,6 +275,17 @@ window.flow = (function () {
                     ref.invokeMethodAsync('DownloadAttachment', link.getAttribute('data-attachment')).catch(function () { });
                 });
             });
+        },
+
+        // Выход должен быть POST: cookie flow.auth объявлена SameSite=Lax, поэтому кросс-сайтовый
+        // POST её не донесёт и принудительно разлогинить человека чужой страницей нельзя. Кнопка выхода
+        // живёт внутри circuit'а и формы вокруг себя не имеет, поэтому форму создаём здесь.
+        submitPost: function (url) {
+            const form = document.createElement('form');
+            form.method = 'post';
+            form.action = url;
+            document.body.appendChild(form);
+            form.submit();
         },
 
         saveFile: function (name, contentType, bytes) {

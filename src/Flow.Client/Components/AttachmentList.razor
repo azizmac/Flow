@@ -4,7 +4,7 @@
    Bearer не носят. Байты приезжают в браузер и превращаются в blob:-URL, который освобождается
    при уходе со страницы — иначе вкладка течёт на задаче с десятком снимков. *@
 @implements IAsyncDisposable
-@inject FlowApi Api
+@inject IFlowApi Api
 @inject BrowserInterop Browser
 @inject ToastService Toasts
 @inject UserDirectory Users

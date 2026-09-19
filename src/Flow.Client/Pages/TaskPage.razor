@@ -1,7 +1,7 @@
 ﻿@* Экран 5 — задача на всю страницу (GET /tasks/{id} → GET /boards/{boardId}). *@
 @page "/tasks/{Id:guid}"
 @implements IDisposable
-@inject FlowApi Api
+@inject IFlowApi Api
 @inject NavigationManager Nav
 @inject ToastService Toasts
 @inject BrowserInterop Browser

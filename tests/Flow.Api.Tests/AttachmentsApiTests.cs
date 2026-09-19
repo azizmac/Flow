@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -24,10 +24,10 @@ public sealed class AttachmentsApiTests(ApiFixture api)
     private static async Task<TaskResponse> CreateTaskAsync(HttpClient client)
     {
         var key = $"ATT{Interlocked.Increment(ref _keySuffix)}";
-        using var board = await client.PostAsJsonAsync("/boards", new CreateBoardRequest($"Вложения {key}", key));
+        using var board = await client.PostAsJsonAsync("/api/boards", new CreateBoardRequest($"Вложения {key}", key));
         var created = (await board.Content.ReadFromJsonAsync<BoardResponse>())!;
 
-        using var task = await client.PostAsJsonAsync($"/boards/{created.Id}/tasks", new CreateTaskRequest("Задача", null, null));
+        using var task = await client.PostAsJsonAsync($"/api/boards/{created.Id}/tasks", new CreateTaskRequest("Задача", null, null));
         return (await task.Content.ReadFromJsonAsync<TaskResponse>())!;
     }
 
@@ -39,7 +39,7 @@ public sealed class AttachmentsApiTests(ApiFixture api)
     }
 
     private static Task<HttpResponseMessage> UploadAsync(HttpClient client, Guid taskId, byte[] bytes, string fileName) =>
-        client.PostAsync($"/tasks/{taskId}/attachments", File(bytes, fileName));
+        client.PostAsync($"/api/tasks/{taskId}/attachments", File(bytes, fileName));
 
     [Fact]
     public async Task Upload_Requires_Token()
@@ -74,7 +74,7 @@ public sealed class AttachmentsApiTests(ApiFixture api)
         using var uploaded = await UploadAsync(client, task.Id, bytes, "договор поставки.txt");
         var attachment = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
 
-        using var download = await client.GetAsync($"/attachments/{attachment.Id}/content");
+        using var download = await client.GetAsync($"/api/attachments/{attachment.Id}/content");
 
         Assert.Equal(bytes, await download.Content.ReadAsByteArrayAsync());
         Assert.Equal("attachment", download.Content.Headers.ContentDisposition!.DispositionType);
@@ -96,8 +96,8 @@ public sealed class AttachmentsApiTests(ApiFixture api)
         using var document = await UploadAsync(client, task.Id, Encoding.UTF8.GetBytes("<html/>"), "страница.html");
         var html = (await document.Content.ReadFromJsonAsync<AttachmentResponse>())!;
 
-        using var inlineImage = await client.GetAsync($"/attachments/{png.Id}/content?inline=true");
-        using var inlineHtml = await client.GetAsync($"/attachments/{html.Id}/content?inline=true");
+        using var inlineImage = await client.GetAsync($"/api/attachments/{png.Id}/content?inline=true");
+        using var inlineHtml = await client.GetAsync($"/api/attachments/{html.Id}/content?inline=true");
 
         Assert.Equal("inline", inlineImage.Content.Headers.ContentDisposition!.DispositionType);
         // HTML с нашего origin показывать нельзя ни при каких параметрах запроса.
@@ -136,13 +136,13 @@ public sealed class AttachmentsApiTests(ApiFixture api)
         var attachment = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
 
         using var created = await owner.PostAsJsonAsync(
-            "/users",
+            "/api/users",
             new CreateUserRequest("att.reader", "att.reader@example.com", "A", "B", "correct horse battery", UserRole.Reader));
         var reader = (await created.Content.ReadFromJsonAsync<UserResponse>())!;
 
         using var client = api.CreateClientAs(reader.Id);
         using var upload = await UploadAsync(client, task.Id, [1, 2, 3], "нельзя.txt");
-        using var download = await client.GetAsync($"/attachments/{attachment.Id}/content");
+        using var download = await client.GetAsync($"/api/attachments/{attachment.Id}/content");
 
         Assert.Equal(HttpStatusCode.Forbidden, upload.StatusCode);
         Assert.Equal(HttpStatusCode.OK, download.StatusCode);
@@ -156,11 +156,11 @@ public sealed class AttachmentsApiTests(ApiFixture api)
         using var uploaded = await UploadAsync(client, task.Id, Encoding.UTF8.GetBytes("файл"), "файл.txt");
         var attachment = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
 
-        var list = await client.GetFromJsonAsync<IReadOnlyList<AttachmentResponse>>($"/tasks/{task.Id}/attachments");
+        var list = await client.GetFromJsonAsync<IReadOnlyList<AttachmentResponse>>($"/api/tasks/{task.Id}/attachments");
         Assert.Single(list!);
 
-        using var deleted = await client.DeleteAsync($"/attachments/{attachment.Id}");
-        using var afterDelete = await client.GetAsync($"/attachments/{attachment.Id}/content");
+        using var deleted = await client.DeleteAsync($"/api/attachments/{attachment.Id}");
+        using var afterDelete = await client.GetAsync($"/api/attachments/{attachment.Id}/content");
 
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);
@@ -171,7 +171,7 @@ public sealed class AttachmentsApiTests(ApiFixture api)
     {
         using var client = api.CreateClientAs();
 
-        using var response = await client.GetAsync($"/tasks/{Guid.NewGuid()}/attachments");
+        using var response = await client.GetAsync($"/api/tasks/{Guid.NewGuid()}/attachments");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }

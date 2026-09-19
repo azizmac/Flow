@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using Flow.Auth.Contracts;
 using Flow.Auth.Data;
 using Flow.Auth.Security;
@@ -93,6 +93,37 @@ public sealed class LoginTests(AuthFixture auth)
         // Пароль bootstrap-овский — сначала на смену (#26).
         Assert.Equal(ChangePasswordPage.Path, ChangePasswordPage.PathOf(login.Headers.Location!));
         Assert.True(user.MustChangePassword);
+    }
+
+    /// <summary>
+    /// Интерфейс живёт в этом же хосте, и его страницы закрыты. Без сессии человек обязан попасть на
+    /// страницу входа, а не получить 401: показать 401 в браузере некуда. Проверяется здесь, а не в
+    /// Flow.Api.Tests, потому что там оснастка подменяет схему на JwtBearer и редиректа не увидеть.
+    /// </summary>
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/boards")]
+    [InlineData("/tasks")]
+    public async Task Ui_Without_Session_Should_Redirect_To_Login(string path)
+    {
+        using var client = auth.CreateApiClient();
+
+        using var response = await client.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Contains("/account/login", response.Headers.Location!.ToString());
+    }
+
+    /// <summary>JSON-API под /api отвечает клиенту API, а не браузеру: 401 с Bearer, без редиректа.</summary>
+    [Fact]
+    public async Task Api_Without_Token_Should_Answer_401_Not_Redirect()
+    {
+        using var client = auth.CreateApiClient();
+
+        using var response = await client.GetAsync("/api/boards");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains("Bearer", response.Headers.WwwAuthenticate.ToString());
     }
 
     [Fact]

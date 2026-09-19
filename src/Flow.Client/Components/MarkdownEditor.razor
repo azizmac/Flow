@@ -137,7 +137,7 @@
                 return;
             }
 
-            _mounted = await Browser.EditorMountAsync(Id, _self, Value, Placeholder, Busy);
+            _mounted = await Browser.EditorMountAsync(Id, _self, Value, Placeholder, Busy, OnCancel.HasDelegate);
             _lastFromEditor = Value;
             _busyApplied = Busy;
 
@@ -178,6 +178,7 @@
         }
 
         await DetectMention();
+        await SyncMentionAsync();
         StateHasChanged();
     }
 
@@ -200,16 +201,27 @@
     private static readonly EditorCommand Handled = new("handled");
 
     /// <summary>
-    /// Клавиша из редактора. Возвращаем команду, если забрали клавишу себе, и null, если это обычный ввод:
-    /// стрелки и Enter принадлежат меню упоминаний, только пока оно открыто.
+    /// Клавиша из редактора, уже перехваченная на стороне JS. Решение «забрать клавишу себе» принимает
+    /// flow-editor (takesKey) синхронно, потому что CodeMirror ждёт true/false, — а сюда вызов приходит
+    /// асинхронно, и здесь можно спокойно и в JS сходить, и состояние поменять.
     ///
-    /// Вызов синхронный — CodeMirror ждёт ответ, чтобы решить судьбу события. Поэтому здесь нельзя ни звать
-    /// JS, ни запускать задачу, которая его позовёт: пока JS ждёт нас, вложенный вызов к нему не проходит,
-    /// и правка текста молча теряется (Ctrl B, выбор упоминания по Enter). Отсюда и разделение: решение —
-    /// в .NET, выполнение — в JS.
+    /// Раньше это был синхронный invokeMethod. При серверном рендере компонент живёт на другом конце
+    /// SignalR, синхронный вызов туда невозможен в принципе, и меню упоминаний вместе с Ctrl+B молча
+    /// переставали работать: исключение гасил catch на стороне JS.
     /// </summary>
     [JSInvokable]
-    public EditorCommand? HandleEditorKey(string key)
+    public async Task HandleEditorKeyAsync(string key)
+    {
+        var command = DecideEditorKey(key);
+        if (command is not null && command.Kind != "handled")
+            await Browser.EditorRunCommandAsync(Id, command);
+
+        // Меню могло открыться или закрыться — JS обязан знать об этом до следующего нажатия.
+        await SyncMentionAsync();
+        StateHasChanged();
+    }
+
+    private EditorCommand? DecideEditorKey(string key)
     {
         if (_mentionOpen && _mentionItems.Count > 0)
         {
@@ -326,12 +338,16 @@
         _mentionItems = [];
     }
 
+    /// <summary>Переносит текущее состояние меню в JS: по нему редактор решает, чьи стрелки и Enter.</summary>
+    private Task SyncMentionAsync() => Browser.EditorSetMentionOpenAsync(Id, _mentionOpen && _mentionItems.Count > 0);
+
     private async Task PickMention(int index)
     {
         if (index < 0 || index >= _mentionItems.Count) return;
         var user = _mentionItems[index];
         var value = await Browser.EditorInsertMentionAsync(Id, _mentionAt, user.Username);
         CloseMention();
+        await SyncMentionAsync();
         await SetValue(value);
         StateHasChanged();
     }
