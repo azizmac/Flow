@@ -5,7 +5,6 @@ using Flow.Application.Features.Attachments.Queries.AttachmentContentQuery;
 using Flow.Application.Features.Attachments.Queries.AttachmentListQuery;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Net.Http.Headers;
 
 namespace Flow.Api.Controllers;
 
@@ -63,8 +62,12 @@ public class AttachmentsController(IMediator mediator, IActorAccessor actor) : C
     }
 
     /// <summary>
-    /// Содержимое файла. По умолчанию всегда скачивание; <c>inline=1</c> работает только для типов
-    /// из белого списка (картинки) — показывать произвольный файл с нашего origin нельзя.
+    /// Содержимое файла для клиентов API (Bearer). Страницы Flow сюда не ходят — у них прямые
+    /// ссылки /files/{id} (FilesController), которые не требуют заголовка и не грузят circuit.
+    ///
+    /// По умолчанию всегда скачивание; inline работает только для типов из белого списка (картинки).
+    /// Осторожно: параметр объявлен как bool, поэтому «inline=1» НЕ биндится и даёт 400 —
+    /// работает только «inline=true».
     /// </summary>
     [HttpGet("attachments/{id:guid}/content")]
     public async Task<IActionResult> GetContent(Guid id, CancellationToken cancellationToken, [FromQuery] bool inline = false)
@@ -73,23 +76,11 @@ public class AttachmentsController(IMediator mediator, IActorAccessor actor) : C
         if (content is null)
             return NotFound();
 
-        // Даже при inline браузер не должен угадывать тип по содержимому.
-        Response.Headers.XContentTypeOptions = "nosniff";
-
-        var disposition = new ContentDispositionHeaderValue(inline && content.CanInline ? "inline" : "attachment");
-        // FileNameStar кодирует имя по RFC 5987 — кириллица и пробелы доезжают целыми.
-        disposition.SetHttpFileName(content.FileName);
-        Response.Headers.ContentDisposition = disposition.ToString();
-
-        // Поток из S3 не seekable (GetObjectResponse.ResponseStream), поэтому MVC сам длину не узнает
-        // и ответ уходит chunked: браузер не показывает прогресс скачивания. Длина уже известна из
-        // строки вложения — проставляем её руками.
-        Response.ContentLength = content.SizeBytes;
-
-        // enableRangeProcessing здесь был бы обманом: диапазоны требуют seekable-потока, MVC на
-        // несеекабельном их не отдаёт (ни Accept-Ranges, ни 206). Чтобы перемотка заработала,
-        // Range надо прокидывать до S3 отдельной задачей.
-        return File(content.Content, content.ContentType);
+        // Заголовки и отдача — общие с /files/{id}: правила inline и nosniff обязаны жить в одном
+        // месте, иначе два входа разойдутся и прямая ссылка на .html станет XSS на своём origin.
+        // ETag здесь не ставим: клиенту API он не нужен, а ради него пришлось бы читать строку дважды.
+        AttachmentDelivery.ApplyHeaders(this, content.FileName, content.CanInline, forceDownload: !inline, etag: null);
+        return AttachmentDelivery.Send(this, content);
     }
 
     [HttpDelete("attachments/{id:guid}")]

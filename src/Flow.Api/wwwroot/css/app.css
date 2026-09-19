@@ -1842,6 +1842,9 @@ a.task-row { color: inherit; text-decoration: none; }
 .att-row:hover .att-ico { background: rgba(0, 0, 0, 0.18); }
 .att-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .att-name {
+    /* display:block обязателен: у кнопки он был inline-block по умолчанию, а у ссылки — inline,
+       и на inline-элементе max-width с обрезкой длинного имени не действуют. */
+    display: block;
     max-width: 100%;
     background: transparent;
     border: 0;

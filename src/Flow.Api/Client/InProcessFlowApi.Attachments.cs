@@ -5,10 +5,6 @@ using Flow.Client.Services;
 using Flow.Shared.Contracts.Attachments;
 using Microsoft.AspNetCore.Components.Forms;
 
-// Запрос берётся алиасом, а не импортом его namespace: там лежит свой AttachmentContent (поток),
-// и рядом с клиентским AttachmentContent (байты) имя стало бы неоднозначным.
-using AttachmentContentQuery = Flow.Application.Features.Attachments.Queries.AttachmentContentQuery.AttachmentContentQuery;
-
 namespace Flow.Api.Client;
 
 /// <summary>
@@ -79,28 +75,6 @@ internal sealed partial class InProcessFlowApi
                 return Invalid<AttachmentResponse>(result.Error!);
 
             return Ok(result.Response!);
-        });
-
-    /// <summary>
-    /// Содержимое вложения байтами: и скачивание, и превью. Заголовки ответа (nosniff,
-    /// Content-Disposition, inline для белого списка типов) здесь не нужны — файл никуда не уходит
-    /// с сервера как HTTP-ответ, а имя и тип едут полями записи.
-    /// </summary>
-    public Task<ApiResult<AttachmentContent>> DownloadAttachment(Guid id, CancellationToken ct = default) =>
-        Guard<AttachmentContent>(async () =>
-        {
-            // null — и вложения нет, и объект пропал из хранилища: для клиента это один и тот же 404.
-            var content = await mediator.Send(new AttachmentContentQuery(id), ct);
-            if (content is null)
-                return NotFound<AttachmentContent>();
-
-            // Поток из S3 не перематывается и живёт до Dispose, а вызывающему нужны байты (img src,
-            // сохранение файла) — вычитываем целиком здесь и сразу отпускаем соединение с хранилищем.
-            await using var source = content.Content;
-            using var buffer = new MemoryStream(content.SizeBytes is > 0 and <= int.MaxValue ? (int)content.SizeBytes : 0);
-            await source.CopyToAsync(buffer, ct);
-
-            return Ok(new AttachmentContent(buffer.ToArray(), content.ContentType, content.FileName));
         });
 
     public Task<ApiResult<bool>> DeleteAttachment(Guid id, CancellationToken ct = default) =>

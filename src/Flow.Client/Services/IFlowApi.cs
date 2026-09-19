@@ -8,9 +8,6 @@ using Microsoft.AspNetCore.Components.Forms;
 
 namespace Flow.Client.Services;
 
-/// <summary>Файл вложения, приехавший в интерфейс: байты, тип и имя — всё как их назвал сервер.</summary>
-public sealed record AttachmentContent(byte[] Bytes, string ContentType, string FileName);
-
 /// <summary>
 /// Результат вызова API: либо значение, либо человекочитаемая ошибка. Коды остались от HTTP-транспорта
 /// намеренно — на Ok/NotFound/Conflict/Unauthorized/Forbidden завязаны все экраны, и менять их вместе
@@ -80,7 +77,6 @@ public interface IFlowApi
     // ---- Вложения ----
     Task<ApiResult<IReadOnlyList<AttachmentResponse>>> GetAttachments(Guid taskId, CancellationToken ct = default);
     Task<ApiResult<AttachmentResponse>> UploadAttachment(Guid taskId, IBrowserFile file, long maxBytes, CancellationToken ct = default);
-    Task<ApiResult<AttachmentContent>> DownloadAttachment(Guid id, CancellationToken ct = default);
     Task<ApiResult<bool>> DeleteAttachment(Guid id, CancellationToken ct = default);
 
     // ---- Поиск ----

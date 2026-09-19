@@ -1,11 +1,10 @@
 ﻿@* Вложения задачи: список, загрузка, превью, скачивание и удаление (docs/TZ_attachments.md, этап 2).
 
-   И картинки, и скачивание идут через .NET: файл отдаётся только по токену, а тег img и <a href>
-   Bearer не носят. Байты приезжают в браузер и превращаются в blob:-URL, который освобождается
-   при уходе со страницы — иначе вкладка течёт на задаче с десятком снимков. *@
-@implements IAsyncDisposable
+   И превью, и скачивание — прямые ссылки /files/{id}: браузер забирает файл сам по cookie, минуя
+   circuit. Раньше байты ехали на сервер в память, оттуда по SignalR в браузер и превращались
+   в blob:-URL, который приходилось освобождать вручную. *@
+@implements IDisposable
 @inject IFlowApi Api
-@inject BrowserInterop Browser
 @inject ToastService Toasts
 @inject UserDirectory Users
 @inject AppState State
@@ -25,16 +24,17 @@
         @foreach (var item in _items)
         {
             <div class="att-row">
-                @if (_previews.TryGetValue(item.Id, out var preview))
+                @if (item.IsImage && item.SizeBytes <= PreviewMaxBytes)
                 {
-                    <img class="att-thumb" src="@preview" alt="@item.FileName" />
+                    <img class="att-thumb" src="@Href(item)" alt="@item.FileName" data-attachment="@item.Id"
+                         loading="lazy" decoding="async" />
                 }
                 else
                 {
                     <span class="att-ico"><Icon Name="@(item.IsImage ? "eye" : "file")" Size="15" /></span>
                 }
                 <div class="att-main">
-                    <button type="button" class="att-name" title="Скачать @item.FileName" @onclick="() => Download(item)">@item.FileName</button>
+                    <a class="att-name" href="@Href(item)" download="@item.FileName" title="Скачать @item.FileName">@item.FileName</a>
                     <div class="att-sub">
                         <span>@Ru.FileSize(item.SizeBytes)</span>
                         <span>·</span>
@@ -43,16 +43,10 @@
                         <span title="@Ru.DateTimeFull(item.UploadedAt)">@Ru.Ago(item.UploadedAt)</span>
                     </div>
                 </div>
-                @if (_downloading == item.Id)
-                {
-                    <span class="ds-spin" aria-label="Скачиваем"></span>
-                }
-                else
-                {
-                    <button type="button" class="icon-lnk" title="Скачать" @onclick="() => Download(item)">
-                        <Icon Name="arrow-left" Size="13" Style="transform:rotate(-90deg);" />
-                    </button>
-                }
+                @* Спиннера больше нет и он не нужен: прогресс скачивания показывает сам браузер. *@
+                <a class="icon-lnk" href="@Href(item)" download="@item.FileName" title="Скачать">
+                    <Icon Name="arrow-left" Size="13" Style="transform:rotate(-90deg);" />
+                </a>
                 @if (CanDelete(item))
                 {
                     <button type="button" class="icon-lnk danger" title="Удалить" @onclick="() => StartDelete(item)">
@@ -79,17 +73,16 @@
     [Parameter] public string? DropZoneId { get; set; }
 
     /// <summary>
-    /// Превью тянет файл целиком: другого способа нет, ссылки на вложение без токена не существует.
-    /// Поэтому снимок на 20 МБ показывается иконкой — ради картинки 40×40 такую загрузку не затевают.
+    /// Порог остался, но смысл у него теперь другой. Трафика он больше не экономит — браузер тянет
+    /// файл сам и кэширует его. Экономит он декодирование: ради плитки 40×40 незачем разворачивать
+    /// в памяти снимок на 20 МБ. Настоящее решение — уменьшенная копия на сервере, это отдельная задача.
     /// </summary>
     private const long PreviewMaxBytes = 4L * 1024 * 1024;
 
     private readonly string _inputId = "att-" + Guid.NewGuid().ToString("N")[..8];
-    private readonly Dictionary<Guid, string> _previews = [];
 
     private List<AttachmentResponse> _items = [];
     private Guid _loadedTaskId;
-    private Guid? _downloading;
     private AttachmentResponse? _deleting;
     private bool _deletingIsMentioned;
 
@@ -114,12 +107,12 @@
 
         if (change.Added is { } added && _items.All(item => item.Id != added.Id))
         {
-            InvokeAsync(() => AddAsync(added));
+            InvokeAsync(() => Add(added));
             return;
         }
 
         if (change.RemovedId is { } removedId && _items.Any(item => item.Id == removedId))
-            InvokeAsync(() => RemoveAsync(removedId));
+            InvokeAsync(() => Remove(removedId));
     }
 
     private bool CanAttach => Permissions.CanAttach(Me);
@@ -137,7 +130,6 @@
 
     private async Task LoadAsync()
     {
-        await ForgetPreviewsAsync();
         _items = [];
 
         var result = await Api.GetAttachments(TaskId);
@@ -152,59 +144,21 @@
 
         if (!Users.IsLoaded)
             _ = Users.EnsureLoadedAsync();
-
-        foreach (var item in _items)
-            await LoadPreviewAsync(item);
     }
 
-    private async Task LoadPreviewAsync(AttachmentResponse item)
-    {
-        if (!item.IsImage || item.SizeBytes > PreviewMaxBytes || _previews.ContainsKey(item.Id))
-            return;
+    /// <summary>Прямая ссылка на содержимое — FilesController, вне префикса /api (там только Bearer).</summary>
+    private static string Href(AttachmentResponse item) => $"/files/{item.Id}";
 
-        var content = await Api.DownloadAttachment(item.Id);
-        if (!content.Ok)
-            return;
-
-        var url = await Browser.BlobUrlAsync(content.Value!.ContentType, content.Value.Bytes);
-        if (url is null)
-            return;
-
-        _previews[item.Id] = url;
-        StateHasChanged();
-    }
-
-    private async Task AddAsync(AttachmentResponse item)
+    private void Add(AttachmentResponse item)
     {
         _items = [.. _items, item];
         StateHasChanged();
-        await LoadPreviewAsync(item);
     }
 
-    private async Task RemoveAsync(Guid id)
+    private void Remove(Guid id)
     {
         _items = [.. _items.Where(item => item.Id != id)];
-        await ForgetPreviewAsync(id);
         StateHasChanged();
-    }
-
-    private async Task Download(AttachmentResponse item)
-    {
-        if (_downloading is not null)
-            return;
-
-        _downloading = item.Id;
-        var content = await Api.DownloadAttachment(item.Id);
-        _downloading = null;
-
-        if (!content.Ok)
-        {
-            Toasts.Error(content.Error ?? "Не удалось скачать файл");
-            return;
-        }
-
-        if (!await Browser.SaveFileAsync(item.FileName, content.Value!.ContentType, content.Value.Bytes))
-            Toasts.Error("Браузер не дал сохранить файл");
     }
 
     /// <summary>
@@ -248,30 +202,12 @@
             return;
         }
 
-        await RemoveAsync(item.Id);
+        Remove(item.Id);
         // Тот же файл мог быть показан в тексте комментария — там ссылка теперь не сработает,
         // но чужие тексты не правим (см. ТЗ, «Порядок операций»).
         Events.NotifyRemoved(TaskId, item.Id);
         Toasts.Ok($"Файл {item.FileName} удалён");
     }
 
-    private async Task ForgetPreviewAsync(Guid id)
-    {
-        if (_previews.Remove(id, out var url))
-            await Browser.RevokeBlobUrlAsync(url);
-    }
-
-    private async Task ForgetPreviewsAsync()
-    {
-        foreach (var url in _previews.Values)
-            await Browser.RevokeBlobUrlAsync(url);
-
-        _previews.Clear();
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        Events.Changed -= OnAttachmentsChanged;
-        await ForgetPreviewsAsync();
-    }
+    public void Dispose() => Events.Changed -= OnAttachmentsChanged;
 }
