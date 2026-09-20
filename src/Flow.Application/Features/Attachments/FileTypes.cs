@@ -1,4 +1,4 @@
-namespace Flow.Application.Features.Attachments;
+﻿namespace Flow.Application.Features.Attachments;
 
 /// <summary>
 /// Тип файла определяет сервер, а не браузер: заголовок из запроса подделывается тривиально, а от типа
@@ -61,7 +61,12 @@ public static class FileTypes
         "image/gif" => head.StartsWith("GIF87a"u8) || head.StartsWith("GIF89a"u8),
         // RIFF....WEBP: между сигнатурой и меткой формата лежит длина файла.
         "image/webp" => head.Length >= 12 && head.StartsWith("RIFF"u8) && head[8..12].SequenceEqual("WEBP"u8),
-        _ => true
+        // Не true. Сюда попадают только типы из InlineContentTypes, а он биндится из конфигурации:
+        // Attachments__InlineContentTypes__0=image/svg+xml меняет список без пересборки и без ревью.
+        // С «_ => true» такой тип прошёл бы вообще без проверки содержимого и стал бы показываться
+        // прямо в браузере с нашего origin. С «_ => false» он понижается до Fallback и может только
+        // скачиваться: чтобы показывать тип inline, для него обязана существовать ветка выше.
+        _ => false
     };
 
     /// <summary>Сколько байт нужно увидеть, чтобы проверить сигнатуру любого из inline-типов.</summary>

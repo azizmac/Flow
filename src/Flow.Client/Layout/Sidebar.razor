@@ -7,8 +7,9 @@
 @inject NavigationManager Nav
 @inject AppState State
 @inject UserDirectory Users
-@inject FlowApi Api
+@inject IFlowApi Api
 @inject AuthenticationStateProvider AuthState
+@inject BrowserInterop Browser
 
 <nav class="sb @SidebarModeClass">
     <div class="sb-top">
@@ -115,7 +116,10 @@
         }
 
         _name = auth.User.Identity?.Name ?? "";
-        if (Guid.TryParse(auth.User.FindFirst("sub")?.Value, out var id))
+        // sub остался от токена OpenIddict, NameIdentifier кладёт cookie-схема Identity после /account/login.
+        var actorId = auth.User.FindFirst("sub")?.Value
+                      ?? auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (Guid.TryParse(actorId, out var id))
             State.SetCurrentUser(id);
 
         // Профиль текущего пользователя — сразу в справочник; остальных подгружаем следом (аватары исполнителей).
@@ -126,10 +130,10 @@
         }
         else if (me.Unauthorized)
         {
-            // Токен есть, но Flow.Api его не принял (сменились ключи Flow.Auth, профиль удалён руками): чистим сессию,
+            // Сессия есть, но профиля под неё нет (удалён руками, сменились ключи): чистим сессию,
             // чтобы человек вошёл заново, а не смотрел на пустой сайдбар.
             _meError = "Сессия устарела";
-            Nav.NavigateToLogout("authentication/logout", "authentication/logged-out");
+            await Browser.PostFormAsync("account/logout");
             return;
         }
         else
@@ -141,8 +145,9 @@
             _ = Users.EnsureLoadedAsync();
     }
 
-    // Явный returnUrl: без него библиотека вернёт на текущую (закрытую) страницу и тут же начнёт новый вход.
-    private void Logout() => Nav.NavigateToLogout("authentication/logout", "authentication/logged-out");
+    // Выход — POST на /account/logout хоста: cookie гасится там, на сервере. GET здесь был бы дырой
+    // (чужая страница смогла бы разлогинить), поэтому форму отправляет flow.submitPost.
+    private async Task Logout() => await Browser.PostFormAsync("account/logout");
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => StateHasChanged();
 

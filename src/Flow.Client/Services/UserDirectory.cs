@@ -7,7 +7,7 @@ namespace Flow.Client.Services;
 /// а TaskResponse несёт только AssigneeId — один GET /users?includeInactive=true вместо N GET /users/{id}.
 /// Команда небольшая, поэтому держим всех (включая деактивированных: они остаются исполнителями старых задач).
 /// </summary>
-public sealed class UserDirectory(FlowApi api)
+public sealed class UserDirectory(IFlowApi api)
 {
     private readonly Dictionary<Guid, UserResponse> _byId = new();
     private Task<ApiResult<IReadOnlyList<UserResponse>>>? _loading;

@@ -7,7 +7,7 @@
    Роль (RoleSelect, PATCH /users/{id}/role) и «Деактивировать/Активировать» — по правам из Permissions (Owner/Admin). *@
 @page "/users/{Id:guid}"
 @implements IDisposable
-@inject FlowApi Api
+@inject IFlowApi Api
 @inject UserDirectory Users
 @inject NavigationManager Nav
 @inject ToastService Toasts

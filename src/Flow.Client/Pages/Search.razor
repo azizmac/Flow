@@ -3,7 +3,7 @@
    Строка запроса тоже с задержкой 300 мс и отменой предыдущего запроса — как в сайдбаре. *@
 @page "/search"
 @implements IDisposable
-@inject FlowApi Api
+@inject IFlowApi Api
 @inject NavigationManager Nav
 
 <PageTitle>@(HasQuery ? $"{_query} — поиск" : "Поиск") — Flow</PageTitle>

@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Tasks;
@@ -13,14 +13,14 @@ public sealed class TaskSearchApiTests(ApiFixture api)
 {
     private static async Task<BoardResponse> CreateBoardAsync(HttpClient client, string key)
     {
-        using var response = await client.PostAsJsonAsync("/boards", new CreateBoardRequest($"Board {key}", key));
+        using var response = await client.PostAsJsonAsync("/api/boards", new CreateBoardRequest($"Board {key}", key));
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<BoardResponse>())!;
     }
 
     private static async Task<TaskResponse> CreateTaskAsync(HttpClient client, Guid boardId, string title, Guid? statusId = null)
     {
-        using var response = await client.PostAsJsonAsync($"/boards/{boardId}/tasks", new CreateTaskRequest(title, null, statusId));
+        using var response = await client.PostAsJsonAsync($"/api/boards/{boardId}/tasks", new CreateTaskRequest(title, null, statusId));
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<TaskResponse>())!;
     }
@@ -34,11 +34,11 @@ public sealed class TaskSearchApiTests(ApiFixture api)
         var here = await CreateTaskAsync(owner, first.Id, "Здесь");
         var there = await CreateTaskAsync(owner, second.Id, "Там");
 
-        var all = await owner.GetFromJsonAsync<TaskListResponse>("/tasks?limit=500");
+        var all = await owner.GetFromJsonAsync<TaskListResponse>("/api/tasks?limit=500");
         Assert.Contains(all!.Items, t => t.Id == here.Id);
         Assert.Contains(all.Items, t => t.Id == there.Id);
 
-        var onlyFirst = await owner.GetFromJsonAsync<TaskListResponse>($"/tasks?boardId={first.Id}");
+        var onlyFirst = await owner.GetFromJsonAsync<TaskListResponse>($"/api/tasks?boardId={first.Id}");
         Assert.Equal(here.Id, Assert.Single(onlyFirst!.Items).Id);
         Assert.Equal(1, onlyFirst.Total);
         Assert.Null(onlyFirst.NextCursor);
@@ -53,7 +53,7 @@ public sealed class TaskSearchApiTests(ApiFixture api)
         var finished = await CreateTaskAsync(owner, board.Id, "Готово", done.Id);
         await CreateTaskAsync(owner, board.Id, "Не начата");
 
-        var result = await owner.GetFromJsonAsync<TaskListResponse>($"/tasks?boardId={board.Id}&statusType={StatusType.Done}");
+        var result = await owner.GetFromJsonAsync<TaskListResponse>($"/api/tasks?boardId={board.Id}&statusType={StatusType.Done}");
 
         Assert.Equal(finished.Id, Assert.Single(result!.Items).Id);
         Assert.Equal(2, result.Total);
@@ -67,12 +67,12 @@ public sealed class TaskSearchApiTests(ApiFixture api)
         using var owner = api.CreateClientAs();
         var board = await CreateBoardAsync(owner, "SRD");
         await CreateTaskAsync(owner, board.Id, "Видна читателю");
-        using var createUser = await owner.PostAsJsonAsync("/users",
+        using var createUser = await owner.PostAsJsonAsync("/api/users",
             new CreateUserRequest("search.reader", "search.reader@example.com", "A", "B", "correct horse battery", UserRole.Reader));
         var reader = (await createUser.Content.ReadFromJsonAsync<UserResponse>())!;
 
         using var asReader = api.CreateClientAs(reader.Id);
-        using var response = await asReader.GetAsync($"/tasks?boardId={board.Id}");
+        using var response = await asReader.GetAsync($"/api/tasks?boardId={board.Id}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var list = (await response.Content.ReadFromJsonAsync<TaskListResponse>())!;

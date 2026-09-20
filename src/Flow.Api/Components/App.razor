@@ -1,0 +1,52 @@
+@* Корневой документ приложения — замена wwwroot/index.html, который обслуживал WebAssembly.
+   Отличия, которые важно не потерять при правках:
+   - порядок стилей: MudBlazor → tokens → app → mud-overrides. Наши файлы перебивают библиотеку,
+     переставишь — поедет форма контролов (pill-кнопки, круглые icon-кнопки, поля-подчёркивания);
+   - blazor.web.js вместо blazor.webassembly.js;
+   - AuthenticationService.js больше нет: он обслуживал браузерный OIDC (292 КБ в критическом пути);
+   - статика лежит в wwwroot самого Flow.Api, поэтому пути остались прежними (css/…, js/…). *@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flow</title>
+    <base href="/" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="_content/MudBlazor/MudBlazor.min.css" />
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="css/mud-overrides.css" />
+    <link rel="icon" type="image/svg+xml" href="brand/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+    <HeadOutlet @rendermode="@RenderMode" />
+</head>
+
+<body>
+    <Routes @rendermode="@RenderMode" />
+
+    <div id="blazor-error-ui">
+        Произошла непредвиденная ошибка.
+        <a href="." class="reload">Перезагрузить</a>
+        <span class="dismiss">🗙</span>
+    </div>
+
+    <script src="js/flow.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script src="_framework/blazor.web.js"></script>
+</body>
+
+</html>
+
+@code {
+    // prerender выключен намеренно на первом шаге перехода. Включать его отдельно и осознанно:
+    // при prerender каждый OnInitializedAsync выполняется дважды (серверный проход + circuit),
+    // то есть все загрузки данных уходят по два раза, пока страницы не научатся переживать это
+    // через [PersistentState] — включая UserDirectory, иначе GET /users поедет повторно.
+    // Кроме того, JS-интероп в prerender недоступен, а он есть в MarkdownView и Drawer.
+    private static IComponentRenderMode RenderMode { get; } = new InteractiveServerRenderMode(prerender: false);
+}

@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -24,10 +24,10 @@ public sealed class AttachmentsApiTests(ApiFixture api)
     private static async Task<TaskResponse> CreateTaskAsync(HttpClient client)
     {
         var key = $"ATT{Interlocked.Increment(ref _keySuffix)}";
-        using var board = await client.PostAsJsonAsync("/boards", new CreateBoardRequest($"Вложения {key}", key));
+        using var board = await client.PostAsJsonAsync("/api/boards", new CreateBoardRequest($"Вложения {key}", key));
         var created = (await board.Content.ReadFromJsonAsync<BoardResponse>())!;
 
-        using var task = await client.PostAsJsonAsync($"/boards/{created.Id}/tasks", new CreateTaskRequest("Задача", null, null));
+        using var task = await client.PostAsJsonAsync($"/api/boards/{created.Id}/tasks", new CreateTaskRequest("Задача", null, null));
         return (await task.Content.ReadFromJsonAsync<TaskResponse>())!;
     }
 
@@ -39,7 +39,7 @@ public sealed class AttachmentsApiTests(ApiFixture api)
     }
 
     private static Task<HttpResponseMessage> UploadAsync(HttpClient client, Guid taskId, byte[] bytes, string fileName) =>
-        client.PostAsync($"/tasks/{taskId}/attachments", File(bytes, fileName));
+        client.PostAsync($"/api/tasks/{taskId}/attachments", File(bytes, fileName));
 
     [Fact]
     public async Task Upload_Requires_Token()
@@ -74,7 +74,7 @@ public sealed class AttachmentsApiTests(ApiFixture api)
         using var uploaded = await UploadAsync(client, task.Id, bytes, "договор поставки.txt");
         var attachment = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
 
-        using var download = await client.GetAsync($"/attachments/{attachment.Id}/content");
+        using var download = await client.GetAsync($"/api/attachments/{attachment.Id}/content");
 
         Assert.Equal(bytes, await download.Content.ReadAsByteArrayAsync());
         Assert.Equal("attachment", download.Content.Headers.ContentDisposition!.DispositionType);
@@ -96,12 +96,88 @@ public sealed class AttachmentsApiTests(ApiFixture api)
         using var document = await UploadAsync(client, task.Id, Encoding.UTF8.GetBytes("<html/>"), "страница.html");
         var html = (await document.Content.ReadFromJsonAsync<AttachmentResponse>())!;
 
-        using var inlineImage = await client.GetAsync($"/attachments/{png.Id}/content?inline=true");
-        using var inlineHtml = await client.GetAsync($"/attachments/{html.Id}/content?inline=true");
+        using var inlineImage = await client.GetAsync($"/api/attachments/{png.Id}/content?inline=true");
+        using var inlineHtml = await client.GetAsync($"/api/attachments/{html.Id}/content?inline=true");
 
         Assert.Equal("inline", inlineImage.Content.Headers.ContentDisposition!.DispositionType);
         // HTML с нашего origin показывать нельзя ни при каких параметрах запроса.
         Assert.Equal("attachment", inlineHtml.Content.Headers.ContentDisposition!.DispositionType);
+    }
+
+    /// <summary>
+    /// Прямые ссылки /files/{id}: по ним работают тег img и <a download>, поэтому маршрут обязан
+    /// жить ВНЕ префикса /api (там принимается только Bearer, а тег img заголовков не носит).
+    /// Здесь проверяется сам маршрут и заголовки; поведение по cookie — в Flow.Auth.Tests,
+    /// потому что ApiFixture намеренно подменяет схему на JwtBearer.
+    /// </summary>
+    [Fact]
+    public async Task Files_Route_Should_Serve_Image_Inline()
+    {
+        using var client = api.CreateClientAs();
+        var task = await CreateTaskAsync(client);
+
+        using var uploaded = await UploadAsync(client, task.Id, Png, "снимок.png");
+        var png = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
+
+        using var response = await client.GetAsync($"/files/{png.Id}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("inline", response.Content.Headers.ContentDisposition!.DispositionType);
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal("same-origin", response.Headers.GetValues("Cross-Origin-Resource-Policy").Single());
+        // no-cache, а не max-age: удаление вложения обязано действовать сразу (см. тест ниже по файлу).
+        // Сверяем разобранное значение, а не строку: порядок директив в ней задаёт парсер заголовка.
+        Assert.True(response.Headers.CacheControl!.NoCache);
+        Assert.True(response.Headers.CacheControl.Private);
+        Assert.Null(response.Headers.CacheControl.MaxAge);
+        Assert.NotNull(response.Headers.ETag);
+    }
+
+    /// <summary>Повторный показ той же картинки не качает байты заново — 304 по ETag.</summary>
+    [Fact]
+    public async Task Files_Route_Should_Answer_304_For_Known_ETag()
+    {
+        using var client = api.CreateClientAs();
+        var task = await CreateTaskAsync(client);
+
+        using var uploaded = await UploadAsync(client, task.Id, Png, "снимок.png");
+        var png = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
+
+        using var first = await client.GetAsync($"/files/{png.Id}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/files/{png.Id}");
+        request.Headers.IfNoneMatch.Add(first.Headers.ETag!);
+        using var second = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotModified, second.StatusCode);
+    }
+
+    /// <summary>
+    /// Маршрут не должен уехать под префикс: ApiPrefixConvention вешает /api на все [ApiController],
+    /// и у FilesController этого атрибута нет намеренно.
+    /// </summary>
+    [Fact]
+    public async Task Files_Route_Should_Not_Be_Under_Api_Prefix()
+    {
+        using var client = api.CreateClientAs();
+
+        using var response = await client.GetAsync($"/api/files/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    /// <summary>
+    /// Мусор вместо id обязан давать честный 404, а не страницу интерфейса: ссылка с атрибутом
+    /// download сохранила бы HTML-страницу под именем файла.
+    /// </summary>
+    [Fact]
+    public async Task Files_Route_Should_Not_Fall_Through_To_Ui()
+    {
+        using var client = api.CreateClientAs();
+
+        using var response = await client.GetAsync("/files/не-guid");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.NotEqual("text/html", response.Content.Headers.ContentType?.MediaType);
     }
 
     /// <summary>
@@ -136,13 +212,13 @@ public sealed class AttachmentsApiTests(ApiFixture api)
         var attachment = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
 
         using var created = await owner.PostAsJsonAsync(
-            "/users",
+            "/api/users",
             new CreateUserRequest("att.reader", "att.reader@example.com", "A", "B", "correct horse battery", UserRole.Reader));
         var reader = (await created.Content.ReadFromJsonAsync<UserResponse>())!;
 
         using var client = api.CreateClientAs(reader.Id);
         using var upload = await UploadAsync(client, task.Id, [1, 2, 3], "нельзя.txt");
-        using var download = await client.GetAsync($"/attachments/{attachment.Id}/content");
+        using var download = await client.GetAsync($"/api/attachments/{attachment.Id}/content");
 
         Assert.Equal(HttpStatusCode.Forbidden, upload.StatusCode);
         Assert.Equal(HttpStatusCode.OK, download.StatusCode);
@@ -156,11 +232,11 @@ public sealed class AttachmentsApiTests(ApiFixture api)
         using var uploaded = await UploadAsync(client, task.Id, Encoding.UTF8.GetBytes("файл"), "файл.txt");
         var attachment = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
 
-        var list = await client.GetFromJsonAsync<IReadOnlyList<AttachmentResponse>>($"/tasks/{task.Id}/attachments");
+        var list = await client.GetFromJsonAsync<IReadOnlyList<AttachmentResponse>>($"/api/tasks/{task.Id}/attachments");
         Assert.Single(list!);
 
-        using var deleted = await client.DeleteAsync($"/attachments/{attachment.Id}");
-        using var afterDelete = await client.GetAsync($"/attachments/{attachment.Id}/content");
+        using var deleted = await client.DeleteAsync($"/api/attachments/{attachment.Id}");
+        using var afterDelete = await client.GetAsync($"/api/attachments/{attachment.Id}/content");
 
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);
@@ -171,7 +247,7 @@ public sealed class AttachmentsApiTests(ApiFixture api)
     {
         using var client = api.CreateClientAs();
 
-        using var response = await client.GetAsync($"/tasks/{Guid.NewGuid()}/attachments");
+        using var response = await client.GetAsync($"/api/tasks/{Guid.NewGuid()}/attachments");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }

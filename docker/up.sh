@@ -48,9 +48,10 @@ echo
 echo "== приложение =="
 docker compose up -d $BUILD
 
-# .env читает Compose, а не этот скрипт — порт клиента достаём оттуда только ради сообщения.
-CLIENT_PORT=$(sed -n 's/^CLIENT_PORT=//p' .env 2>/dev/null | tail -1)
+# .env читает Compose, а не этот скрипт — порт достаём оттуда только ради сообщения.
+# Порт один: интерфейс, JSON-API и страницы входа отдаёт один и тот же сервис api.
+API_PORT=$(sed -n 's/^API_PORT=//p' .env 2>/dev/null | tail -1)
 
 echo
-echo "Готово. Клиент: http://localhost:${CLIENT_PORT:-5016}"
+echo "Готово. Flow: http://localhost:${API_PORT:-8080}"
 echo "Состояние:  docker compose ps && docker compose -f docker-compose.data.yml ps"

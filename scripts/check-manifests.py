@@ -25,8 +25,6 @@ except ImportError:  # pragma: no cover
     print("нужен PyYAML: pip install pyyaml", file=sys.stderr)
     raise SystemExit(2)
 
-# Клиент nginx: перечисленное ломает подстановку адресов в appsettings.json, причём молча.
-CLIENT_FORBIDDEN_SECURITY = ("runAsNonRoot", "readOnlyRootFilesystem")
 WORKLOADS = ("Deployment", "StatefulSet", "DaemonSet")
 JOBS = ("Job", "CronJob")
 
@@ -72,22 +70,6 @@ def check_probes(where: str, containers: list) -> None:
         for probe in ("livenessProbe", "readinessProbe"):
             if probe not in container:
                 fail(where, f"контейнер {name}: нет {probe}")
-
-
-def check_client(where: str, doc: dict, pod: dict) -> None:
-    for container in pod.get("containers") or []:
-        if container.get("name") != "client" and "flow-client" not in doc["metadata"]["name"]:
-            continue
-        for field in CLIENT_FORBIDDEN_SECURITY:
-            for scope, holder in (("pod", pod.get("securityContext") or {}),
-                                  ("container", container.get("securityContext") or {})):
-                if holder.get(field) is True:
-                    fail(where, f"{field}: true в securityContext ({scope}) клиента — entrypoint nginx "
-                                f"перестанет подставлять адреса, и клиент молча уедет на localhost:5000")
-        for field in ("command", "args"):
-            if field in container:
-                fail(where, f"у контейнера клиента переопределён {field} — это отключает "
-                            f"/docker-entrypoint.d, где живёт подстановка адресов")
 
 
 def check_selector(where: str, doc: dict) -> None:
@@ -173,8 +155,6 @@ def main() -> int:
             if kind in WORKLOADS:
                 check_probes(where, containers)
                 check_selector(where, doc)
-                if "client" in name:
-                    check_client(where, doc, pod)
             if kind in JOBS:
                 check_job(where, doc)
 

@@ -3,7 +3,7 @@
    Соседние записи журнала одного актора в пределах минуты — одна группа. CommentAdded не показываем:
    сам комментарий уже в ленте. Композер внизу — только Member+ (Permissions.CanComment). *@
 @implements IDisposable
-@inject FlowApi Api
+@inject IFlowApi Api
 @inject ToastService Toasts
 @inject AppState State
 @inject UserDirectory Users

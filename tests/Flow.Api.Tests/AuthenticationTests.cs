@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using Flow.Shared.Contracts.Users;
 using Xunit;
@@ -8,20 +8,29 @@ namespace Flow.Api.Tests;
 [Collection(ApiCollection.Name)]
 public sealed class AuthenticationTests(ApiFixture api)
 {
+    /// <summary>
+    /// Корень перестал быть анонимной заглушкой app.MapGet("/", () => "Flow.Api") — теперь это экран
+    /// «Проекты», и без сессии он закрыт. Заглушку убрали потому, что она дралась за "/" со страницей
+    /// интерфейса; признак живости живёт на /health/live (HealthProbeTests).
+    ///
+    /// Здесь проверяется именно «закрыт», а не «ведёт на /account/login»: ApiFixture намеренно
+    /// подменяет схему на JwtBearer (см. ConfigureTestServices), поэтому challenge всегда 401.
+    /// Редирект на страницу входа проверяется настоящим конвейером — Flow.Auth.Tests.LoginTests.
+    /// </summary>
     [Fact]
-    public async Task Root_Should_Be_Anonymous()
+    public async Task Root_Without_Session_Should_Be_Closed()
     {
-        using var client = api.CreateClient();
+        using var client = api.CreateClient(allowAutoRedirect: false);
 
         using var response = await client.GetAsync("/");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Theory]
-    [InlineData("/users")]
-    [InlineData("/boards")]
-    [InlineData("/users/me")]
+    [InlineData("/api/users")]
+    [InlineData("/api/boards")]
+    [InlineData("/api/users/me")]
     public async Task Endpoints_WithoutToken_Should_Return401(string url)
     {
         using var client = api.CreateClient();
@@ -38,11 +47,11 @@ public sealed class AuthenticationTests(ApiFixture api)
         using var client = api.CreateClient();
 
         client.DefaultRequestHeaders.Authorization = new("Bearer", ApiFixture.CreateToken(ApiFixture.BootstrapId, audience: "flow-auth"));
-        using var wrongAudience = await client.GetAsync("/users");
+        using var wrongAudience = await client.GetAsync("/api/users");
         Assert.Equal(HttpStatusCode.Unauthorized, wrongAudience.StatusCode);
 
         client.DefaultRequestHeaders.Authorization = new("Bearer", ApiFixture.CreateToken(ApiFixture.BootstrapId, issuer: "http://evil.test"));
-        using var wrongIssuer = await client.GetAsync("/users");
+        using var wrongIssuer = await client.GetAsync("/api/users");
         Assert.Equal(HttpStatusCode.Unauthorized, wrongIssuer.StatusCode);
     }
 
@@ -51,7 +60,7 @@ public sealed class AuthenticationTests(ApiFixture api)
     {
         using var client = api.CreateClientAs();
 
-        var users = await client.GetFromJsonAsync<List<UserResponse>>("/users");
+        var users = await client.GetFromJsonAsync<List<UserResponse>>("/api/users");
 
         Assert.NotNull(users);
         Assert.Contains(users!, u => u.Id == ApiFixture.BootstrapId);
@@ -62,7 +71,7 @@ public sealed class AuthenticationTests(ApiFixture api)
     {
         using var client = api.CreateClientAs();
 
-        var me = await client.GetFromJsonAsync<UserResponse>("/users/me");
+        var me = await client.GetFromJsonAsync<UserResponse>("/api/users/me");
 
         Assert.Equal(ApiFixture.BootstrapId, me!.Id);
         Assert.Equal("admin", me.Username);
@@ -75,7 +84,7 @@ public sealed class AuthenticationTests(ApiFixture api)
     {
         using var client = api.CreateClientAs(Guid.NewGuid());
 
-        using var response = await client.GetAsync("/users/me");
+        using var response = await client.GetAsync("/api/users/me");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -85,11 +94,11 @@ public sealed class AuthenticationTests(ApiFixture api)
     {
         using var client = api.CreateClientAs();
 
-        using var noPassword = await client.PostAsJsonAsync("/users", new CreateUserRequest("nopw", "nopw@example.com", "A", "B"));
+        using var noPassword = await client.PostAsJsonAsync("/api/users", new CreateUserRequest("nopw", "nopw@example.com", "A", "B"));
         Assert.Equal(HttpStatusCode.BadRequest, noPassword.StatusCode);
 
         api.Accounts.Calls.Clear();
-        using var created = await client.PostAsJsonAsync("/users", new CreateUserRequest("withpw", "withpw@example.com", "A", "B", "correct horse battery"));
+        using var created = await client.PostAsJsonAsync("/api/users", new CreateUserRequest("withpw", "withpw@example.com", "A", "B", "correct horse battery"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var user = await created.Content.ReadFromJsonAsync<UserResponse>();
         var call = Assert.Single(api.Accounts.CallsTo("Create"));
@@ -103,7 +112,7 @@ public sealed class AuthenticationTests(ApiFixture api)
         using var client = api.CreateClientAs();
         api.Accounts.Calls.Clear();
 
-        using var response = await client.PostAsJsonAsync($"/users/{ApiFixture.BootstrapId}/password", new ChangePasswordRequest("admin", "new strong password"));
+        using var response = await client.PostAsJsonAsync($"/api/users/{ApiFixture.BootstrapId}/password", new ChangePasswordRequest("admin", "new strong password"));
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var call = Assert.Single(api.Accounts.CallsTo("ChangePassword"));

@@ -1,5 +1,6 @@
-﻿// Минимальный JS-мост для Flow.Client: глобальные хоткеи, буфер обмена,
-// фокус, геометрия якорей для поповеров и localStorage. Всё остальное — в Razor/CSS.
+﻿// Минимальный JS-мост для интерфейса Flow: глобальные хоткеи, буфер обмена, фокус,
+// геометрия якорей для поповеров, приём файлов и выход. Всё остальное — в Razor/CSS.
+// Содержимого вложений здесь больше нет: картинки и скачивание — прямые ссылки /files/{id}.
 window.flow = (function () {
     let hotkeyRef = null;
     // Промис загрузки бандла редактора: он один на страницу, грузим по требованию.
@@ -102,6 +103,15 @@ window.flow = (function () {
             .catch(function () { });
     });
 
+    // Картинка вложения не загрузилась — помечаем её, чтобы вместо битой иконки сработало правило
+    // .md-att-img.missing. Раньше класс вешал цикл оживления разметки, теперь разметка приходит
+    // готовой, и остаётся один слушатель на документ. Обязательно в фазе захвата: событие error
+    // у изображений не всплывает, на document его иначе не поймать.
+    document.addEventListener('error', function (e) {
+        const el = e.target;
+        if (el && el.tagName === 'IMG' && el.hasAttribute('data-attachment')) el.classList.add('missing');
+    }, true);
+
     return {
         registerHotkeys: function (ref) { hotkeyRef = ref; },
         unregisterHotkeys: function () { hotkeyRef = null; },
@@ -150,22 +160,6 @@ window.flow = (function () {
         scrollIntoView: function (id) {
             const el = document.getElementById(id);
             if (el) el.scrollIntoView({ block: 'nearest' });
-        },
-
-        // ---- Вложения ----
-        // Файлы приезжают сюда байтами из .NET (byte[] → Uint8Array), а не по ссылке: публичных
-        // ссылок у вложений нет, а тег img и <a href> не носят Bearer-токен. Blob живёт до
-        // revokeBlobUrl — за превью следит компонент списка, иначе вкладка течёт на длинной ленте.
-        blobUrl: function (contentType, bytes) {
-            try {
-                return URL.createObjectURL(new Blob([bytes], { type: contentType || 'application/octet-stream' }));
-            } catch (_) {
-                return null;
-            }
-        },
-
-        revokeBlobUrl: function (url) {
-            try { if (url) URL.revokeObjectURL(url); } catch (_) { }
         },
 
         // После разбора выбора input нужно очистить: браузер не шлёт change, если выбрали тот же файл,
@@ -249,51 +243,15 @@ window.flow = (function () {
             try { zone.off(); } catch (_) { }
         },
 
-        // Оживление ссылок на вложения в отрендеренном Markdown: картинке подставляется blob, ссылка
-        // на файл получает обработчик клика. Содержимое приносит .NET — оно доступно только по токену.
-        // Метка data-att-done защищает от повторной работы, когда компонент перерисовался сам по себе.
-        hydrateAttachments: async function (containerId, ref) {
-            const box = document.getElementById(containerId);
-            if (!box) return;
-
-            const images = box.querySelectorAll('img[data-attachment]:not([data-att-done])');
-            for (const image of images) {
-                image.setAttribute('data-att-done', '1');
-                try {
-                    const url = await ref.invokeMethodAsync('ResolveAttachment', image.getAttribute('data-attachment'));
-                    if (url) image.src = url;
-                    else image.classList.add('missing');
-                } catch (_) {
-                    image.classList.add('missing');
-                }
-            }
-
-            box.querySelectorAll('a[data-attachment]:not([data-att-done])').forEach(function (link) {
-                link.setAttribute('data-att-done', '1');
-                link.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    ref.invokeMethodAsync('DownloadAttachment', link.getAttribute('data-attachment')).catch(function () { });
-                });
-            });
-        },
-
-        saveFile: function (name, contentType, bytes) {
-            let url = null;
-            try {
-                url = URL.createObjectURL(new Blob([bytes], { type: contentType || 'application/octet-stream' }));
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = name || 'file';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-            } catch (_) {
-                return false;
-            }
-            // Освобождаем с задержкой: браузер начинает запись файла уже после возврата из обработчика,
-            // и отозванный сразу blob обрывает скачивание.
-            setTimeout(function () { URL.revokeObjectURL(url); }, 20000);
-            return true;
+        // Выход должен быть POST: cookie flow.auth объявлена SameSite=Lax, поэтому кросс-сайтовый
+        // POST её не донесёт и принудительно разлогинить человека чужой страницей нельзя. Кнопка выхода
+        // живёт внутри circuit'а и формы вокруг себя не имеет, поэтому форму создаём здесь.
+        submitPost: function (url) {
+            const form = document.createElement('form');
+            form.method = 'post';
+            form.action = url;
+            document.body.appendChild(form);
+            form.submit();
         },
 
         // Бандл редактора (CodeMirror, ~500 КБ) грузим только когда на странице понадобился ввод Markdown:
