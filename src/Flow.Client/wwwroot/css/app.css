@@ -715,8 +715,10 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px;
 }
 /* Полоска активного раздела выезжает сверху вниз, а не возникает рывком. */
 @keyframes sb-mark { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-.sb-item .ds-icon { transition: transform 180ms var(--ease-out); }
-.sb-item.active .ds-icon { transform: translateX(2px); }
+/* Иконка пункта — фиксированная клетка: глифы набора рисуются в сетке 24×24, но с разной шириной чернил,
+   и без общей клетки подписи и сами значки вставали то левее, то правее. Активный пункт больше не сдвигает
+   свою иконку: колонка значков должна читаться как ровная линия, а выделение даёт цвет, фон и полоска слева. */
+.sb-item .ds-icon { width: 18px; height: 18px; align-items: center; justify-content: center; }
 .sb-soon {
     margin-left: auto;
     font: var(--fw-bold) 9px var(--font-display);
@@ -1647,6 +1649,106 @@ a.task-row { color: inherit; text-decoration: none; }
     .task-page { padding: 24px 24px; gap: 20px; }
 }
 
+/* ---------- Узкое окно (ниже 1024px) ----------
+   Обещанный диапазон — от 1280px, но окно ужимают до половины экрана, и до сих пор ответом на это была
+   горизонтальная полоса: `.main` держал min-width: 900px, правый край топбара уезжал за кадр вместе с
+   «Создать задачу». Полоса честная, но пользоваться таким экраном нельзя. Ниже 1024px min-width снимаем
+   и раскладываем всё в одну колонку: топбар переносит свою правую часть, страницы задачи и профиля
+   становятся вертикальными, из таблиц уходят колонки, которые дублируются в карточке. */
+@media (max-width: 1023px) {
+    .flow-app { overflow-x: hidden; }
+    .main { min-width: 0; }
+
+    /* Сайдбар здесь всегда иконочный: 240px забрали бы четверть окна. Правила те же, что у .collapsed,
+       но перебивают и явный выбор «развернуть» — на такой ширине выбирать нечего, поэтому и сами кнопки
+       режима прячем, чтобы они не предлагали невозможного. */
+    .sb, .sb.expanded { width: 68px; padding: 22px 0; }
+    .sb .sb-word,
+    .sb .sb-ws,
+    .sb .sb-section,
+    .sb .sb-search-wrap,
+    .sb .sb-soon,
+    .sb .sb-item span:not(.ds-icon),
+    .sb .sb-un,
+    .sb .sb-ur { display: none; }
+    /* Обе кнопки режима. Селекторы повторяют форму правил .collapsed / :not(.expanded) выше в файле:
+       у тех такой же вес, и без этого повтора кнопка «развернуть» пережила бы скрытие. */
+    .sb .sb-toggle,
+    .sb:not(.expanded) .sb-toggle.sb-toggle-expand,
+    .sb.collapsed .sb-toggle.sb-toggle-expand { display: none; }
+    .sb .sb-search-icon { display: flex; }
+    .sb .sb-top { flex-direction: column; gap: 10px; padding: 0 0 18px; }
+    .sb .sb-item { justify-content: center; padding: 10px 0; margin: 0 10px 4px; }
+    .sb .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px; }
+    .sb .sb-me { justify-content: center; }
+
+    /* Топбар перестаёт быть строкой фиксированной высоты: правая группа переносится под левую,
+       когда перестаёт помещаться, а не выдавливает её за край. */
+    .topbar { height: auto; min-height: 64px; padding: 12px 16px; row-gap: 10px; flex-wrap: wrap; }
+    .topbar-right { flex-wrap: wrap; justify-content: flex-end; }
+    .search { width: 240px; max-width: 100%; }
+
+    .content { padding: 16px; gap: 16px; }
+    .filter-row { align-items: flex-start; }
+
+    /* Страница задачи — одна колонка: боковая карточка уходит под основную и занимает всю ширину. */
+    .task-page { flex-direction: column; padding: 20px 16px; gap: 20px; }
+    .task-page-main { max-width: none; }
+    .task-page-side { width: 100%; }
+
+    /* Профиль: те же поля, что у остальных экранов; вкладки прокручиваются, а не обрезаются. */
+    .profile-head { padding: 20px 16px 16px; }
+    /* flex: none обязателен вместе с overflow: у flex-элемента со скроллом минимальная высота становится
+       нулевой, и колонка .content сплющивала вкладки в полоску в один пиксель. */
+    .tabs { padding: 0 16px; overflow-x: auto; scrollbar-width: none; flex: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .profile-grid { padding: 16px; }
+    .profile .panel { margin: 16px; }
+}
+
+/* Колонка «Создана» уходит с 1200px (см. .flow-grid в mud-overrides.css) — те же списки, собранные
+   не гридом, а сеткой .list-cols (скелетон загрузки и задачи в профиле), прячут её на той же границе. */
+@media (max-width: 1200px) {
+    .list-cols { grid-template-columns: 92px minmax(0, 1fr) 36px 160px 32px; }
+    .list-cols > *:nth-child(5) { display: none; }
+    .list-cols.no-who { grid-template-columns: 92px minmax(0, 1fr) 160px 32px; }
+    .list-cols.no-who > *:nth-child(4) { display: none; }
+    .list-cols.no-who > *:nth-child(5) { display: block; }
+}
+
+/* ---------- Окно в половину экрана и уже (ниже 768px) ----------
+   Всё, что ещё стояло парами, встаёт друг под друга; из списков уходят колонки, значение которых
+   видно на самой странице (должность и почта — в карточке человека, исполнитель — в задаче). */
+@media (max-width: 767px) {
+    .topbar-right { flex: 1 1 100%; justify-content: flex-start; }
+    .search { flex: 1 1 160px; width: auto; }
+    .board-grid { grid-template-columns: minmax(0, 1fr); }
+    .user-cols { grid-template-columns: 30px minmax(0, 1fr) 110px 32px; gap: 10px; padding: 12px 14px; }
+    .user-cols > *:nth-child(3),
+    .user-cols > *:nth-child(4) { display: none; }
+    /* «Кто» уходит вслед за колонкой грида: исполнитель виден в самой задаче. Оставшиеся колонки ужимаются
+       до содержимого — на 400px строка иначе съедала всю ширину фиксированными колонками, и название
+       схлопывалось в ноль. */
+    .list-cols { gap: 8px; padding: 12px 12px; grid-template-columns: 76px minmax(0, 1fr) 110px 28px; }
+    .list-cols > *:nth-child(3) { display: none; }
+    .list-cols.no-who { grid-template-columns: 76px minmax(0, 1fr) 110px 28px; }
+    .list-cols.no-who > *:nth-child(3) { display: block; }
+    .status-pill { padding: 4px 6px; }
+    .drawer { width: 100%; }
+    .profile-head { flex-wrap: wrap; }
+}
+
+/* ---------- Телефонные ширины (ниже 480px) ----------
+   Телефон в объём не входит (docs/TZ_client_mudblazor.md, п. 7), но окно можно ужать и сюда. Место
+   остаётся только под код и название: статус в таком списке всё равно сжался бы в многоточие, а увидеть
+   его можно в самой задаче. Лучше две читаемые колонки, чем пять обрезанных. */
+@media (max-width: 479px) {
+    .list-cols { grid-template-columns: 70px minmax(0, 1fr) 28px; }
+    .list-cols > *:nth-child(4) { display: none; }
+    .list-cols.no-who { grid-template-columns: 70px minmax(0, 1fr) 28px; }
+    .list-cols.no-who > *:nth-child(3) { display: none; }
+}
+
 /* ---------- Hover — только для настоящих указателей ---------- */
 @media (hover: hover) and (pointer: fine) {
     .ds-btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
@@ -1701,7 +1803,6 @@ a.task-row { color: inherit; text-decoration: none; }
     .task-row.flash { animation: none; }
     .empty { animation: none; }
     .sb-item.active::before { animation: none; }
-    .sb-item.active .ds-icon { transform: none; }
     .save-state { animation: none; }
     .search-clear, .ds-field-error { animation: none; }
     .ds-field.error .ds-field-row { animation: none; }
