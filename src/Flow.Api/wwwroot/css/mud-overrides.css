@@ -455,6 +455,51 @@ a.mud-link:hover {
     }
 }
 
+/* Узкое окно: поля ячеек ужимаются, а ниже 768px уходит и «Кто» — исполнитель виден в самой задаче,
+   а название без этих 56px начинало резаться на втором слове. То же самое делаем со скелетоном списка
+   (.list-cols в app.css рисует его теми же колонками), чтобы загрузка не отличалась от готового списка. */
+@media (max-width: 1023px) {
+    .flow-grid .mud-table-head th,
+    .flow-grid .mud-table-body td {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .flow-grid .mud-table-pagination {
+        flex-wrap: wrap;
+        row-gap: 4px;
+    }
+}
+
+@media (max-width: 767px) {
+    .flow-grid th:nth-child(3),
+    .flow-grid td:nth-child(3) {
+        display: none;
+    }
+
+    /* Колонки ужимаются вслед за окном: при прежних 92 и 170px на 400px ширины название оставалось
+       без места и обрезалось на первом слове. */
+    .flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: 76px; }
+    .flow-grid th:nth-child(4), .flow-grid td:nth-child(4) { width: 118px; }
+    .flow-grid th:nth-child(6), .flow-grid td:nth-child(6) { width: 34px; }
+
+    .flow-grid .mud-table-head th,
+    .flow-grid .mud-table-body td {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+}
+
+/* Ниже 480px в строке остаются код и название: статус ужался бы в многоточие, а в задаче он и так виден. */
+@media (max-width: 479px) {
+    .flow-grid th:nth-child(4),
+    .flow-grid td:nth-child(4) {
+        display: none;
+    }
+
+    .flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: 70px; }
+}
+
 /* Пустой список и индикатор загрузки занимают всю ширину таблицы. */
 .flow-grid .mud-table-body .empty {
     padding: 40px 20px;
