@@ -992,8 +992,8 @@ jobs:
           KUBECONFIG_B64: ${{ secrets.KUBE_DEPLOY_B64 }}
         run: |
           set -euo pipefail
-          export KUBECONFIG="$(mktemp)"
-          echo "$KUBECONFIG_B64" | base64 -d > "$KUBECONFIG"
+          umask 077; kc="$RUNNER_TEMP/kubeconfig"; printf '%s' "$KUBECONFIG_B64" | base64 -d > "$kc"
+          export KUBECONFIG="$kc"; trap 'rm -f "$kc"' EXIT
           kubectl -n flow delete job flow-api-migrate --ignore-not-found --wait=true
           kubectl -n flow apply -f manifests/api-migrate.yaml
           # Ждём только успеха. Провал виден по таймауту, а не отдельным условием: у kubectl wait нет

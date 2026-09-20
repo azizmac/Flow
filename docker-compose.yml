@@ -94,9 +94,6 @@ services:
       - flow-network
 
 networks:
-      - flow-network
-
-networks:
   # Та же сеть, что у стека данных; создаётся docker/data/init-env.sh.
   flow-network:
     name: flow-network
