@@ -3,8 +3,14 @@
 
    Ссылки вида attachment:{id} (docs/TZ_attachments.md) превращаются в готовые /files/{id} прямо при
    рендере — см. AttachmentLinks. Дорисовки после рендера больше нет: ни интеропа, ни blob-адресов,
-   ни ссылки на компонент. Это важно именно здесь — MarkdownView стоит на каждом комментарии ленты. *@
+   ни ссылки на компонент. Это важно именно здесь — MarkdownView стоит на каждом комментарии ленты.
+
+   Размеры картинок берутся из AttachmentSizes и уходят в атрибуты width/height: по ним браузер
+   резервирует место ещё до загрузки. Подписка на Changed нужна там, где список вложений приезжает
+   позже первого рендера (слайдер задачи) — иначе картинки так и остались бы без размеров. *@
 @using Flow.Client.Markdown
+@implements IDisposable
+@inject AttachmentSizes Sizes
 
 <div class="desc-box @(IsEmpty ? "ph" : "") @Class" style="@Style" id="@_id" @onclick="OnClick">
     @if (IsEmpty)
@@ -32,5 +38,17 @@
 
     private MarkupString Html => new(_html);
 
-    protected override void OnParametersSet() => _html = FlowMarkdown.ToHtml(Text);
+    protected override void OnInitialized() => Sizes.Changed += OnSizesChanged;
+
+    protected override void OnParametersSet() => Render();
+
+    private void Render() => _html = FlowMarkdown.ToHtml(Text, Sizes.Find);
+
+    private void OnSizesChanged() => InvokeAsync(() =>
+    {
+        Render();
+        StateHasChanged();
+    });
+
+    public void Dispose() => Sizes.Changed -= OnSizesChanged;
 }

@@ -17,5 +17,7 @@ public static class AttachmentMappingExtensions
             attachment.SizeBytes,
             attachment.UploadedById,
             attachment.UploadedAt,
-            options.InlineContentTypes.Contains(attachment.ContentType, StringComparer.OrdinalIgnoreCase));
+            options.InlineContentTypes.Contains(attachment.ContentType, StringComparer.OrdinalIgnoreCase),
+            attachment.Width,
+            attachment.Height);
 }

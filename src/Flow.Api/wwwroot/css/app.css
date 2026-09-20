@@ -1923,13 +1923,24 @@ a.task-row { color: inherit; text-decoration: none; }
 .md-att-img {
     display: block;
     max-width: 100%;
+    /* Потолок высоты. Дублируется константой MaxBoxHeight в Markdown/AttachmentLinks.cs: разметка
+       считает по нему инлайновый потолок ширины, и при расхождении они тихо разъедутся. */
     max-height: 420px;
-    width: auto;
+    /* height:auto, а НЕ width:auto. Атрибуты width/height — это presentational hint с нулевой
+       специфичностью, и любое авторское правило их перебивает. С width:auto хинт ширины умирал,
+       у незагруженной картинки не оставалось ни одной определённой стороны, и коробка схлопывалась
+       в 2x2 пикселя — вся лента помещалась в первый экран, а loading="lazy" не срабатывал ни разу
+       (замерено). Теперь ширину задаёт хинт, max-width ужимает её до колонки, высоту браузер
+       считает по соотношению сторон. */
+    height: auto;
     border-radius: var(--r-md);
     border: 1px solid var(--border);
     background: var(--surface-raised);
     margin: 8px 0;
 }
+/* Картинка не загрузилась (вложение удалено, сессия протухла) — класс вешает flow.js по событию error.
+   Теперь схлопывается не пустая рамка 2x2, а зарезервированное место: единственный оставшийся прыжок
+   в ленте, и он же признак настоящей ошибки, а не медленной загрузки. */
 .md-att-img.missing { display: none; }
 .md-att-file {
     display: inline-flex;

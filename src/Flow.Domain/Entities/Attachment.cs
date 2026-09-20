@@ -38,6 +38,19 @@ public sealed class Attachment
 
     public DateTime UploadedAt { get; private set; }
 
+    /// <summary>
+    /// Отображаемые размеры картинки, прочитанные из заголовка файла при загрузке (ImageDimensions).
+    /// Именно отображаемые: у JPEG с поворотом в EXIF стороны уже поменяны местами — иначе поправку
+    /// пришлось бы повторять в каждом месте, где размерами пользуются.
+    ///
+    /// null — штатное состояние, а не ошибка: не картинка, обрезанный или битый заголовок, слишком
+    /// глубоко лежащий SOF, и все вложения, загруженные до появления этого кода. Разметка при null
+    /// ведёт себя ровно как раньше.
+    /// </summary>
+    public int? Width { get; private set; }
+
+    public int? Height { get; private set; }
+
     private Attachment()
     {
         // EF Core
@@ -50,7 +63,9 @@ public sealed class Attachment
         string contentType,
         long sizeBytes,
         byte[] contentHash,
-        Guid uploadedById)
+        Guid uploadedById,
+        int? width = null,
+        int? height = null)
     {
         if (taskId == Guid.Empty)
             throw new ArgumentException("Task id must not be empty.", nameof(taskId));
@@ -80,7 +95,10 @@ public sealed class Attachment
             ContentHash = contentHash,
             StorageKey = BuildKey(boardId, taskId, id, name),
             UploadedById = uploadedById,
-            UploadedAt = DateTime.UtcNow
+            UploadedAt = DateTime.UtcNow,
+            // Пара или ничего: одинокая сторона бесполезна — соотношение сторон браузер считает из обеих.
+            Width = width > 0 && height > 0 ? width : null,
+            Height = width > 0 && height > 0 ? height : null
         };
     }
 
