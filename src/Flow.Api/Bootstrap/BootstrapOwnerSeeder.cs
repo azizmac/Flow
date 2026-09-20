@@ -26,6 +26,14 @@ public sealed class BootstrapOwnerSeeder(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        // Парный флаг к AuthDatabaseInitializer: в кластере миграции обоих контекстов катит Job,
+        // а веб-хост стартует уже на готовой схеме — ради этого он и может ехать RollingUpdate.
+        if (!configuration.GetValue("Startup:RunMigrations", true))
+        {
+            logger.LogInformation("Startup:RunMigrations=false — миграции ядра и сидер профиля пропущены.");
+            return;
+        }
+
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FlowDbContext>();
 

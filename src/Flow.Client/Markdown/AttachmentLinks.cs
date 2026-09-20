@@ -1,4 +1,4 @@
-using Markdig.Renderers.Html;
+﻿using Markdig.Renderers.Html;
 using Markdig.Syntax.Inlines;
 
 namespace Flow.Client.Markdown;
@@ -8,21 +8,26 @@ namespace Flow.Client.Markdown;
 /// Путь к файлу в текст не пишется намеренно: переезд хранилища или смена адреса API не должны ломать
 /// уже написанные комментарии — ссылка называет вложение, а не место, где оно лежит.
 ///
-/// Разметку готовим здесь, а подставляет содержимое уже компонент: файл отдаётся только по токену,
-/// поэтому картинка получает <c>data-attachment</c> вместо <c>src</c>, а ссылка — вместо адреса.
+/// Разметка сразу несёт настоящий адрес <c>/files/{id}</c> — дорисовывать её после рендера больше
+/// не нужно. Этот маршрут аутентифицируется cookie (схема-диспетчер <c>AuthConstants.SmartScheme</c>:
+/// под <c>/api</c> только Bearer, вне — cookie), а её браузер отправляет сам, без JS и без интеропа.
+///
+/// В тексте при этом по-прежнему хранится <c>attachment:{id}</c>: правится только узел AST при
+/// рендере, дерево строится заново на каждый показ и выбрасывается. Писать путь в сам текст нельзя —
+/// сломается проверка «файл упомянут в тексте» перед удалением (AttachmentList).
 /// </summary>
 public static class AttachmentLinks
 {
     public const string Scheme = "attachment:";
 
-    /// <summary>Атрибут, по которому MarkdownView находит, что оживлять.</summary>
+    /// <summary>
+    /// Признак вложения в разметке. Хуком для оживления быть перестал, но остался: по нему
+    /// flow.js помечает не загрузившуюся картинку классом .missing, и по нему же удобно писать тесты.
+    /// </summary>
     public const string Attribute = "data-attachment";
 
-    /// <summary>
-    /// Прозрачный пиксель вместо настоящего src: пустой src браузер трактует как ссылку на саму
-    /// страницу и повторно её запрашивает.
-    /// </summary>
-    private const string Placeholder = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+    /// <summary>Прямая ссылка на содержимое — FilesController, вне префикса /api.</summary>
+    private static string Href(Guid id) => $"/files/{id}";
 
     /// <summary>
     /// Ссылка на вложение → разметка для оживления. Чужие схемы и мусор вместо id не трогаем:
@@ -42,13 +47,18 @@ public static class AttachmentLinks
         if (link.IsImage)
         {
             attributes.AddClass("md-att-img");
-            link.Url = Placeholder;
+            link.Url = Href(id);
+            // Лента комментариев бывает длинной: без lazy браузер запросит все картинки разом.
+            attributes.AddProperty("loading", "lazy");
+            attributes.AddProperty("decoding", "async");
             return;
         }
 
-        // Адрес у ссылки остаётся исходным, «attachment:{id}»: клик перехватывает обработчик
-        // (файл качается по токену), а если скрипт не успел навеситься — неизвестная схема просто
-        // никуда не ведёт. «#» увёл бы страницу наверх, пустой href — перезагрузил бы её.
+        // Обычная ссылка на скачивание. download обязателен по двум причинам: без него роутер
+        // Blazor перехватит клик и попробует найти маршрут /files/{id} среди страниц, а при
+        // протухшей cookie браузер сохранил бы под именем файла страницу входа, куда ведёт редирект.
+        link.Url = Href(id);
+        attributes.AddProperty("download", null);
         attributes.AddClass("md-att-file");
     }
 }

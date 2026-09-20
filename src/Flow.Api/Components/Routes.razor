@@ -1,4 +1,8 @@
-@* Все страницы закрыты ([Authorize] в _Imports.razor), кроме /authentication/{action}. Без сессии — на вход в Flow.Auth.
+﻿@* Роутер переехал сюда из Flow.Client/App.razor вместе с провайдерами MudBlazor: корневой документ
+   теперь Components/App.razor хоста, а этот файл — только маршрутизация и слои UI.
+   AppAssembly указывает на сборку Flow.Client: все страницы (@page) живут там, а не в хосте. *@
+@* Все страницы закрыты ([Authorize] в _Imports.razor). Без сессии — RedirectToLogin на /account/login Auth-модуля
+   (маршрута /authentication/{action} больше нет: он обслуживал браузерный OIDC, которого при серверном рендере нет).
    Authorizing/NotAuthorized AuthorizeRouteView сам оборачивает в DefaultLayout (MainLayout), поэтому Sidebar там
    показывается только для аутентифицированных (AuthorizeView в MainLayout). *@
 @* Провайдеры MudBlazor поднимаются выше роутера: слои (поповеры, диалоги, снекбары) не должны
@@ -9,7 +13,7 @@
 <MudSnackbarProvider />
 
 <CascadingAuthenticationState>
-    <Router AppAssembly="@typeof(App).Assembly">
+    <Router AppAssembly="@typeof(MainLayout).Assembly">
         <Found Context="routeData">
             <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
                 <NotAuthorized>

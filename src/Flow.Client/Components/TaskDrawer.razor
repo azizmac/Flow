@@ -2,7 +2,7 @@
    в CreateTaskRequest его нет); Mode=View — просмотр/редактирование существующей
    (PATCH Title/Description/StatusId, PATCH /assignee, DELETE). Содержимое рендерится внутри общего Drawer. *@
 @implements IDisposable
-@inject FlowApi Api
+@inject IFlowApi Api
 @inject ToastService Toasts
 @inject BrowserInterop Browser
 @inject HotkeyService Hotkeys

@@ -1,4 +1,4 @@
-# Единственная дверь снаружи: три имени → три Service в namespace flow.
+﻿# Единственная дверь снаружи: три имени → три Service в namespace flow.
 #
 # Почему три объекта, а не один с тремя правилами. Аннотации у ingress-nginx действуют на весь объект
 # целиком, а не на правило: положив все три хоста в один Ingress, мы отдали бы лимит тела в 32 МБ и
@@ -28,8 +28,10 @@
 # TLS: на этапе 1 его нет вовсе, блоки tls ниже закомментированы. Включается он не здесь и не сам по себе —
 # см. комментарий в конце файла.
 
-# ---------- клиент ----------
-# Корень всего: по этому имени пользователь открывает Flow. Никаких аннотаций: статика, маленькие запросы.
+# ---------- интерфейс ----------
+# Корень всего: по этому имени пользователь открывает Flow. Отдельного пода с интерфейсом больше нет —
+# страницы рендерит тот же flow-api, поэтому бэкенд здесь общий с API, а имя хоста осталось прежним,
+# чтобы не ломать закладки и записи DNS.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -40,6 +42,15 @@ metadata:
     # component различает три объекта модуля: метка name у всех одна и та же — имя модуля, как и
     # в слоях platform и storage.
     app.kubernetes.io/component: client
+  annotations:
+    # Интерфейс держит постоянное WebSocket-соединение на каждую вкладку (Blazor Server). Дефолтные
+    # proxy-read-timeout/proxy-send-timeout ingress-nginx равны 60 секундам — с ними соединение рвётся
+    # на каждой паузе в работе, и человек видит «Произошла непредвиденная ошибка» посреди сессии.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Вложения (Attachments:MaxFileBytes = 25 МБ) грузятся через это же имя хоста, а не через API-хост:
+    # форма загрузки живёт на странице задачи. Дефолт 1m оборвал бы их на 413.
+    nginx.ingress.kubernetes.io/proxy-body-size: "32m"
 spec:
   ingressClassName: "${INGRESS_CLASS}"
   # tls:
@@ -50,15 +61,14 @@ spec:
       http:
         paths:
           - path: /
-            # Prefix, а не Exact: Blazor — SPA, и за index.html идут /_framework/*.wasm, /css, /js и
-            # собственные маршруты приложения. Разбор путей делает nginx внутри пода (SPA-fallback
-            # в docker/client/nginx.conf), Ingress только отдаёт ему весь хост целиком.
+            # Prefix, а не Exact: под этим хостом живут и страницы, и их статика (/css, /js,
+            # /_framework/blazor.web.js), и /account/*, и /connect/*. Разбор делает сам хост.
             pathType: Prefix
             backend:
               service:
-                name: flow-client
+                name: flow-api
                 port:
-                  number: 80
+                  number: 8080
 ---
 # ---------- API ----------
 apiVersion: networking.k8s.io/v1

@@ -1,6 +1,14 @@
-@* Без сессии — на вход через Flow.Auth; после входа RemoteAuthenticatorView вернёт на исходный адрес (returnUrl). *@
+@* Без сессии — на страницу входа Auth-модуля. Раньше здесь был NavigateToLogin из браузерного OIDC
+   (authentication/login → RemoteAuthenticatorView); при серверном рендере вход обслуживает сам хост,
+   и это обычная Razor Page /account/login, поэтому переход только через forceLoad: маршрута Blazor
+   с таким адресом нет и роутер его не найдёт. *@
 @inject NavigationManager Nav
 
 @code {
-    protected override void OnInitialized() => Nav.NavigateToLogin("authentication/login");
+    protected override void OnInitialized()
+    {
+        // ReturnUrl страница входа проверяет через Url.IsLocalUrl, поэтому отдаём именно локальный путь.
+        var returnUrl = "/" + Nav.ToBaseRelativePath(Nav.Uri);
+        Nav.NavigateTo($"account/login?ReturnUrl={Uri.EscapeDataString(returnUrl)}", forceLoad: true);
+    }
 }

@@ -28,7 +28,10 @@ public sealed class AuthOptions
     /// <summary>PFX для шифрования кодов и refresh-токенов. Обязателен вне Development.</summary>
     public CertificateOptions EncryptionCertificate { get; set; } = new();
 
-    /// <summary>Публичный клиент Flow.Client (Blazor WASM): code + PKCE.</summary>
+    /// <summary>
+    /// Публичный OIDC-клиент (code + PKCE). Интерфейс им больше не пользуется — при серверном рендере
+    /// вход идёт через /account/login и cookie. Оставлен ради отката на старый образ WASM-клиента.
+    /// </summary>
     public sealed class ClientOptions
     {
         public string ClientId { get; set; } = "flow-client";

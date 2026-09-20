@@ -288,6 +288,13 @@ public interface IAccountService
 
 ## Flow.Client
 
+> **Устарело после перехода на серверный рендер.** Браузерного OIDC в интерфейсе больше нет: страница
+> исполняется в том же процессе, что и Auth-модуль, вход — Razor Page `/account/login`, сессия — cookie
+> `flow.auth`, схему выбирает диспетчер `AuthConstants.SmartScheme` (под `/api` только Bearer, вне —
+> cookie). Пакет `…WebAssembly.Authentication`, `AddOidcAuthentication`, `FlowAuthorizationMessageHandler`
+> и `Pages/Authentication.razor` удалены. Раздел ниже описывает, как это работало до перехода,
+> и остаётся полезным ровно для отката: клиент `flow-client` в OIDC ради него и не снят.
+
 - Пакет `Microsoft.AspNetCore.Components.WebAssembly.Authentication 10.0.0`.
 - `wwwroot/appsettings.json`: `ApiBaseUrl`, `AuthBaseUrl`.
 - `Program.cs`: `AddOidcAuthentication(o => { Authority = AuthBaseUrl; ClientId = "flow-client"; ResponseType = "code"; DefaultScopes: openid profile email offline_access flow-api; })`;

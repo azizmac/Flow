@@ -8,7 +8,7 @@
    MudDialog показывает себя через MudDialogProvider и сам не закрывается, когда компонент убирают
    из разметки (@if на странице): закрывать ссылку на диалог нужно явно — CloseDialog. *@
 @implements IAsyncDisposable
-@inject FlowApi Api
+@inject IFlowApi Api
 @inject BrowserInterop Browser
 
 <MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"

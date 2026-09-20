@@ -43,8 +43,8 @@ Flow.Api (единственный backend-процесс)
  ├─ Flow.Auth (RCL): Identity + BCrypt, OpenIddict server, /connect/*, /account/*, AuthDbContext (схема auth)
  ├─ ядро: Domain/Application/Infrastructure (Boards, Tasks, Users; flow)
  └─ Flow.Shared (DTO для клиента)
-Flow.Client (Blazor WASM) → один адрес backend'а
-Docker: api + client (+ data stack без изменений)
+Flow.Client → библиотека компонентов внутри того же хоста (после перехода на серверный рендер)
+Docker: один сервис api (+ data stack без изменений)
 ```
 
 Границы: Auth-модуль не обращается к репозиториям и таблицам ядра, ядро не обращается к `AuthDbContext`

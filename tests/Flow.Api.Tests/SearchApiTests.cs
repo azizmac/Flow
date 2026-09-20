@@ -20,7 +20,7 @@ public sealed class SearchApiTests(ApiFixture api)
     {
         using var anonymous = api.CreateClient();
 
-        using var response = await anonymous.GetAsync("/search?q=что-нибудь");
+        using var response = await anonymous.GetAsync("/api/search?q=что-нибудь");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -30,7 +30,7 @@ public sealed class SearchApiTests(ApiFixture api)
     {
         using var client = api.CreateClientAs();
 
-        using var response = await client.GetAsync("/search?q=экспорт&types=task,sprint");
+        using var response = await client.GetAsync("/api/search?q=экспорт&types=task,sprint");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -40,13 +40,13 @@ public sealed class SearchApiTests(ApiFixture api)
     {
         using var owner = api.CreateClientAs();
         using var created = await owner.PostAsJsonAsync(
-            "/users",
+            "/api/users",
             new CreateUserRequest("search.reader", "search.reader@example.com", "A", "B", "correct horse battery", UserRole.Reader));
 
         var reader = (await created.Content.ReadFromJsonAsync<UserResponse>())!;
         using var client = api.CreateClientAs(reader.Id);
 
-        using var response = await client.GetAsync("/search?q=экспорт");
+        using var response = await client.GetAsync("/api/search?q=экспорт");
 
         // Читать может любая роль — как и остальные запросы (docs/TZ_user_roles.md).
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -57,7 +57,7 @@ public sealed class SearchApiTests(ApiFixture api)
     {
         using var owner = api.CreateClientAs();
 
-        var status = await owner.GetFromJsonAsync<SearchStatusResponse>("/search/status");
+        var status = await owner.GetFromJsonAsync<SearchStatusResponse>("/api/search/status");
 
         Assert.True(status!.Enabled);
         Assert.False(status.EmbedderAvailable);
@@ -70,13 +70,13 @@ public sealed class SearchApiTests(ApiFixture api)
     {
         using var owner = api.CreateClientAs();
         using var created = await owner.PostAsJsonAsync(
-            "/users",
+            "/api/users",
             new CreateUserRequest("search.dev", "search.dev@example.com", "A", "B", "correct horse battery", UserRole.Developer));
 
         var developer = (await created.Content.ReadFromJsonAsync<UserResponse>())!;
         using var client = api.CreateClientAs(developer.Id);
 
-        using var response = await client.GetAsync("/search/status");
+        using var response = await client.GetAsync("/api/search/status");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -86,7 +86,7 @@ public sealed class SearchApiTests(ApiFixture api)
     {
         using var anonymous = api.CreateClient();
 
-        using var response = await anonymous.GetAsync($"/tasks/{Guid.NewGuid()}/similar");
+        using var response = await anonymous.GetAsync($"/api/tasks/{Guid.NewGuid()}/similar");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -96,7 +96,7 @@ public sealed class SearchApiTests(ApiFixture api)
     {
         using var client = api.CreateClientAs();
 
-        using var response = await client.GetAsync($"/tasks/{Guid.NewGuid()}/similar");
+        using var response = await client.GetAsync($"/api/tasks/{Guid.NewGuid()}/similar");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -105,14 +105,14 @@ public sealed class SearchApiTests(ApiFixture api)
     public async Task Similar_Is_Empty_While_The_Task_Is_Not_Indexed()
     {
         using var client = api.CreateClientAs();
-        using var board = await client.PostAsJsonAsync("/boards", new CreateBoardRequest("Похожие", "SIM"));
+        using var board = await client.PostAsJsonAsync("/api/boards", new CreateBoardRequest("Похожие", "SIM"));
         var created = (await board.Content.ReadFromJsonAsync<BoardResponse>())!;
 
-        using var task = await client.PostAsJsonAsync($"/boards/{created.Id}/tasks", new CreateTaskRequest("Задача без индекса", null, null));
+        using var task = await client.PostAsJsonAsync($"/api/boards/{created.Id}/tasks", new CreateTaskRequest("Задача без индекса", null, null));
         var response = (await task.Content.ReadFromJsonAsync<TaskResponse>())!;
 
         // Воркер в тестах выключен: чанков ещё нет, и блок «похожие» должен быть пустым, а не 500.
-        var similar = await client.GetFromJsonAsync<IReadOnlyList<SearchResultItem>>($"/tasks/{response.Id}/similar");
+        var similar = await client.GetFromJsonAsync<IReadOnlyList<SearchResultItem>>($"/api/tasks/{response.Id}/similar");
 
         Assert.Empty(similar!);
     }
@@ -122,7 +122,7 @@ public sealed class SearchApiTests(ApiFixture api)
     {
         using var client = api.CreateClientAs();
 
-        var response = await client.GetFromJsonAsync<SearchResponse>("/search?q=мои просроченные экспорт");
+        var response = await client.GetFromJsonAsync<SearchResponse>("/api/search?q=мои просроченные экспорт");
 
         // Фильтры разбираются без модели, поэтому видны даже при погашенном эмбеддере.
         Assert.Contains("мои", response!.Intent.Filters);
@@ -135,7 +135,7 @@ public sealed class SearchApiTests(ApiFixture api)
     {
         using var owner = api.CreateClientAs();
 
-        using var response = await owner.PostAsJsonAsync("/search/reindex", new ReindexRequest());
+        using var response = await owner.PostAsJsonAsync("/api/search/reindex", new ReindexRequest());
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
     }

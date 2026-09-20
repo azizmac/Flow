@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using Flow.Application.Abstractions;
@@ -89,7 +89,12 @@ public sealed class ApiFixture : IAsyncLifetime
         await _container.DisposeAsync();
     }
 
-    public HttpClient CreateClient() => Factory.CreateClient();
+    /// <param name="allowAutoRedirect">
+    /// false — когда проверяется сам редирект: интерфейс отдаёт 302 на /account/login, и по умолчанию
+    /// клиент прошёл бы по нему до страницы входа, спрятав проверяемое поведение.
+    /// </param>
+    public HttpClient CreateClient(bool allowAutoRedirect = true) =>
+        Factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = allowAutoRedirect });
 
     /// <summary>Клиент с Bearer-токеном для пользователя sub = userId (по умолчанию — bootstrap-пользователь).</summary>
     public HttpClient CreateClientAs(Guid? userId = null)

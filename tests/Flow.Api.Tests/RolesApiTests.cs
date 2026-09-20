@@ -12,7 +12,7 @@ public sealed class RolesApiTests(ApiFixture api)
 {
     private static async Task<UserResponse> CreateAsync(HttpClient owner, string username, UserRole? role = null)
     {
-        using var response = await owner.PostAsJsonAsync("/users", new CreateUserRequest(username, $"{username}@example.com", "A", "B", "correct horse battery", role));
+        using var response = await owner.PostAsJsonAsync("/api/users", new CreateUserRequest(username, $"{username}@example.com", "A", "B", "correct horse battery", role));
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<UserResponse>())!;
     }
@@ -22,7 +22,7 @@ public sealed class RolesApiTests(ApiFixture api)
     {
         using var client = api.CreateClientAs();
 
-        var me = await client.GetFromJsonAsync<UserResponse>("/users/me");
+        var me = await client.GetFromJsonAsync<UserResponse>("/api/users/me");
 
         Assert.Equal(UserRole.Owner, me!.Role);
         Assert.Equal(UserStatus.Active, me.Status);
@@ -47,12 +47,12 @@ public sealed class RolesApiTests(ApiFixture api)
         var member = await CreateAsync(owner, "roles.member");
         var target = await CreateAsync(owner, "roles.target");
 
-        using var promoted = await owner.PatchAsJsonAsync($"/users/{target.Id}/role", new ChangeUserRoleRequest(UserRole.Admin));
+        using var promoted = await owner.PatchAsJsonAsync($"/api/users/{target.Id}/role", new ChangeUserRoleRequest(UserRole.Admin));
         Assert.Equal(HttpStatusCode.OK, promoted.StatusCode);
         Assert.Equal(UserRole.Admin, (await promoted.Content.ReadFromJsonAsync<UserResponse>())!.Role);
 
         using var asMember = api.CreateClientAs(member.Id);
-        using var forbidden = await asMember.PatchAsJsonAsync($"/users/{target.Id}/role", new ChangeUserRoleRequest(UserRole.Reader));
+        using var forbidden = await asMember.PatchAsJsonAsync($"/api/users/{target.Id}/role", new ChangeUserRoleRequest(UserRole.Reader));
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
         Assert.Contains("message", await forbidden.Content.ReadAsStringAsync());
     }
@@ -64,10 +64,10 @@ public sealed class RolesApiTests(ApiFixture api)
         var member = await CreateAsync(owner, "roles.member2");
         using var asMember = api.CreateClientAs(member.Id);
 
-        using var board = await asMember.PostAsJsonAsync("/boards", new CreateBoardRequest("Nope", "NOPE"));
+        using var board = await asMember.PostAsJsonAsync("/api/boards", new CreateBoardRequest("Nope", "NOPE"));
         Assert.Equal(HttpStatusCode.Forbidden, board.StatusCode);
 
-        using var user = await asMember.PostAsJsonAsync("/users", new CreateUserRequest("roles.x", "roles.x@example.com", "A", "B", "correct horse battery"));
+        using var user = await asMember.PostAsJsonAsync("/api/users", new CreateUserRequest("roles.x", "roles.x@example.com", "A", "B", "correct horse battery"));
         Assert.Equal(HttpStatusCode.Forbidden, user.StatusCode);
     }
 
@@ -76,11 +76,11 @@ public sealed class RolesApiTests(ApiFixture api)
     {
         using var owner = api.CreateClientAs();
         var victim = await CreateAsync(owner, "roles.deactivated");
-        using var deactivate = await owner.PostAsync($"/users/{victim.Id}/deactivate", null);
+        using var deactivate = await owner.PostAsync($"/api/users/{victim.Id}/deactivate", null);
         Assert.Equal(HttpStatusCode.NoContent, deactivate.StatusCode);
 
         using var asVictim = api.CreateClientAs(victim.Id);
-        using var response = await asVictim.PostAsJsonAsync("/boards", new CreateBoardRequest("Nope", "NOPE"));
+        using var response = await asVictim.PostAsJsonAsync("/api/boards", new CreateBoardRequest("Nope", "NOPE"));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }

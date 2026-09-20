@@ -6,7 +6,7 @@
    Диалог живёт в портале MudDialogProvider и сам не закрывается, когда страница снимает компонент
    условием, — убираем его с экрана явно (CloseDialog), иначе модалка остаётся поверх страницы. *@
 @implements IAsyncDisposable
-@inject FlowApi Api
+@inject IFlowApi Api
 @inject BrowserInterop Browser
 @inject UserDirectory Users
 @inject AppState State
