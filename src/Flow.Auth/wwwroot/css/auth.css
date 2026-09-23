@@ -193,6 +193,102 @@ html, body {
     .ds-btn:hover { background: var(--accent-hover); }
 }
 
+/* Вторичные варианты — только на странице смены пароля: «Оставить как есть» и кнопки предупреждения. */
+.ds-btn.ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.ds-btn.danger {
+    background: transparent;
+    color: var(--danger);
+    box-shadow: inset 0 0 0 1px rgba(226, 96, 79, 0.45);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .ds-btn.ghost:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); }
+    .ds-btn.danger:hover { background: var(--danger-soft); }
+}
+
+/* «Оставить пароль как есть» стоит под основной формой и не спорит с ней. */
+.login-keep { margin-top: calc(var(--space-2) * -1); }
+
+/* ---------- Предупреждение «Оставить как есть» ----------
+   Рисуется сервером сразу открытым, поэтому появление — CSS-анимация на входе: подложка проявляется,
+   карточка «встаёт» из 96% и небольшого сдвига, знак внимания один раз толкается (без бесконечной пульсации —
+   предупреждение должно читаться, а не мигать). Всё на transform/opacity, ≤ 300 мс, кривая --ease-out. */
+.auth-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: grid;
+    place-items: center;
+    padding: var(--space-4);
+    background: rgba(4, 18, 14, 0.62);
+    backdrop-filter: blur(3px);
+    animation: scrim-in 200ms ease-out;
+}
+
+.auth-dialog {
+    width: 100%;
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-6);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-modal);
+    transform-origin: 50% 60%;
+    animation: dialog-in 260ms var(--ease-out);
+}
+
+.auth-dialog-icon {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    color: var(--danger);
+    background: var(--danger-soft);
+    animation: nudge 420ms var(--ease-out) 120ms backwards;
+}
+
+.auth-dialog-title {
+    margin: 0;
+    font: var(--fw-black) 20px/1.2 var(--font-display);
+    letter-spacing: var(--tracking-display);
+}
+
+.auth-dialog-text p {
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.auth-dialog-text .auth-dialog-risk { margin: 0; color: var(--text-primary); font-weight: var(--fw-semibold); }
+
+.auth-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}
+
+.auth-dialog-actions .ds-btn { height: var(--control-h-md); padding: 0 var(--space-4); text-decoration: none; }
+
+@keyframes scrim-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(8px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes nudge {
+    0% { opacity: 0; transform: scale(0.6); }
+    60% { opacity: 1; transform: scale(1.08); }
+    100% { transform: none; }
+}
+
 /* ---------- Фокус с клавиатуры ----------
    Кольцо акцентом — то же правило, что у клиента: на тёмном фоне белое кольцо сливается с текстом. */
 :focus-visible {
@@ -205,4 +301,6 @@ html, body {
     .ds-btn:active { transform: none; }
     .ds-field.error .ds-field-row { animation: none; }
     .ds-field-row::after { transition: none; }
+    .auth-dialog { animation: scrim-in 150ms ease-out; }
+    .auth-dialog-icon { animation: none; }
 }

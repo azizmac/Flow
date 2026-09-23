@@ -12,9 +12,14 @@ namespace Flow.Auth.Pages.Account;
 /// Обязательная смена пароля: сюда ведут /account/login и /connect/authorize, пока стоит
 /// <see cref="ApplicationUser.MustChangePassword"/>. Требует cookie входа (иначе — на /account/login).
 /// После смены — обратно на ReturnUrl (обычно /connect/authorize), и клиент получает токен.
+/// Вместо смены можно «Оставить как есть» (<see cref="OnPostKeepAsync"/>): сначала предупреждение, что риск на человеке,
+/// и только второе, явное подтверждение снимает флаг и запоминает согласие в <see cref="ApplicationUser.PasswordRiskAcceptedAt"/>.
 /// </summary>
 [Authorize(Policy = AuthConstants.CookiePolicy)]
-public sealed class ChangePasswordModel(SignInManager<ApplicationUser> signIn, UserManager<ApplicationUser> users) : PageModel
+public sealed class ChangePasswordModel(
+    SignInManager<ApplicationUser> signIn,
+    UserManager<ApplicationUser> users,
+    ILogger<ChangePasswordModel> logger) : PageModel
 {
     [BindProperty]
     public InputModel Input { get; set; } = new();
@@ -25,6 +30,9 @@ public sealed class ChangePasswordModel(SignInManager<ApplicationUser> signIn, U
     public string? Error { get; private set; }
 
     public bool Forced { get; private set; }
+
+    /// <summary>Нажато «Оставить как есть» — поверх формы показывается предупреждение с подтверждением.</summary>
+    public bool ConfirmKeep { get; private set; }
 
     public sealed class InputModel
     {
@@ -85,11 +93,47 @@ public sealed class ChangePasswordModel(SignInManager<ApplicationUser> signIn, U
         }
 
         user.MustChangePassword = false;
+        user.PasswordRiskAcceptedAt = null;
         await users.UpdateAsync(user);
         await signIn.RefreshSignInAsync(user);
 
-        return LocalRedirect(string.IsNullOrEmpty(ReturnUrl) || !Url.IsLocalUrl(ReturnUrl) ? "/" : ReturnUrl);
+        return LocalRedirect(SafeReturnUrl);
     }
+
+    /// <summary>
+    /// «Оставить как есть». Без <paramref name="confirm"/> — только показать предупреждение (флаг не трогаем:
+    /// случайный клик не должен снимать защиту). С подтверждением — снять флаг, записать время согласия и продолжить вход.
+    /// Поля формы здесь не нужны, поэтому ModelState (Required у Input) не проверяется. Текущий пароль заново не спрашиваем:
+    /// человек только что ввёл его на странице входа, а cookie уже выдана.
+    /// </summary>
+    public async Task<IActionResult> OnPostKeepAsync(bool confirm)
+    {
+        var user = await users.GetUserAsync(User);
+        if (user is null)
+            return Challenge();
+
+        // Своей волей зашёл сменить пароль — оставлять нечего, просто уходим.
+        if (!user.MustChangePassword)
+            return LocalRedirect(SafeReturnUrl);
+
+        Forced = true;
+        if (!confirm)
+        {
+            ModelState.Clear();
+            ConfirmKeep = true;
+            return Page();
+        }
+
+        user.MustChangePassword = false;
+        user.PasswordRiskAcceptedAt = DateTimeOffset.UtcNow;
+        await users.UpdateAsync(user);
+        await signIn.RefreshSignInAsync(user);
+
+        logger.LogWarning("User {Username} ({Id}) kept the password assigned to them and accepted the risk", user.UserName, user.Id);
+        return LocalRedirect(SafeReturnUrl);
+    }
+
+    private string SafeReturnUrl => string.IsNullOrEmpty(ReturnUrl) || !Url.IsLocalUrl(ReturnUrl) ? "/" : ReturnUrl;
 
     /// <summary>Коды IdentityErrorDescriber → русский текст; неизвестные — как есть.</summary>
     private static string Translate(IdentityResult result) => string.Join(" ", result.Errors.Select(e => e.Code switch

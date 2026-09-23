@@ -95,6 +95,7 @@ public sealed class AuthAccountManager(UserManager<ApplicationUser> users) : IAc
             return ToResult(result);
 
         user.MustChangePassword = currentPassword is null;
+        user.PasswordRiskAcceptedAt = null;
         result = await users.UpdateAsync(user);
         return result.Succeeded ? AccountResult.Success() : ToResult(result);
     }
