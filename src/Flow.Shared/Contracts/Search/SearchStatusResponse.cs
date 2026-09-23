@@ -21,4 +21,4 @@ public sealed record SearchStatusResponse(
     DateTime? OldestQueuedAt);
 
 /// <summary>Число чанков текущей ModelVersion по типам источников.</summary>
-public sealed record SearchChunkCounts(int Task, int Comment, int Board, int User);
+public sealed record SearchChunkCounts(int Task, int Comment, int Board, int User, int Attachment);

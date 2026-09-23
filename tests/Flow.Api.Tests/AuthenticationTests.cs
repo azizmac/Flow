@@ -31,6 +31,8 @@ public sealed class AuthenticationTests(ApiFixture api)
     [InlineData("/api/users")]
     [InlineData("/api/boards")]
     [InlineData("/api/users/me")]
+    [InlineData("/api/users/me/preferences")]
+    [InlineData("/api/about")]
     public async Task Endpoints_WithoutToken_Should_Return401(string url)
     {
         using var client = api.CreateClient();

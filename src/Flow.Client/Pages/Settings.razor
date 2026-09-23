@@ -1,0 +1,398 @@
+@* Экран «Настройки» (/settings, ?tab=ui|search|about).
+   «Интерфейс» — личные настройки (GET/PATCH /users/me/preferences): хранятся на сервере и едут за человеком
+   на любой компьютер; каждое поле сохраняется сразу по клику, кнопки «Сохранить» нет.
+   «Поиск» — состояние индекса (GET /search/status, Admin+) и переиндексация (POST /search/reindex, Owner).
+   «О системе» — версия, модули и лимиты (GET /about, любая роль). *@
+@page "/settings"
+@implements IDisposable
+@inject IFlowApi Api
+@inject NavigationManager Nav
+@inject ToastService Toasts
+@inject AppState State
+@inject UserDirectory Users
+@inject PreferencesState Preferences
+
+<PageTitle>Настройки — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left"><h2>Настройки</h2></div>
+</div>
+
+<div class="content profile">
+    <div class="tabs settings-tabs" role="tablist">
+        <button type="button" class="tab @(Tab == "ui" ? "on" : "")" role="tab" @onclick="@(() => SetTab("ui"))">Интерфейс</button>
+        @if (CanViewSearch)
+        {
+            <button type="button" class="tab @(Tab == "search" ? "on" : "")" role="tab" @onclick="@(() => SetTab("search"))">Поиск</button>
+        }
+        <button type="button" class="tab @(Tab == "about" ? "on" : "")" role="tab" @onclick="@(() => SetTab("about"))">О системе</button>
+    </div>
+
+    <div class="settings-body">
+        @if (Tab == "ui")
+        {
+            @if (Preferences.Current is not { } prefs)
+            {
+                @if (_prefsError is not null)
+                {
+                    <div class="empty">
+                        <div class="empty-title">Не удалось загрузить настройки</div>
+                        <div>@_prefsError</div>
+                        <DsButton Variant="secondary" Size="sm" OnClick="LoadPreferences">Повторить</DsButton>
+                    </div>
+                }
+                else
+                {
+                    <div class="meta-line">Загрузка…</div>
+                }
+            }
+            else
+            {
+                <div class="side-card">
+                    <div class="section-title">Боковое меню</div>
+                    <div class="hint">«Авто» сворачивает меню в иконки, когда окно уже 1366px. Стрелка в самом меню меняет режим до перезагрузки страницы.</div>
+                    <div class="seg" role="radiogroup" aria-label="Боковое меню">
+                        @foreach (var (mode, label) in SidebarModes)
+                        {
+                            <button type="button" class="seg-btn @(prefs.SidebarMode == mode ? "on" : "")" role="radio" aria-checked="@(prefs.SidebarMode == mode)"
+                                    disabled="@_saving" @onclick="() => Save(new UpdateUserPreferencesRequest(SidebarMode: mode))">@label</button>
+                        }
+                    </div>
+                </div>
+
+                <div class="side-card">
+                    <div class="section-title">Стартовая страница</div>
+                    <div class="hint">Что открывается по адресу Flow без пути и сразу после входа. Пункт «Проекты» в меню ведёт на проекты всегда.</div>
+                    <div class="seg" role="radiogroup" aria-label="Стартовая страница">
+                        @foreach (var (page, label) in StartPages)
+                        {
+                            <button type="button" class="seg-btn @(prefs.StartPage == page ? "on" : "")" role="radio" aria-checked="@(prefs.StartPage == page)"
+                                    disabled="@_saving" @onclick="() => Save(new UpdateUserPreferencesRequest(StartPage: page))">@label</button>
+                        }
+                    </div>
+                </div>
+
+                <div class="side-card">
+                    <div class="section-title">Список задач</div>
+                    <div class="hint">Сколько задач на странице при открытии экрана «Задачи». Переключатель под таблицей меняет это только до ухода с экрана.</div>
+                    <div class="seg" role="radiogroup" aria-label="Задач на странице">
+                        @foreach (var size in prefs.AllowedTasksPageSizes)
+                        {
+                            <button type="button" class="seg-btn @(prefs.TasksPageSize == size ? "on" : "")" role="radio" aria-checked="@(prefs.TasksPageSize == size)"
+                                    disabled="@_saving" @onclick="() => Save(new UpdateUserPreferencesRequest(TasksPageSize: size))">@size</button>
+                        }
+                    </div>
+                </div>
+            }
+        }
+        else if (Tab == "search")
+        {
+            @if (_searchStatus is null)
+            {
+                @if (_searchError is not null)
+                {
+                    <div class="empty">
+                        <div class="empty-title">Не удалось получить состояние поиска</div>
+                        <div>@_searchError</div>
+                        <DsButton Variant="secondary" Size="sm" OnClick="LoadSearchStatus">Повторить</DsButton>
+                    </div>
+                }
+                else
+                {
+                    <div class="meta-line">Загрузка…</div>
+                }
+            }
+            else if (!_searchStatus.Enabled)
+            {
+                <div class="side-card">
+                    <div class="section-title">Поиск выключен</div>
+                    <div class="hint">Выключен настройкой установки (<span class="mono">SEARCH_ENABLED=false</span>): строки поиска нет, индекс не ведётся.</div>
+                </div>
+            }
+            else
+            {
+                var s = _searchStatus;
+                <div class="side-card">
+                    <div class="card-head">
+                        <div class="section-title">Индекс</div>
+                        <button type="button" class="icon-lnk" @onclick="LoadSearchStatus" disabled="@_searchLoading">@(_searchLoading ? "Обновляю…" : "Обновить")</button>
+                    </div>
+                    <div class="meta-grid">
+                        <div class="meta-k">Поиск по смыслу</div>
+                        <div class="meta-v">
+                            @if (_about is { Modules.SmartSearch: false })
+                            {
+                                <OnOff On="false" Label="выключен — ищем только по словам" />
+                            }
+                            else
+                            {
+                                <OnOff On="s.EmbedderAvailable" Problem="true"
+                                       Label="@(s.EmbedderAvailable ? "модель отвечает" : "модель не отвечает — ищем только по словам")" />
+                            }
+                        </div>
+                        <div class="meta-k">Модель</div>
+                        <div class="meta-v"><span class="mono" title="@s.ModelVersion">@s.ModelVersion</span></div>
+                        <div class="meta-k">Очередь</div>
+                        <div class="meta-v">
+                            @if (s.QueueTotal == 0)
+                            {
+                                <span>пусто</span>
+                            }
+                            else
+                            {
+                                <span>@s.QueueTotal @Ru.Plural(s.QueueTotal, "запись", "записи", "записей")</span>
+                                @if (s.OldestQueuedAt is { } oldest)
+                                {
+                                    <span class="hint">самая старая — @Ru.Ago(oldest)</span>
+                                }
+                            }
+                        </div>
+                        @if (s.QueueStuck > 0)
+                        {
+                            <div class="meta-k">Застряли</div>
+                            <div class="meta-v"><OnOff On="false" Problem="true" Label="@($"{s.QueueStuck} — исчерпали попытки, причина в логе воркера")" /></div>
+                        }
+                    </div>
+                </div>
+
+                <div class="side-card">
+                    <div class="section-title">В индексе</div>
+                    <div class="meta-grid">
+                        <div class="meta-k">Задачи</div><div class="meta-v">@s.ChunksByType.Task</div>
+                        <div class="meta-k">Комментарии</div><div class="meta-v">@s.ChunksByType.Comment</div>
+                        <div class="meta-k">Вложения</div><div class="meta-v">@s.ChunksByType.Attachment</div>
+                        <div class="meta-k">Проекты</div><div class="meta-v">@s.ChunksByType.Board</div>
+                        <div class="meta-k">Люди</div><div class="meta-v">@s.ChunksByType.User</div>
+                    </div>
+                    <div class="hint">Считаются фрагменты текущей модели: длинная задача режется на несколько.</div>
+                </div>
+
+                @if (CanReindex)
+                {
+                    <div class="side-card">
+                        <div class="section-title">Переиндексация</div>
+                        <div class="hint">Ставит в очередь все задачи, комментарии, вложения, проекты и людей. Нужна после смены модели или правил разбиения текста; поиск всё это время работает по старому индексу.</div>
+                        <div>
+                            <DsButton Variant="secondary" Size="sm" OnClick="() => _confirmReindex = true" Busy="_reindexing">Переиндексировать всё</DsButton>
+                        </div>
+                    </div>
+                }
+            }
+        }
+        else
+        {
+            @if (_about is null)
+            {
+                @if (_aboutError is not null)
+                {
+                    <div class="empty">
+                        <div class="empty-title">Не удалось получить сведения о системе</div>
+                        <div>@_aboutError</div>
+                        <DsButton Variant="secondary" Size="sm" OnClick="LoadAbout">Повторить</DsButton>
+                    </div>
+                }
+                else
+                {
+                    <div class="meta-line">Загрузка…</div>
+                }
+            }
+            else
+            {
+                var a = _about;
+                <div class="side-card">
+                    <div class="section-title">Flow</div>
+                    <div class="meta-grid">
+                        <div class="meta-k">Версия</div>
+                        <div class="meta-v">
+                            <span class="mono">@a.Version</span>
+                            @if (a.Commit is { } commit)
+                            {
+                                <span class="hint mono">@commit</span>
+                            }
+                        </div>
+                        <div class="meta-k">Платформа</div>
+                        <div class="meta-v">@a.Runtime</div>
+                        <div class="meta-k">Запущен</div>
+                        <div class="meta-v">@Ru.DateTimeFull(a.StartedAt)</div>
+                    </div>
+                </div>
+
+                <div class="side-card">
+                    <div class="section-title">Модули</div>
+                    <div class="meta-grid">
+                        <div class="meta-k">Поиск</div>
+                        <div class="meta-v"><OnOff On="a.Modules.Search" /></div>
+                        <div class="meta-k">По смыслу</div>
+                        <div class="meta-v"><OnOff On="a.Modules.SmartSearch" /></div>
+                        <div class="meta-k">По картинкам</div>
+                        <div class="meta-v"><OnOff On="a.Modules.ImageSearch" /></div>
+                        <div class="meta-k">«Точнее»</div>
+                        <div class="meta-v"><OnOff On="a.Modules.Rerank" /></div>
+                    </div>
+                    <div class="hint">Модули включает администратор установки, из интерфейса они не меняются.</div>
+                </div>
+
+                <div class="side-card">
+                    <div class="section-title">Вложения</div>
+                    <div class="meta-grid">
+                        <div class="meta-k">Файл</div>
+                        <div class="meta-v">до @Ru.FileSize(a.Limits.MaxFileBytes)</div>
+                        <div class="meta-k">На задачу</div>
+                        <div class="meta-v">@Ru.Files(a.Limits.MaxFilesPerTask), всего до @Ru.FileSize(a.Limits.MaxTotalBytesPerTask)</div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@if (_confirmReindex)
+{
+    <ConfirmDialog Title="Переиндексировать всё?"
+                   Text="Все источники встанут в очередь, воркер пересчитает их в фоне. На большой базе с моделью на CPU это может занять часы."
+                   ConfirmLabel="Переиндексировать"
+                   OnConfirm="Reindex" OnCancel="() => _confirmReindex = false" />
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "tab")] public string? TabParam { get; set; }
+
+    private static readonly (SidebarMode Mode, string Label)[] SidebarModes =
+    [
+        (SidebarMode.Auto, "Авто"),
+        (SidebarMode.Expanded, "Развёрнуто"),
+        (SidebarMode.Collapsed, "Иконки")
+    ];
+
+    private static readonly (StartPage Page, string Label)[] StartPages =
+    [
+        (StartPage.Projects, "Проекты"),
+        (StartPage.Tasks, "Все задачи"),
+        (StartPage.MyTasks, "Мои задачи")
+    ];
+
+    private string? _prefsError;
+    private bool _saving;
+
+    private SearchStatusResponse? _searchStatus;
+    private string? _searchError;
+    private bool _searchLoading;
+    private bool _confirmReindex;
+    private bool _reindexing;
+
+    private AboutResponse? _about;
+    private string? _aboutError;
+
+    private UserResponse? Me => Users.Find(State.CurrentUserId);
+
+    private bool CanViewSearch => Permissions.CanViewSearchDiagnostics(Me);
+
+    private bool CanReindex => Permissions.CanReindex(Me);
+
+    /// <summary>Вкладка «Поиск» без прав не показывается; прямая ссылка на неё открывает «Интерфейс».</summary>
+    private string Tab => TabParam switch
+    {
+        "search" when CanViewSearch => "search",
+        "about" => "about",
+        _ => "ui"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.Changed += OnChanged;
+        Users.Changed += OnChanged;
+        Preferences.Changed += OnChanged;
+
+        // «О системе» нужна и вкладке поиска: только по модулям видно, выключена модель настройкой или упала.
+        await Task.WhenAll(LoadPreferences(), LoadAbout());
+    }
+
+    protected override Task OnParametersSetAsync() => EnsureSearchStatus();
+
+    private void SetTab(string tab) =>
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("tab", tab == "ui" ? null : tab), replace: true);
+
+    private async Task LoadPreferences()
+    {
+        _prefsError = null;
+        await Preferences.EnsureLoadedAsync();
+        if (Preferences.Current is null)
+            _prefsError = "Нет связи с сервером.";
+    }
+
+    private async Task Save(UpdateUserPreferencesRequest request)
+    {
+        _saving = true;
+        var result = await Preferences.UpdateAsync(request);
+        _saving = false;
+
+        if (result.Ok)
+            Toasts.Ok("Сохранено");
+        else
+            Toasts.Error(result.Error!);
+    }
+
+    /// <summary>Состояние индекса грузим, только когда открыта его вкладка: запрос дёргает модель пробным вызовом.</summary>
+    private Task EnsureSearchStatus() =>
+        Tab == "search" && _searchStatus is null && _searchError is null && !_searchLoading
+            ? LoadSearchStatus()
+            : Task.CompletedTask;
+
+    private async Task LoadSearchStatus()
+    {
+        _searchLoading = true;
+        _searchError = null;
+        var result = await Api.GetSearchStatus();
+        _searchLoading = false;
+
+        if (result.Ok)
+            _searchStatus = result.Value;
+        else
+            _searchError = result.Error;
+    }
+
+    private async Task LoadAbout()
+    {
+        _aboutError = null;
+        var result = await Api.GetAbout();
+        if (result.Ok)
+            _about = result.Value;
+        else
+            _aboutError = result.Error;
+    }
+
+    private async Task Reindex()
+    {
+        _confirmReindex = false;
+        _reindexing = true;
+        var result = await Api.Reindex(new ReindexRequest());
+        _reindexing = false;
+
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error!);
+            return;
+        }
+
+        Toasts.Ok($"В очереди: {result.Value}");
+        await LoadSearchStatus();
+    }
+
+    /// <summary>
+    /// Роль «я» приходит из справочника позже страницы, а от неё зависит вкладка «Поиск»:
+    /// прямая ссылка ?tab=search должна догрузить состояние, как только права станут известны.
+    /// </summary>
+    private void OnChanged() => InvokeAsync(async () =>
+    {
+        StateHasChanged();
+        await EnsureSearchStatus();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        State.Changed -= OnChanged;
+        Users.Changed -= OnChanged;
+        Preferences.Changed -= OnChanged;
+    }
+}

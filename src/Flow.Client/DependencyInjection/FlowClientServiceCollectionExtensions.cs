@@ -43,6 +43,7 @@ public static class FlowClientServiceCollectionExtensions
         services.AddScoped<AttachmentEvents>();
         // Размеры картинок-вложений: их узнаёт список вложений, а нужны они рендеру Markdown.
         services.AddScoped<AttachmentSizes>();
+        services.AddScoped<PreferencesState>();
 
         return services;
     }

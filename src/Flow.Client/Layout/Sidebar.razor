@@ -1,6 +1,6 @@
 ﻿@* Drawer-nav 240px по Sidebar.dc.html. Строка поиска — GlobalSearch (выдача на /search).
    «Проекты» → /boards; «Задачи» → /tasks (все проекты);
-   «Люди» → /users. Дашборды/Настройки — в API ещё нет: помечены «скоро» и не притворяются кликабельными.
+   «Люди» → /users, «Настройки» → /settings. Дашбордов в API ещё нет: помечены «скоро» и не притворяются кликабельными.
    Футер — текущий пользователь: claim sub из токена Flow.Auth → AppState.CurrentUserId, профиль — GET /users/me;
    кнопка «Выйти» → authentication/logout (endsession в Flow.Auth). *@
 @implements IDisposable
@@ -10,6 +10,7 @@
 @inject IFlowApi Api
 @inject AuthenticationStateProvider AuthState
 @inject BrowserInterop Browser
+@inject PreferencesState Preferences
 
 <nav class="sb @SidebarModeClass">
     <div class="sb-top">
@@ -44,7 +45,7 @@
     <a class="sb-item @(IsTasks ? "active" : "")" href="@TasksHref" title="Задачи"><Icon Name="check" Size="18" /><span>Задачи</span></a>
     <a class="sb-item @(IsUsers ? "active" : "")" href="users" title="Люди"><Icon Name="users" Size="18" /><span>Люди</span></a>
     <span class="sb-item disabled" aria-disabled="true" title="Раздел появится позже"><Icon Name="chart" Size="18" /><span>Дашборды</span><span class="sb-soon">скоро</span></span>
-    <span class="sb-item disabled" aria-disabled="true" title="Раздел появится позже"><Icon Name="settings" Size="18" /><span>Настройки</span><span class="sb-soon">скоро</span></span>
+    <a class="sb-item @(IsSettings ? "active" : "")" href="settings" title="Настройки"><Icon Name="settings" Size="18" /><span>Настройки</span></a>
 
     <div class="sb-foot">
         @if (Me is { } me)
@@ -94,6 +95,8 @@
 
     private bool IsUsers => Path is "users" || Path.StartsWith("users/", StringComparison.OrdinalIgnoreCase);
 
+    private bool IsSettings => Path is "settings";
+
     // Раньше пункт вёл в последний открытый проект; теперь это отдельный экран со всеми задачами,
     // а проект выбирается селектором в его топбаре.
     private const string TasksHref = "tasks";
@@ -127,6 +130,8 @@
         if (me.Ok)
         {
             Users.Put(me.Value!);
+            // Режим меню из личных настроек: AppState получит его сам, сайдбар перерисуется по State.Changed.
+            _ = Preferences.EnsureLoadedAsync();
         }
         else if (me.Unauthorized)
         {

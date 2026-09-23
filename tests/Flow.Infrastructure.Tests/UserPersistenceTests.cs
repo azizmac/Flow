@@ -2,6 +2,8 @@ using Flow.Application.Features.Users.Commands.UserCreateCommand;
 using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
 using Flow.Application.Features.Users.Commands.UserRemoveLinkCommand;
 using Flow.Application.Features.Users.Commands.UserSetLinkCommand;
+using Flow.Application.Features.Users.Commands.UserUpdatePreferencesCommand;
+using Flow.Application.Features.Users.Queries.UserGetPreferencesQuery;
 using Flow.Application.Features.Users.Queries.UserGetQuery;
 using Flow.Application.Features.Users.Queries.UserSearchQuery;
 using Flow.Shared.Contracts.Users;
@@ -148,5 +150,27 @@ public class UserPersistenceTests(PostgresFixture db)
         var admins = await db.QueryAsync(ctx => new UserRepository(ctx).CountByRoleAsync(UserRole.Admin, CancellationToken.None));
         Assert.Equal(1, admins);
         Assert.True(await db.QueryAsync(ctx => new UserRepository(ctx).CountByRoleAsync(UserRole.Owner, CancellationToken.None)) >= 1);
+    }
+
+    /// <summary>
+    /// Настройки — complex type, и сохраняются они заменой целого объекта: EF должен увидеть, что
+    /// поменялись колонки PrefSidebarMode/PrefTasksPageSize, а не решить, что объект «тот же».
+    /// </summary>
+    [Fact]
+    public async Task Preferences_Should_Persist_And_LoadBack()
+    {
+        var user = await CreateAsync("prefs");
+
+        await db.SendAsync(new UserUpdatePreferencesCommand(user.Id, SidebarMode.Collapsed, null, 25));
+        await db.SendAsync(new UserUpdatePreferencesCommand(user.Id, null, StartPage.MyTasks, null));
+
+        var loaded = await db.SendAsync(new UserGetPreferencesQuery(user.Id));
+        Assert.Equal(SidebarMode.Collapsed, loaded.SidebarMode);
+        Assert.Equal(StartPage.MyTasks, loaded.StartPage);
+        Assert.Equal(25, loaded.TasksPageSize);
+
+        var entity = await db.QueryAsync(ctx => ctx.Users.SingleAsync(u => u.Id == user.Id));
+        Assert.Equal(Flow.Domain.Entities.SidebarMode.Collapsed, entity.Preferences.SidebarMode);
+        Assert.Equal(25, entity.Preferences.TasksPageSize);
     }
 }

@@ -74,6 +74,9 @@ public sealed partial class User
 
     public IReadOnlyCollection<UserLink> Links => _links;
 
+    /// <summary>Личные настройки интерфейса; у нового пользователя — <see cref="UserPreferences.Default"/>.</summary>
+    public UserPreferences Preferences { get; private set; } = UserPreferences.Default;
+
     private User()
     {
         // EF Core
@@ -160,6 +163,18 @@ public sealed partial class User
 
     /// <summary>Удаляет ссылку указанного типа. Если её нет — ничего не делает.</summary>
     public void RemoveLink(UserLinkType type) => _links.RemoveAll(l => l.Type == type);
+
+    /// <summary>Заменяет настройки целиком. false — ничего не изменилось (сохранять нечего).</summary>
+    public bool ChangePreferences(UserPreferences preferences)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+
+        if (Preferences.SameAs(preferences))
+            return false;
+
+        Preferences = preferences;
+        return true;
+    }
 
     /// <summary>Только меняет роль. Ограничения (кто кому что может выдать, последний Owner) — в Application.</summary>
     public void ChangeRole(UserRole role)

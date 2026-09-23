@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using Flow.Shared.Contracts.About;
 using Flow.Shared.Contracts.Attachments;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
@@ -91,6 +92,10 @@ public interface IFlowApi
         CancellationToken ct = default);
 
     Task<ApiResult<IReadOnlyList<SearchResultItem>>> GetSimilarTasks(Guid taskId, int limit = 5, CancellationToken ct = default);
+    Task<ApiResult<SearchStatusResponse>> GetSearchStatus(CancellationToken ct = default);
+
+    /// <summary>Число поставленных в очередь источников. Только Owner; при выключенном поиске — 400.</summary>
+    Task<ApiResult<int>> Reindex(ReindexRequest request, CancellationToken ct = default);
 
     // ---- Люди ----
     Task<ApiResult<IReadOnlyList<UserResponse>>> GetUsers(bool includeInactive = false, CancellationToken ct = default);
@@ -108,4 +113,9 @@ public interface IFlowApi
     Task<ApiResult<bool>> RemoveUserLink(Guid id, UserLinkType type, CancellationToken ct = default);
     Task<ApiResult<bool>> DeactivateUser(Guid id, CancellationToken ct = default);
     Task<ApiResult<bool>> ActivateUser(Guid id, CancellationToken ct = default);
+    Task<ApiResult<UserPreferencesResponse>> GetPreferences(CancellationToken ct = default);
+    Task<ApiResult<UserPreferencesResponse>> UpdatePreferences(UpdateUserPreferencesRequest request, CancellationToken ct = default);
+
+    // ---- О системе ----
+    Task<ApiResult<AboutResponse>> GetAbout(CancellationToken ct = default);
 }

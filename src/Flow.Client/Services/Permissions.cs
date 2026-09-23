@@ -27,6 +27,12 @@ public static class Permissions
 
     public static bool CanManageUsers(UserResponse? me) => me?.Role >= UserRole.Admin;
 
+    /// <summary>Состояние поискового индекса (GET /search/status) — Admin и Owner.</summary>
+    public static bool CanViewSearchDiagnostics(UserResponse? me) => me?.Role >= UserRole.Admin;
+
+    /// <summary>Массовая переиндексация (POST /search/reindex) — только Owner.</summary>
+    public static bool CanReindex(UserResponse? me) => me?.Role >= UserRole.Owner;
+
     /// <summary>Комментировать — Member+; Reader только читает (docs/TZ_task_activity_comments.md).</summary>
     public static bool CanComment(UserResponse? me) => me?.Role >= UserRole.Member;
 

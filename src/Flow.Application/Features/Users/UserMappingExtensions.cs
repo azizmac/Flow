@@ -1,9 +1,13 @@
 using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Users;
 using DomainLinkType = Flow.Domain.Entities.UserLinkType;
+using DomainSidebarMode = Flow.Domain.Entities.SidebarMode;
+using DomainStartPage = Flow.Domain.Entities.StartPage;
 using DomainRole = Flow.Domain.Entities.UserRole;
 using DomainStatus = Flow.Domain.Entities.UserStatus;
 using SharedLinkType = Flow.Shared.Contracts.Users.UserLinkType;
+using SharedSidebarMode = Flow.Shared.Contracts.Users.SidebarMode;
+using SharedStartPage = Flow.Shared.Contracts.Users.StartPage;
 using SharedRole = Flow.Shared.Contracts.Users.UserRole;
 using SharedStatus = Flow.Shared.Contracts.Users.UserStatus;
 
@@ -64,4 +68,23 @@ public static class UserMappingExtensions
         SharedLinkType.Other => DomainLinkType.Other,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown UserLinkType.")
     };
+
+    public static UserPreferencesResponse ToResponse(this UserPreferences preferences) => new(
+        preferences.SidebarMode.ToResponseSidebarMode(),
+        preferences.StartPage.ToResponseStartPage(),
+        preferences.TasksPageSize,
+        UserPreferences.AllowedTasksPageSizes);
+
+    /// <summary>Значения зеркал совпадают, как у UserRole; неизвестное значение из запроса — ArgumentException (400).</summary>
+    public static SharedSidebarMode ToResponseSidebarMode(this DomainSidebarMode mode) =>
+        Enum.IsDefined(mode) ? (SharedSidebarMode)(int)mode : throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown SidebarMode.");
+
+    public static DomainSidebarMode ToDomainSidebarMode(this SharedSidebarMode mode) =>
+        Enum.IsDefined(mode) ? (DomainSidebarMode)(int)mode : throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown SidebarMode.");
+
+    public static SharedStartPage ToResponseStartPage(this DomainStartPage page) =>
+        Enum.IsDefined(page) ? (SharedStartPage)(int)page : throw new ArgumentOutOfRangeException(nameof(page), page, "Unknown StartPage.");
+
+    public static DomainStartPage ToDomainStartPage(this SharedStartPage page) =>
+        Enum.IsDefined(page) ? (DomainStartPage)(int)page : throw new ArgumentOutOfRangeException(nameof(page), page, "Unknown StartPage.");
 }

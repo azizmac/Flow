@@ -8,9 +8,11 @@ using Flow.Application.Features.Users.Commands.UserCreateCommand;
 using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
 using Flow.Application.Features.Users.Commands.UserRemoveLinkCommand;
 using Flow.Application.Features.Users.Commands.UserSetLinkCommand;
+using Flow.Application.Features.Users.Commands.UserUpdatePreferencesCommand;
 using Flow.Application.Features.Users.Commands.UserUpdateProfileCommand;
 using Flow.Application.Features.Users.Queries.UserGetByUsernameQuery;
 using Flow.Application.Features.Users.Queries.UserGetMeQuery;
+using Flow.Application.Features.Users.Queries.UserGetPreferencesQuery;
 using Flow.Application.Features.Users.Queries.UserGetQuery;
 using Flow.Application.Features.Users.Queries.UserListQuery;
 using Flow.Application.Features.Users.Queries.UserSearchQuery;
@@ -81,6 +83,32 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
 
         var me = await mediator.Send(new UserGetMeQuery(actorId), cancellationToken);
         return me is null ? Unauthorized(new { Message = "Профиль для этой учётной записи не найден." }) : Ok(me);
+    }
+
+    /// <summary>Личные настройки интерфейса текущего пользователя. Чужие не читаются никем — маршрута с {id} нет.</summary>
+    [HttpGet("me/preferences")]
+    public async Task<IActionResult> GetPreferences(CancellationToken cancellationToken)
+    {
+        var preferences = await mediator.Send(new UserGetPreferencesQuery(actor.Require()), cancellationToken);
+        return Ok(preferences);
+    }
+
+    /// <summary>PATCH-семантика: null — не трогать. 400 — недопустимое значение (например, размер страницы вне списка).</summary>
+    [HttpPatch("me/preferences")]
+    public async Task<IActionResult> UpdatePreferences(UpdateUserPreferencesRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var preferences = await mediator.Send(
+                new UserUpdatePreferencesCommand(actor.Require(), request.SidebarMode, request.StartPage, request.TasksPageSize),
+                cancellationToken);
+
+            return Ok(preferences);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { ex.Message });
+        }
     }
 
     [HttpGet("{id:guid}")]
