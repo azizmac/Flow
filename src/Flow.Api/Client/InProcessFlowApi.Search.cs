@@ -1,4 +1,6 @@
-﻿using Flow.Application.Features.Search.Queries.SearchQuery;
+﻿using Flow.Application.Features.Search.Commands.ReindexCommand;
+using Flow.Application.Features.Search.Queries.SearchQuery;
+using Flow.Application.Features.Search.Queries.SearchStatusQuery;
 using Flow.Application.Features.Search.Queries.SimilarTasksQuery;
 using Flow.Client.Services;
 using Flow.Shared.Contracts.Search;
@@ -56,5 +58,21 @@ internal sealed partial class InProcessFlowApi
 
             // Одинаковый null и на «задачи нет», и на «поиск выключен» — контроллер их тоже не различает.
             return similar is null ? NotFound<IReadOnlyList<SearchResultItem>>() : Ok(similar);
+        });
+
+    /// <summary>Admin+ (иначе 403 через Guard). Выключенный поиск — не ошибка: 200 с Enabled = false.</summary>
+    public Task<ApiResult<SearchStatusResponse>> GetSearchStatus(CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var actor = await ActorAsync();
+            return Ok(await mediator.Send(new SearchStatusQuery(actor), ct));
+        });
+
+    /// <summary>Только Owner. Выключенный поиск — InvalidOperationException, Guard превращает её в 400, как контроллер.</summary>
+    public Task<ApiResult<int>> Reindex(ReindexRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var actor = await ActorAsync();
+            return Ok(await mediator.Send(new ReindexCommand(actor, request.Types, request.BoardId), ct));
         });
 }

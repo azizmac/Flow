@@ -9,6 +9,7 @@
 @inject HotkeyService Hotkeys
 @inject AppState State
 @inject UserDirectory Users
+@inject PreferencesState Preferences
 
 <PageTitle>Проекты — Flow</PageTitle>
 
@@ -118,6 +119,15 @@
             }
             return Task.CompletedTask;
         });
+
+        // Стартовая страница из личных настроек действует только на корень сайта: «Проекты» в меню и логотип
+        // ведут на /boards, и туда человек должен попадать всегда, что бы ни выбрал стартовой.
+        if (Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Length == 0
+            && await Preferences.StartPageHrefAsync() is { } start)
+        {
+            Nav.NavigateTo(start, replace: true);
+            return;
+        }
 
         await Load();
     }

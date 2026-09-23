@@ -56,6 +56,15 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(u => u.CreatedAt).IsRequired();
 
+        // Настройки — complex type: у value object нет ключа, отдельная таблица с join'ом на каждую загрузку
+        // профиля ничего бы не дала. Колонки с префиксом, чтобы не спорить с полями самого профиля.
+        builder.ComplexProperty(u => u.Preferences, preferences =>
+        {
+            preferences.Property(p => p.SidebarMode).HasColumnName("PrefSidebarMode").IsRequired();
+            preferences.Property(p => p.StartPage).HasColumnName("PrefStartPage").IsRequired();
+            preferences.Property(p => p.TasksPageSize).HasColumnName("PrefTasksPageSize").IsRequired();
+        });
+
         // Ссылки — owned-коллекция: живут только внутри агрегата User, своего DbSet и репозитория у них нет.
         // Ключ (UserId, Type) в БД дублирует доменный инвариант «не более одной ссылки каждого типа».
         builder.OwnsMany(u => u.Links, links =>

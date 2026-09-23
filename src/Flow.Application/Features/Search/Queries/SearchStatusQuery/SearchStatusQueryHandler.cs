@@ -26,7 +26,7 @@ internal sealed class SearchStatusQueryHandler(
                 Dimensions: embedder.Dimensions,
                 QueueTotal: 0,
                 QueueStuck: 0,
-                ChunksByType: new SearchChunkCounts(0, 0, 0, 0),
+                ChunksByType: new SearchChunkCounts(0, 0, 0, 0, 0),
                 OldestQueuedAt: null);
 
         var statistics = await index.GetStatisticsAsync(embedder.ModelVersion, options.Indexing.MaxAttempts, cancellationToken);
@@ -44,7 +44,8 @@ internal sealed class SearchStatusQueryHandler(
                 Count(statistics, SearchSourceType.Task),
                 Count(statistics, SearchSourceType.Comment),
                 Count(statistics, SearchSourceType.Board),
-                Count(statistics, SearchSourceType.User)),
+                Count(statistics, SearchSourceType.User),
+                Count(statistics, SearchSourceType.Attachment)),
             OldestQueuedAt: statistics.OldestQueuedAt);
     }
 

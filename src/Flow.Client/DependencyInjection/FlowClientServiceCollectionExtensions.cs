@@ -41,6 +41,7 @@ public static class FlowClientServiceCollectionExtensions
         // Permissions), а событие AttachmentEvents.Changed уходило бы всем, у кого открыта та же задача.
         services.AddScoped<AppState>();
         services.AddScoped<AttachmentEvents>();
+        services.AddScoped<PreferencesState>();
 
         return services;
     }

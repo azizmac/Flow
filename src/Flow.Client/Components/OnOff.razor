@@ -1,0 +1,15 @@
+@* Пилюля «включено / выключено» с точкой-индикатором — для настроек и диагностики.
+   Цвета те же, что у статусов людей: sage — работает, серый — выключено, danger — выключено там, где должно работать. *@
+<span class="status-pill"><span class="sd" style="background:@Color"></span>@(Label ?? (On ? "включено" : "выключено"))</span>
+
+@code {
+    [Parameter] public bool On { get; set; }
+
+    /// <summary>Подпись вместо «включено/выключено».</summary>
+    [Parameter] public string? Label { get; set; }
+
+    /// <summary>Выключенное состояние — сбой, а не настройка: красная точка вместо серой.</summary>
+    [Parameter] public bool Problem { get; set; }
+
+    private string Color => On ? "var(--sage)" : Problem ? "var(--danger)" : "rgba(255,255,255,0.35)";
+}

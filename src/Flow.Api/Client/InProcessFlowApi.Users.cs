@@ -9,9 +9,11 @@ using Flow.Application.Features.Users.Commands.UserCreateCommand;
 using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
 using Flow.Application.Features.Users.Commands.UserRemoveLinkCommand;
 using Flow.Application.Features.Users.Commands.UserSetLinkCommand;
+using Flow.Application.Features.Users.Commands.UserUpdatePreferencesCommand;
 using Flow.Application.Features.Users.Commands.UserUpdateProfileCommand;
 using Flow.Application.Features.Users.Queries.UserGetByUsernameQuery;
 using Flow.Application.Features.Users.Queries.UserGetMeQuery;
+using Flow.Application.Features.Users.Queries.UserGetPreferencesQuery;
 using Flow.Application.Features.Users.Queries.UserGetQuery;
 using Flow.Application.Features.Users.Queries.UserListQuery;
 using Flow.Application.Features.Users.Queries.UserSearchQuery;
@@ -175,6 +177,22 @@ internal sealed partial class InProcessFlowApi
             var result = await mediator.Send(new UserActivateCommand(actor, id), ct);
 
             return result.IsNotFound ? Missing() : Ok(true);
+        });
+
+    public Task<ApiResult<UserPreferencesResponse>> GetPreferences(CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var actor = await ActorAsync();
+            return Ok(await mediator.Send(new UserGetPreferencesQuery(actor), ct));
+        });
+
+    public Task<ApiResult<UserPreferencesResponse>> UpdatePreferences(UpdateUserPreferencesRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var actor = await ActorAsync();
+            return Ok(await mediator.Send(
+                new UserUpdatePreferencesCommand(actor, request.SidebarMode, request.StartPage, request.TasksPageSize),
+                ct));
         });
 
     /// <summary>Три исхода UserUpdateResult — те же, что раскладывал ToActionResult контроллера.</summary>

@@ -13,6 +13,7 @@
 @inject HotkeyService Hotkeys
 @inject AppState State
 @inject UserDirectory Users
+@inject PreferencesState Preferences
 
 <PageTitle>@(CurrentBoard?.Name ?? "Задачи") — Flow</PageTitle>
 
@@ -345,7 +346,12 @@
         }
 
         if (_boardsLoading)
+        {
+            // Размер страницы из личных настроек нужен до того, как таблица смонтируется и запросит первую страницу.
+            await Preferences.EnsureLoadedAsync();
+            _pageSize = Preferences.TasksPageSize;
             await LoadBoards();
+        }
 
         // Фильтры считает сервер, поэтому любое их изменение — это новый запрос списка.
         var key = $"{BoardId}|{StatusId}|{Type}|{Who}|{_search.Trim()}";

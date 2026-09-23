@@ -1,4 +1,6 @@
-﻿namespace Flow.Client.Services;
+﻿using Flow.Shared.Contracts.Users;
+
+namespace Flow.Client.Services;
 
 /// <summary>
 /// Состояние сессии клиента: последний открытый проект (для пункта «Задачи» в сайдбаре) и текущий пользователь —
@@ -10,12 +12,29 @@ public sealed class AppState
 
     /// <summary>
     /// Иконочный режим сайдбара. null — «как решит ширина окна» (ниже 1366px он сворачивается сам,
-    /// правило в app.css); true/false — выбор человека кнопкой, он важнее ширины и живёт до перезагрузки.
+    /// правило в app.css); true/false — выбор в настройках или кнопкой в меню, он важнее ширины.
     /// </summary>
     public bool? SidebarCollapsed { get; private set; }
 
     public void ToggleSidebar(bool collapsed)
     {
+        SidebarCollapsed = collapsed;
+        Changed?.Invoke();
+    }
+
+    /// <summary>Режим из личных настроек: с ним circuit стартует, кнопка в меню меняет его до перезагрузки.</summary>
+    public void SetSidebarMode(SidebarMode mode)
+    {
+        bool? collapsed = mode switch
+        {
+            SidebarMode.Expanded => false,
+            SidebarMode.Collapsed => true,
+            _ => null
+        };
+
+        if (SidebarCollapsed == collapsed)
+            return;
+
         SidebarCollapsed = collapsed;
         Changed?.Invoke();
     }

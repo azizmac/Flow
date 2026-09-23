@@ -1544,6 +1544,13 @@ a.sb-me:active { transform: scale(0.98); }
 @media (max-width: 1100px) { .profile-grid { grid-template-columns: minmax(0, 1fr); } }
 .profile-main, .profile-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 30px; }
+
+/* ---------- Настройки: вкладки профиля, одна колонка карточек ---------- */
+.settings-tabs { padding-top: 8px; }
+.settings-body { display: flex; flex-direction: column; gap: 16px; padding: 24px 40px 36px; max-width: 760px; }
+.settings-body .meta-grid { grid-template-columns: 140px minmax(0, 1fr); row-gap: 12px; }
+.settings-body .seg { align-self: flex-start; }
+.settings-body .mono { font: var(--fw-medium) 12px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .form-2col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; }
 @media (max-width: 720px) { .form-2col { grid-template-columns: minmax(0, 1fr); } }
 .ds-field-row input[type="email"] { font-size: var(--text-body); }
