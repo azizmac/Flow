@@ -1,5 +1,6 @@
 @* Экран «Люди» (GET /users?includeInactive=): список профилей — аватар, имя + @username, должность, почта,
-   статус, меню «…». Клик → /users/{id}. «Добавить» — модалка нового человека (хоткей N).
+   роль, статус, меню «…». Роль меняется прямо в строке (RolePicker, PATCH /users/{id}/role) — по Permissions.AssignableRoles;
+   без права в ячейке обычный чип. Клик → /users/{id}. «Добавить» — модалка нового человека (хоткей N).
    Деактивированные скрыты за переключателем (их нельзя назначать, но история за ними остаётся).
    Деактивация/активация — пункт меню «…», виден только Owner (Permissions.CanDeactivate). «Добавить» — Admin и Owner.
    Чип «это я» — текущий пользователь из токена (AppState.CurrentUserId). *@
@@ -57,8 +58,8 @@
         </div>
 
         <div class="panel">
-            <div class="user-cols list-head"><div></div><div>Человек</div><div>Должность</div><div>Почта</div><div>Статус</div><div></div></div>
-            <div class="panel-rows">
+            <div class="user-cols list-head"><div></div><div>Человек</div><div>Должность</div><div>Почта</div><div>Роль</div><div>Статус</div><div></div></div>
+            <div class="panel-rows user-rows">
                 @if (Directory.All.Count == 0)
                 {
                     <div class="empty">
@@ -79,16 +80,21 @@
                 }
                 else
                 {
+                    var i = 0;
                     @foreach (var u in Visible)
                     {
-                        <div class="user-row user-cols @(u.IsActive ? "" : "off") @(_flashId == u.Id ? "flash" : "")" @key="u.Id" id="@("user-" + u.Id.ToString("N"))" @onclick="() => Open(u)">
+                        <div class="user-row user-cols @(u.IsActive ? "" : "off") @(_flashId == u.Id ? "flash" : "")" @key="u.Id" id="@("user-" + u.Id.ToString("N"))"
+                             style="--i:@(Math.Min(i++, 12))" @onclick="() => Open(u)">
                             <div><Avatar User="u" Size="30" /></div>
                             <div class="user-cell-name">
-                                <div class="user-name">@u.FullName <RoleChip Role="u.Role" /> @if (State.CurrentUserId == u.Id) { <span class="me-chip">это я</span> }</div>
+                                <div class="user-name">@u.FullName @if (State.CurrentUserId == u.Id) { <span class="me-chip">это я</span> }</div>
                                 <div class="user-un">@@@u.Username</div>
                             </div>
                             <div class="user-job">@(string.IsNullOrEmpty(u.JobTitle) ? "—" : u.JobTitle)</div>
                             <div class="user-mail" title="@u.Email">@u.Email</div>
+                            <div>
+                                <RolePicker Value="u.Role" Allowed="Permissions.AssignableRoles(Me, u)" OnChange="role => ChangeRole(u, role)" />
+                            </div>
                             <div>
                                 <span class="status-pill"><span class="sd" style="background:@Permissions.StatusColor(u.Status)"></span>@Permissions.StatusLabel(u.Status)</span>
                             </div>
@@ -185,6 +191,21 @@
         await Browser.ScrollIntoViewAsync("user-" + u.Id.ToString("N"));
         await Task.Delay(1500);
         if (_flashId == u.Id) _flashId = null;
+    }
+
+    /// <summary>Роль из строки: сервер — источник истины (403 по матрице, 400 — последний Owner), отказ — тост и откат пилюли.</summary>
+    private async Task<bool> ChangeRole(UserResponse u, UserRole role)
+    {
+        var result = await Api.ChangeUserRole(u.Id, new ChangeUserRoleRequest(role));
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось сменить роль");
+            return false;
+        }
+
+        Directory.Put(result.Value!);
+        Toasts.Ok($"{u.FullName}: теперь {Permissions.RoleLabel(role)}");
+        return true;
     }
 
     /// <summary>Деактивация/активация — только Owner (пункт меню виден по Permissions.CanDeactivate); сервер тоже проверит.</summary>
