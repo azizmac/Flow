@@ -51,6 +51,9 @@ namespace Flow.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<int?>("Height")
+                        .HasColumnType("integer");
+
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint");
 
@@ -67,6 +70,9 @@ namespace Flow.Infrastructure.Migrations
 
                     b.Property<Guid>("UploadedById")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("Width")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

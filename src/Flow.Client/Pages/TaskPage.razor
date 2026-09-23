@@ -8,6 +8,7 @@
 @inject HotkeyService Hotkeys
 @inject AppState State
 @inject UserDirectory Users
+@inject AttachmentSizes Sizes
 
 <PageTitle>@(_task?.Code ?? "Задача") — Flow</PageTitle>
 
@@ -282,6 +283,15 @@ else if (_task is not null && _board is not null)
         }
 
         _task = task.Value!;
+
+        // Вложения тянем ДО снятия _loading, хотя рисует их отдельный компонент: из них берутся
+        // размеры картинок, а разметка описания и ленты обязана получить их на ПЕРВОМ рендере.
+        // Приедь они позже — браузер уже разослал бы запросы на все картинки, и резервировать
+        // место было бы поздно. Ошибку здесь глотаем: блок вложений покажет своё состояние сам.
+        var attachments = await Api.GetAttachments(Id);
+        if (attachments.Ok)
+            Sizes.Remember(attachments.Value!);
+
         var board = await Api.GetBoard(_task.BoardId);
         _loading = false;
         if (!board.Ok)

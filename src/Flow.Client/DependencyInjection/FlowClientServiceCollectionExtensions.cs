@@ -41,6 +41,8 @@ public static class FlowClientServiceCollectionExtensions
         // Permissions), а событие AttachmentEvents.Changed уходило бы всем, у кого открыта та же задача.
         services.AddScoped<AppState>();
         services.AddScoped<AttachmentEvents>();
+        // Размеры картинок-вложений: их узнаёт список вложений, а нужны они рендеру Markdown.
+        services.AddScoped<AttachmentSizes>();
         services.AddScoped<PreferencesState>();
 
         return services;

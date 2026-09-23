@@ -6,6 +6,7 @@
 @implements IDisposable
 @inject IFlowApi Api
 @inject ToastService Toasts
+@inject AttachmentSizes Sizes
 @inject UserDirectory Users
 @inject AppState State
 @inject AttachmentEvents Events
@@ -140,6 +141,10 @@
         }
 
         _items = [.. result.Value!];
+        // Размеры отсюда нужны рендеру Markdown: в тексте лежит только attachment:{id}.
+        // На странице задачи справочник уже наполнен до первого рендера, здесь это для слайдера,
+        // где список приезжает параметром и гейта загрузки нет.
+        Sizes.Remember(_items);
         StateHasChanged();
 
         if (!Users.IsLoaded)
@@ -152,6 +157,8 @@
     private void Add(AttachmentResponse item)
     {
         _items = [.. _items, item];
+        // Только что приложенная картинка должна получить размеры сразу: её уже вставили в текст.
+        Sizes.Remember([item]);
         StateHasChanged();
     }
 

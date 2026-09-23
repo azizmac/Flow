@@ -18,6 +18,11 @@ public sealed class AttachmentConfiguration : IEntityTypeConfiguration<Attachmen
 
         builder.Property(a => a.ContentHash).IsRequired();
 
+        // Размеры картинки: обнуляемые намеренно. Индекса нет и не нужно — по ним не фильтруют
+        // и не сортируют, они едут вместе со строкой в списке вложений.
+        builder.Property(a => a.Width);
+        builder.Property(a => a.Height);
+
         builder.Property(a => a.StorageKey).IsRequired().HasMaxLength(Attachment.StorageKeyMaxLength);
 
         builder.Property(a => a.BoardId).IsRequired();

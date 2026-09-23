@@ -17,13 +17,17 @@ public static class FlowMarkdown
     /// Текст → HTML. Ссылки (вложения, внешние адреса) правятся в дереве, а не в готовой строке:
     /// подменять атрибуты регулярками по HTML — значит однажды попасть в текст пользователя, а не в разметку.
     /// </summary>
-    public static string ToHtml(string? text)
+    /// <param name="sizes">
+    /// Размеры картинок-вложений по id (Services/AttachmentSizes). null — как раньше: атрибуты
+    /// width/height не пишутся, браузер места под картинку не резервирует.
+    /// </param>
+    public static string ToHtml(string? text, Func<Guid, (int Width, int Height)?>? sizes = null)
     {
         var document = Markdig.Markdown.Parse(text ?? string.Empty, Pipeline);
 
         foreach (var link in document.Descendants<LinkInline>())
         {
-            AttachmentLinks.Rewrite(link);
+            AttachmentLinks.Rewrite(link, sizes);
             ExternalLinks.Rewrite(link);
         }
 
