@@ -1,0 +1,100 @@
+@* Роль «в строке» списка людей: пилюля в цвете роли (как RoleChip) + меню со всеми ролями и подсказкой,
+   что каждая может. Недоступные actor'у роли видны, но выключены — по Permissions.AssignableRoles.
+   Без права менять (Allowed пуст) рисуется обычный RoleChip, без стрелки и меню.
+
+   Смена оптимистичная: новая подпись въезжает сразу, пока летит PATCH; OnChange возвращает false —
+   подпись откатывается и пилюля «качает головой». Успех — короткое кольцо вокруг пилюли.
+   Слой и клавиатура — MudMenu, открытием управляем сами, как в StatusSelect: пилюля лежит внутри
+   кликабельной строки, и клик по ней не должен открывать профиль. *@
+
+@if (Allowed.Count == 0)
+{
+    <RoleChip Role="Value" />
+}
+else
+{
+    <MudMenu @bind-Open="_open" PopoverClass="flow-pop flow-pop-roles" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomLeft"
+             TransformOrigin="Origin.TopLeft" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Сменить роль">
+        <ActivatorContent>
+            <div class="role-pick @Variant(Shown) @(_open ? "open" : "") @(_saving ? "saving" : "") @(_shake ? "shake" : "") @(_saved ? "saved" : "") @(_changed ? "changed" : "")"
+                 @onclick="Toggle" @onclick:stopPropagation @onkeydown="OnKey" @onkeydown:stopPropagation
+                 role="button" tabindex="0" aria-haspopup="menu" aria-expanded="@(_open ? "true" : "false")"
+                 title="@Permissions.RoleHint(Shown)">
+                <span class="role-pick-lbl" @key="Shown">@Permissions.RoleLabel(Shown)</span>
+                <Icon Name="chevron-down" Size="12" Class="role-pick-chev" />
+            </div>
+        </ActivatorContent>
+        <ChildContent>
+            @foreach (var role in Enum.GetValues<UserRole>().Reverse())
+            {
+                var allowed = Allowed.Contains(role);
+                <MudMenuItem Class="@($"pop-item role-opt {(role == Shown ? "cur" : "")}")" Disabled="!allowed" OnClick="() => Select(role)">
+                    <span class="role-dot @Variant(role)"></span>
+                    <span class="role-opt-text">
+                        <span class="role-opt-name">@Permissions.RoleLabel(role)</span>
+                        <span class="role-opt-hint">@(allowed ? Permissions.RoleHint(role) : "Ваша роль не позволяет выдать эту")</span>
+                    </span>
+                    <Icon Name="check" Size="14" Class="role-opt-check" />
+                </MudMenuItem>
+            }
+        </ChildContent>
+    </MudMenu>
+}
+
+@code {
+    [Parameter, EditorRequired] public UserRole Value { get; set; }
+    /// <summary>Роли, которые actor может выдать (Permissions.AssignableRoles); пусто — только чип.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<UserRole> Allowed { get; set; } = [];
+    /// <summary>PATCH роли; false — сервер отказал (тост показывает вызывающий), подпись откатывается.</summary>
+    [Parameter, EditorRequired] public Func<UserRole, Task<bool>> OnChange { get; set; } = default!;
+
+    private bool _open, _saving, _shake, _saved, _changed;
+    private UserRole? _optimistic;
+
+    private UserRole Shown => _optimistic ?? Value;
+
+    private static string Variant(UserRole role) => role switch
+    {
+        UserRole.Owner => "owner",
+        UserRole.Admin => "admin",
+        UserRole.Developer => "dev",
+        UserRole.Member => "member",
+        _ => "reader"
+    };
+
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or " " or "ArrowDown")
+            _open = true;
+    }
+
+    private void Toggle() => _open = !_open;
+
+    private async Task Select(UserRole role)
+    {
+        _open = false;
+        if (_saving || role == Shown) return;
+
+        _optimistic = role;
+        _changed = true;
+        _saving = true;
+        StateHasChanged();
+
+        var ok = await OnChange(role);
+        _saving = false;
+        _optimistic = null;
+
+        if (ok) await Pulse(v => _saved = v, 600);
+        else await Pulse(v => _shake = v, 320);
+    }
+
+    // Класс-одноразовка: ставим, даём анимации доиграть, снимаем — чтобы следующая могла стартовать заново.
+    private async Task Pulse(Action<bool> set, int ms)
+    {
+        set(true);
+        StateHasChanged();
+        await Task.Delay(ms);
+        set(false);
+        StateHasChanged();
+    }
+}

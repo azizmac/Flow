@@ -512,3 +512,16 @@ a.mud-link:hover {
 .flow-grid .mud-table-root:has(.mud-table-empty-row, .mud-table-loading) {
     table-layout: auto;
 }
+
+/* Слои Flow (.flow-pop: меню «…», селекты статуса, исполнителя, проекта, роли, карточка человека) не прилипают
+   к кнопке: MudBlazor ставит слой вплотную к якорю, и рамка ложилась прямо на пилюлю. Все они открываются
+   от нижнего края якоря, поэтому отступ вертикальный. Сделан через transform, как у собственных подсказок
+   библиотеки: top/left считает её JS, и margin он бы не учёл. Перевёрнутый вверх слой (data-mudpopover-flip)
+   отодвигается в обратную сторону. Появись меню, открытое вбок, — ему нужен translateX, а не это правило. */
+.mud-popover.flow-pop:not([data-mudpopover-flip]) {
+    transform: translateY(6px);
+}
+
+.mud-popover.flow-pop[data-mudpopover-flip] {
+    transform: translateY(-6px);
+}

@@ -1474,7 +1474,7 @@ a.sb-me:active { transform: scale(0.98); }
 /* ---------- Люди: список ---------- */
 .user-cols {
     display: grid;
-    grid-template-columns: 30px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.2fr) 130px 32px;
+    grid-template-columns: 30px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.2fr) 150px 130px 32px;
     gap: 14px;
     align-items: center;
     padding: 12px 20px;
@@ -1493,6 +1493,83 @@ a.sb-me:active { transform: scale(0.98); }
 .user-un { font: var(--fw-semibold) 11.5px var(--font-display); color: var(--accent); margin-top: 1px; }
 .user-job, .user-mail { font: var(--fw-medium) 12.5px var(--font-text); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-row .ds-iconbtn { color: rgba(255, 255, 255, 0.4); }
+/* Строки въезжают лесенкой при появлении (загрузка, «Все», поиск): --i — номер строки, срезанный
+   на 12, чтобы длинный список не заставлял ждать хвост. fill-mode backwards — как у .stagger. */
+.user-rows > .user-row { animation: rise 260ms var(--ease-out) backwards; animation-delay: calc(var(--i, 0) * 20ms); }
+
+/* ---------- Роль в строке (RolePicker) ----------
+   Тот же чип, что RoleChip, но кликабельный: стрелка, press-feedback, меню от якоря.
+   Цвет — переменные на варианте, чтобы смена роли перетекала одним transition. */
+.role-pick {
+    --role-bg: rgba(255, 255, 255, 0.08);
+    --role-fg: var(--text-secondary);
+    --role-ring: rgba(255, 255, 255, 0.45);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 4px 5px 4px 8px;
+    border-radius: var(--r-sm);
+    background: var(--role-bg);
+    color: var(--role-fg);
+    font: var(--fw-bold) 10px var(--font-display);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 240ms var(--ease-out), color 240ms var(--ease-out), transform 160ms var(--ease-out), box-shadow 150ms ease;
+}
+.role-pick.owner { --role-bg: var(--accent); --role-fg: var(--on-accent); --role-ring: var(--accent); }
+.role-pick.admin { --role-bg: var(--sage); --role-fg: #fff; --role-ring: var(--sage); }
+.role-pick.dev { --role-bg: rgba(255, 255, 255, 0.13); --role-fg: #fff; }
+.role-pick.reader { --role-bg: rgba(255, 255, 255, 0.04); --role-fg: var(--text-tertiary); }
+.role-pick:active { transform: scale(0.97); }
+.role-pick.open { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28); }
+.role-pick-lbl { display: inline-block; }
+.role-pick-chev { opacity: 0.8; transition: transform 220ms var(--ease-out), opacity 150ms ease; }
+.role-pick.open .role-pick-chev { transform: rotate(180deg); opacity: 1; }
+/* Новая подпись въезжает снизу из лёгкого размытия — @key пересоздаёт span при каждой смене. */
+.role-pick.changed .role-pick-lbl { animation: role-swap 260ms var(--ease-out); }
+@keyframes role-swap { from { opacity: 0; transform: translateY(5px); filter: blur(2px); } to { opacity: 1; transform: none; filter: none; } }
+.role-pick.saving { cursor: progress; }
+.role-pick.saving .role-pick-chev { opacity: 0.25; }
+/* Сохранено — кольцо расходится от пилюли и тает. */
+.role-pick::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: 0 0 0 2px var(--role-ring);
+    opacity: 0;
+    pointer-events: none;
+}
+.role-pick.saved::after { animation: role-ring 600ms var(--ease-out); }
+@keyframes role-ring { from { opacity: 0.9; transform: scale(1); } to { opacity: 0; transform: scale(1.25, 1.7); } }
+.role-pick.shake { animation: field-shake 220ms ease-in-out 2; }
+
+/* Меню ролей: имя + что роль может, текущая — галочка. */
+.mud-popover.flow-pop-roles { width: 300px; }
+.flow-pop .role-opt .mud-menu-item-text { align-items: flex-start; white-space: normal; }
+.flow-pop .role-opt.cur { background: var(--accent-soft); }
+.flow-pop-roles .role-opt { animation: role-opt-in 220ms var(--ease-out) backwards; }
+.flow-pop-roles .role-opt:nth-child(2) { animation-delay: 25ms; }
+.flow-pop-roles .role-opt:nth-child(3) { animation-delay: 50ms; }
+.flow-pop-roles .role-opt:nth-child(4) { animation-delay: 75ms; }
+.flow-pop-roles .role-opt:nth-child(5) { animation-delay: 100ms; }
+@keyframes role-opt-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.role-dot { flex-shrink: 0; width: 8px; height: 8px; margin-top: 4px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); }
+.role-dot.owner { background: var(--accent); }
+.role-dot.admin { background: var(--sage); }
+.role-dot.dev { background: rgba(255, 255, 255, 0.75); }
+.role-dot.reader { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.35); }
+.role-opt-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.role-opt-name { color: #fff; }
+.role-opt-hint { font: var(--fw-medium) 11.5px/1.35 var(--font-text); color: var(--text-tertiary); }
+.role-opt-check { margin-left: auto; margin-top: 1px; color: var(--accent); opacity: 0; transform: scale(0.5); transition: opacity 150ms ease, transform 220ms var(--ease-out); }
+.role-opt.cur .role-opt-check { opacity: 1; transform: none; }
+.flow-pop .role-opt.mud-disabled .role-opt-name,
+.flow-pop .role-opt.mud-disabled .role-dot { opacity: 0.4; }
 
 /* ---------- Профиль (Profile.dc.html → тёмная тема Flow) ---------- */
 .profile { gap: 0; padding: 0; overflow: auto; }
@@ -1629,6 +1706,7 @@ a.task-row { color: inherit; text-decoration: none; }
 .icon-lnk:focus-visible,
 .seg-btn:focus-visible,
 .status-sel:focus-visible,
+.role-pick:focus-visible,
 .sb-item:focus-visible,
 .sb-brand:focus-visible,
 .board-sel:focus-visible,
@@ -1793,6 +1871,8 @@ a.task-row { color: inherit; text-decoration: none; }
     .assignee-sel:hover { border-color: rgba(255, 255, 255, 0.25); }
     .assignee-sel.compact:hover .avatar { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25); }
     .user-row:hover { background: rgba(255, 255, 255, 0.03); }
+    .role-pick:hover { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22); }
+    .role-pick:hover .role-pick-chev { opacity: 1; }
     a.sb-me:hover { background: rgba(255, 255, 255, 0.06); }
     .sb-foot .ds-iconbtn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); color: #fff; }
     .ucard-row.lnk:hover { color: #fff; }
@@ -1808,6 +1888,10 @@ a.task-row { color: inherit; text-decoration: none; }
     .assignee-sel:active, .sb-me:active, .ucard-link:active, .tab:active, .who-card:active { transform: none; }
     .tab::after, .tab.on::after { transform: none; transition: opacity 150ms ease; }
     .user-row.flash { animation: none; }
+    .user-rows > .user-row { animation: none; }
+    .role-pick:active, .role-pick.open .role-pick-chev { transform: none; }
+    .role-pick.changed .role-pick-lbl, .role-pick.saved::after, .role-pick.shake, .flow-pop-roles .role-opt { animation: none; }
+    .role-opt-check { transform: none; }
     .pop, .pop.in { transform: none; }
     .drawer, .drawer.in { transition: none; }
     .stagger > * { animation: none; }
