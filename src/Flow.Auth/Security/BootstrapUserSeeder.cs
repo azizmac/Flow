@@ -57,7 +57,8 @@ public sealed class BootstrapUserSeeder(
 
     private async Task FlagDefaultPasswordAsync(ApplicationUser user, string defaultPassword)
     {
-        if (user.MustChangePassword || user.PasswordHash is null)
+        // PasswordRiskAcceptedAt — человек сам решил оставить стандартный пароль: не переспрашиваем на каждом старте.
+        if (user.MustChangePassword || user.PasswordHash is null || user.PasswordRiskAcceptedAt is not null)
             return;
 
         if (hasher.VerifyHashedPassword(user, user.PasswordHash, defaultPassword) == PasswordVerificationResult.Failed)

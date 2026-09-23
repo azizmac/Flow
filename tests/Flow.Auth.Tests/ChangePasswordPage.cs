@@ -39,4 +39,25 @@ public static partial class ChangePasswordPage
 
         return await client.PostAsync(url, new FormUrlEncodedContent(form));
     }
+
+    /// <summary>«Оставить пароль как есть»: без confirm — только предупреждение, с confirm — согласие с риском.</summary>
+    public static async Task<HttpResponseMessage> KeepAsync(HttpClient client, bool confirm, string? returnUrl = null)
+    {
+        var url = Path + (returnUrl is null ? string.Empty : "?ReturnUrl=" + Uri.EscapeDataString(returnUrl));
+
+        using var page = await client.GetAsync(url);
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        var token = AntiforgeryToken().Match(await page.Content.ReadAsStringAsync()).Groups[1].Value;
+        Assert.False(string.IsNullOrEmpty(token), "Antiforgery token not found on the change-password page.");
+
+        var form = new Dictionary<string, string>
+        {
+            ["confirm"] = confirm ? "true" : "false",
+            ["__RequestVerificationToken"] = token
+        };
+        if (returnUrl is not null)
+            form["ReturnUrl"] = returnUrl;
+
+        return await client.PostAsync(Path + "?handler=Keep", new FormUrlEncodedContent(form));
+    }
 }

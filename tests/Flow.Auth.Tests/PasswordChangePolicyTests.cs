@@ -1,6 +1,7 @@
 using System.Net;
 using Flow.Auth.Contracts;
 using Flow.Auth.Data;
+using Flow.Auth.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
@@ -97,6 +98,101 @@ public sealed class PasswordChangePolicyTests(AuthFixture auth)
         // Смена со своим текущим — снимает флаг.
         Assert.True((await accounts.ChangePasswordAsync(account.Id, Initial, Chosen, CancellationToken.None)).IsSuccess);
         Assert.False((await users.FindByIdAsync(account.Id.ToString()))!.MustChangePassword);
+    }
+
+    [Fact]
+    public async Task Keep_Should_Warn_First_Then_Accept_Risk_And_Continue_Login()
+    {
+        var account = await auth.CreateAccountAsync("keep-as-is", Initial, mustChangePassword: true);
+        using var client = auth.CreateClient();
+        using var login = await LoginPage.PostAsync(client, "keep-as-is", Initial, "/");
+        Assert.Equal(ChangePasswordPage.Path, ChangePasswordPage.PathOf(login.Headers.Location!));
+
+        using var page = await client.GetAsync(ChangePasswordPage.Path);
+        Assert.Contains("Оставить пароль как есть", await page.Content.ReadAsStringAsync());
+
+        // Первый клик — только предупреждение: флаг на месте, код по-прежнему не выдаётся.
+        using var warning = await ChangePasswordPage.KeepAsync(client, confirm: false, "/connect/authorize?x=1");
+        Assert.Equal(HttpStatusCode.OK, warning.StatusCode);
+        Assert.Contains("риск на себя", await warning.Content.ReadAsStringAsync());
+        await using (var scope = auth.CreateScope())
+        {
+            var pending = await scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>().FindByIdAsync(account.Id.ToString());
+            Assert.True(pending!.MustChangePassword);
+            Assert.Null(pending.PasswordRiskAcceptedAt);
+        }
+        using (var blocked = await client.GetAsync(AuthorizeUrl))
+            Assert.Equal(ChangePasswordPage.Path, ChangePasswordPage.PathOf(blocked.Headers.Location!));
+
+        // Подтверждение — вход продолжается туда же, куда вела смена пароля, согласие записано.
+        using var accepted = await ChangePasswordPage.KeepAsync(client, confirm: true, "/connect/authorize?x=1");
+        Assert.Equal(HttpStatusCode.Redirect, accepted.StatusCode);
+        Assert.Equal("/connect/authorize?x=1", accepted.Headers.Location!.ToString());
+
+        using var authorize = await client.GetAsync(AuthorizeUrl);
+        Assert.StartsWith(AuthFixture.ClientRedirectUri, authorize.Headers.Location!.ToString());
+        Assert.True(QueryHelpers.ParseQuery(authorize.Headers.Location.Query).ContainsKey("code"));
+
+        await using var after = auth.CreateScope();
+        var reloaded = await after.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>().FindByIdAsync(account.Id.ToString());
+        Assert.False(reloaded!.MustChangePassword);
+        Assert.NotNull(reloaded.PasswordRiskAcceptedAt);
+
+        // Прежний пароль остался рабочим — именно это человек и выбрал.
+        using var fresh = auth.CreateClient();
+        using var again = await LoginPage.PostAsync(fresh, "keep-as-is", Initial, "/");
+        Assert.Equal("/", again.Headers.Location!.ToString());
+    }
+
+    [Fact]
+    public async Task Password_Reset_Should_Forget_Accepted_Risk()
+    {
+        var account = await auth.CreateAccountAsync("keep-then-reset");
+        await using var scope = auth.CreateScope();
+        var accounts = scope.ServiceProvider.GetRequiredService<IAccountService>();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        var user = (await users.FindByIdAsync(account.Id.ToString()))!;
+        user.PasswordRiskAcceptedAt = DateTimeOffset.UtcNow;
+        await users.UpdateAsync(user);
+
+        Assert.True((await accounts.ChangePasswordAsync(account.Id, null, Initial, CancellationToken.None)).IsSuccess);
+
+        var reset = (await users.FindByIdAsync(account.Id.ToString()))!;
+        Assert.True(reset.MustChangePassword);
+        Assert.Null(reset.PasswordRiskAcceptedAt);
+    }
+
+    [Fact]
+    public async Task Bootstrap_Seeder_Should_Not_Reflag_Default_Password_After_Accepted_Risk()
+    {
+        await using var scope = auth.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var seeder = scope.ServiceProvider.GetRequiredService<BootstrapUserSeeder>();
+        var admin = (await users.FindByNameAsync("admin"))!;
+
+        try
+        {
+            admin.MustChangePassword = false;
+            admin.PasswordRiskAcceptedAt = DateTimeOffset.UtcNow;
+            await users.UpdateAsync(admin);
+
+            await seeder.SeedAsync(CancellationToken.None);
+            Assert.False((await users.FindByNameAsync("admin"))!.MustChangePassword);
+
+            // Без согласия стандартный пароль снова требует смены — прежнее правило не ослабло.
+            admin.PasswordRiskAcceptedAt = null;
+            await users.UpdateAsync(admin);
+            await seeder.SeedAsync(CancellationToken.None);
+            Assert.True((await users.FindByNameAsync("admin"))!.MustChangePassword);
+        }
+        finally
+        {
+            // Общая фикстура: вернуть базового пользователя в исходное состояние для остальных тестов.
+            admin.MustChangePassword = true;
+            admin.PasswordRiskAcceptedAt = null;
+            await users.UpdateAsync(admin);
+        }
     }
 
     [Fact]
