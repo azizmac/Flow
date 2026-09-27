@@ -27,13 +27,13 @@ public static class FqlFields
         new("points", "story points"),
         new("estimate", "оценка: 30m, 2h, 1d"),
         new("text", "подстрока в названии, описании, коде: text ~ \"слово\""),
-        new("linked", "linkedTo(КОД), blockedBy(КОД), isBlocked(), EMPTY")
+        new("linked", "linkedTo(КОД), blockedBy(КОД), isBlocked(), EMPTY"),
+        new("sprint", "имя спринта, openSprints(), closedSprints(), EMPTY — бэклог")
     ];
 
     /// <summary>Поля, которые появятся с будущими этапами: биндер отвечает понятной ошибкой, а не «неизвестное поле».</summary>
     public static readonly IReadOnlyDictionary<string, string> Future = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        ["sprint"] = "спринты появятся на этапе 2D",
         ["milestone"] = "вехи появятся на этапе 2E"
     };
 

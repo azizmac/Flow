@@ -42,6 +42,7 @@ internal static class TaskFilterTranslator
             TaskFilterRef.Assignee => t => nullable.Contains(t.AssigneeId),
             TaskFilterRef.Creator => t => nullable.Contains(t.CreatedById),
             TaskFilterRef.Parent => t => nullable.Contains(t.ParentId),
+            TaskFilterRef.Sprint => t => nullable.Contains(t.SprintId),
             _ => throw new NotSupportedException($"Field {node.Field} is not supported.")
         };
     }
@@ -54,6 +55,7 @@ internal static class TaskFilterTranslator
         TaskFilterNullable.DueDate => t => t.DueDate == null,
         TaskFilterNullable.StoryPoints => t => t.StoryPoints == null,
         TaskFilterNullable.Estimate => t => t.EstimateMinutes == null,
+        TaskFilterNullable.Sprint => t => t.SprintId == null,
         TaskFilterNullable.Links => t => !db.TaskLinks.Any(l => l.SourceTaskId == t.Id || l.TargetTaskId == t.Id),
         _ => throw new NotSupportedException($"Field {field} is not supported.")
     };

@@ -69,6 +69,9 @@ public sealed class TaskItem
     /// </summary>
     public DateTime StatusChangedAt { get; private set; }
 
+    /// <summary>Спринт задачи (docs/TZ_task_views.md §2); null — бэклог. FK SetNull: удаление спринта возвращает в бэклог.</summary>
+    public Guid? SprintId { get; private set; }
+
     /// <summary>
     /// Родитель в иерархии (docs/TZ_task_model.md §3); null — задача верхнего уровня. Родитель всегда в том же
     /// проекте и строго выше по уровню типа, поэтому циклов и глубины больше четырёх не бывает по построению.
@@ -293,6 +296,20 @@ public sealed class TaskItem
 
     /// <summary>Ставит IUnitOfWork при сохранении изменённой задачи; вызывать из хендлеров не нужно.</summary>
     public void Touch(DateTime utcNow) => UpdatedAt = utcNow;
+
+    /// <summary>
+    /// Перенос в спринт того же проекта или в бэклог (null). В завершённый спринт задачу не переносят:
+    /// его состав — история. Спринт приносит хендлер, как типы для SetParent.
+    /// </summary>
+    public void SetSprint(Sprint? sprint)
+    {
+        if (sprint is not null && sprint.BoardId != BoardId)
+            throw new InvalidOperationException("A task can be planned only into a sprint of its own project.");
+        if (sprint is { IsCompleted: true } && sprint.Id != SprintId)
+            throw new InvalidOperationException("A completed sprint cannot take new tasks.");
+
+        SprintId = sprint?.Id;
+    }
 
     /// <summary>Ставит IUnitOfWork, когда при сохранении изменился StatusId.</summary>
     public void MarkStatusChanged(DateTime utcNow) => StatusChangedAt = utcNow;

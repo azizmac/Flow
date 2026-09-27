@@ -7,5 +7,8 @@ public enum TaskView
     Board = 1,
 
     /// <summary>Дерево — только внутри проекта; в «Все проекты» экран покажет список.</summary>
-    Tree = 2
+    Tree = 2,
+
+    /// <summary>Бэклог и спринты — тоже только внутри проекта.</summary>
+    Backlog = 3
 }

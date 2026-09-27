@@ -194,7 +194,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     /// <summary>Место в ручном порядке: после afterId и/или перед beforeId; без соседей или соседи из другого проекта → 400.</summary>
     [HttpPost("tasks/{id:guid}/rank")]
     public Task<IActionResult> RankTask(Guid id, RankTaskRequest request, CancellationToken cancellationToken) =>
-        SendUpdate(new TaskRankCommand(actor.Require(), id, request.AfterId, request.BeforeId, request.StatusId), cancellationToken);
+        SendUpdate(new TaskRankCommand(actor.Require(), id, request.AfterId, request.BeforeId, request.StatusId, request.SprintId, request.ToBacklog), cancellationToken);
 
     /// <summary>
     /// Канбан (docs/TZ_task_views.md §1): boardId — колонки-статусы проекта, без него — виды статусов по всем проектам.

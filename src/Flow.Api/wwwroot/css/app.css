@@ -2459,3 +2459,68 @@ a.task-row { color: inherit; text-decoration: none; }
 .tree-progress { display: flex; align-items: center; gap: 8px; }
 .tree-progress .tree-bar { width: 70px; flex: none; }
 @media (prefers-reduced-motion: reduce) { .tree-toggle { transition: none; } }
+
+/* ---- Бэклог и спринты (docs/TZ_task_views.md §2, этап 2D) ---- */
+.bl { display: flex; gap: 16px; flex: 1; min-height: 0; }
+.bl-epics { flex: 0 0 220px; padding: 14px 10px; gap: 4px; overflow: auto; }
+.bl-epics .section-title { padding: 0 8px 6px; }
+.bl-epics .hint { padding: 4px 8px; }
+.bl-epic {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: var(--r-sm);
+    justify-content: flex-start; background: transparent; color: var(--text-secondary); font: var(--fw-medium) 13px var(--font-text); text-align: left; cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+}
+.bl-epic .code { font: var(--fw-semibold) 11.5px var(--font-mono); color: var(--text-tertiary); flex: none; }
+.bl-epic-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-epic.on { background: rgba(255, 186, 0, 0.12); color: #fff; }
+.bl-epic.on .code { color: var(--accent); }
+.bl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.bl-sections { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+.bl-section { flex: none; overflow: visible; padding: 12px 14px; gap: 8px; }
+.bl-section.active { border-color: rgba(255, 186, 0, 0.45); }
+.bl-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.bl-title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; color: #fff; font: var(--fw-semibold) 14px var(--font-display); }
+.bl-state {
+    padding: 1px 8px; border-radius: var(--r-pill, 999px); background: rgba(255, 186, 0, 0.14); color: var(--accent);
+    font: var(--fw-bold) 11px var(--font-display);
+}
+.bl-load { display: flex; align-items: center; gap: 10px; }
+.bl-load-item { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); font: var(--fw-semibold) 11.5px var(--font-display); }
+.bl-actions { display: flex; align-items: center; gap: 6px; }
+.bl-goal { color: var(--text-secondary); font: var(--fw-medium) 12.5px/1.45 var(--font-text); }
+.bl-zone { display: flex; flex-direction: column; min-height: 36px; border-radius: var(--r-md); }
+.bl-empty { color: var(--text-tertiary); font: var(--fw-medium) 12.5px var(--font-text); padding: 4px 2px; }
+.bl-row {
+    display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-top: 1px solid var(--border-subtle);
+    cursor: grab; background: var(--surface); transition: background 150ms ease;
+}
+.bl-row .code { font: var(--fw-semibold) 12px var(--font-mono); color: var(--accent); white-space: nowrap; }
+.bl-row-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; font: var(--fw-medium) 13.5px var(--font-text); }
+.bl-row.sel { background: rgba(255, 186, 0, 0.08); }
+.bl-row.done .bl-row-title { color: var(--text-tertiary); text-decoration: line-through; }
+.bl-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bl-epic-chip {
+    flex: none; padding: 1px 6px; border-radius: var(--r-sm); background: rgba(109, 151, 115, 0.18); color: var(--sage);
+    font: var(--fw-semibold) 11px var(--font-mono);
+}
+.bl-who { width: 20px; flex: none; display: inline-flex; }
+.bl-row .status-pill { flex: none; }
+@media (hover: hover) and (pointer: fine) {
+    .bl-epic:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+    .bl-row:hover { background: rgba(255, 255, 255, 0.03); }
+}
+
+/* Модалка спринта */
+.sd-dates { display: flex; gap: 16px; }
+.sd-date { flex: 1; }
+
+/* Отчёт спринта */
+.sr-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+.sr-head h2 { margin: 0; color: #fff; font: var(--fw-extrabold) 22px var(--font-display); }
+.sr-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.sr-tile { padding: 14px 16px; gap: 4px; flex: none; }
+.sr-tile-label { color: var(--text-secondary); font: var(--fw-semibold) 12px var(--font-display); }
+.sr-tile-value { color: #fff; font: var(--fw-extrabold) 24px var(--font-display); }
+.sr-tile-value small { color: var(--text-tertiary); font-size: 12px; }
+.sr-chart { padding: 14px 16px; gap: 8px; flex: none; margin-bottom: 16px; overflow: visible; }
+.sr-table .code { font: var(--fw-semibold) 12px var(--font-mono); color: var(--accent); white-space: nowrap; }

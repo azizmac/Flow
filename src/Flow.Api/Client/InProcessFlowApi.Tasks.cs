@@ -159,7 +159,7 @@ internal sealed partial class InProcessFlowApi
         SendUpdate(actor => new TaskSetParentCommand(actor, id, request.ParentId), ct);
 
     public Task<ApiResult<TaskResponse>> RankTask(Guid id, RankTaskRequest request, CancellationToken ct = default) =>
-        SendUpdate(actor => new TaskRankCommand(actor, id, request.AfterId, request.BeforeId, request.StatusId), ct);
+        SendUpdate(actor => new TaskRankCommand(actor, id, request.AfterId, request.BeforeId, request.StatusId, request.SprintId, request.ToBacklog), ct);
 
     public Task<ApiResult<IReadOnlyList<TaskTreeNode>>> GetTree(
         Guid boardId,

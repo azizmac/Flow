@@ -233,7 +233,33 @@
         _comments = comments.Result.Value!.ToList();
         _activity = activity.Result.Value!.ToList();
         await LoadTaskRefsAsync(cts.Token);
+        await LoadSprintNamesAsync();
     }
+
+    /// <summary>Имена спринтов для записей SprintChanged — одним запросом по проекту и только когда такие записи есть.</summary>
+    private Dictionary<Guid, string>? _sprintNames;
+
+    private async Task LoadSprintNamesThenRedrawAsync()
+    {
+        await LoadSprintNamesAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadSprintNamesAsync()
+    {
+        if (_sprintNames is not null || _activity.All(a => a.Type != TaskActivityType.SprintChanged))
+            return;
+
+        var result = await Api.GetSprints(Board.Id);
+        _sprintNames = result.Ok ? result.Value!.ToDictionary(s => s.Id, s => s.Name) : new Dictionary<Guid, string>();
+    }
+
+    /// <summary>«спринт: «A» → «B»», null с любой стороны — бэклог.</summary>
+    private RenderFragment Sprints(TaskActivityResponse a) =>
+        @<span>спринт: <s class="tl-old">@(a.OldValue is { } o ? SprintName(o) : "бэклог")</s> <span class="tl-arrow">→</span> <b>@(a.NewValue is { } n ? SprintName(n) : "бэклог")</b></span>;
+
+    private string SprintName(string value) =>
+        Guid.TryParse(value, out var id) && _sprintNames?.GetValueOrDefault(id) is { } name ? $"«{name}»" : "удалённый спринт";
 
     /// <summary>Подзадачу создали из блока «Подзадачи» этой же задачи — запись у родителя без перезагрузки ленты.</summary>
     public void NoteChildAdded(TaskResponse child)
@@ -294,6 +320,12 @@
         {
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.ParentChanged, before.ParentId?.ToString(), after.ParentId?.ToString(), now));
             _ = LoadTaskRefsThenRedrawAsync();
+        }
+        if (before.SprintId != after.SprintId)
+        {
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.SprintChanged, before.SprintId?.ToString(), after.SprintId?.ToString(), now));
+            _sprintNames = null;
+            _ = LoadSprintNamesThenRedrawAsync();
         }
         if (before.DueDate != after.DueDate)
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.DueDateChanged,
@@ -367,6 +399,7 @@
         TaskActivityType.ChildRemoved => @<span>подзадача убрана: @TaskRef(a.OldValue)</span>,
         TaskActivityType.LinkAdded => @<span>связь «@LinkSide(a.OldValue)»: @TaskRef(a.NewValue)</span>,
         TaskActivityType.LinkRemoved => @<span>связь «@LinkSide(a.OldValue)» убрана: @TaskRef(a.NewValue)</span>,
+        TaskActivityType.SprintChanged => Sprints(a),
         TaskActivityType.ChecklistChanged => @<span>чек-лист: <s class="tl-old">@a.OldValue</s> <span class="tl-arrow">→</span> <b>@a.NewValue</b></span>,
         _ => Text(a.Type.ToString())
     };

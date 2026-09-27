@@ -30,6 +30,8 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
 
     public DbSet<Attachment> Attachments => Set<Attachment>();
 
+    public DbSet<Sprint> Sprints => Set<Sprint>();
+
     /// <summary>
     /// Поисковый индекс — проекция, а не домен: наружу из сборки не торчит, Application работает
     /// с ним через ISearchIndexQueue и ISearchIndexRepository.

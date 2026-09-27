@@ -23,5 +23,8 @@ public enum TaskActivityType
     ChildRemoved = 17,
     LinkAdded = 18,
     LinkRemoved = 19,
-    ChecklistChanged = 20
+    ChecklistChanged = 20,
+
+    /// <summary>Спринт задачи: OldValue/NewValue — Guid спринта, null — бэклог.</summary>
+    SprintChanged = 21
 }

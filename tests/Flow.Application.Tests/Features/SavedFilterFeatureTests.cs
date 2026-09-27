@@ -127,6 +127,6 @@ public class SavedFilterFeatureTests
         Assert.Equal(["WEB"], projects.Items.Select(i => i.Insert));
 
         var fields = await mediator.Send(new FqlSuggestQuery(Owner, "pr", 2), CancellationToken.None);
-        Assert.Equal(["priority", "project"], fields.Items.Select(i => i.Label).Order());
+        Assert.Equal(["priority", "project", "sprint"], fields.Items.Select(i => i.Label).Order()); // подсказка ищет по вхождению, «sPRint» тоже подходит
     }
 }

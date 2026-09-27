@@ -238,4 +238,26 @@ public static partial class Ru
         value.Kind == DateTimeKind.Utc
             ? value.ToLocalTime()
             : DateTime.SpecifyKind(value, DateTimeKind.Utc).ToLocalTime();
+
+    /// <summary>
+    /// Культура для MudDatePicker: русские месяцы и дни недели, неделя с понедельника, «дд.ММ.гггг». Собрана поверх
+    /// инвариантной, а не new CultureInfo("ru-RU") — рендер серверный, и ICU в образе может не оказаться.
+    /// </summary>
+    public static readonly System.Globalization.CultureInfo PickerCulture = BuildPickerCulture();
+
+    private static System.Globalization.CultureInfo BuildPickerCulture()
+    {
+        var culture = (System.Globalization.CultureInfo)System.Globalization.CultureInfo.InvariantCulture.Clone();
+        var f = culture.DateTimeFormat;
+        f.MonthNames = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь", ""];
+        f.MonthGenitiveNames = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря", ""];
+        f.AbbreviatedMonthNames = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек", ""];
+        f.AbbreviatedMonthGenitiveNames = f.AbbreviatedMonthNames;
+        f.DayNames = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+        f.AbbreviatedDayNames = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+        f.ShortestDayNames = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+        f.FirstDayOfWeek = DayOfWeek.Monday;
+        f.ShortDatePattern = "dd.MM.yyyy";
+        return culture;
+    }
 }

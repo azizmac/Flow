@@ -209,6 +209,56 @@ namespace Flow.Infrastructure.Migrations
                     b.ToTable("SavedFilterStars");
                 });
 
+            modelBuilder.Entity("Flow.Domain.Entities.Sprint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Goal")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoardId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Sprints_BoardId_Active")
+                        .HasFilter("\"State\" = 1");
+
+                    b.HasIndex("BoardId", "SortOrder");
+
+                    b.ToTable("Sprints", (string)null);
+                });
+
             modelBuilder.Entity("Flow.Domain.Entities.Status", b =>
                 {
                     b.Property<Guid>("Id")
@@ -402,6 +452,9 @@ namespace Flow.Infrastructure.Migrations
                         .HasColumnType("character varying(200)")
                         .UseCollation("C");
 
+                    b.Property<Guid?>("SprintId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
 
@@ -436,6 +489,8 @@ namespace Flow.Infrastructure.Migrations
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("ParentId");
+
+                    b.HasIndex("SprintId");
 
                     b.HasIndex("StatusId");
 
@@ -763,6 +818,39 @@ namespace Flow.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Flow.Domain.Entities.Sprint", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsMany("Flow.Domain.Entities.SprintCommitment", "Commitments", b1 =>
+                        {
+                            b1.Property<Guid>("SprintId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<Guid>("TaskId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<int>("Kind")
+                                .HasColumnType("integer");
+
+                            b1.Property<decimal?>("StoryPoints")
+                                .HasColumnType("numeric(5,1)");
+
+                            b1.HasKey("SprintId", "TaskId", "Kind");
+
+                            b1.ToTable("SprintCommitments", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("SprintId");
+                        });
+
+                    b.Navigation("Commitments");
+                });
+
             modelBuilder.Entity("Flow.Domain.Entities.Status", b =>
                 {
                     b.HasOne("Flow.Domain.Entities.Board", null)
@@ -870,6 +958,11 @@ namespace Flow.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Flow.Domain.Entities.Sprint", null)
+                        .WithMany()
+                        .HasForeignKey("SprintId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Flow.Domain.Entities.Status", null)
                         .WithMany()

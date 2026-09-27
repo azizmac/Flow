@@ -86,7 +86,7 @@
 
                 <div class="side-card">
                     <div class="section-title">Вид экрана «Задачи»</div>
-                    <div class="hint">Что открывается, когда в адресе нет вида. Переключатель на самом экране меняет вид только для открытой ссылки. Дерево — внутри проекта: в «Все проекты» откроется список.</div>
+                    <div class="hint">Что открывается, когда в адресе нет вида. Переключатель на самом экране меняет вид только для открытой ссылки. Дерево и бэклог — внутри проекта: в «Все проекты» откроется список.</div>
                     <div class="seg" role="radiogroup" aria-label="Вид экрана задач">
                         @foreach (var (view, label) in TaskViews)
                         {
@@ -280,7 +280,8 @@
     [
         (TaskView.List, "Список"),
         (TaskView.Board, "Доска"),
-        (TaskView.Tree, "Дерево")
+        (TaskView.Tree, "Дерево"),
+        (TaskView.Backlog, "Бэклог")
     ];
 
     private static readonly (StartPage Page, string Label)[] StartPages =

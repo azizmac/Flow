@@ -91,6 +91,9 @@
                     <button type="button" class="seg-btn @(IsTreeView ? "on" : "")" role="radio" aria-checked="@IsTreeView" disabled="@(BoardId is null)"
                             title="@(BoardId is null ? "Дерево — внутри одного проекта: выберите проект" : "Дерево: эпики, истории и подзадачи")"
                             @onclick="() => SetView(TaskView.Tree)"><Icon Name="list-ordered" Size="14" />Дерево</button>
+                    <button type="button" class="seg-btn @(IsBacklogView ? "on" : "")" role="radio" aria-checked="@IsBacklogView" disabled="@(BoardId is null)"
+                            title="@(BoardId is null ? "Бэклог — внутри одного проекта: выберите проект" : "Бэклог и спринты")"
+                            @onclick="() => SetView(TaskView.Backlog)"><Icon Name="history" Size="14" />Бэклог</button>
                 </div>
                 @* В доске фильтр статуса не нужен: колонки и есть статусы. *@
                 @if (CurrentView == TaskView.List && CurrentBoard is { } board)
@@ -124,7 +127,13 @@
             <FqlBar Value="@EffectiveFql" Error="_fqlError" OnApply="ApplyFql" OnSave="OpenSave" OnClose="CloseFql" />
         }
 
-        @if (IsTreeView && BoardId is { } treeBoardId)
+        @if (IsBacklogView && BoardId is { } backlogBoardId)
+        {
+            <BacklogView @ref="_backlog" Boards="_boards" BoardId="backlogBoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
+                         Query="@_search" Fql="@EffectiveFql" Me="Me" SelectedId="TaskId"
+                         OnOpen="OpenTask" OnLoaded="OnKanbanLoaded" OnFqlError="e => _fqlError = e" />
+        }
+        else if (IsTreeView && BoardId is { } treeBoardId)
         {
             <TaskTree @ref="_tree" Boards="_boards" BoardId="treeBoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
                       Query="@_search" Fql="@EffectiveFql" Me="Me" SelectedId="TaskId"
@@ -392,16 +401,21 @@
             {
                 "board" => TaskView.Board,
                 "tree" => TaskView.Tree,
+                "backlog" => TaskView.Backlog,
                 "list" => TaskView.List,
                 _ => Preferences.TasksView
             };
-            return view == TaskView.Tree && BoardId is null ? TaskView.List : view;
+            return view is TaskView.Tree or TaskView.Backlog && BoardId is null ? TaskView.List : view;
         }
     }
 
     private bool IsBoardView => CurrentView == TaskView.Board;
 
     private bool IsTreeView => CurrentView == TaskView.Tree;
+
+    private bool IsBacklogView => CurrentView == TaskView.Backlog;
+
+    private BacklogView? _backlog;
 
     /// <summary>
     /// Смена вида. Фильтр статуса есть только у списка (в доске колонки и есть статусы, в дереве статус виден в строке),
@@ -734,6 +748,13 @@
         {
             if (_tree is not null)
                 await _tree.ReloadAsync();
+            return;
+        }
+
+        if (IsBacklogView)
+        {
+            if (_backlog is not null)
+                await _backlog.ReloadAsync();
             return;
         }
 
@@ -1216,6 +1237,8 @@
         _tasks[i] = t;
         _kanban?.Replace(t);
         _tree?.Replace(t);
+        if (_backlog is not null)
+            await _backlog.ReplaceAsync(t);
         await Redraw();
     }
 

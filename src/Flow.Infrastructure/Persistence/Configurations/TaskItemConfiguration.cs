@@ -79,6 +79,14 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
 
         builder.HasIndex(t => t.ParentId);
 
+        // Спринт (docs/TZ_task_views.md §2): удаление запланированного спринта возвращает задачи в бэклог.
+        builder.HasOne<Sprint>()
+            .WithMany()
+            .HasForeignKey(t => t.SprintId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasIndex(t => t.SprintId);
+
         // Ранг (§7): COLLATE "C" обязателен — по правилам локали Postgres сравнивал бы 'a' и 'B' не по ASCII,
         // и порядок ключей дробного индекса сломался бы. Unique — страховка от двух одинаковых ключей в гонке
         // (UnitOfWork переводит 23505 по нему в RankConflictException, хендлер пересчитывает ключ).

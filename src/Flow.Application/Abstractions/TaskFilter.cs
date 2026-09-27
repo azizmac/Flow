@@ -18,12 +18,12 @@ public sealed record TaskFilterOr(IReadOnlyList<TaskFilterNode> Items) : TaskFil
 public sealed record TaskFilterNot(TaskFilterNode Item) : TaskFilterNode;
 
 /// <summary>Поля-ссылки: значение задачи входит в набор Id.</summary>
-public enum TaskFilterRef { Id, Board, Type, Status, Assignee, Creator, Parent }
+public enum TaskFilterRef { Id, Board, Type, Status, Assignee, Creator, Parent, Sprint }
 
 public sealed record TaskFilterIn(TaskFilterRef Field, IReadOnlyList<Guid> Ids) : TaskFilterNode;
 
 /// <summary>Поля, которые бывают пустыми.</summary>
-public enum TaskFilterNullable { Assignee, Parent, StartDate, DueDate, StoryPoints, Estimate, Links }
+public enum TaskFilterNullable { Assignee, Parent, StartDate, DueDate, StoryPoints, Estimate, Links, Sprint }
 
 public sealed record TaskFilterIsEmpty(TaskFilterNullable Field) : TaskFilterNode;
 

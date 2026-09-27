@@ -114,6 +114,8 @@ else if (Item is not null)
             </div>
             <div class="meta-k">Родитель</div>
             <div class="meta-v"><ParentSelect Board="Board" Task="Item" Value="Item.ParentId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetParent" /></div>
+            <div class="meta-k">Спринт</div>
+            <div class="meta-v"><SprintSelect BoardId="Board.Id" Value="Current.SprintId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetSprint" /></div>
             <div class="meta-k">Статус</div>
             <div>
                 @if (CanEdit)
@@ -448,6 +450,9 @@ else if (Item is not null)
         await Apply(id => Api.SetParent(id, new SetTaskParentRequest(parentId)), "Не удалось сменить родителя");
         await OnHierarchyChanged.InvokeAsync();
     }
+
+    private Task SetSprint(Guid? sprintId) =>
+        Apply(id => Api.SetTaskSprint(id, new SetTaskSprintRequest(sprintId)), "Не удалось перенести задачу в спринт");
 
     private async Task OnChecklistChanged((int OldDone, int OldTotal, int Done, int Total) c)
     {

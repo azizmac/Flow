@@ -114,6 +114,9 @@ public sealed class TaskActivity
     public static TaskActivity ChecklistChanged(Guid taskId, Guid actorId, int oldDone, int oldTotal, int newDone, int newTotal) =>
         new(taskId, actorId, TaskActivityType.ChecklistChanged, $"{oldDone}/{oldTotal}", $"{newDone}/{newTotal}");
 
+    public static TaskActivity SprintChanged(Guid taskId, Guid actorId, Guid? oldSprintId, Guid? newSprintId) =>
+        new(taskId, actorId, TaskActivityType.SprintChanged, oldSprintId?.ToString(), newSprintId?.ToString());
+
     private static string LinkSide(TaskLinkType type, bool outward) =>
         outward || type == TaskLinkType.RelatesTo ? type.ToString() : $"{type}:in";
 

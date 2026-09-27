@@ -13,6 +13,7 @@ internal sealed class FqlSuggestQueryHandler(
     IUserRepository users,
     ITaskItemRepository tasks,
     ITaskLinkRepository links,
+    ISprintRepository sprints,
     ActorResolver actors,
     IProjectAccess projectAccess) : IRequestHandler<FqlSuggestQuery, FqlSuggestResponse>
 {
@@ -22,7 +23,7 @@ internal sealed class FqlSuggestQueryHandler(
     {
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
         var cursor = FqlSuggester.Analyze(request.Query ?? "", request.Position);
-        var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess);
+        var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints);
 
         var items = cursor.Slot switch
         {
@@ -81,6 +82,10 @@ internal sealed class FqlSuggestQueryHandler(
                     .Concat([Function("-7d", "неделю назад"), Function("7d", "через неделю"), Function(DateTime.UtcNow.ToString("yyyy-MM-dd"), "дата")]);
             case "estimate":
                 return [Function("30m"), Function("2h"), Function("1d")];
+            case "sprint":
+                var sprints = await lookup.SprintsAsync(ct);
+                return new[] { Function("openSprints()", "незавершённые"), Function("closedSprints()", "завершённые"), Function("EMPTY", "бэклог") }
+                    .Concat(sprints.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Select(n => Value(n)));
             default:
                 return [];
         }

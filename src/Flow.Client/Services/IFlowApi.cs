@@ -3,6 +3,7 @@ using Flow.Shared.Contracts.About;
 using Flow.Shared.Contracts.Attachments;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
+using Flow.Shared.Contracts.Sprints;
 using Flow.Shared.Contracts.Tasks;
 using Flow.Shared.Contracts.Users;
 using Microsoft.AspNetCore.Components.Forms;
@@ -76,6 +77,28 @@ public interface IFlowApi
         CancellationToken ct = default);
 
     Task<ApiResult<BoardResponse>> SetDoneColumnDays(Guid boardId, int days, CancellationToken ct = default);
+
+    // Спринты и бэклог (docs/TZ_task_views.md §2).
+    Task<ApiResult<IReadOnlyList<SprintResponse>>> GetSprints(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<SprintResponse>> CreateSprint(Guid boardId, CreateSprintRequest request, CancellationToken ct = default);
+    Task<ApiResult<SprintResponse>> UpdateSprint(Guid sprintId, UpdateSprintRequest request, CancellationToken ct = default);
+    Task<ApiResult<SprintResponse>> StartSprint(Guid sprintId, StartSprintRequest request, CancellationToken ct = default);
+    Task<ApiResult<SprintResponse>> CompleteSprint(Guid sprintId, CompleteSprintRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteSprint(Guid sprintId, CancellationToken ct = default);
+    Task<ApiResult<SprintReportResponse>> GetSprintReport(Guid sprintId, CancellationToken ct = default);
+
+    Task<ApiResult<BacklogResponse>> GetBacklog(
+        Guid boardId,
+        Guid? assigneeId = null,
+        bool unassigned = false,
+        string? query = null,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
+        string? fql = null,
+        Guid? epicId = null,
+        CancellationToken ct = default);
+
+    Task<ApiResult<TaskResponse>> SetTaskSprint(Guid taskId, SetTaskSprintRequest request, CancellationToken ct = default);
 
     // ---- Доступ к проектам ----
     Task<ApiResult<IReadOnlyList<ProjectAccessResponse>>> GetMyAccess(CancellationToken ct = default);

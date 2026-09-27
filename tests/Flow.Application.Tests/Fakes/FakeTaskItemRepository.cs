@@ -53,6 +53,9 @@ public sealed class FakeTaskItemRepository(FakeBoardRepository? boards = null) :
         return Task.FromResult(new TaskCounts(byStatus.Sum(x => x.Count), matched, [], byStatus));
     }
 
+    public Task<IReadOnlyList<TaskItem>> GetBySprintIdAsync(Guid sprintId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TaskItem>>(_tasks.Where(t => t.SprintId == sprintId).OrderBy(t => t.Rank, StringComparer.Ordinal).ToList());
+
     public Task<IReadOnlyList<Guid>> MatchingIdsAsync(TaskListFilter filter, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Guid>>(Filtered(filter).Select(t => t.Id).ToList());
 

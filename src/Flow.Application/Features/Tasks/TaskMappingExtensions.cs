@@ -36,7 +36,8 @@ public static class TaskMappingExtensions
         children.Done,
         blockedByCount,
         task.ChecklistDone,
-        task.ChecklistTotal);
+        task.ChecklistTotal,
+        task.SprintId);
 
     public static TaskChecklistItemResponse ToResponse(this TaskChecklistItem item) =>
         new(item.Id, item.Text, item.IsDone, item.DoneAt, item.DoneById);

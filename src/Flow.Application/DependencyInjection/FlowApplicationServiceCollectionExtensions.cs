@@ -26,6 +26,7 @@ public static class FlowApplicationServiceCollectionExtensions
         services.AddScoped<Features.Tasks.TaskResponses>();
         services.AddScoped<Features.Tasks.TaskLinkResponses>();
         services.AddScoped<Features.Tasks.TransitionGuard>();
+        services.AddScoped<Features.Sprints.TaskSprints>();
 
         return services;
     }

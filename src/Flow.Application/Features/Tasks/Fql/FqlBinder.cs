@@ -77,6 +77,7 @@ public sealed partial class FqlBinder(IFqlLookup lookup, Guid actorId, DateOnly 
             "estimate" => Scalar(c, TaskFilterScalar.Estimate, TaskFilterNullable.Estimate, v => Duration(v)),
             "text" => Text(c),
             "linked" => await LinkedAsync(c, ct),
+            "sprint" => await SprintAsync(c, ct),
             _ => throw Error($"Неизвестное поле «{name}». Поля: {string.Join(", ", FqlFields.All.Select(f => f.Name))}", c.Field)
         };
     }
@@ -181,6 +182,43 @@ public sealed partial class FqlBinder(IFqlLookup lookup, Guid actorId, DateOnly 
             (0, _) => new TaskFilterIn(TaskFilterRef.Id, subtree),
             _ => new TaskFilterOr([new TaskFilterIn(TaskFilterRef.Parent, parents), new TaskFilterIn(TaskFilterRef.Id, subtree)])
         };
+        return IsNegative(c) ? new TaskFilterNot(node) : node;
+    }
+
+    /// <summary>
+    /// sprint = "Спринт 3" (по имени во всех видимых проектах) | openSprints() (запланированные и активный) |
+    /// closedSprints() (завершённые); sprint IS EMPTY — бэклог, как и значение EMPTY в списке.
+    /// </summary>
+    private async Task<TaskFilterNode> SprintAsync(FqlClause c, CancellationToken ct)
+    {
+        if (c.Operator is FqlOperator.IsEmpty or FqlOperator.IsNotEmpty)
+            return Empty(c, TaskFilterNullable.Sprint);
+
+        EnsureOps(c, FqlOperator.Eq, FqlOperator.NotEq, FqlOperator.In, FqlOperator.NotIn);
+
+        var sprints = await lookup.SprintsAsync(ct);
+        var ids = new List<Guid>();
+        var orEmpty = false;
+        foreach (var v in c.Values)
+        {
+            if (v.IsFunction("openSprints"))
+                ids.AddRange(sprints.Where(s => !s.IsCompleted).Select(s => s.Id));
+            else if (v.IsFunction("closedSprints"))
+                ids.AddRange(sprints.Where(s => s.IsCompleted).Select(s => s.Id));
+            else if (v.Function is not null)
+                throw Error($"Функции {v.Function}() у поля «sprint» нет; есть openSprints(), closedSprints()", v);
+            else if (!v.Quoted && v.Text.Equals("EMPTY", StringComparison.OrdinalIgnoreCase))
+                orEmpty = true;
+            else
+            {
+                var named = sprints.Where(s => string.Equals(s.Name, v.Text, StringComparison.OrdinalIgnoreCase)).Select(s => s.Id).ToList();
+                ids.AddRange(named.Count > 0 ? named : throw Error($"Спринта «{v.Text}» нет ни в одном проекте", v));
+            }
+        }
+
+        TaskFilterNode node = new TaskFilterIn(TaskFilterRef.Sprint, ids.Distinct().ToList());
+        if (orEmpty)
+            node = new TaskFilterOr([node, new TaskFilterIsEmpty(TaskFilterNullable.Sprint)]);
         return IsNegative(c) ? new TaskFilterNot(node) : node;
     }
 

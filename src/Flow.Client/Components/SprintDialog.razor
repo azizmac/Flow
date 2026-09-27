@@ -1,0 +1,184 @@
+@* Диалог спринта (docs/TZ_task_views.md §2): создание и правка (имя, цель, даты), старт (даты обязательны) и
+   завершение (куда перенести незакрытые задачи). Один компонент — одинаковый каркас MudDialog и одни и те же поля;
+   жизненный цикл как у SaveFilterDialog. Даты — MudDatePicker с русской культурой Ru.PickerCulture. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>@Title</h3>
+        @if (Sprint is { } s && Mode != SprintDialogMode.Create)
+        {
+            <div class="hint">@s.Name</div>
+        }
+    </TitleContent>
+    <DialogContent>
+        @if (Mode is SprintDialogMode.Create or SprintDialogMode.Edit)
+        {
+            <DsInput Id="sd-name" Label="Название" MaxLength="60" Placeholder="Спринт N" Value="@_name" ValueChanged="v => _name = v" />
+            @if (Sprint?.State != SprintState.Completed)
+            {
+                <DsInput Id="sd-goal" Label="Цель (необязательно)" MaxLength="500" Value="@_goal" ValueChanged="v => _goal = v" />
+            }
+        }
+        @if (Mode is SprintDialogMode.Start || (Mode is SprintDialogMode.Create or SprintDialogMode.Edit && Sprint?.State != SprintState.Completed))
+        {
+            <div class="sd-dates">
+                <MudDatePicker Label="Начало" Date="_start" DateChanged="d => _start = d" Culture="Ru.PickerCulture" DateFormat="dd.MM.yyyy"
+                               Clearable="@(Mode != SprintDialogMode.Start && Sprint?.State != SprintState.Active)" PickerVariant="PickerVariant.Inline"
+                               Variant="Variant.Text" Class="sd-date" PopoverClass="flow-pop" />
+                <MudDatePicker Label="Конец" Date="_end" DateChanged="d => _end = d" Culture="Ru.PickerCulture" DateFormat="dd.MM.yyyy"
+                               Clearable="@(Mode != SprintDialogMode.Start && Sprint?.State != SprintState.Active)" PickerVariant="PickerVariant.Inline"
+                               Variant="Variant.Text" Class="sd-date" PopoverClass="flow-pop" />
+            </div>
+        }
+        @if (Mode == SprintDialogMode.Complete)
+        {
+            <div class="hint">
+                @if (OpenCount > 0)
+                {
+                    @($"Незакрытых задач: {OpenCount}. Закрытые останутся в спринте — на них держится отчёт.")
+                }
+                else
+                {
+                    @("Все задачи закрыты.")
+                }
+            </div>
+            @if (OpenCount > 0)
+            {
+                <MudSelect T="Guid" Label="Незакрытые перенести в" Value="_moveTo" ValueChanged="v => _moveTo = v" Dense="true"
+                           Variant="Variant.Text" PopoverClass="flow-pop" Class="sd-target">
+                    <MudSelectItem T="Guid" Value="Guid.Empty">Бэклог</MudSelectItem>
+                    @foreach (var target in Targets)
+                    {
+                        <MudSelectItem T="Guid" Value="target.Id">@target.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+        }
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Отмена</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="_busy" Busy="_busy">@Action</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public SprintDialogMode Mode { get; set; }
+    [Parameter, EditorRequired] public Guid BoardId { get; set; }
+    /// <summary>Спринт для правки, старта и завершения; при создании — null.</summary>
+    [Parameter] public SprintResponse? Sprint { get; set; }
+    /// <summary>Куда можно перенести незакрытые при завершении — запланированные спринты проекта.</summary>
+    [Parameter] public IReadOnlyList<SprintResponse> Targets { get; set; } = [];
+    [Parameter] public int OpenCount { get; set; }
+    [Parameter] public EventCallback<SprintResponse> OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private string _name = "";
+    private string _goal = "";
+    private DateTime? _start;
+    private DateTime? _end;
+    private Guid _moveTo;
+    private string? _error;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    private string Title => Mode switch
+    {
+        SprintDialogMode.Create => "Новый спринт",
+        SprintDialogMode.Edit => "Спринт",
+        SprintDialogMode.Start => "Начать спринт",
+        _ => "Завершить спринт"
+    };
+
+    private string Action => Mode switch
+    {
+        SprintDialogMode.Create => "Создать",
+        SprintDialogMode.Edit => "Сохранить",
+        SprintDialogMode.Start => "Начать",
+        _ => "Завершить"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _name = Sprint?.Name ?? "";
+        _goal = Sprint?.Goal ?? "";
+        var today = DateTime.Today;
+        _start = Sprint?.StartDate?.ToDateTime(TimeOnly.MinValue) ?? (Mode == SprintDialogMode.Start ? today : null);
+        _end = Sprint?.EndDate?.ToDateTime(TimeOnly.MinValue) ?? (Mode == SprintDialogMode.Start ? (_start ?? today).AddDays(14) : null);
+        _moveTo = Targets.FirstOrDefault()?.Id ?? Guid.Empty;
+
+        if (Mode is SprintDialogMode.Create or SprintDialogMode.Edit)
+        {
+            await Task.Delay(50);
+            await Browser.FocusAsync("sd-name", select: true);
+        }
+    }
+
+    private static DateOnly? Day(DateTime? value) => value is { } d ? DateOnly.FromDateTime(d) : null;
+
+    private async Task Save()
+    {
+        _error = null;
+        if (Mode == SprintDialogMode.Start && (_start is null || _end is null))
+        {
+            _error = "У спринта должны быть обе даты.";
+            return;
+        }
+
+        _busy = true;
+        var result = Mode switch
+        {
+            SprintDialogMode.Create => await Api.CreateSprint(BoardId, new CreateSprintRequest(Blank(_name), Blank(_goal), Day(_start), Day(_end))),
+            SprintDialogMode.Edit => await Api.UpdateSprint(Sprint!.Id, Sprint.State == SprintState.Completed
+                ? new UpdateSprintRequest(Name: _name.Trim())
+                : new UpdateSprintRequest(_name.Trim(), Blank(_goal), ClearGoal: Blank(_goal) is null,
+                    StartDate: Day(_start), EndDate: Day(_end), ClearDates: _start is null && _end is null)),
+            SprintDialogMode.Start => await Api.StartSprint(Sprint!.Id, new StartSprintRequest(Day(_start)!.Value, Day(_end)!.Value)),
+            _ => await Api.CompleteSprint(Sprint!.Id, new CompleteSprintRequest(_moveTo == Guid.Empty ? null : _moveTo))
+        };
+        _busy = false;
+
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить спринт";
+            return;
+        }
+
+        await CloseDialog();
+        await OnSaved.InvokeAsync(result.Value!);
+    }
+
+    private static string? Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

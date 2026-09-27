@@ -14,6 +14,7 @@ internal sealed class TaskRankCommandHandler(
     ITaskActivityRepository activities,
     ISearchIndexQueue searchIndex,
     TransitionGuard guard,
+    Features.Sprints.TaskSprints taskSprints,
     ActorResolver actors,
     IPermissionService permissions,
     IProjectAccess projectAccess,
@@ -22,7 +23,11 @@ internal sealed class TaskRankCommandHandler(
 {
     public async Task<TaskUpdateResult> Handle(TaskRankCommand request, CancellationToken cancellationToken)
     {
-        if (request.AfterId is null && request.BeforeId is null && request.StatusId is null)
+        if (request.SprintId is not null && request.ToBacklog)
+            throw new ArgumentException("SprintId and ToBacklog are mutually exclusive.", nameof(request.ToBacklog));
+
+        var movesSprint = request.SprintId is not null || request.ToBacklog;
+        if (request.AfterId is null && request.BeforeId is null && request.StatusId is null && !movesSprint)
             throw new ArgumentException("Either AfterId, BeforeId or StatusId is required.", nameof(request.AfterId));
         if (request.AfterId == request.TaskId || request.BeforeId == request.TaskId)
             throw new ArgumentException("A task cannot be its own neighbour.", nameof(request.AfterId));
@@ -54,6 +59,9 @@ internal sealed class TaskRankCommandHandler(
             // Текст не менялся — воркер обновит только IsClosed, без реэмбеддинга.
             searchIndex.Enqueue(SearchSourceType.Task, task.Id, task.BoardId, SearchIndexOperation.Upsert);
         }
+
+        if (movesSprint)
+            await taskSprints.MoveAsync(task, request.ToBacklog ? null : request.SprintId, actor.Id, cancellationToken);
 
         if (request.AfterId is null && request.BeforeId is null)
         {

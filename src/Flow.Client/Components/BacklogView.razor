@@ -1,0 +1,378 @@
+@* Бэклог проекта (docs/TZ_task_views.md §2, этап 2D) поверх GET /boards/{id}/backlog. Секции: активный спринт,
+   запланированные, «Бэклог»; внутри — ручной порядок. Перетаскивание — MudDropContainer, как на канбане: строка
+   переезжает сразу, запрос — POST /tasks/{id}/rank с sprintId/toBacklog и соседями, при отказе — откат с тостом,
+   после успеха секции перечитываются (суммы и нагрузку считает сервер). Слева — панель эпиков: фильтр по эпику. *@
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject UserDirectory Users
+@inject ProjectAccessState Access
+@inject NavigationManager Nav
+
+<div class="bl">
+    <aside class="bl-epics panel">
+        <div class="section-title">Эпики</div>
+        <button type="button" class="bl-epic @(_epicId is null ? "on" : "")" @onclick="() => SetEpic(null)">Все задачи</button>
+        @foreach (var epic in _backlog?.Epics ?? [])
+        {
+            <button type="button" class="bl-epic @(_epicId == epic.Id ? "on" : "")" title="@epic.Title" @onclick="() => SetEpic(epic.Id)">
+                <span class="code">@epic.Code</span>
+                <span class="bl-epic-title">@epic.Title</span>
+                <span class="kb-count">@epic.Count</span>
+            </button>
+        }
+        @if (_backlog is { Epics.Count: 0 })
+        {
+            <div class="hint">Эпиков нет — заведите задачу вида «Эпик».</div>
+        }
+    </aside>
+
+    <div class="bl-main">
+        @if (CanManage)
+        {
+            <div class="kb-toolbar">
+                <DsButton Variant="secondary" Size="sm" Icon="plus" OnClick="() => Open(SprintDialogMode.Create, null)">Спринт</DsButton>
+                <div class="hint">Задачи перетаскиваются между спринтами и бэклогом; внутри секции — меняют порядок.</div>
+            </div>
+        }
+
+        @if (_loading && _backlog is null)
+        {
+            <Skeleton Kind="rows" Count="5" />
+        }
+        else if (_error is not null)
+        {
+            <div class="empty">
+                <div class="empty-title">Не удалось загрузить бэклог</div>
+                <div>@_error</div>
+                <DsButton Variant="secondary" Size="sm" OnClick="ReloadAsync">Повторить</DsButton>
+            </div>
+        }
+        else if (_backlog is not null)
+        {
+            <MudDropContainer T="BacklogItem" @ref="_drop" Items="_items" ItemsSelector="InZone" ItemDropped="OnDropped"
+                              ItemDisabled="i => !CanMove(i.Task)" Class="bl-sections">
+                <ChildContent>
+                    @foreach (var section in _backlog.Sections)
+                    {
+                        var sprint = section.Sprint;
+                        var zone = ZoneOf(sprint?.Id);
+                        var count = _items.Count(i => ZoneOf(i.Task.SprintId) == zone);
+                        <section class="bl-section panel @(sprint?.State == SprintState.Active ? "active" : "")">
+                            <header class="bl-head">
+                                <div class="bl-title">
+                                    <b>@(sprint?.Name ?? "Бэклог")</b>
+                                    @if (sprint?.State == SprintState.Active)
+                                    {
+                                        <span class="bl-state">идёт</span>
+                                    }
+                                    @if (sprint is { StartDate: { } start, EndDate: { } end })
+                                    {
+                                        <span class="hint">@Ru.DateOnlyShort(start) — @Ru.DateOnlyShort(end)</span>
+                                    }
+                                    <span class="kb-count">@Ru.Tasks(count)@(section.Points > 0 ? $" · {Ru.Points(section.Points)} SP" : "")@(section.EstimateMinutes > 0 ? $" · {Ru.Duration(section.EstimateMinutes)}" : "")</span>
+                                </div>
+                                <div class="bl-load">
+                                    @foreach (var load in section.ByAssignee.Take(6))
+                                    {
+                                        var who = Users.Find(load.AssigneeId);
+                                        <span class="bl-load-item" title="@($"{who?.FullName ?? "Без исполнителя"}: {Ru.Tasks(load.Count)}, {Ru.Points(load.Points)} SP")">
+                                            @if (who is not null)
+                                            {
+                                                <Avatar User="who" Size="20" />
+                                            }
+                                            else
+                                            {
+                                                <Icon Name="user" Size="16" />
+                                            }
+                                            <span>@(load.Points > 0 ? Ru.Points(load.Points) : load.Count.ToString())</span>
+                                        </span>
+                                    }
+                                </div>
+                                @if (sprint is not null)
+                                {
+                                    <div class="bl-actions">
+                                        @if (sprint.State == SprintState.Active)
+                                        {
+                                            <DsButton Variant="secondary" Size="sm" OnClick="@(() => Nav.NavigateTo($"boards/{BoardId}/sprints/{sprint.Id}/report"))">Отчёт</DsButton>
+                                        }
+                                        @if (CanManage)
+                                        {
+                                            @if (sprint.State == SprintState.Planned)
+                                            {
+                                                <DsButton Variant="primary" Size="sm" Disabled="HasActive" OnClick="() => Open(SprintDialogMode.Start, sprint)">Начать</DsButton>
+                                            }
+                                            else
+                                            {
+                                                <DsButton Variant="primary" Size="sm" OnClick="() => Open(SprintDialogMode.Complete, sprint)">Завершить</DsButton>
+                                            }
+                                            <DsIconButton Icon="edit" Size="28" Title="Изменить спринт" OnClick="() => Open(SprintDialogMode.Edit, sprint)" />
+                                            @if (sprint.State == SprintState.Planned)
+                                            {
+                                                <DsIconButton Icon="trash" Size="28" Title="Удалить спринт: задачи вернутся в бэклог" OnClick="() => _deleting = sprint" />
+                                            }
+                                        }
+                                    </div>
+                                }
+                            </header>
+                            @if (sprint?.Goal is { } goal)
+                            {
+                                <div class="bl-goal">@goal</div>
+                            }
+                            <MudDropZone T="BacklogItem" Identifier="@zone" AllowReorder="true" Class="bl-zone" />
+                            @if (count == 0)
+                            {
+                                <div class="bl-empty">@(sprint is null ? "Бэклог пуст" : "Перетащите сюда задачи из бэклога")</div>
+                            }
+                        </section>
+                    }
+                </ChildContent>
+                <ItemRenderer>
+                    @{ var item = context; var task = item.Task; }
+                    <div class="bl-row @(task.Id == SelectedId ? "sel" : "") @(IsDone(task) ? "done" : "")" role="button" tabindex="0"
+                         aria-label="@($"{task.Code}: {task.Title}")" @onclick="() => OnOpen.InvokeAsync(task)"
+                         @onkeydown="e => OnRowKey(e, task)">
+                        @if (TaskMeta.TypeOf(Board, task.TypeId) is { } type)
+                        {
+                            <TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />
+                        }
+                        <span class="code">@task.Code</span>
+                        <PriorityIcon Value="task.Priority" Size="13" />
+                        <span class="bl-row-title">@task.Title</span>
+                        @if (item.EpicId is { } epicId && _backlog?.Epics.FirstOrDefault(e => e.Id == epicId) is { } epic)
+                        {
+                            <span class="bl-epic-chip" title="@epic.Title">@epic.Code</span>
+                        }
+                        @if (task.StoryPoints is { } sp)
+                        {
+                            <span class="count-chip">@Ru.Points(sp) SP</span>
+                        }
+                        <span class="bl-who">
+                            @if (Users.Find(task.AssigneeId) is { } who)
+                            {
+                                <Avatar User="who" Size="20" Title="@who.FullName" />
+                            }
+                        </span>
+                        @{ var st = Board?.Statuses.FirstOrDefault(s => s.Id == task.StatusId); }
+                        <span class="status-pill sm"><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span>
+                    </div>
+                </ItemRenderer>
+            </MudDropContainer>
+        }
+    </div>
+</div>
+
+@if (_dialog is { } dialog)
+{
+    <SprintDialog Mode="dialog.Mode" BoardId="BoardId" Sprint="dialog.Sprint" Targets="PlannedExcept(dialog.Sprint)"
+                  OpenCount="OpenCountOf(dialog.Sprint)" OnSaved="OnSprintSaved" OnClose="() => _dialog = null" />
+}
+
+@if (_deleting is { } deleting)
+{
+    <ConfirmDialog Title="@($"Удалить «{deleting.Name}»?")" Text="Задачи спринта вернутся в бэклог, записи о переносе останутся в журнале."
+                   OnConfirm="ConfirmDelete" OnCancel="() => _deleting = null" />
+}
+
+@code {
+    private const string BacklogZone = "backlog";
+
+    [Parameter, EditorRequired] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
+    [Parameter, EditorRequired] public Guid BoardId { get; set; }
+    [Parameter] public Guid? AssigneeId { get; set; }
+    [Parameter] public bool Unassigned { get; set; }
+    [Parameter] public string? Query { get; set; }
+    [Parameter] public string? Fql { get; set; }
+    [Parameter] public UserResponse? Me { get; set; }
+    [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public EventCallback<TaskResponse> OnOpen { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<TaskResponse>> OnLoaded { get; set; }
+    [Parameter] public EventCallback<FqlErrorResponse?> OnFqlError { get; set; }
+
+    private MudDropContainer<BacklogItem>? _drop;
+    private BacklogResponse? _backlog;
+    private List<BacklogItem> _items = [];
+    private Guid? _epicId;
+    private bool _loading = true;
+    private string? _error;
+    private string? _loadedKey;
+    private bool _refreshZones;
+    private (SprintDialogMode Mode, SprintResponse? Sprint)? _dialog;
+    private SprintResponse? _deleting;
+
+    private BoardResponse? Board => Boards.FirstOrDefault(b => b.Id == BoardId);
+
+    private bool CanManage => Permissions.CanManageSprints(Access.For(BoardId));
+
+    private bool HasActive => _backlog?.Sections.Any(s => s.Sprint?.State == SprintState.Active) == true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{BoardId}|{AssigneeId}|{Unassigned}|{Query}|{Fql}";
+        if (_loadedKey == key)
+            return;
+
+        _loadedKey = key;
+        await ReloadAsync();
+    }
+
+    public async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var result = await Api.GetBacklog(BoardId, AssigneeId, Unassigned, Query, fql: Fql, epicId: _epicId);
+        _loading = false;
+
+        await OnFqlError.InvokeAsync(result.FqlError);
+        if (result.FqlError is not null)
+        {
+            _backlog = null;
+            return;
+        }
+
+        if (!result.Ok)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        _backlog = result.Value!;
+        _items = _backlog.Sections.SelectMany(s => s.Items).ToList();
+        _refreshZones = true;
+        await OnLoaded.InvokeAsync(_items.Select(i => i.Task).ToList());
+    }
+
+    /// <summary>Правка в слайдере: спринт мог смениться — перечитываем, суммы секций считает сервер.</summary>
+    public async Task ReplaceAsync(TaskResponse task)
+    {
+        var at = _items.FindIndex(i => i.Task.Id == task.Id);
+        if (at < 0)
+            return;
+
+        if (_items[at].Task.SprintId != task.SprintId || _items[at].Task.StoryPoints != task.StoryPoints)
+        {
+            await ReloadAsync();
+            return;
+        }
+
+        _items[at] = _items[at] with { Task = task };
+        _refreshZones = true;
+        StateHasChanged();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!_refreshZones || _drop is null)
+            return;
+
+        _refreshZones = false;
+        _drop.Refresh();
+    }
+
+    private static string ZoneOf(Guid? sprintId) => sprintId?.ToString() ?? BacklogZone;
+
+    private bool InZone(BacklogItem item, string zone) => ZoneOf(item.Task.SprintId) == zone;
+
+    private bool CanMove(TaskResponse task) => Permissions.CanEditTask(Me, Access.For(task.BoardId), task);
+
+    private bool IsDone(TaskResponse task) => Board?.Statuses.FirstOrDefault(s => s.Id == task.StatusId)?.IsFinal == true;
+
+    private async Task SetEpic(Guid? epicId)
+    {
+        _epicId = epicId;
+        await ReloadAsync();
+    }
+
+    // ---- перенос ----
+
+    private Task OnDropped(MudItemDropInfo<BacklogItem> info) => MoveAsync(info.Item!, info.DropzoneIdentifier, info.IndexInZone);
+
+    private async Task MoveAsync(BacklogItem item, string zone, int index)
+    {
+        var task = item.Task;
+        var sprintId = zone == BacklogZone ? (Guid?)null : Guid.Parse(zone);
+        var others = _items.Where(i => i.Task.Id != task.Id && ZoneOf(i.Task.SprintId) == zone).ToList();
+        index = Math.Clamp(index, 0, others.Count);
+        var after = index > 0 ? others[index - 1].Task : null;
+        var before = index < others.Count ? others[index].Task : null;
+
+        var sameZone = ZoneOf(task.SprintId) == zone;
+        var oldZone = _items.Where(i => ZoneOf(i.Task.SprintId) == zone).ToList();
+        if (sameZone && oldZone.FindIndex(i => i.Task.Id == task.Id) == index)
+            return;
+
+        // Сразу на экране: строка встаёт между соседями новой секции.
+        var snapshot = _items.ToList();
+        _items.RemoveAll(i => i.Task.Id == task.Id);
+        var moved = item with { Task = task with { SprintId = sprintId } };
+        var at = before is not null ? _items.FindIndex(i => i.Task.Id == before.Id)
+            : after is not null ? _items.FindIndex(i => i.Task.Id == after.Id) + 1
+            : _items.Count;
+        _items.Insert(Math.Max(0, at), moved);
+        _refreshZones = true;
+        StateHasChanged();
+
+        var request = new RankTaskRequest(after?.Id, before?.Id,
+            SprintId: sameZone ? null : sprintId, ToBacklog: !sameZone && sprintId is null);
+        var result = await Api.RankTask(task.Id, request);
+        if (!result.Ok)
+        {
+            _items = snapshot;
+            _refreshZones = true;
+            Toasts.Error(result.Error ?? "Не удалось перенести задачу");
+            StateHasChanged();
+            return;
+        }
+
+        if (!sameZone)
+            Toasts.Ok($"{task.Code} → {(sprintId is { } id ? _backlog?.Sections.FirstOrDefault(s => s.Sprint?.Id == id)?.Sprint?.Name : "бэклог")}");
+        await ReloadAsync();
+    }
+
+    private async Task OnRowKey(KeyboardEventArgs e, TaskResponse task)
+    {
+        if (e.Key is "Enter" or " ")
+            await OnOpen.InvokeAsync(task);
+    }
+
+    // ---- спринты ----
+
+    private void Open(SprintDialogMode mode, SprintResponse? sprint) => _dialog = (mode, sprint);
+
+    private IReadOnlyList<SprintResponse> PlannedExcept(SprintResponse? sprint) =>
+        _backlog?.Sections.Select(s => s.Sprint).OfType<SprintResponse>()
+            .Where(s => s.State == SprintState.Planned && s.Id != sprint?.Id).ToList() ?? [];
+
+    private int OpenCountOf(SprintResponse? sprint) =>
+        sprint is null ? 0 : _items.Count(i => i.Task.SprintId == sprint.Id && !IsDone(i.Task));
+
+    private async Task OnSprintSaved(SprintResponse sprint)
+    {
+        var mode = _dialog?.Mode;
+        _dialog = null;
+        Toasts.Ok(mode switch
+        {
+            SprintDialogMode.Create => $"Спринт «{sprint.Name}» создан",
+            SprintDialogMode.Start => $"Спринт «{sprint.Name}» начат",
+            SprintDialogMode.Complete => $"Спринт «{sprint.Name}» завершён",
+            _ => "Спринт сохранён"
+        });
+        await ReloadAsync();
+        if (mode == SprintDialogMode.Complete)
+            Nav.NavigateTo($"boards/{BoardId}/sprints/{sprint.Id}/report");
+    }
+
+    private async Task ConfirmDelete()
+    {
+        var sprint = _deleting!;
+        _deleting = null;
+        var result = await Api.DeleteSprint(sprint.Id);
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось удалить спринт");
+            return;
+        }
+
+        Toasts.Ok($"Спринт «{sprint.Name}» удалён");
+        await ReloadAsync();
+    }
+}

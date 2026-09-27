@@ -34,6 +34,12 @@ internal sealed class PermissionService : IPermissionService
         RequireProject(access, ProjectPermission.ManageConfig, "Настраивать проект (типы задач) может его администратор.");
     }
 
+    public void EnsureCanManageSprints(ProjectAccessInfo access)
+    {
+        RequireVisible(access);
+        RequireProject(access, ProjectPermission.ManageSprints, "Спринты ведут разработчики и администраторы проекта.");
+    }
+
     public void EnsureCanManageMembers(ProjectAccessInfo access, ProjectRole? grantedRole = null)
     {
         RequireVisible(access);

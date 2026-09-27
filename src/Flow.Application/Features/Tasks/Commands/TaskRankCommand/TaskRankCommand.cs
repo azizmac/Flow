@@ -10,6 +10,15 @@ namespace Flow.Application.Features.Tasks.Commands.TaskRankCommand;
 /// положение задачи, а не её изменение.
 /// StatusId — перенос в другую колонку канбана (docs/TZ_task_views.md §1): переход проверяет workflow
 /// (TransitionGuard, отказ — TransitionNotAllowed), в журнал идёт StatusChanged, в очередь поиска — Upsert.
-/// Со StatusId соседи необязательны (пустая колонка — ранг не меняется); без него и без соседей — 400.
+/// SprintId / ToBacklog — перенос между секциями бэклога (docs/TZ_task_views.md §2): спринт своего проекта, не
+/// завершённый, SprintChanged в журнале. Со StatusId или сменой спринта соседи необязательны (пустая секция — ранг
+/// не меняется); без них и без соседей — 400.
 /// </summary>
-public sealed record TaskRankCommand(Guid ActorId, Guid TaskId, Guid? AfterId, Guid? BeforeId, Guid? StatusId = null) : IRequest<TaskUpdateResult>;
+public sealed record TaskRankCommand(
+    Guid ActorId,
+    Guid TaskId,
+    Guid? AfterId,
+    Guid? BeforeId,
+    Guid? StatusId = null,
+    Guid? SprintId = null,
+    bool ToBacklog = false) : IRequest<TaskUpdateResult>;

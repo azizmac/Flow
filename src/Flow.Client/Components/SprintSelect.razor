@@ -1,0 +1,52 @@
+@* Поле «Спринт» задачи (docs/TZ_task_views.md §2): MudSelect из незавершённых спринтов проекта и «Бэклога».
+   Завершённый спринт в список не попадает — туда задачу не переносят; если задача уже в нём, он виден
+   выключенным пунктом, чтобы поле не показывало пустоту. Guid.Empty — «Бэклог»: null MudSelect рисует пустым. *@
+@inject IFlowApi Api
+
+@if (CanEdit)
+{
+    <MudSelect T="Guid" Value="@(Value ?? Guid.Empty)" ValueChanged="Change" Disabled="Disabled" Dense="true" Underline="false"
+               Variant="Variant.Text" Margin="Margin.None" PopoverClass="flow-pop" Class="sprint-select" aria-label="Спринт">
+        <MudSelectItem T="Guid" Value="Guid.Empty">Бэклог</MudSelectItem>
+        @foreach (var sprint in _sprints.Where(s => s.State != SprintState.Completed || s.Id == Value))
+        {
+            <MudSelectItem T="Guid" Value="sprint.Id" Disabled="@(sprint.State == SprintState.Completed)">@Label(sprint)</MudSelectItem>
+        }
+    </MudSelect>
+}
+else
+{
+    <span>@(Current is { } s ? Label(s) : "Бэклог")</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid BoardId { get; set; }
+    [Parameter] public Guid? Value { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<Guid?> OnChange { get; set; }
+
+    private IReadOnlyList<SprintResponse> _sprints = [];
+    private Guid _loadedFor;
+
+    private SprintResponse? Current => _sprints.FirstOrDefault(s => s.Id == Value);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == BoardId)
+            return;
+
+        _loadedFor = BoardId;
+        var result = await Api.GetSprints(BoardId);
+        _sprints = result.Ok ? result.Value! : [];
+    }
+
+    private static string Label(SprintResponse sprint) => sprint.State switch
+    {
+        SprintState.Active => $"{sprint.Name} · идёт",
+        SprintState.Completed => $"{sprint.Name} · завершён",
+        _ => sprint.Name
+    };
+
+    private Task Change(Guid id) => OnChange.InvokeAsync(id == Guid.Empty ? null : id);
+}

@@ -22,6 +22,9 @@ public interface IPermissionService
     /// <summary>Типы задач и прочая настройка проекта — ManageConfig (администратор проекта).</summary>
     void EnsureCanManageConfig(ProjectAccessInfo access);
 
+    /// <summary>Создавать, запускать, завершать и править спринты проекта — ManageSprints (Developer+).</summary>
+    void EnsureCanManageSprints(ProjectAccessInfo access);
+
     /// <summary>Участники и роль по умолчанию — ManageMembers; выдаваемая роль не выше своей роли в проекте.</summary>
     void EnsureCanManageMembers(ProjectAccessInfo access, ProjectRole? grantedRole = null);
 

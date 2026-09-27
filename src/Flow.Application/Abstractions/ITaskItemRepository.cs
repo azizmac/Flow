@@ -12,6 +12,9 @@ public interface ITaskItemRepository
     /// <summary>Задачи в статусе — отслеживаемые: их переводят в другой статус при удалении этого (docs/TZ_workflow_config.md §1).</summary>
     Task<IReadOnlyList<TaskItem>> GetByStatusIdAsync(Guid statusId, CancellationToken cancellationToken);
 
+    /// <summary>Задачи спринта, отслеживаемые — снимок при старте и перенос при завершении.</summary>
+    Task<IReadOnlyList<TaskItem>> GetBySprintIdAsync(Guid sprintId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Страница задач по отбору, от новых к старым. Возвращает не больше <see cref="TaskListFilter.Limit"/> задач;
     /// «есть ли ещё» вызывающая сторона определяет по тому, заполнилась ли страница целиком.

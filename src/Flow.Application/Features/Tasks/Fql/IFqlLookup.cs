@@ -23,6 +23,9 @@ public interface IFqlLookup
     /// <summary>Задачи, связанные с этой любой связью (оба направления).</summary>
     Task<IReadOnlyList<Guid>> LinkedAsync(Guid taskId, CancellationToken cancellationToken);
 
+    /// <summary>Спринты видимых проектов, включая завершённые (docs/TZ_task_views.md §2).</summary>
+    Task<IReadOnlyList<Sprint>> SprintsAsync(CancellationToken cancellationToken);
+
     /// <summary>Задачи, которые эта блокирует (исходящие Blocks).</summary>
     Task<IReadOnlyList<Guid>> BlockedByAsync(Guid taskId, CancellationToken cancellationToken);
 }

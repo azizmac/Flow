@@ -130,6 +130,8 @@ else if (_task is not null && _board is not null)
                     </div>
                     <div class="meta-k">Родитель</div>
                     <div class="meta-v"><ParentSelect Board="_board" Task="_task" Value="_task.ParentId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetParent" /></div>
+                    <div class="meta-k">Спринт</div>
+                    <div class="meta-v"><SprintSelect BoardId="_board.Id" Value="_task.SprintId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetSprint" /></div>
                     <div class="meta-k">Статус</div>
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         @if (CanEdit)
@@ -400,6 +402,9 @@ else if (_task is not null && _board is not null)
 
     private Task SetStartDate(DateOnly? startDate) =>
         Apply(id => Api.SetSchedule(id, new SetTaskScheduleRequest(startDate, _task!.DueDate)), "Не удалось изменить дату начала");
+
+    private Task SetSprint(Guid? sprintId) =>
+        Apply(id => Api.SetTaskSprint(id, new SetTaskSprintRequest(sprintId)), "Не удалось перенести задачу в спринт");
 
     private Task SetParent(Guid? parentId) =>
         Apply(id => Api.SetParent(id, new SetTaskParentRequest(parentId)), "Не удалось сменить родителя");

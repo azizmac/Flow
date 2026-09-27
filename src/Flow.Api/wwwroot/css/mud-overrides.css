@@ -564,3 +564,27 @@ a.mud-link:hover {
 .st-wip.mud-input-control { width: 64px; flex: none; margin: 0; }
 .st-wip .mud-input { background: rgba(0, 0, 0, 0.15); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 6px; }
 .st-wip input { color: #fff; font: var(--fw-semibold) 12px var(--font-display); }
+
+/* Поле «Спринт» в карточке — компактный MudSelect в строке мета-полей. */
+.sprint-select.mud-input-control { width: 220px; flex: none; margin: 0; }
+.sprint-select .mud-input { color: #fff; font: var(--fw-semibold) 13px var(--font-display); }
+
+/* Бэклог: MudDropZone — наша секция без фона Material; призрак переносимой строки — полупрозрачный. */
+.bl-sections .mud-drop-zone { background: transparent; }
+.bl-sections .mud-drop-item { display: block; }
+.bl-sections .mud-drop-item-preview-start { opacity: 0.4; }
+/* Цель «вставить первым» у MudDropZone — absolute-полоса 20px поверх начала зоны: строка бэклога ниже карточки канбана,
+   и полоса накрывала середину первой строки (клик и перетаскивание шли мимо). Ужата до 8px на верхней границе. */
+.bl-sections .mud-drop-zone > .mud-drop-item-preview-start:not(.mud-drop-item-draggable) { height: 8px; top: -4px; }
+.sd-target.mud-input-control { margin-top: 8px; }
+
+/* Отчёт спринта: график на прозрачном фоне панели, подписи осей — вторичными чернилами, сетка приглушена;
+   «Идеально» — пунктиром (второй признак кроме цвета: её контраст к поверхности ниже 3:1). */
+.sr-chart .mud-chart { background: transparent; }
+.sr-chart .mud-charts-xaxis text, .sr-chart .mud-charts-yaxis text { fill: var(--text-tertiary); font: var(--fw-medium) 11px var(--font-text); }
+.sr-chart .mud-charts-gridlines-yaxis path, .sr-chart .mud-charts-gridlines-xaxis-lines path { stroke: var(--border-subtle); }
+.sr-chart .mud-chart-line path.mud-chart-serie:nth-of-type(2), .sr-chart .mud-chart-serie:nth-child(2) { stroke-dasharray: 6 4; }
+.sr-chart .mud-chart-legend-item .mud-typography { color: var(--text-secondary); font: var(--fw-semibold) 12px var(--font-display); }
+.sr-table.mud-simple-table { background: transparent; }
+.sr-table.mud-simple-table table * tr > th { color: var(--text-tertiary); font: var(--fw-semibold) 12px var(--font-display); border-bottom: 1px solid var(--border); }
+.sr-table.mud-simple-table table * tr > td { color: #fff; border-bottom: 1px solid var(--border-subtle); font: var(--fw-medium) 13px var(--font-text); }

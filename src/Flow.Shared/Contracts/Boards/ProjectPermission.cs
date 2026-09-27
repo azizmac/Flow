@@ -18,5 +18,8 @@ public enum ProjectPermission
     ManageConfig = 9,
     ManageMembers = 10,
     RenameProject = 11,
-    DeleteProject = 12
+    DeleteProject = 12,
+
+    /// <summary>Создавать, запускать и завершать спринты (docs/TZ_task_views.md §2): Developer и выше.</summary>
+    ManageSprints = 13
 }
