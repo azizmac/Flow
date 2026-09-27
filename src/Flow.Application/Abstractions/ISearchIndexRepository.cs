@@ -14,7 +14,8 @@ public interface ISearchIndexRepository
 
     /// <summary>
     /// Ставит в очередь все подходящие источники пачками (Priority = 1 — позади живых правок).
-    /// Возвращает число поставленных записей.
+    /// Упавшие записи тех же источников (в том числе исчерпавшие MaxAttempts) оживляются.
+    /// Возвращает число поставленных и оживлённых записей.
     /// </summary>
     Task<int> EnqueueAllAsync(IReadOnlyCollection<SearchSourceType> types, Guid? boardId, CancellationToken cancellationToken);
 
