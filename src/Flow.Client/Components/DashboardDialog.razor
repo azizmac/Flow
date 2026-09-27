@@ -1,0 +1,87 @@
+@* Новый дашборд или правка его имени и видимости (docs/TZ_task_views.md §8). Общий видят все, но каждый виджет
+   считается правами смотрящего. Жизненный цикл MudDialog — как у MilestoneDialog. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject BrowserInterop Browser
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>@(Dashboard is null ? "Новый дашборд" : "Дашборд")</h3>
+    </TitleContent>
+    <DialogContent>
+        <DsInput Id="dd-name" Label="Название" MaxLength="80" Placeholder="Команда: неделя" Value="@_name" ValueChanged="v => { _name = v; _error = null; }" />
+        <MudCheckBox T="bool" @bind-Value="_shared" Size="Size.Small" Color="Color.Primary" Dense="true" Class="sf-shared"
+                     Label="Виден всем — каждый увидит в виджетах только задачи доступных ему проектов" />
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Отмена</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="@(_busy || _name.Trim().Length == 0)" Busy="_busy">@(Dashboard is null ? "Создать" : "Сохранить")</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter] public DashboardResponse? Dashboard { get; set; }
+    [Parameter] public EventCallback<DashboardResponse> OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private string _name = "";
+    private bool _shared;
+    private string? _error;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _name = Dashboard?.Name ?? "";
+        _shared = Dashboard?.Shared ?? false;
+        await Task.Delay(50);
+        await Browser.FocusAsync("dd-name", select: true);
+    }
+
+    private async Task Save()
+    {
+        _busy = true;
+        var result = Dashboard is null
+            ? await Api.CreateDashboard(new CreateDashboardRequest(_name.Trim(), _shared))
+            : await Api.UpdateDashboard(Dashboard.Id, new UpdateDashboardRequest(_name.Trim(), _shared));
+        _busy = false;
+
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить дашборд";
+            return;
+        }
+
+        await CloseDialog();
+        await OnSaved.InvokeAsync(result.Value!);
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

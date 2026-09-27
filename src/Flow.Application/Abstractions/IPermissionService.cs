@@ -87,4 +87,10 @@ public interface IPermissionService
 
     /// <summary>Удалить — владелец; чужой общий — ещё и Admin+ (уборка брошенных общих фильтров).</summary>
     void EnsureCanDeleteSavedFilter(User actor, SavedFilter filter);
+
+    /// <summary>Менять дашборд и его виджеты — только автор (как сохранённый фильтр).</summary>
+    void EnsureCanEditDashboard(User actor, Dashboard dashboard);
+
+    /// <summary>Удалить дашборд — автор, общий — ещё Admin и Owner.</summary>
+    void EnsureCanDeleteDashboard(User actor, Dashboard dashboard);
 }

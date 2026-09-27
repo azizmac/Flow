@@ -15,6 +15,19 @@ public interface ITaskItemRepository
     /// <summary>Задачи спринта, отслеживаемые — снимок при старте и перенос при завершении.</summary>
     Task<IReadOnlyList<TaskItem>> GetBySprintIdAsync(Guid sprintId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Разбивка задач под фильтром одним GROUP BY (виджет дашборда). CustomField — по значению поля (Id варианта у
+    /// списков, у MultiSelect — каждый вариант отдельно); <paramref name="customFieldIds"/> — поля с одним ключом в
+    /// разных проектах.
+    /// </summary>
+    Task<IReadOnlyList<TaskGroupCount>> GroupCountAsync(TaskListFilter filter, TaskGroupField field, IReadOnlyList<Guid>? customFieldIds, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Создано по дню CreatedAt и закрыто по дню StatusChangedAt задач в финальном статусе — начиная с <paramref name="since"/>.
+    /// Задача, переоткрытая после закрытия, в «закрыто» не попадает: считается нынешнее состояние.
+    /// </summary>
+    Task<TaskDailyCounts> DailyCountsAsync(TaskListFilter filter, DateTime since, CancellationToken cancellationToken);
+
     /// <summary>Задачи вехи, отслеживаемые (удаление вехи снимает её с задач с записью в журнале).</summary>
     Task<IReadOnlyList<TaskItem>> GetByMilestoneIdAsync(Guid milestoneId, CancellationToken cancellationToken);
 

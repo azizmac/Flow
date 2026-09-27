@@ -67,8 +67,7 @@
             }
             else
             {
-                <MudChart T="double" ChartType="ChartType.Line" ChartSeries="_series" ChartLabels="_labels" ChartOptions="_options"
-                          Width="100%" Height="280px" LegendPosition="Position.Top" />
+                <BurndownChart Points="_report.Burndown" />
             }
         </div>
 
@@ -110,13 +109,6 @@
     private SprintReportResponse? _report;
     private IReadOnlyList<SprintResponse> _sprints = [];
     private bool _notFound;
-    private List<ChartSeries<double>> _series = [];
-    private string[] _labels = [];
-
-    /// <summary>«Осталось» — амбер, «идеально» — зелёный пунктиром: пара прошла валидатор против поверхности #1B4A3B.</summary>
-    private static readonly string[] Palette = ["#D07E1F", "#3A9D6E"];
-
-    private LineChartOptions _options = new();
 
     private IEnumerable<(string Label, SprintReportTotals Totals)> Tiles =>
     [
@@ -142,28 +134,6 @@
         }
 
         _report = report.Result.Value!;
-        var points = _report.Burndown;
-        // Подписи оси — через одну при длинном спринте: 28 дат подряд налезают друг на друга.
-        var step = (points.Count + 13) / 14;
-        _labels = points.Select((p, i) => i % step == 0 ? Ru.DateOnlyShort(p.Date) : "").ToArray();
-        // Шаг делений оси Y по умолчанию — 20: при спринте на 8 SP ось была бы «0 … 20» без промежуточных подписей.
-        var max = points.Select(p => Math.Max(p.Remaining ?? 0, p.Ideal)).DefaultIfEmpty(0).Max();
-        _options = new LineChartOptions
-        {
-            ChartPalette = Palette,
-            LineStrokeWidth = 2,
-            ShowDataMarkers = true,
-            ShowToolTips = true,
-            ShowLegend = true,
-            YAxisRequireZeroPoint = true,
-            YAxisTicks = Math.Max(1, (int)Math.Ceiling(max / 5))
-        };
-        _series =
-        [
-            // Факт — только по сегодняшний день: серия короче подписей, линия обрывается там, где кончились данные.
-            new ChartSeries<double> { Name = "Осталось", Data = points.TakeWhile(p => p.Remaining is not null).Select(p => (double)p.Remaining!.Value).ToArray() },
-            new ChartSeries<double> { Name = "Идеально", Data = points.Select(p => (double)p.Ideal).ToArray() }
-        ];
     }
 
     private void Switch(Guid sprintId) => Nav.NavigateTo($"boards/{BoardId}/sprints/{sprintId}/report");

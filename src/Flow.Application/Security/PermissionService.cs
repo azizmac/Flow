@@ -162,6 +162,13 @@ internal sealed class PermissionService : IPermissionService
         Require(filter.OwnerId == actor.Id || (filter.Visibility == SavedFilterVisibility.Shared && actor.Role >= UserRole.Admin),
             "Удалить фильтр может его автор, а общий — ещё Admin и Owner.");
 
+    public void EnsureCanEditDashboard(User actor, Dashboard dashboard) =>
+        Require(dashboard.OwnerId == actor.Id, "Менять дашборд может только его автор.");
+
+    public void EnsureCanDeleteDashboard(User actor, Dashboard dashboard) =>
+        Require(dashboard.OwnerId == actor.Id || (dashboard.Visibility == SavedFilterVisibility.Shared && actor.Role >= UserRole.Admin),
+            "Удалить дашборд может его автор, а общий — ещё Admin и Owner.");
+
     /// <summary>«Своя задача» для Member: создал или назначен исполнителем.</summary>
     private static bool IsOwn(User actor, TaskItem task) =>
         task.CreatedById == actor.Id || task.AssigneeId == actor.Id;

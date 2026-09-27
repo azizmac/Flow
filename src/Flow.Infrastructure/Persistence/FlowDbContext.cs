@@ -36,6 +36,8 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
 
     public DbSet<CustomFieldDefinition> CustomFields => Set<CustomFieldDefinition>();
 
+    public DbSet<Dashboard> Dashboards => Set<Dashboard>();
+
     /// <summary>
     /// Поисковый индекс — проекция, а не домен: наружу из сборки не торчит, Application работает
     /// с ним через ISearchIndexQueue и ISearchIndexRepository.

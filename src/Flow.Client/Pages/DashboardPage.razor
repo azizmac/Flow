@@ -1,0 +1,190 @@
+@* Дашборд (docs/TZ_task_views.md §8, этап 2G): виджеты сеткой из 12 колонок, строка — 90px. Каждый виджет грузит
+   данные сам (правами смотрящего) и падает сам. Править может только автор; удалить общий — ещё Admin и Owner.
+   Место и размер задаются в диалоге виджета: перетаскивания в сетке нет, зато раскладка одинакова у всех смотрящих. *@
+@page "/dashboards/{Id:guid}"
+@inject IFlowApi Api
+@inject NavigationManager Nav
+@inject ToastService Toasts
+@inject UserDirectory Users
+@inject AppState State
+
+<PageTitle>@(_dashboard?.Name ?? "Дашборд") — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        <a class="topbar-back" href="dashboards" title="Все дашборды"><Icon Name="arrow-left" Size="18" /></a>
+        @if (_dashboard is not null)
+        {
+            <h1 class="topbar-title">@_dashboard.Name</h1>
+            <span class="hint">@(_dashboard.Shared ? "общий" : "личный")@(_dashboard is { IsOwn: true, IsDefault: true } ? " · стартовый" : "")</span>
+        }
+    </div>
+    <div class="topbar-right">
+        @if (_dashboard is not null)
+        {
+            <DsIconButton Icon="history" Size="30" Title="Обновить данные" OnClick="Refresh" />
+            @if (_dashboard.IsOwn)
+            {
+                <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="() => _editingWidget = NewWidget">Виджет</DsButton>
+            }
+            @if (_dashboard.IsOwn || CanDelete)
+            {
+                <MudMenu @bind-Open="_menu" PopoverClass="flow-pop" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomRight"
+                         TransformOrigin="Origin.TopRight" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Действия с дашбордом">
+                    <ActivatorContent>
+                        <DsIconButton Icon="more" Size="30" Title="Действия" AriaHasPopup="menu" AriaExpanded="_menu" OnClick="() => _menu = !_menu" />
+                    </ActivatorContent>
+                    <ChildContent>
+                        @if (_dashboard.IsOwn)
+                        {
+                            <MudMenuItem Class="pop-item" OnClick="() => _editing = true"><Icon Name="edit" Size="15" />Название и доступ</MudMenuItem>
+                            @if (!_dashboard.IsDefault)
+                            {
+                                <MudMenuItem Class="pop-item" OnClick="MakeDefault"><Icon Name="check" Size="15" />Сделать стартовым</MudMenuItem>
+                            }
+                        }
+                        @if (_dashboard.IsOwn || CanDelete)
+                        {
+                            <div class="pop-sep" role="separator"></div>
+                            <MudMenuItem Class="pop-item danger" OnClick="() => _deleting = true"><Icon Name="trash" Size="15" />Удалить</MudMenuItem>
+                        }
+                    </ChildContent>
+                </MudMenu>
+            }
+        }
+    </div>
+</div>
+
+<div class="content">
+    @if (_notFound)
+    {
+        <div class="empty"><div class="empty-title">Дашборд не найден</div><a href="dashboards">Все дашборды</a></div>
+    }
+    else if (_dashboard is null)
+    {
+        <Skeleton Kind="rows" Count="4" />
+    }
+    else if (_dashboard.Widgets.Count == 0)
+    {
+        <div class="empty">
+            <div class="empty-title">Виджетов пока нет</div>
+            @if (_dashboard.IsOwn)
+            {
+                <div>Список задач по FQL, счётчик, разбивка по статусам или людям, создано/закрыто, burndown, прогресс вехи, заметка.</div>
+                <DsButton Variant="primary" Size="md" Icon="plus" OnClick="() => _editingWidget = NewWidget">Добавить виджет</DsButton>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="dash-grid" @key="_version">
+            @foreach (var widget in _dashboard.Widgets.OrderBy(w => w.Y).ThenBy(w => w.X))
+            {
+                <DashboardWidgetView @key="widget.Id" DashboardId="_dashboard.Id" Widget="widget" CanEdit="_dashboard.IsOwn"
+                                     OnEdit="w => _editingWidget = w" OnRemove="w => _removing = w" />
+            }
+        </div>
+    }
+</div>
+
+@if (_editing && _dashboard is not null)
+{
+    <DashboardDialog Dashboard="_dashboard" OnSaved="OnSaved" OnClose="() => _editing = false" />
+}
+
+@if (_editingWidget is not null && _dashboard is not null)
+{
+    <WidgetDialog DashboardId="_dashboard.Id" Widget="@(ReferenceEquals(_editingWidget, NewWidget) ? null : _editingWidget)"
+                  OnSaved="OnSaved" OnClose="() => _editingWidget = null" />
+}
+
+@if (_removing is not null)
+{
+    <ConfirmDialog Title="@($"Убрать виджет «{_removing.Title ?? DashboardWidgetView.DefaultTitle(_removing.Type)}»?")" ConfirmLabel="Убрать"
+                   OnConfirm="RemoveWidget" OnCancel="() => _removing = null" />
+}
+
+@if (_deleting && _dashboard is not null)
+{
+    <ConfirmDialog Title="@($"Удалить дашборд «{_dashboard.Name}»?")"
+                   Text="@(_dashboard.Shared ? "Он пропадёт у всех, кто его открывал. Задачи и фильтры останутся." : "Задачи и фильтры останутся.")"
+                   OnConfirm="Delete" OnCancel="() => _deleting = false" />
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    /// <summary>Метка «новый виджет» для диалога: сам виджет ещё не существует.</summary>
+    private static readonly DashboardWidgetResponse NewWidget = new(Guid.Empty, WidgetType.TaskList, null, new WidgetConfig(), 0, 0, 6, 3);
+
+    private DashboardResponse? _dashboard;
+    private bool _notFound;
+    private bool _menu;
+    private bool _editing;
+    private bool _deleting;
+    private DashboardWidgetResponse? _editingWidget;
+    private DashboardWidgetResponse? _removing;
+    private int _version;
+
+    /// <summary>Общий чужой дашборд удаляют Admin и Owner — как общий сохранённый фильтр; сервер проверит ещё раз.</summary>
+    private bool CanDelete => _dashboard is { Shared: true } && Users.Find(State.CurrentUserId)?.Role >= UserRole.Admin;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _dashboard = null;
+        _notFound = false;
+        var result = await Api.GetDashboard(Id);
+        if (!result.Ok)
+        {
+            _notFound = true;
+            return;
+        }
+
+        _dashboard = result.Value!;
+    }
+
+    private void OnSaved(DashboardResponse dashboard)
+    {
+        _editing = false;
+        _editingWidget = null;
+        _dashboard = dashboard;
+    }
+
+    /// <summary>Перерисовать сетку заново — каждый виджет перечитает данные.</summary>
+    private void Refresh() => _version++;
+
+    private async Task MakeDefault()
+    {
+        var result = await Api.UpdateDashboard(_dashboard!.Id, new UpdateDashboardRequest(IsDefault: true));
+        if (result.Ok)
+        {
+            _dashboard = result.Value!;
+            Toasts.Ok("Дашборд стал стартовым");
+        }
+        else
+        {
+            Toasts.Error(result.Error ?? "Не удалось сохранить");
+        }
+    }
+
+    private async Task RemoveWidget()
+    {
+        var widget = _removing!;
+        _removing = null;
+        var result = await Api.RemoveWidget(_dashboard!.Id, widget.Id);
+        if (result.Ok)
+            _dashboard = result.Value!;
+        else
+            Toasts.Error(result.Error ?? "Не удалось убрать виджет");
+    }
+
+    private async Task Delete()
+    {
+        _deleting = false;
+        var result = await Api.DeleteDashboard(_dashboard!.Id);
+        if (result.Ok)
+            Nav.NavigateTo("dashboards");
+        else
+            Toasts.Error(result.Error ?? "Не удалось удалить дашборд");
+    }
+}

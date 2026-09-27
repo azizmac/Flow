@@ -133,6 +133,7 @@ public static class TestMediatorFactory
         services.AddSingleton<IMilestoneRepository>(new FakeMilestoneRepository(tasks));
         services.AddSingleton<ITaskLinkRepository>(links);
         services.AddSingleton<ISavedFilterRepository>(new FakeSavedFilterRepository());
+        services.AddSingleton<IDashboardRepository>(new FakeDashboardRepository());
         services.AddSingleton<IUserRepository>(users);
         services.AddSingleton<IAccountService>(accounts);
         services.AddSingleton<ITaskCommentRepository>(comments);

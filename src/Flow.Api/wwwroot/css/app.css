@@ -2654,3 +2654,46 @@ a.task-row { color: inherit; text-decoration: none; }
 .rm-undated-item .code { font: var(--fw-semibold) 11px var(--font-mono); color: var(--accent); flex: none; }
 @media (hover: hover) and (pointer: fine) { .rm-undated-item:hover, .rm-title:hover { color: var(--accent); } }
 @media (prefers-reduced-motion: reduce) { .rm-toggle { transition: none; } }
+
+/* ---- Дашборды (docs/TZ_task_views.md §8, этап 2G): сетка 12 колонок, строка 90px ---- */
+.dash-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 90px; gap: 12px; }
+.dw { flex: none; min-width: 0; min-height: 0; padding: 12px 14px; gap: 8px; overflow: hidden; }
+.dw-head { display: flex; align-items: center; gap: 6px; min-height: 24px; }
+.dw-title { flex: 1; min-width: 0; color: #fff; font: var(--fw-semibold) 14px var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dw-open { color: var(--text-tertiary); font: var(--fw-semibold) 12px var(--font-display); text-decoration: none; padding: 0 4px; }
+.dw-open:hover { color: var(--accent); }
+.dw-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.dw-error { display: flex; align-items: flex-start; gap: 8px; color: var(--danger); font: var(--fw-medium) 13px var(--font-text); }
+.dw-error svg { flex: none; margin-top: 2px; }
+.dw-more { margin-top: auto; }
+.dw-table .code { font: var(--fw-semibold) 12px var(--font-mono); white-space: nowrap; width: 1%; }
+.dw-table .code a { color: var(--accent); text-decoration: none; }
+.dw-task-title { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dw-task-title a { color: var(--text-primary); text-decoration: none; }
+.dw-task-title a:hover { text-decoration: underline; }
+.dw-task-due, .dw-task-who { width: 1%; white-space: nowrap; }
+.dw-counter { flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
+.dw-number { color: #fff; font: var(--fw-bold) 44px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.dw-bars, .dw-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dw-bars li { display: grid; grid-template-columns: minmax(80px, 35%) 1fr auto; align-items: center; gap: 10px; }
+.dw-bars b, .dw-legend b { color: var(--text-primary); font: var(--fw-semibold) 13px var(--font-display); font-variant-numeric: tabular-nums; text-align: right; }
+.dw-label { color: var(--text-secondary); font: var(--fw-medium) 13px var(--font-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dw-track { height: 10px; }
+.dw-bar { display: block; height: 100%; border-radius: 0 4px 4px 0; }
+.dw-pie { display: flex; align-items: center; gap: 16px; }
+.dw-pie .mud-chart { flex: none; }
+.dw-legend { flex: 1; min-width: 0; }
+.dw-legend li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 38px; align-items: center; gap: 8px; }
+.dw-legend .hint { text-align: right; }
+.dw-swatch { width: 10px; height: 10px; border-radius: 3px; }
+.dw-sprint { display: flex; align-items: baseline; gap: 10px; }
+.dw-sprint a { color: #fff; font: var(--fw-semibold) 13px var(--font-display); text-decoration: none; }
+.dw-sprint a:hover { text-decoration: underline; }
+.dw .desc-box.dw-note { border: 0; background: none; padding: 0; min-height: 0; font-size: 13px; cursor: default; }
+
+/* Диалог виджета */
+.wd-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.wd-row > * { flex: 1 1 140px; min-width: 0; }
+.wd-seg { align-self: flex-start; margin: 4px 0; }
+.wd-narrow { max-width: 220px; }
+.wd-grid { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }

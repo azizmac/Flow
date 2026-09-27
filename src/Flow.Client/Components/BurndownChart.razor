@@ -1,0 +1,46 @@
+@* Burndown спринта (docs/TZ_task_views.md §2): «осталось» — амбер, «идеально» — зелёный пунктиром; пара прошла валидатор
+   палитры против поверхности #1B4A3B. У «идеальной» контраст ниже 3:1 — поэтому пунктир и легенда, а цифры есть в
+   подсказках и в таблице отчёта. Общий для отчёта спринта и виджета дашборда. *@
+
+<MudChart T="double" ChartType="ChartType.Line" ChartSeries="_series" ChartLabels="_labels" ChartOptions="_options"
+          Width="100%" Height="@Height" LegendPosition="Position.Top" MatchBoundsToSize="FillBounds" />
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<BurndownPoint> Points { get; set; } = [];
+    [Parameter] public string Height { get; set; } = "280px";
+    /// <summary>Сколько подписей оси X умещается; остальные пропускаются через одну и более.</summary>
+    [Parameter] public int MaxLabels { get; set; } = 14;
+    /// <summary>Подогнать SVG под размер контейнера (подписи осей не мельчают) — для тесных мест вроде виджета дашборда.</summary>
+    [Parameter] public bool FillBounds { get; set; }
+
+    private static readonly string[] Palette = ["#D07E1F", "#3A9D6E"];
+
+    private List<ChartSeries<double>> _series = [];
+    private string[] _labels = [];
+    private LineChartOptions _options = new();
+
+    protected override void OnParametersSet()
+    {
+        // Подписи оси — через одну при длинном спринте: 28 дат подряд налезают друг на друга.
+        var step = Math.Max(1, (Points.Count + MaxLabels - 1) / MaxLabels);
+        _labels = Points.Select((p, i) => i % step == 0 ? Ru.DateOnlyShort(p.Date) : "").ToArray();
+        // Шаг делений оси Y по умолчанию — 20: при спринте на 8 SP ось была бы «0 … 20» без промежуточных подписей.
+        var max = Points.Select(p => Math.Max(p.Remaining ?? 0, p.Ideal)).DefaultIfEmpty(0).Max();
+        _options = new LineChartOptions
+        {
+            ChartPalette = Palette,
+            LineStrokeWidth = 2,
+            ShowDataMarkers = true,
+            ShowToolTips = true,
+            ShowLegend = true,
+            YAxisRequireZeroPoint = true,
+            YAxisTicks = Math.Max(1, (int)Math.Ceiling(max / 5))
+        };
+        _series =
+        [
+            // Факт — только по сегодняшний день: серия короче подписей, линия обрывается там, где кончились данные.
+            new ChartSeries<double> { Name = "Осталось", Data = Points.TakeWhile(p => p.Remaining is not null).Select(p => (double)p.Remaining!.Value).ToArray() },
+            new ChartSeries<double> { Name = "Идеально", Data = Points.Select(p => (double)p.Ideal).ToArray() }
+        ];
+    }
+}

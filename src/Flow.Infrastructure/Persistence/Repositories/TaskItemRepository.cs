@@ -1,3 +1,4 @@
+using System.Globalization;
 ﻿using System.Linq.Expressions;
 using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Tasks;
@@ -144,6 +145,78 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
 
     public async Task<IReadOnlyList<TaskItem>> GetBySprintIdAsync(Guid sprintId, CancellationToken cancellationToken) =>
         await db.TaskItems.Where(t => t.SprintId == sprintId).OrderBy(t => t.Rank).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<TaskGroupCount>> GroupCountAsync(
+        TaskListFilter filter, TaskGroupField field, IReadOnlyList<Guid>? customFieldIds, CancellationToken cancellationToken)
+    {
+        var query = Filtered(filter);
+        switch (field)
+        {
+            case TaskGroupField.Status:
+                return (await query.GroupBy(t => t.StatusId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                    .Select(x => new TaskGroupCount(x.Key.ToString(), x.Count)).ToList();
+            case TaskGroupField.Assignee:
+                return (await query.GroupBy(t => t.AssigneeId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                    .Select(x => new TaskGroupCount(x.Key?.ToString(), x.Count)).ToList();
+            case TaskGroupField.Priority:
+                return (await query.GroupBy(t => t.Priority).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                    .Select(x => new TaskGroupCount(((int)x.Key).ToString(CultureInfo.InvariantCulture), x.Count)).ToList();
+            case TaskGroupField.Type:
+                return (await query.GroupBy(t => t.TypeId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                    .Select(x => new TaskGroupCount(x.Key.ToString(), x.Count)).ToList();
+            case TaskGroupField.Board:
+                return (await query.GroupBy(t => t.BoardId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                    .Select(x => new TaskGroupCount(x.Key.ToString(), x.Count)).ToList();
+        }
+
+        // Пользовательское поле: значения лежат в jsonb, у MultiSelect — массивом. Группировку по вариантам делаем в
+        // памяти по одной колонке задач под фильтром — без разворачивания jsonb в SQL; предел — MaxGroupRows задач.
+        var ids = customFieldIds?.Select(id => id.ToString()).ToList() ?? [];
+        var rows = await query.Select(t => t.CustomFieldsJson).Take(MaxGroupRows).ToListAsync(cancellationToken);
+        var counts = new Dictionary<string, int>();
+        var empty = 0;
+        foreach (var json in rows)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var values = ids.Select(id => doc.RootElement.TryGetProperty(id, out var v) ? v : (System.Text.Json.JsonElement?)null)
+                .FirstOrDefault(v => v is not null);
+            var keys = values switch
+            {
+                { ValueKind: System.Text.Json.JsonValueKind.Array } arr => arr.EnumerateArray().Select(e => e.ToString()).ToList(),
+                { } one => [one.ToString()],
+                null => new List<string>()
+            };
+            if (keys.Count == 0)
+                empty++;
+            foreach (var key in keys)
+                counts[key] = counts.GetValueOrDefault(key) + 1;
+        }
+
+        var result = counts.Select(c => new TaskGroupCount(c.Key, c.Value)).ToList();
+        if (empty > 0)
+            result.Add(new TaskGroupCount(null, empty));
+        return result;
+    }
+
+    /// <summary>Предел задач для разбивки по пользовательскому полю (группировка в памяти).</summary>
+    private const int MaxGroupRows = 20000;
+
+    public async Task<TaskDailyCounts> DailyCountsAsync(TaskListFilter filter, DateTime since, CancellationToken cancellationToken)
+    {
+        var query = Filtered(filter);
+        var created = await query.Where(t => t.CreatedAt >= since)
+            .GroupBy(t => t.CreatedAt.Date)
+            .Select(g => new { Day = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        var closed = await query.Where(t => t.StatusChangedAt >= since && db.Statuses.Any(s => s.Id == t.StatusId && s.IsFinal))
+            .GroupBy(t => t.StatusChangedAt.Date)
+            .Select(g => new { Day = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        return new TaskDailyCounts(
+            created.ToDictionary(x => DateOnly.FromDateTime(x.Day), x => x.Count),
+            closed.ToDictionary(x => DateOnly.FromDateTime(x.Day), x => x.Count));
+    }
 
     public async Task<IReadOnlyList<TaskItem>> GetByMilestoneIdAsync(Guid milestoneId, CancellationToken cancellationToken) =>
         await db.TaskItems.Where(t => t.MilestoneId == milestoneId).ToListAsync(cancellationToken);

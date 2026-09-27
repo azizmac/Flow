@@ -5,5 +5,6 @@ public enum StartPage
 {
     Projects = 0,
     Tasks = 1,
-    MyTasks = 2
+    MyTasks = 2,
+    Dashboard = 3
 }

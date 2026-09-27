@@ -1,3 +1,4 @@
+using Flow.Application.Features.Dashboards;
 using Flow.Application.Features.Filters;
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
@@ -491,6 +492,36 @@ public class PermissionTests
         var filter = await mediator.Send(new SavedFilterCreateCommand(Owner, "Общий", "", true), CancellationToken.None);
 
         Task Delete() => mediator.Send(new SavedFilterDeleteCommand(actor, filter.Id), CancellationToken.None);
+
+        if (allowed) await Delete(); else await Forbidden(Delete);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Owner, false)]
+    [InlineData(UserRole.Member, false)]
+    public async Task Dashboard_Edit_Only_Author(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var author = AddUser(users, UserRole.Member, "author");
+        var dashboard = await mediator.Send(new DashboardCreateCommand(author, "Общий", true), CancellationToken.None);
+
+        Task Edit() => mediator.Send(new DashboardUpdateCommand(actor, dashboard.Id, Name: "X"), CancellationToken.None);
+
+        if (allowed) await Edit(); else await Forbidden(Edit);
+        Assert.NotNull(await mediator.Send(new DashboardUpdateCommand(author, dashboard.Id, Name: "Своё"), CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Admin, true)]
+    public async Task Dashboard_Delete_Shared_Author_Or_Admin(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var dashboard = await mediator.Send(new DashboardCreateCommand(Owner, "Общий", true), CancellationToken.None);
+
+        Task Delete() => mediator.Send(new DashboardDeleteCommand(actor, dashboard.Id), CancellationToken.None);
 
         if (allowed) await Delete(); else await Forbidden(Delete);
     }

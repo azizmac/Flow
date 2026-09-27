@@ -62,6 +62,10 @@ public sealed class PreferencesState(IFlowApi api, AppState state, Authenticatio
                 var user = (await auth.GetAuthenticationStateAsync()).User;
                 var raw = user.FindFirst("sub")?.Value ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 return Guid.TryParse(raw, out var me) ? $"tasks?who={me}" : "tasks";
+            case StartPage.Dashboard:
+                // Свой стартовый дашборд; нет ни одного — список, где его можно создать.
+                var dashboard = await api.GetDefaultDashboard();
+                return dashboard.Ok ? $"dashboards/{dashboard.Value!.Id}" : "dashboards";
             default:
                 return null;
         }

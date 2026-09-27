@@ -3,6 +3,7 @@ using Flow.Shared.Contracts.About;
 using Flow.Shared.Contracts.Attachments;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
+using Flow.Shared.Contracts.Dashboards;
 using Flow.Shared.Contracts.Milestones;
 using Flow.Shared.Contracts.Sprints;
 using Flow.Shared.Contracts.Tasks;
@@ -131,6 +132,18 @@ public interface IFlowApi
     Task<ApiResult<MilestoneResponse>> UpdateMilestone(Guid milestoneId, UpdateMilestoneRequest request, CancellationToken ct = default);
     Task<ApiResult<bool>> DeleteMilestone(Guid milestoneId, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> SetTaskMilestone(Guid taskId, SetTaskMilestoneRequest request, CancellationToken ct = default);
+
+    // Дашборды (docs/TZ_task_views.md §8): данные каждого виджета — отдельным вызовом; ошибка виджета — в WidgetDataResponse.Error.
+    Task<ApiResult<IReadOnlyList<DashboardResponse>>> GetDashboards(CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> GetDefaultDashboard(CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> GetDashboard(Guid dashboardId, CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> CreateDashboard(CreateDashboardRequest request, CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> UpdateDashboard(Guid dashboardId, UpdateDashboardRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteDashboard(Guid dashboardId, CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> AddWidget(Guid dashboardId, AddWidgetRequest request, CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> UpdateWidget(Guid dashboardId, Guid widgetId, UpdateWidgetRequest request, CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> RemoveWidget(Guid dashboardId, Guid widgetId, CancellationToken ct = default);
+    Task<ApiResult<WidgetDataResponse>> GetWidgetData(Guid dashboardId, Guid widgetId, CancellationToken ct = default);
 
     // ---- Доступ к проектам ----
     Task<ApiResult<IReadOnlyList<ProjectAccessResponse>>> GetMyAccess(CancellationToken ct = default);

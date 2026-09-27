@@ -1,0 +1,339 @@
+@* Настройка виджета дашборда (docs/TZ_task_views.md §8): вид, заголовок и поля своего вида — отбор задач (FQL или
+   сохранённый фильтр), размер списка, поле разбивки и вид графика, окно дней, проект/спринт для burndown, веха, текст
+   заметки; размер и место в сетке 12 колонок. Вид после создания не меняется. Сервер проверяет FQL и фильтр ещё раз —
+   его ошибка показывается под полями. Жизненный цикл MudDialog — как у MilestoneDialog. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject SavedFiltersState Filters
+@inject BrowserInterop Browser
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>@(Widget is null ? "Новый виджет" : "Виджет")</h3>
+    </TitleContent>
+    <DialogContent>
+        <div class="wd-row">
+            <MudSelect T="WidgetType" Label="Вид" Value="_type" ValueChanged="SetType" Disabled="@(Widget is not null)"
+                       Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="wd-field">
+                @foreach (var type in Types)
+                {
+                    <MudSelectItem T="WidgetType" Value="type">@DashboardWidgetView.DefaultTitle(type)</MudSelectItem>
+                }
+            </MudSelect>
+            <DsInput Id="wd-title" Label="Заголовок (необязательно)" MaxLength="80" Placeholder="@DashboardWidgetView.DefaultTitle(_type)"
+                     Value="@_title" ValueChanged="v => _title = v" />
+        </div>
+
+        @if (IsQuery)
+        {
+            <div class="seg wd-seg" role="radiogroup" aria-label="Отбор задач">
+                <button type="button" class="seg-btn @(!_useFilter ? "on" : "")" role="radio" aria-checked="@(!_useFilter)" @onclick="() => _useFilter = false">FQL</button>
+                <button type="button" class="seg-btn @(_useFilter ? "on" : "")" role="radio" aria-checked="@_useFilter" @onclick="() => _useFilter = true">Сохранённый фильтр</button>
+            </div>
+            @if (_useFilter)
+            {
+                <MudSelect T="Guid?" Label="Фильтр" Value="_filterId" ValueChanged="v => _filterId = v" Dense="true" Variant="Variant.Text"
+                           PopoverClass="flow-pop" Class="wd-field" Placeholder="@(Filters.All.Count == 0 ? "Сохранённых фильтров нет" : "Выберите фильтр")">
+                    @foreach (var f in Filters.All)
+                    {
+                        <MudSelectItem T="Guid?" Value="f.Id">@f.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            else
+            {
+                <DsInput Id="wd-fql" Label="FQL — пусто значит все задачи" MaxLength="4000" Placeholder="assignee = currentUser() AND status != done"
+                         Value="@_fql" ValueChanged="v => { _fql = v; _error = null; }" />
+            }
+        }
+
+        @switch (_type)
+        {
+            case WidgetType.TaskList:
+                <MudNumericField T="int" Label="Сколько задач показать" Value="_limit" ValueChanged="v => _limit = v" Min="1" Max="50"
+                                 Variant="Variant.Text" Class="wd-field wd-narrow" />
+                break;
+            case WidgetType.Breakdown:
+                <div class="wd-row">
+                    <MudSelect T="string" Label="Разбить по" Value="_groupBy" ValueChanged="v => _groupBy = v" Dense="true" Variant="Variant.Text"
+                               PopoverClass="flow-pop" Class="wd-field">
+                        @foreach (var (key, label) in GroupOptions)
+                        {
+                            <MudSelectItem T="string" Value="key">@label</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <div class="seg wd-seg" role="radiogroup" aria-label="График">
+                        <button type="button" class="seg-btn @(_chart == "bar" ? "on" : "")" role="radio" aria-checked="@(_chart == "bar")" @onclick="@(() => _chart = "bar")">Полосы</button>
+                        <button type="button" class="seg-btn @(_chart == "pie" ? "on" : "")" role="radio" aria-checked="@(_chart == "pie")" @onclick="@(() => _chart = "pie")">Кольцо</button>
+                    </div>
+                </div>
+                break;
+            case WidgetType.CreatedVsClosed:
+                <MudSelect T="int" Label="Период" Value="_days" ValueChanged="v => _days = v" Dense="true" Variant="Variant.Text"
+                           PopoverClass="flow-pop" Class="wd-field wd-narrow">
+                    @foreach (var days in DayOptions)
+                    {
+                        <MudSelectItem T="int" Value="days">@Ru.Days(days)</MudSelectItem>
+                    }
+                </MudSelect>
+                break;
+            case WidgetType.SprintBurndown:
+            case WidgetType.MilestoneProgress:
+                <div class="wd-row">
+                    <MudSelect T="Guid?" Label="Проект" Value="_boardId" ValueChanged="OnBoardChanged" Dense="true" Variant="Variant.Text"
+                               PopoverClass="flow-pop" Class="wd-field">
+                        @foreach (var b in _boards)
+                        {
+                            <MudSelectItem T="Guid?" Value="b.Id">@b.Key · @b.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (_type == WidgetType.SprintBurndown)
+                    {
+                        <MudSelect T="Guid?" Label="Спринт" Value="_sprintId" ValueChanged="v => _sprintId = v" Dense="true" Variant="Variant.Text"
+                                   PopoverClass="flow-pop" Class="wd-field" Disabled="@(_boardId is null)">
+                            <MudSelectItem T="Guid?" Value="null">Активный спринт</MudSelectItem>
+                            @foreach (var s in _sprints)
+                            {
+                                <MudSelectItem T="Guid?" Value="s.Id">@s.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                    else
+                    {
+                        <MudSelect T="Guid?" Label="Веха" Value="_milestoneId" ValueChanged="v => _milestoneId = v" Dense="true" Variant="Variant.Text"
+                                   PopoverClass="flow-pop" Class="wd-field" Disabled="@(_boardId is null)">
+                            @foreach (var m in _milestones)
+                            {
+                                <MudSelectItem T="Guid?" Value="m.Id">@m.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                </div>
+                break;
+            case WidgetType.Markdown:
+                <MarkdownEditor Value="@_text" ValueChanged="v => _text = v" ShowActions="false" MinHeight="120" AllowEmpty="true"
+                                Placeholder="Заметка для команды: цели, ссылки, договорённости…" />
+                break;
+        }
+
+        <div class="wd-grid">
+            <span class="hint">Место в сетке из 12 колонок@(Widget is null ? " — новый виджет встанет под остальными" : "")</span>
+            <div class="wd-row">
+                @if (Widget is not null)
+                {
+                    <MudNumericField T="int" Label="Колонка" Value="_x + 1" ValueChanged="v => _x = v - 1" Min="1" Max="12" Variant="Variant.Text" Class="wd-field" />
+                    <MudNumericField T="int" Label="Строка" Value="_y + 1" ValueChanged="v => _y = v - 1" Min="1" Max="99" Variant="Variant.Text" Class="wd-field" />
+                }
+                <MudSelect T="int" Label="Ширина" Value="_w" ValueChanged="v => _w = v" Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="wd-field">
+                    @foreach (var (w, label) in Widths)
+                    {
+                        <MudSelectItem T="int" Value="w">@label</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudNumericField T="int" Label="Высота, строк" Value="_h" ValueChanged="v => _h = v" Min="1" Max="8" Variant="Variant.Text" Class="wd-field" />
+            </div>
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Отмена</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="_busy" Busy="_busy">@(Widget is null ? "Добавить" : "Сохранить")</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public Guid DashboardId { get; set; }
+    /// <summary>Виджет для правки; при создании — null.</summary>
+    [Parameter] public DashboardWidgetResponse? Widget { get; set; }
+    [Parameter] public EventCallback<DashboardResponse> OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private static readonly WidgetType[] Types = Enum.GetValues<WidgetType>();
+    private static readonly int[] DayOptions = [7, 14, 30, 60, 90];
+    private static readonly (int W, string Label)[] Widths =
+        [(3, "Четверть"), (4, "Треть"), (6, "Половина"), (8, "Две трети"), (12, "Во всю ширину")];
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private string? _error;
+
+    private WidgetType _type = WidgetType.TaskList;
+    private string _title = "";
+    private bool _useFilter;
+    private string _fql = "";
+    private Guid? _filterId;
+    private int _limit = 10;
+    private string _groupBy = "status";
+    private string _chart = "bar";
+    private int _days = 30;
+    private Guid? _boardId;
+    private Guid? _sprintId;
+    private Guid? _milestoneId;
+    private string _text = "";
+    private int _x, _y, _w = 6, _h = 4;
+
+    private IReadOnlyList<BoardResponse> _boards = [];
+    private IReadOnlyList<SprintResponse> _sprints = [];
+    private IReadOnlyList<MilestoneResponse> _milestones = [];
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    private bool IsQuery => _type is WidgetType.TaskList or WidgetType.Counter or WidgetType.Breakdown or WidgetType.CreatedVsClosed;
+
+    /// <summary>Поля разбивки: системные и пользовательские поля с вариантами — ключ общий для всех проектов, где такое поле есть.</summary>
+    private IEnumerable<(string Key, string Label)> GroupOptions =>
+        new[] { ("status", "Статус"), ("assignee", "Исполнитель"), ("priority", "Приоритет"), ("type", "Тип задачи"), ("project", "Проект") }
+            .Concat(_boards.SelectMany(b => b.CustomFields ?? [])
+                .Where(f => !f.IsArchived && f.Type is CustomFieldType.Select or CustomFieldType.MultiSelect or CustomFieldType.Checkbox)
+                .GroupBy(f => f.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(g => ($"cf:{g.Key}", $"{g.First().Name} (cf.{g.Key})")));
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Widget is { } w)
+        {
+            var c = w.Config;
+            _type = w.Type;
+            _title = w.Title ?? "";
+            _useFilter = c.FilterId is not null;
+            _fql = c.Fql ?? "";
+            _filterId = c.FilterId;
+            _limit = c.Limit ?? 10;
+            _groupBy = c.GroupBy ?? "status";
+            _chart = c.Chart ?? "bar";
+            _days = c.Days ?? 30;
+            _boardId = c.BoardId;
+            _sprintId = c.SprintId;
+            _milestoneId = c.MilestoneId;
+            _text = c.Text ?? "";
+            (_x, _y, _w, _h) = (w.X, w.Y, w.W, w.H);
+        }
+
+        var boards = Api.GetBoards();
+        await Task.WhenAll(boards, Filters.EnsureLoadedAsync());
+        _boards = boards.Result.Ok ? boards.Result.Value! : [];
+
+        // Спринт и веха хранятся без проекта — проект находим по ним, чтобы показать списки.
+        if (_boardId is null && (_sprintId is not null || _milestoneId is not null))
+            _boardId = await FindBoardAsync();
+        if (_boardId is { } board)
+            await LoadBoardListsAsync(board);
+
+        await Task.Delay(50);
+        await Browser.FocusAsync("wd-title", select: true);
+    }
+
+    private async Task<Guid?> FindBoardAsync()
+    {
+        if (_milestoneId is { } m && await Api.GetMilestone(m) is { Ok: true } milestone)
+            return milestone.Value!.BoardId;
+        foreach (var b in _boards)
+            if (await Api.GetSprints(b.Id) is { Ok: true } sprints && sprints.Value!.Any(s => s.Id == _sprintId))
+                return b.Id;
+        return null;
+    }
+
+    private async Task OnBoardChanged(Guid? boardId)
+    {
+        _boardId = boardId;
+        _sprintId = null;
+        _milestoneId = null;
+        if (boardId is { } id)
+            await LoadBoardListsAsync(id);
+    }
+
+    private async Task LoadBoardListsAsync(Guid boardId)
+    {
+        var sprints = Api.GetSprints(boardId);
+        var milestones = Api.GetMilestones(boardId);
+        await Task.WhenAll(sprints, milestones);
+        _sprints = sprints.Result.Ok ? sprints.Result.Value!.Where(s => s.State != SprintState.Planned).ToList() : [];
+        _milestones = milestones.Result.Ok ? milestones.Result.Value! : [];
+    }
+
+    /// <summary>Размер по умолчанию — по виду: счётчику хватает четверти в две строки, списку нужна половина в четыре.</summary>
+    private void SetType(WidgetType type)
+    {
+        _type = type;
+        _error = null;
+        (_w, _h) = type switch
+        {
+            WidgetType.Counter => (3, 2),
+            WidgetType.Breakdown => (4, 3),
+            WidgetType.TaskList => (6, 4),
+            WidgetType.MilestoneProgress => (4, 2),
+            WidgetType.Markdown => (4, 2),
+            _ => (6, 3)
+        };
+    }
+
+    private WidgetConfig Config() => _type switch
+    {
+        WidgetType.TaskList => Query() with { Limit = _limit },
+        WidgetType.Counter => Query(),
+        WidgetType.Breakdown => Query() with { GroupBy = _groupBy, Chart = _chart },
+        WidgetType.CreatedVsClosed => Query() with { Days = _days },
+        WidgetType.SprintBurndown => new WidgetConfig(BoardId: _sprintId is null ? _boardId : null, SprintId: _sprintId),
+        WidgetType.MilestoneProgress => new WidgetConfig(MilestoneId: _milestoneId),
+        _ => new WidgetConfig(Text: _text)
+    };
+
+    private WidgetConfig Query() => _useFilter ? new WidgetConfig(FilterId: _filterId) : new WidgetConfig(Fql: _fql);
+
+    private async Task Save()
+    {
+        _error = _type switch
+        {
+            _ when IsQuery && _useFilter && _filterId is null => "Выберите сохранённый фильтр.",
+            WidgetType.SprintBurndown when _boardId is null => "Выберите проект.",
+            WidgetType.MilestoneProgress when _milestoneId is null => "Выберите веху.",
+            _ when _x + _w > 12 => "Виджет не помещается: колонка + ширина больше 12.",
+            _ => null
+        };
+        if (_error is not null)
+            return;
+
+        var title = string.IsNullOrWhiteSpace(_title) ? null : _title.Trim();
+        _busy = true;
+        var result = Widget is null
+            ? await Api.AddWidget(DashboardId, new AddWidgetRequest(_type, title, Config(), W: _w, H: _h))
+            : await Api.UpdateWidget(DashboardId, Widget.Id, new UpdateWidgetRequest(title, Config(), _x, _y, _w, _h));
+        _busy = false;
+
+        if (!result.Ok)
+        {
+            _error = result.FqlError is { } fql ? $"FQL: {fql.Message}" : result.Error ?? "Не удалось сохранить виджет";
+            return;
+        }
+
+        await CloseDialog();
+        await OnSaved.InvokeAsync(result.Value!);
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

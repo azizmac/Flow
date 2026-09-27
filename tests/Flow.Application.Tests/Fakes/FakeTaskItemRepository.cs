@@ -82,6 +82,43 @@ public sealed class FakeTaskItemRepository(FakeBoardRepository? boards = null) :
                 g.Count(t => Final(t) && t.StatusChangedAt >= closedSince)));
     }
 
+    public Task<IReadOnlyList<TaskGroupCount>> GroupCountAsync(
+        TaskListFilter filter, TaskGroupField field, IReadOnlyList<Guid>? customFieldIds, CancellationToken cancellationToken)
+    {
+        var items = Filtered(filter).ToList();
+        IEnumerable<string?> Keys(TaskItem t) => field switch
+        {
+            TaskGroupField.Status => [t.StatusId.ToString()],
+            TaskGroupField.Assignee => [t.AssigneeId?.ToString()],
+            TaskGroupField.Priority => [((int)t.Priority).ToString()],
+            TaskGroupField.Type => [t.TypeId.ToString()],
+            TaskGroupField.Board => [t.BoardId.ToString()],
+            _ => (customFieldIds ?? []).Select(t.GetCustomField).FirstOrDefault(v => v is not null) switch
+            {
+                { ValueKind: System.Text.Json.JsonValueKind.Array } arr when arr.GetArrayLength() > 0 => arr.EnumerateArray().Select(e => (string?)e.ToString()),
+                { ValueKind: not System.Text.Json.JsonValueKind.Array } one => [one.ToString()],
+                _ => [null]
+            }
+        };
+
+        return Task.FromResult<IReadOnlyList<TaskGroupCount>>(items.SelectMany(Keys)
+            .GroupBy(k => k)
+            .Select(g => new TaskGroupCount(g.Key, g.Count()))
+            .ToList());
+    }
+
+    public async Task<TaskDailyCounts> DailyCountsAsync(TaskListFilter filter, DateTime since, CancellationToken cancellationToken)
+    {
+        var finalStatuses = boards is null
+            ? []
+            : (await boards.GetAllAsync(cancellationToken)).SelectMany(b => b.Statuses).Where(s => s.IsFinal).Select(s => s.Id).ToHashSet();
+        var items = Filtered(filter).ToList();
+        return new TaskDailyCounts(
+            items.Where(t => t.CreatedAt >= since).GroupBy(t => DateOnly.FromDateTime(t.CreatedAt)).ToDictionary(g => g.Key, g => g.Count()),
+            items.Where(t => finalStatuses.Contains(t.StatusId) && t.StatusChangedAt >= since)
+                .GroupBy(t => DateOnly.FromDateTime(t.StatusChangedAt)).ToDictionary(g => g.Key, g => g.Count()));
+    }
+
     public Task<IReadOnlyList<Guid>> MatchingIdsAsync(TaskListFilter filter, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Guid>>(Filtered(filter).Select(t => t.Id).ToList());
 
