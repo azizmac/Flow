@@ -43,6 +43,7 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<ISprintRepository, SprintRepository>();
         services.AddScoped<IMilestoneRepository, MilestoneRepository>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
+        services.AddScoped<ITaskCodeAliasRepository, TaskCodeAliasRepository>();
         services.AddScoped<IBoardMemberRepository, BoardMemberRepository>();
         services.AddScoped<ITaskItemRepository, TaskItemRepository>();
         services.AddScoped<IUserRepository, UserRepository>();

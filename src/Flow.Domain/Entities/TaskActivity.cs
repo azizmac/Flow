@@ -128,6 +128,15 @@ public sealed class TaskActivity
     private static string LinkSide(TaskLinkType type, bool outward) =>
         outward || type == TaskLinkType.RelatesTo ? type.ToString() : $"{type}:in";
 
+    public static TaskActivity Merged(Guid taskId, Guid actorId, Guid sourceTaskId, Guid targetTaskId) =>
+        new(taskId, actorId, TaskActivityType.Merged, sourceTaskId.ToString(), targetTaskId.ToString());
+
+    public static TaskActivity Split(Guid taskId, Guid actorId, IEnumerable<string> newCodes) =>
+        new(taskId, actorId, TaskActivityType.Split, null, string.Join(", ", newCodes));
+
+    public static TaskActivity Moved(Guid taskId, Guid actorId, string oldCode, string newCode) =>
+        new(taskId, actorId, TaskActivityType.Moved, oldCode, newCode);
+
     public static TaskActivity CommentAdded(Guid taskId, Guid actorId, Guid commentId) =>
         new(taskId, actorId, TaskActivityType.CommentAdded, null, commentId.ToString());
 

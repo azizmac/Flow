@@ -2697,3 +2697,16 @@ a.task-row { color: inherit; text-decoration: none; }
 .wd-seg { align-self: flex-start; margin: 4px 0; }
 .wd-narrow { max-width: 220px; }
 .wd-grid { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+
+/* ---- Слияние, разделение, перенос (docs/TZ_task_model.md §6, этап 1E) ---- */
+.rs-parts { display: flex; flex-direction: column; gap: 6px; }
+.rs-part { display: flex; align-items: flex-end; gap: 8px; }
+.rs-part > .ds-field, .rs-part > div:not(.rs-num) { flex: 1; min-width: 0; }
+.rs-num { flex: none; width: 18px; padding-bottom: 8px; color: var(--text-tertiary); font: var(--fw-semibold) 12px var(--font-display); text-align: right; }
+.rs-notes { margin: 10px 0 0; padding-left: 18px; color: var(--text-secondary); font: var(--fw-medium) 13px var(--font-text); display: flex; flex-direction: column; gap: 4px; }
+.rs-notes .warn { color: var(--accent); }
+.rs-facts { display: flex; gap: 14px; margin: 10px 0 0; color: var(--text-primary); font: var(--fw-semibold) 13px var(--font-display); }
+.rs-map { margin-top: 10px; }
+.rs-map td { vertical-align: middle; }
+.rs-map .rs-inline { min-width: 160px; }
+.tl-code { margin-right: 6px; font: var(--fw-semibold) 12px var(--font-mono); color: var(--accent); text-decoration: none; }

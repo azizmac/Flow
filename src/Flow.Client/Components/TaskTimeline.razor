@@ -331,7 +331,7 @@
 
     private static readonly TaskActivityType[] HierarchyTypes =
         [TaskActivityType.ParentChanged, TaskActivityType.ChildAdded, TaskActivityType.ChildRemoved,
-         TaskActivityType.LinkAdded, TaskActivityType.LinkRemoved];
+         TaskActivityType.LinkAdded, TaskActivityType.LinkRemoved, TaskActivityType.Merged];
 
     /// <summary>Коды задач из записей об иерархии — по запросу на задачу; таких записей обычно единицы.</summary>
     private async Task LoadTaskRefsAsync(CancellationToken ct)
@@ -472,11 +472,23 @@
         TaskActivityType.SprintChanged => Sprints(a),
         TaskActivityType.MilestoneChanged => Milestones(a),
         TaskActivityType.CustomFieldChanged => CustomField(a),
+        TaskActivityType.Merged when a.NewValue == TaskItem.Id.ToString() => @<span>влита задача @TaskRef(a.OldValue)</span>,
+        TaskActivityType.Merged => @<span>влита в @TaskRef(a.NewValue) как дубликат</span>,
+        TaskActivityType.Split => SplitCodes(a.NewValue),
+        TaskActivityType.Moved => @<span>перенос: <s class="tl-old">@a.OldValue</s> <span class="tl-arrow">→</span> <b>@a.NewValue</b></span>,
         TaskActivityType.ChecklistChanged => @<span>чек-лист: <s class="tl-old">@a.OldValue</s> <span class="tl-arrow">→</span> <b>@a.NewValue</b></span>,
         _ => Text(a.Type.ToString())
     };
 
     private static RenderFragment Text(string text) => @<span>@text</span>;
+
+    /// <summary>Коды выделенных задач — ссылками /tasks/{код}: коды живут дольше Id в тексте журнала.</summary>
+    private static RenderFragment SplitCodes(string? codes) => @<span>выделены задачи:
+        @foreach (var taskCode in (codes ?? "").Split(", ", StringSplitOptions.RemoveEmptyEntries))
+        {
+            <a class="tl-code" href="@($"tasks/{taskCode}")">@taskCode</a>
+        }
+    </span>;
 
     /// <summary>OldValue связи — имя вида, у входящей стороны с «:in» (см. TaskActivity.LinkAdded в домене).</summary>
     private static string LinkSide(string? value)

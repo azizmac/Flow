@@ -1,0 +1,92 @@
+@* Слияние (docs/TZ_task_model.md §6): эта задача вливается в выбранную. Комментарии (с пометкой «из КОДА»),
+   вложения без повторов, связи и подзадачи переходят к основной; эта закрывается финальным статусом со связью
+   «дубликат». Описание и поля не сливаются. Выбор основной — MudAutocomplete с серверным поиском по коду и названию
+   среди видимых проектов. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Слить @Task.Code с другой задачей</h3>
+        <div class="hint">«@Task.Title» станет дубликатом и закроется. К основной задаче перейдут комментарии, вложения, связи и подзадачи.</div>
+    </TitleContent>
+    <DialogContent>
+        <MudAutocomplete T="TaskResponse" Label="Основная задача" Value="_target" ValueChanged="v => { _target = v; _error = null; }"
+                         SearchFunc="SearchAsync" ToStringFunc="@(t => t is null ? "" : $"{t.Code} · {t.Title}")" DebounceInterval="250"
+                         MinCharacters="1" ResetValueOnEmptyText="true" Variant="Variant.Text" Dense="true" PopoverClass="flow-pop"
+                         Placeholder="Код или название" AutoFocus="true" Class="rs-autocomplete">
+            <ItemTemplate Context="t">
+                <span class="pop-task"><span class="code">@t.Code</span>@t.Title</span>
+            </ItemTemplate>
+        </MudAutocomplete>
+        <ul class="rs-notes">
+            <li>Описание и пользовательские поля основной задачи не меняются.</li>
+            <li>Повторяющиеся по содержимому файлы останутся у дубликата.</li>
+        </ul>
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Отмена</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="@(_busy || _target is null)" Busy="_busy">Слить</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public TaskResponse Task { get; set; } = default!;
+    [Parameter] public EventCallback<TaskResponse> OnDone { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private TaskResponse? _target;
+    private string? _error;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    private async Task<IEnumerable<TaskResponse>> SearchAsync(string? query, CancellationToken token)
+    {
+        var result = await Api.SearchTasks(query: query, limit: 10, ct: token);
+        return result.Ok ? result.Value!.Items.Where(t => t.Id != Task.Id) : [];
+    }
+
+    private async Task Save()
+    {
+        _busy = true;
+        var result = await Api.MergeTask(Task.Id, new MergeTaskRequest(_target!.Id));
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось слить задачи";
+            return;
+        }
+
+        await CloseDialog();
+        await OnDone.InvokeAsync(result.Value!);
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? System.Threading.Tasks.Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

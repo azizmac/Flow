@@ -133,6 +133,13 @@ public interface IFlowApi
     Task<ApiResult<bool>> DeleteMilestone(Guid milestoneId, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> SetTaskMilestone(Guid taskId, SetTaskMilestoneRequest request, CancellationToken ct = default);
 
+    // Слияние, разделение, перенос (docs/TZ_task_model.md §6); код — живой или прежний (после переноса).
+    Task<ApiResult<TaskResponse>> GetTaskByCode(string code, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> MergeTask(Guid taskId, MergeTaskRequest request, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskResponse>>> SplitTask(Guid taskId, SplitTaskRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskMovePreviewResponse>> PreviewTaskMove(Guid taskId, MoveTaskRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> MoveTask(Guid taskId, MoveTaskRequest request, CancellationToken ct = default);
+
     // Дашборды (docs/TZ_task_views.md §8): данные каждого виджета — отдельным вызовом; ошибка виджета — в WidgetDataResponse.Error.
     Task<ApiResult<IReadOnlyList<DashboardResponse>>> GetDashboards(CancellationToken ct = default);
     Task<ApiResult<DashboardResponse>> GetDefaultDashboard(CancellationToken ct = default);

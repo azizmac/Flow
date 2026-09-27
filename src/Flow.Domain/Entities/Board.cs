@@ -530,6 +530,28 @@ public sealed partial class Board
         return task;
     }
 
+    /// <summary>
+    /// Принимает задачу из другого проекта (docs/TZ_task_model.md §6): новый код из счётчика этого проекта, статус
+    /// и тип — этого проекта (тип не архивный). Статус и тип подбирает хендлер по картам и видам; workflow здесь
+    /// не проверяется — перенос служебный, как перевод задач при удалении статуса. Возвращает прежний код.
+    /// </summary>
+    public TaskCode ReceiveTask(TaskItem task, Guid statusId, Guid typeId, string rank, string customFieldsJson, bool keepParent)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        if (task.BoardId == Id)
+            throw new InvalidOperationException("Задача уже в этом проекте.");
+        if (_statuses.All(s => s.Id != statusId))
+            throw new InvalidOperationException($"Status {statusId} does not belong to board {Id}.");
+        if (GetTaskType(typeId).IsArchived)
+            throw new InvalidOperationException($"Task type {typeId} is archived.");
+        Ranking.FractionalIndex.Validate(rank);
+
+        var old = task.Code;
+        NextTaskNumber++;
+        task.Relocate(Id, TaskCode.Create(Key, NextTaskNumber), statusId, typeId, rank, customFieldsJson, keepParent);
+        return old;
+    }
+
     // ---- Workflow (docs/TZ_workflow_config.md §2) ----
 
     /// <summary>

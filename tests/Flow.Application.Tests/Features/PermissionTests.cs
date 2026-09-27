@@ -1,5 +1,6 @@
 using Flow.Application.Features.Dashboards;
 using Flow.Application.Features.Filters;
+using Flow.Application.Features.Tasks.Restructure;
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
@@ -524,5 +525,53 @@ public class PermissionTests
         Task Delete() => mediator.Send(new DashboardDeleteCommand(actor, dashboard.Id), CancellationToken.None);
 
         if (allowed) await Delete(); else await Forbidden(Delete);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Developer, true)]
+    public async Task Merge_Needs_Edit_On_Both_Tasks(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var board = await CreateBoardAsync(mediator);
+        var source = await CreateTaskAsync(mediator, Owner, board);
+        var target = await CreateTaskAsync(mediator, Owner, board);
+
+        Task Merge() => mediator.Send(new TaskMergeCommand(actor, source, target), CancellationToken.None);
+
+        if (allowed) await Merge(); else await Forbidden(Merge);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Reader, false)]
+    [InlineData(UserRole.Member, true)]
+    public async Task Split_Needs_Edit_And_Create(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var board = await CreateBoardAsync(mediator);
+        // Своя задача Member: создал сам — правка разрешена правом EditOwnTask.
+        var source = await CreateTaskAsync(mediator, allowed ? actor : Owner, board);
+
+        Task Split() => mediator.Send(new TaskSplitCommand(actor, source, [new Flow.Shared.Contracts.Tasks.SplitPart("Часть")]), CancellationToken.None);
+
+        if (allowed) await Split(); else await Forbidden(Split);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Developer, true)]
+    public async Task Move_Needs_Edit_In_Source_And_Create_In_Target(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var board = await CreateBoardAsync(mediator);
+        var target = (await mediator.Send(new BoardCreateCommand(Owner, "Цель", "DST"), CancellationToken.None)).Response!.Id;
+        var task = await CreateTaskAsync(mediator, Owner, board);
+
+        Task Move() => mediator.Send(new TaskMoveCommand(actor, task, target), CancellationToken.None);
+
+        if (allowed) await Move(); else await Forbidden(Move);
     }
 }

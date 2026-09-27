@@ -16,6 +16,9 @@ public sealed class AttachmentRepository(FlowDbContext db) : IAttachmentReposito
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Attachment>> GetByTaskIdForUpdateAsync(Guid taskId, CancellationToken cancellationToken) =>
+        await db.Attachments.Where(a => a.TaskId == taskId).OrderBy(a => a.UploadedAt).ToListAsync(cancellationToken);
+
     /// <summary>Счёт и сумма одним запросом: лимиты проверяются перед каждой загрузкой.</summary>
     public async Task<AttachmentUsage> GetUsageAsync(Guid taskId, CancellationToken cancellationToken)
     {

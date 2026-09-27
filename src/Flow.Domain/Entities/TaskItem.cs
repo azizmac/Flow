@@ -384,6 +384,38 @@ public sealed class TaskItem
         return (old, next);
     }
 
+    /// <summary>
+    /// Копия значений пользовательских полей задачи того же проекта — для разделения (§6): новые части
+    /// наследуют поля образца. Значения уже прошли валидатор у образца, повторно их не проверяем.
+    /// </summary>
+    public void CopyCustomFieldsFrom(TaskItem source)
+    {
+        if (source.BoardId != BoardId)
+            throw new InvalidOperationException("Custom field values can be copied only within one project.");
+
+        CustomFieldsJson = source.CustomFieldsJson;
+    }
+
+    /// <summary>
+    /// Переезд в другой проект (§6) — только через <see cref="Board.ReceiveTask"/>: код, статус, тип, ранг и значения
+    /// полей уже пересчитаны под целевой проект. Спринт и веха принадлежат проекту и сбрасываются; родитель остаётся,
+    /// только если он переезжает вместе с задачей (поддерево).
+    /// </summary>
+    internal void Relocate(Guid boardId, TaskCode code, Guid statusId, Guid typeId, string rank, string customFieldsJson, bool keepParent)
+    {
+        FractionalIndex.Validate(rank);
+        BoardId = boardId;
+        Code = code;
+        StatusId = statusId;
+        TypeId = typeId;
+        Rank = rank;
+        CustomFieldsJson = customFieldsJson;
+        SprintId = null;
+        MilestoneId = null;
+        if (!keepParent)
+            ParentId = null;
+    }
+
     /// <summary>Ставит IUnitOfWork, когда при сохранении изменился StatusId.</summary>
     public void MarkStatusChanged(DateTime utcNow) => StatusChangedAt = utcNow;
 

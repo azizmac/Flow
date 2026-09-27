@@ -14,8 +14,12 @@ public sealed class FakeTaskItemRepository(FakeBoardRepository? boards = null) :
     public Task<TaskItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(_tasks.SingleOrDefault(t => t.Id == id));
 
+    /// <summary>Прежние коды (FakeTaskCodeAliasRepository): живой код важнее алиаса, как в SQL.</summary>
+    public Func<string, Guid?>? AliasLookup { get; set; }
+
     public Task<TaskItem?> GetByCodeAsync(string code, CancellationToken cancellationToken) =>
-        Task.FromResult(_tasks.FirstOrDefault(t => string.Equals(t.Code.Value, code, StringComparison.OrdinalIgnoreCase)));
+        Task.FromResult(_tasks.FirstOrDefault(t => string.Equals(t.Code.Value, code, StringComparison.OrdinalIgnoreCase))
+                        ?? (AliasLookup?.Invoke(code.Trim().ToUpperInvariant()) is { } id ? _tasks.SingleOrDefault(t => t.Id == id) : null));
 
     public Task<IReadOnlyList<TaskItem>> GetByBoardIdAsync(Guid boardId, Guid? assigneeId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<TaskItem>>(_tasks

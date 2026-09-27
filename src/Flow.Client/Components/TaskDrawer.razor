@@ -109,7 +109,9 @@ else if (Item is not null)
                на /tasks/{id} — там раскладка страницы задачи (описание слева, мета-карточка справа). *@
             <DsIconButton Icon="expand" Size="30" Title="На всю страницу" OnClick="OpenFullPage" />
             <RowMenu ShowOpen="false" ShowRename="CanEdit" ShowDelete="CanEdit" Size="30" Style="color:rgba(255,255,255,0.5)"
-                     OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => OnDelete.InvokeAsync(Item)" />
+                     OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => OnDelete.InvokeAsync(Item)" ShowRestructure="CanEdit"
+                     OnSplit="() => _restructure = TaskRestructureMode.Split" OnMerge="() => _restructure = TaskRestructureMode.Merge"
+                     OnMove="() => _restructure = TaskRestructureMode.Move" />
             <DsIconButton Icon="close" Size="30" Title="Закрыть (Esc)" OnClick="Close" />
         </div>
     </div>
@@ -222,6 +224,12 @@ else if (Item is not null)
     </div>
 }
 
+
+@if (_restructure != TaskRestructureMode.None && Item is not null)
+{
+    <TaskRestructure Task="Item" @bind-Mode="_restructure" OnDone="AfterRestructure" />
+}
+
 @code {
     /// <summary>Раскладка карточки для типа задачи (экран типа → «для всех типов» → встроенный).</summary>
     private IReadOnlyList<ScreenFieldDto> DetailLayout => ScreenLayout.Resolve(Board, Current.TypeId, ScreenContext.Detail, Current.CustomFields);
@@ -299,6 +307,19 @@ else if (Item is not null)
     [Parameter] public Guid? OnlyAssigneeId { get; set; }
 
     private bool IsCreate => Item is null;
+
+    private TaskRestructureMode _restructure;
+
+    /// <summary>
+    /// Разделение добавило задачи в список; слияние закрыло эту, перенос увёл её из проекта — список перечитывается,
+    /// а после слияния и переноса слайдер закрывается: показывать в нём больше нечего.
+    /// </summary>
+    private async Task AfterRestructure(TaskResponse next)
+    {
+        await OnHierarchyChanged.InvokeAsync();
+        if (next.Id != Item?.Id || next.BoardId != Item.BoardId)
+            await OnClose.InvokeAsync();
+    }
 
     private string _title = "";
     private string _description = "";

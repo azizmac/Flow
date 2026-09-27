@@ -30,7 +30,9 @@
         {
             <button type="button" class="icon-lnk" @onclick="CopyLink"><Icon Name="copy" Size="14" />Скопировать ссылку</button>
             <RowMenu ShowOpen="false" ShowRename="CanEdit" ShowDelete="CanEdit" Size="30" Style="color:rgba(255,255,255,0.5)"
-                     OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => _deleting = true" />
+                     OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => _deleting = true" ShowRestructure="CanEdit"
+                     OnSplit="() => _restructure = TaskRestructureMode.Split" OnMerge="() => _restructure = TaskRestructureMode.Merge"
+                     OnMove="() => _restructure = TaskRestructureMode.Move" />
         }
     </div>
 </div>
@@ -205,6 +207,11 @@ else if (_task is not null && _board is not null)
     </div>
 }
 
+@if (_restructure != TaskRestructureMode.None && _task is not null)
+{
+    <TaskRestructure Task="_task" @bind-Mode="_restructure" OnDone="AfterRestructure" />
+}
+
 @if (_deleting && _task is not null)
 {
     <ConfirmDialog Title="@($"Удалить задачу {_task.Code}?")"
@@ -262,6 +269,7 @@ else if (_task is not null && _board is not null)
     private DateTime? _savedAt;
     private CancellationTokenSource? _savedCts;
     private bool _deleting;
+    private TaskRestructureMode _restructure;
 
     // Права в проекте задачи (docs/TZ_project_access.md) — только показ; Flow.Api ответит 403, если что.
     private UserResponse? Me => Users.Find(State.CurrentUserId);
@@ -317,6 +325,18 @@ else if (_task is not null && _board is not null)
             if (e.Key == "Enter" && e.Ctrl && _editingDesc) e.Handled = true;
             return Task.CompletedTask;
         });
+    }
+
+    /// <summary>После слияния — к основной задаче; после переноса или разделения — перечитать эту (новый код, связи).</summary>
+    private async Task AfterRestructure(TaskResponse next)
+    {
+        if (next.Id != Id)
+        {
+            Nav.NavigateTo($"tasks/{next.Id}");
+            return;
+        }
+
+        await Load();
     }
 
     private void OnUsersChanged() => InvokeAsync(StateHasChanged);

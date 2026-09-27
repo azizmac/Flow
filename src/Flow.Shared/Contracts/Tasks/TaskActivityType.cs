@@ -32,5 +32,8 @@ public enum TaskActivityType
     MilestoneChanged = 22,
 
     /// <summary>Пользовательское поле: OldValue — прежнее значение JSON, NewValue — {"field": Id поля, "value": новое}.</summary>
-    CustomFieldChanged = 23
+    CustomFieldChanged = 23,
+    Merged = 24,
+    Split = 25,
+    Moved = 26
 }

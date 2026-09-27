@@ -349,13 +349,16 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
     /// выражения EF не переводит. Коды в базе всегда в верхнем регистре (ключ доски такой), запрос
     /// приводится к нему здесь.
     /// </summary>
-    public Task<TaskItem?> GetByCodeAsync(string code, CancellationToken cancellationToken)
+    public async Task<TaskItem?> GetByCodeAsync(string code, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(code))
-            return Task.FromResult<TaskItem?>(null);
+            return null;
 
-        var normalized = TaskCode.FromValue(code.Trim().ToUpperInvariant());
-        return db.TaskItems.FirstOrDefaultAsync(t => t.Code == normalized, cancellationToken);
+        var raw = code.Trim().ToUpperInvariant();
+        var normalized = TaskCode.FromValue(raw);
+        // Живой код важнее алиаса: алиас — прежний код задачи, переехавшей в другой проект (docs/TZ_task_model.md §6).
+        return await db.TaskItems.FirstOrDefaultAsync(t => t.Code == normalized, cancellationToken)
+               ?? await db.TaskItems.FirstOrDefaultAsync(t => db.TaskCodeAliases.Any(a => a.Code == raw && a.TaskId == t.Id), cancellationToken);
     }
 
     public async Task<IReadOnlyList<TaskItem>> GetChildrenAsync(Guid parentId, CancellationToken cancellationToken) =>

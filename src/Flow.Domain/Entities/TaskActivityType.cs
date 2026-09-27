@@ -35,5 +35,14 @@ public enum TaskActivityType
     MilestoneChanged = 22,
 
     /// <summary>Пользовательское поле: OldValue — прежнее значение JSON, NewValue — {"field": Id поля, "value": новое}.</summary>
-    CustomFieldChanged = 23
+    CustomFieldChanged = 23,
+
+    /// <summary>Слияние (docs/TZ_task_model.md §6) — у обеих задач: OldValue — Guid влитой (source), NewValue — Guid основной (target).</summary>
+    Merged = 24,
+
+    /// <summary>Разделение — у исходной задачи: NewValue — коды новых задач через запятую.</summary>
+    Split = 25,
+
+    /// <summary>Перенос в другой проект: OldValue — прежний код, NewValue — новый.</summary>
+    Moved = 26
 }

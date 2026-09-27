@@ -15,6 +15,9 @@ public interface IAttachmentRepository
     /// <summary>Тот же файл в той же задаче: повтор отклоняется, между задачами дубли допустимы.</summary>
     Task<Attachment?> FindDuplicateAsync(Guid taskId, byte[] contentHash, CancellationToken cancellationToken);
 
+    /// <summary>Вложения задачи с отслеживанием — для правки владельца при слиянии и переносе (docs/TZ_task_model.md §6).</summary>
+    Task<IReadOnlyList<Attachment>> GetByTaskIdForUpdateAsync(Guid taskId, CancellationToken cancellationToken);
+
     void Add(Attachment attachment);
 
     void Remove(Attachment attachment);

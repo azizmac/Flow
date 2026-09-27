@@ -1,0 +1,48 @@
+@* /tasks/{код} — задача по коду, живому или прежнему (после переноса в другой проект, docs/TZ_task_model.md §6):
+   находит её и уводит на /tasks/{id}. Маршрут с Guid-ограничением у TaskPage точнее, поэтому Id сюда не попадает. *@
+@page "/tasks/{Code}"
+@inject IFlowApi Api
+@inject NavigationManager Nav
+
+<PageTitle>@Code — Flow</PageTitle>
+
+<div class="content">
+    @if (_notFound)
+    {
+        <div class="empty">
+            <div class="empty-title">Задача @Code не найдена</div>
+            <a href="tasks">К задачам</a>
+        </div>
+    }
+    else if (_error is not null)
+    {
+        <div class="empty">
+            <div class="empty-title">Не удалось открыть задачу</div>
+            <div>@_error</div>
+        </div>
+    }
+    else
+    {
+        <Skeleton Kind="task" />
+    }
+</div>
+
+@code {
+    [Parameter] public string Code { get; set; } = "";
+
+    private bool _notFound;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _notFound = false;
+        _error = null;
+        var result = await Api.GetTaskByCode(Code);
+        if (result.Ok)
+            Nav.NavigateTo($"tasks/{result.Value!.Id}", replace: true);
+        else if (result.NotFound)
+            _notFound = true;
+        else
+            _error = result.Error;
+    }
+}

@@ -12,6 +12,9 @@ public sealed class FakeAttachmentRepository : IAttachmentRepository
     public Task<Attachment?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(_attachments.FirstOrDefault(a => a.Id == id));
 
+    public Task<IReadOnlyList<Attachment>> GetByTaskIdForUpdateAsync(Guid taskId, CancellationToken cancellationToken) =>
+        GetByTaskIdAsync(taskId, cancellationToken);
+
     public Task<IReadOnlyList<Attachment>> GetByTaskIdAsync(Guid taskId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Attachment>>(
             _attachments.Where(a => a.TaskId == taskId).OrderBy(a => a.UploadedAt).ToList());
@@ -55,6 +58,15 @@ public sealed class InMemoryFileStorage : IFileStorage
 
     public Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken) =>
         Task.FromResult<Stream?>(_objects.TryGetValue(key, out var bytes) ? new MemoryStream(bytes) : null);
+
+    public Task<bool> CopyAsync(string sourceKey, string targetKey, CancellationToken cancellationToken)
+    {
+        if (!_objects.TryGetValue(sourceKey, out var bytes))
+            return Task.FromResult(false);
+
+        _objects[targetKey] = bytes;
+        return Task.FromResult(true);
+    }
 
     public Task DeleteAsync(string key, CancellationToken cancellationToken)
     {

@@ -69,6 +69,21 @@ public sealed class TaskComment
         return true;
     }
 
+    /// <summary>
+    /// Переносит комментарий в другую задачу при слиянии (docs/TZ_task_model.md §6): автор и дата сохраняются,
+    /// в начало тела дописывается «_из PROJ-12_», чтобы в ленте было видно, откуда он. Длинное тело обрезается
+    /// по пределу — лучше потерять хвост, чем сорвать всё слияние.
+    /// </summary>
+    public void TransferTo(Guid taskId, string sourceCode)
+    {
+        if (taskId == Guid.Empty)
+            throw new ArgumentException("Task id must not be empty.", nameof(taskId));
+
+        var body = $"_из {sourceCode}_\n\n{Body}";
+        TaskId = taskId;
+        Body = body.Length <= BodyMaxLength ? body : body[..BodyMaxLength];
+    }
+
     private void ReplaceMentions(IEnumerable<Guid> mentions)
     {
         _mentions.Clear();

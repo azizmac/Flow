@@ -12,6 +12,9 @@ public sealed class FakeTaskCommentRepository : ITaskCommentRepository
     public Task<TaskComment?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(_comments.SingleOrDefault(c => c.Id == id));
 
+    public Task<IReadOnlyList<TaskComment>> GetByTaskIdForUpdateAsync(Guid taskId, CancellationToken cancellationToken) =>
+        GetByTaskIdAsync(taskId, cancellationToken);
+
     public Task<IReadOnlyList<TaskComment>> GetByTaskIdAsync(Guid taskId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<TaskComment>>(_comments.Where(c => c.TaskId == taskId).OrderBy(c => c.CreatedAt).ToList());
 
