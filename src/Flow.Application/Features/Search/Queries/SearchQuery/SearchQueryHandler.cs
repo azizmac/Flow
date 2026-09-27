@@ -168,28 +168,45 @@ internal sealed class SearchQueryHandler(
     /// Переупорядочивает отобранное первой ступенью. Недоступная модель — не ошибка запроса: выдача
     /// уже есть, она просто остаётся гибридной, и клиент видит это по Reranked = false.
     /// </summary>
+    /// <remarks>
+    /// Находки визуальной половины (<see cref="SearchHit.IsVisual"/>) модели не показываются и остаются
+    /// на своих местах: реранкер текстовый, а у картинки, найденной по кадру, в чанке только имя файла.
+    /// Оценил бы он «IMG_1234.jpg» против запроса «красный квадрат» — и утопил бы ровно то, что нашла
+    /// визуальная модель. Текстовые находки пересортировываются между собой на оставшихся местах.
+    /// </remarks>
     private async Task<(IReadOnlyList<SearchHit> Hits, bool Reranked)> RerankAsync(
         string query,
         IReadOnlyList<SearchHit> hits,
         CancellationToken cancellationToken)
     {
-        if (hits.Count <= 1)
+        var slots = hits.Select((hit, position) => (hit, position))
+            .Where(pair => !pair.hit.IsVisual)
+            .Select(pair => pair.position)
+            .ToArray();
+
+        if (slots.Length <= 1)
             return (hits, false);
+
+        var textual = slots.Select(position => hits[position]).ToArray();
 
         try
         {
-            var scores = await reranker.RankAsync(query, hits.Select(Document).ToArray(), cancellationToken);
+            var scores = await reranker.RankAsync(query, textual.Select(Document).ToArray(), cancellationToken);
             if (scores.Count == 0)
                 return (hits, false);
 
-            var ordered = scores.OrderByDescending(score => score.Score).Select(score => hits[score.Index]).ToList();
+            var ordered = scores.OrderByDescending(score => score.Score).Select(score => textual[score.Index]).ToList();
 
             // Документы, которых модель не оценила, уходят в хвост в исходном порядке: выбросить их
             // нельзя — первая ступень их уже нашла, а человек ждёт полную страницу.
             var scored = scores.Select(score => score.Index).ToHashSet();
-            ordered.AddRange(hits.Where((_, position) => !scored.Contains(position)));
+            ordered.AddRange(textual.Where((_, index) => !scored.Contains(index)));
 
-            return (ordered, true);
+            var result = hits.ToArray();
+            for (var i = 0; i < slots.Length; i++)
+                result[slots[i]] = ordered[i];
+
+            return (result, true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
