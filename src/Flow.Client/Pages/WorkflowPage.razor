@@ -161,6 +161,19 @@
                     <MudCheckBox T="bool" Value="edit.Conditions.RequireChecklistDone" Disabled="!CanEdit" Size="Size.Small" Color="Color.Primary" Dense="true"
                                  Label="Чек-лист выполнен" ValueChanged="v => Update(cell, edit with { Conditions = edit.Conditions with { RequireChecklistDone = v } })" />
                 </div>
+                @if ((_board.CustomFields ?? []).Any(f => !f.IsArchived) || edit.Conditions.RequireFields is { Count: > 0 })
+                {
+                    @* Обязательные пользовательские поля перехода (этап 3C): «в “На проверке” — только с заполненными “Шагами”». *@
+                    <MudSelect T="Guid" MultiSelection="true" Label="Заполнены поля" Disabled="!CanEdit" Dense="true" Variant="Variant.Text"
+                               SelectedValues="@(edit.Conditions.RequireFields ?? [])" PopoverClass="flow-pop" Class="cf-select wf-fields"
+                               MultiSelectionTextFunc="@(ids => ids.Count == 0 ? "—" : string.Join(", ", ids.Select(FieldName)))"
+                               SelectedValuesChanged="ids => Update(cell, edit with { Conditions = edit.Conditions with { RequireFields = ids.ToList() } })">
+                        @foreach (var field in (_board.CustomFields ?? []).Where(f => !f.IsArchived || (edit.Conditions.RequireFields?.Contains(f.Id) ?? false)))
+                        {
+                            <MudSelectItem T="Guid" Value="field.Id">@field.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
             </div>
         }
 
@@ -274,10 +287,14 @@
     private TransitionRequest? Find(Guid? from, Guid to) => _transitions.FirstOrDefault(t => t.FromStatusId == from && t.ToStatusId == to);
 
     private static bool HasConditions(TransitionRequest t) =>
-        t.Conditions is { } c && (c.MinRole is not null || c.RequireAssignee || c.RequireChildrenDone || c.RequireChecklistDone);
+        t.Conditions is { } c && (c.MinRole is not null || c.RequireAssignee || c.RequireChildrenDone || c.RequireChecklistDone || c.RequireFields is { Count: > 0 });
 
     private static bool HasConditions(TransitionResponse t) =>
-        t.Conditions.MinRole is not null || t.Conditions.RequireAssignee || t.Conditions.RequireChildrenDone || t.Conditions.RequireChecklistDone;
+        t.Conditions.MinRole is not null || t.Conditions.RequireAssignee || t.Conditions.RequireChildrenDone || t.Conditions.RequireChecklistDone
+        || t.Conditions.RequireFields is { Count: > 0 };
+
+    private string FieldName(string id) =>
+        Guid.TryParse(id, out var fieldId) ? _board?.CustomFields?.FirstOrDefault(f => f.Id == fieldId)?.Name ?? "удалённое поле" : id;
 
     private string? StatusName(Guid? id) => id is null ? null : Statuses.FirstOrDefault(s => s.Id == id)?.Name;
 

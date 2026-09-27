@@ -1,0 +1,215 @@
+@* Модалка «Экраны задач» (docs/TZ_workflow_config.md §3, администратор проекта — ManageConfig): для пары
+   «тип задачи или все типы × карточка или создание» — список полей по порядку: стрелки, раздел, «обязательное»,
+   убрать; ниже — добавить поле из недоступных сейчас. Сохранение заменяет экран целиком (PUT), «Сбросить» снимает
+   настройку — снова действует экран «Все типы» или встроенный. Скрытое поле значение не теряет: экран только про показ.
+   Обязательное на создании проверяет сервер, на карточке — подсветка незаполненного. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject ToastService Toasts
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal wide"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Экраны задач · @_board.Key</h3>
+        <div class="hint">Какие поля и в каком порядке видны в карточке и в форме создания. Название и статус есть всегда;
+            скрытое поле значение не теряет.</div>
+    </TitleContent>
+    <DialogContent>
+        <div class="sc-head">
+            <div class="seg" role="radiogroup" aria-label="Где">
+                @foreach (var ctx in new[] { ScreenContext.Detail, ScreenContext.Create })
+                {
+                    <button type="button" class="seg-btn @(ctx == _context ? "on" : "")" role="radio" aria-checked="@(ctx == _context ? "true" : "false")"
+                            @onclick="() => Switch(_typeId, ctx)">@(ctx == ScreenContext.Detail ? "Карточка" : "Создание")</button>
+                }
+            </div>
+            <MudSelect T="Guid" Value="_typeId" ValueChanged="id => Switch(id, _context)" Dense="true" Variant="Variant.Text"
+                       PopoverClass="flow-pop" Class="cf-select sc-type" aria-label="Тип задачи">
+                <MudSelectItem T="Guid" Value="Guid.Empty">Все типы</MudSelectItem>
+                @foreach (var type in _board.TaskTypes.Where(t => !t.IsArchived))
+                {
+                    <MudSelectItem T="Guid" Value="type.Id">@type.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <span class="hint">@SourceHint</span>
+        </div>
+
+        <div class="tt-list sc-list">
+            @for (var i = 0; i < _fields.Count; i++)
+            {
+                var index = i;
+                var row = _fields[i];
+                <div class="tt-row sc-row" @key="row.Field">
+                    <span class="sc-name">@ScreenLayout.FieldLabel(_board, row.ToDto())</span>
+                    <input class="sc-section" value="@row.Section" maxlength="40" placeholder="раздел" aria-label="Раздел перед полем"
+                           @oninput="e => row.Section = e.Value?.ToString()" />
+                    @if (CanBeRequired(row.Field))
+                    {
+                        <MudCheckBox T="bool" Value="row.Required" ValueChanged="v => row.Required = v" Class="check-mud sc-req" Label="обязательное" />
+                    }
+                    else
+                    {
+                        <span></span>
+                    }
+                    <span class="tt-actions">
+                        <DsIconButton Icon="chevron-down" Size="24" Title="Выше" Class="cf-up" Disabled="@(index == 0)" OnClick="() => Move(index, -1)" />
+                        <DsIconButton Icon="chevron-down" Size="24" Title="Ниже" Disabled="@(index == _fields.Count - 1)" OnClick="() => Move(index, 1)" />
+                        <DsIconButton Icon="close-simple" Size="24" Title="Убрать с экрана" OnClick="() => _fields.RemoveAt(index)" />
+                    </span>
+                </div>
+            }
+            @if (_fields.Count == 0)
+            {
+                <div class="hint">Пусто: на экране останутся только название и статус.</div>
+            }
+        </div>
+
+        @if (Available.Any())
+        {
+            <MudSelect T="string" Value="@((string?)null)" ValueChanged="Add" Dense="true" Variant="Variant.Text" Label="Добавить поле"
+                       PopoverClass="flow-pop" Class="cf-select sc-add">
+                @foreach (var field in Available)
+                {
+                    <MudSelectItem T="string" Value="field">@ScreenLayout.FieldLabel(_board, new ScreenFieldDto(field))</MudSelectItem>
+                }
+            </MudSelect>
+        }
+
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (ScreenLayout.IsConfigured(_board, TypeOrNull, _context))
+        {
+            <DsButton Variant="secondary" Size="md" OnClick="Reset" Disabled="_busy">Сбросить</DsButton>
+        }
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Готово</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="_busy" Busy="_busy">Сохранить экран</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter] public EventCallback<BoardResponse> OnChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private sealed class Row(string field, bool required, string? section)
+    {
+        public string Field { get; } = field;
+        public bool Required { get; set; } = required;
+        public string? Section { get; set; } = section;
+
+        public ScreenFieldDto ToDto() => new(Field, Required, string.IsNullOrWhiteSpace(Section) ? null : Section.Trim());
+    }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private BoardResponse _board = default!;
+    private Guid _boardId;
+    private ScreenContext _context = ScreenContext.Detail;
+    private Guid _typeId = Guid.Empty;
+    private List<Row> _fields = [];
+    private string? _error;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    private Guid? TypeOrNull => _typeId == Guid.Empty ? null : _typeId;
+
+    /// <summary>Откуда взялся список: свой экран, экран «Все типы» или встроенный (все поля).</summary>
+    private string SourceHint =>
+        ScreenLayout.IsConfigured(_board, TypeOrNull, _context) ? "настроен"
+        : TypeOrNull is not null && ScreenLayout.IsConfigured(_board, null, _context) ? "сейчас действует экран «Все типы»"
+        : "сейчас действует встроенный экран";
+
+    /// <summary>Поля, которых нет на экране: системные (на создании — только допустимые там) и неархивные пользовательские.</summary>
+    private IEnumerable<string> Available =>
+        ScreenLayout.SystemFields.Where(n => _context == ScreenContext.Detail || ScreenLayout.OnCreate.Contains(n)).Select(n => ScreenLayout.System + n)
+            .Concat((_board.CustomFields ?? []).Where(f => !f.IsArchived).Select(f => ScreenLayout.Custom + f.Id))
+            .Where(f => _fields.All(r => r.Field != f));
+
+    protected override void OnParametersSet()
+    {
+        if (_boardId == Board.Id)
+            return;
+
+        _boardId = Board.Id;
+        _board = Board;
+        Load();
+    }
+
+    /// <summary>Тип «системного» поля, у которого нет пустого значения, обязательным не бывает (тип задачи есть всегда).</summary>
+    private static bool CanBeRequired(string field) => field != ScreenLayout.System + "type" &&
+        field is not (ScreenLayout.System + "links" or ScreenLayout.System + "attachments");
+
+    private void Switch(Guid typeId, ScreenContext context)
+    {
+        _typeId = typeId;
+        _context = context;
+        _error = null;
+        Load();
+    }
+
+    /// <summary>Список для правки — то, что действует сейчас: свой экран, «Все типы» или встроенный для этого типа.</summary>
+    private void Load()
+    {
+        var typeId = TypeOrNull ?? _board.TaskTypes.First(t => t.IsDefault).Id;
+        var fields = TypeOrNull is null
+            ? (_board.Screens ?? []).FirstOrDefault(s => s.TaskTypeId is null && s.Context == _context)?.Fields ?? ScreenLayout.Default(_board, typeId, _context)
+            : ScreenLayout.Resolve(_board, typeId, _context);
+        _fields = fields.Select(f => new Row(f.Field, f.Required, f.Section)).ToList();
+    }
+
+    private void Move(int index, int delta) => (_fields[index], _fields[index + delta]) = (_fields[index + delta], _fields[index]);
+
+    private void Add(string? field)
+    {
+        if (field is not null)
+            _fields.Add(new Row(field, false, null));
+    }
+
+    private Task Save() => Run(() => Api.SetScreen(_board.Id, TypeOrNull, _context, new SetScreenRequest(_fields.Select(f => f.ToDto()).ToList())), "Экран сохранён");
+
+    private Task Reset() => Run(() => Api.ResetScreen(_board.Id, TypeOrNull, _context), "Экран сброшен");
+
+    private async Task Run(Func<Task<ApiResult<BoardResponse>>> call, string done)
+    {
+        _busy = true;
+        _error = null;
+        var result = await call();
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить экран";
+            return;
+        }
+
+        _board = result.Value!;
+        Load();
+        Toasts.Ok(done);
+        await OnChanged.InvokeAsync(_board);
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

@@ -12,7 +12,8 @@ public sealed record TransitionConditionsDto(
     ProjectRole? MinRole = null,
     bool RequireAssignee = false,
     bool RequireChildrenDone = false,
-    bool RequireChecklistDone = false);
+    bool RequireChecklistDone = false,
+    IReadOnlyList<Guid>? RequireFields = null);
 
 /// <summary>Переход графа; FromStatusId = null — «из любого статуса».</summary>
 public sealed record TransitionResponse(Guid Id, Guid? FromStatusId, Guid ToStatusId, string? Name, TransitionConditionsDto Conditions);

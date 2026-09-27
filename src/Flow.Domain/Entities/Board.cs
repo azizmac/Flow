@@ -16,6 +16,7 @@ public sealed partial class Board
     private readonly List<TaskItem> _tasks = [];
     private readonly List<StatusTransition> _transitions = [];
     private readonly List<CustomFieldDefinition> _customFields = [];
+    private readonly List<TaskScreen> _screens = [];
 
     public Guid Id { get; private set; }
 
@@ -48,6 +49,9 @@ public sealed partial class Board
 
     /// <summary>Пользовательские поля проекта, включая архивные (docs/TZ_task_model.md §4).</summary>
     public IReadOnlyCollection<CustomFieldDefinition> CustomFields => _customFields;
+
+    /// <summary>Настроенные экраны задач (docs/TZ_workflow_config.md §3); нет подходящего — встроенный.</summary>
+    public IReadOnlyCollection<TaskScreen> Screens => _screens;
 
     /// <summary>Free — статус меняется на любой; Restricted — только по <see cref="Transitions"/> (docs/TZ_workflow_config.md §2).</summary>
     public WorkflowMode WorkflowMode { get; private set; }
@@ -365,6 +369,94 @@ public sealed partial class Board
             .OrderBy(f => f.SortOrder)
             .ToList();
 
+    // ---- экраны задач (docs/TZ_workflow_config.md §3) ----
+
+    /// <summary>
+    /// Заменяет экран (тип или null — для всех типов, контекст) списком полей. Поле — системное из
+    /// <see cref="ScreenFields.System"/> или пользовательское поле этого проекта, без повторов; на Create — только то,
+    /// что заполняется при создании. Название и статус есть всегда и на экран не выносятся.
+    /// </summary>
+    public TaskScreen SetScreen(Guid? taskTypeId, ScreenContext context, IReadOnlyList<ScreenField> fields)
+    {
+        if (!Enum.IsDefined(context))
+            throw new ArgumentException($"Unknown screen context {context}.", nameof(context));
+        if (taskTypeId is { } typeId)
+            GetTaskType(typeId);
+
+        var seen = new HashSet<string>();
+        foreach (var field in fields)
+        {
+            if (!seen.Add(field.Field))
+                throw new InvalidOperationException($"Поле «{field.Field}» на экране дважды.");
+
+            if (field.Field.StartsWith(ScreenFields.SystemPrefix, StringComparison.Ordinal))
+            {
+                var name = field.Field[ScreenFields.SystemPrefix.Length..];
+                if (!ScreenFields.System.Contains(name))
+                    throw new InvalidOperationException($"Системного поля «{name}» нет.");
+                if (context == ScreenContext.Create && !ScreenFields.OnCreate.Contains(name))
+                    throw new InvalidOperationException($"Поле «{ScreenFields.Label(name)}» не заполняется при создании задачи.");
+            }
+            else if (!field.Field.StartsWith(ScreenFields.CustomPrefix, StringComparison.Ordinal)
+                     || !Guid.TryParse(field.Field[ScreenFields.CustomPrefix.Length..], out var fieldId))
+                throw new InvalidOperationException($"Неизвестное поле «{field.Field}».");
+            else
+                GetCustomField(fieldId);
+        }
+
+        var screen = _screens.FirstOrDefault(s => s.TaskTypeId == taskTypeId && s.Context == context);
+        if (screen is null)
+        {
+            screen = new TaskScreen(Id, taskTypeId, context);
+            _screens.Add(screen);
+        }
+
+        screen.SetFields(fields);
+        return screen;
+    }
+
+    /// <summary>Убирает настройку — снова действует экран «для всех типов» или встроенный.</summary>
+    public void ResetScreen(Guid? taskTypeId, ScreenContext context) =>
+        _screens.RemoveAll(s => s.TaskTypeId == taskTypeId && s.Context == context);
+
+    /// <summary>Поля экрана задачи этого типа: свой экран типа → экран «для всех типов» → встроенный.</summary>
+    public IReadOnlyList<ScreenField> ResolveScreen(Guid taskTypeId, ScreenContext context) =>
+        (_screens.FirstOrDefault(s => s.TaskTypeId == taskTypeId && s.Context == context)
+         ?? _screens.FirstOrDefault(s => s.TaskTypeId is null && s.Context == context))?.Fields
+        ?? ScreenFields.Default(this, taskTypeId, context);
+
+    /// <summary>
+    /// Обязательные поля экрана создания, не заполненные у новой задачи — подписи для ошибки. Обязательное
+    /// пользовательское поле проверяет <see cref="MissingRequiredFields"/> и без экрана.
+    /// </summary>
+    public IReadOnlyList<string> MissingOnCreateScreen(TaskItem task)
+    {
+        var missing = new List<string>();
+        foreach (var field in ResolveScreen(task.TypeId, ScreenContext.Create).Where(f => f.Required))
+        {
+            if (field.Field.StartsWith(ScreenFields.CustomPrefix, StringComparison.Ordinal))
+            {
+                var id = Guid.Parse(field.Field[ScreenFields.CustomPrefix.Length..]);
+                if (task.GetCustomField(id) is null && _customFields.FirstOrDefault(f => f.Id == id) is { } custom && custom.AppliesTo(task.TypeId))
+                    missing.Add(custom.Name);
+                continue;
+            }
+
+            var name = field.Field[ScreenFields.SystemPrefix.Length..];
+            var empty = name switch
+            {
+                "priority" => task.Priority == TaskPriority.None,
+                "assignee" => task.AssigneeId is null,
+                "description" => string.IsNullOrWhiteSpace(task.Description),
+                _ => false
+            };
+            if (empty)
+                missing.Add(ScreenFields.Label(name));
+        }
+
+        return missing;
+    }
+
     private List<Guid> ValidateTaskTypes(IEnumerable<Guid>? taskTypeIds)
     {
         var ids = taskTypeIds?.Distinct().ToList() ?? [];
@@ -460,6 +552,8 @@ public sealed partial class Board
                 throw new InvalidOperationException($"Status {t.ToStatusId} does not belong to board {Id}.");
             if (t.FromStatusId == t.ToStatusId)
                 throw new InvalidOperationException("A transition to the same status is not needed.");
+            foreach (var fieldId in t.Conditions?.RequireFields ?? [])
+                GetCustomField(fieldId);
         }
 
         if (transitions.GroupBy(t => (t.FromStatusId, t.ToStatusId)).Any(g => g.Count() > 1))
@@ -510,7 +604,7 @@ public sealed partial class Board
         List<string>? firstReasons = null;
         foreach (var transition in candidates)
         {
-            var reasons = FailedConditions(transition.Conditions, context);
+            var reasons = FailedConditions(transition, context);
             if (reasons.Count == 0)
                 return TransitionCheck.Ok;
             firstReasons ??= reasons;
@@ -519,8 +613,9 @@ public sealed partial class Board
         return new TransitionCheck(false, firstReasons!);
     }
 
-    private static List<string> FailedConditions(TransitionConditions c, TransitionContext ctx)
+    private List<string> FailedConditions(StatusTransition transition, TransitionContext ctx)
     {
+        var c = transition.Conditions;
         var reasons = new List<string>();
         if (c.MinRole is { } role && ctx.ActorRole < role)
             reasons.Add($"Переход доступен роли «{RoleLabel(role)}» и выше");
@@ -530,6 +625,9 @@ public sealed partial class Board
             reasons.Add("Не все подзадачи закрыты");
         if (c.RequireChecklistDone && !ctx.ChecklistDone)
             reasons.Add("Чек-лист выполнен не полностью");
+        foreach (var fieldId in c.RequireFields ?? [])
+            if (ctx.FilledFields is not { } filled || !filled.Contains(fieldId))
+                reasons.Add($"Заполните поле «{_customFields.FirstOrDefault(f => f.Id == fieldId)?.Name ?? "удалённое поле"}»");
         return reasons;
     }
 

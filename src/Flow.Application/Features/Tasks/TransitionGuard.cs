@@ -25,7 +25,8 @@ internal sealed class TransitionGuard(ITaskItemRepository tasks)
             access.Role ?? ProjectRole.Viewer,
             task.AssigneeId is not null,
             childrenDone,
-            task.ChecklistDone == task.ChecklistTotal);
+            task.ChecklistDone == task.ChecklistTotal,
+            task.CustomFieldValues().Keys.ToHashSet());
     }
 
     public async Task<TransitionCheck> CheckAsync(ProjectAccessInfo access, Board board, TaskItem task, Guid toStatusId, CancellationToken cancellationToken) =>

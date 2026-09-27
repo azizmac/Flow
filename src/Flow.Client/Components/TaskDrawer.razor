@@ -1,5 +1,5 @@
-﻿@* Слайдер задачи. Mode=Create — форма новой задачи (POST с типом и приоритетом; исполнитель — отдельным
-   PATCH /assignee после создания, в CreateTaskRequest его нет); Mode=View — просмотр/редактирование существующей
+@* Слайдер задачи. Mode=Create — форма новой задачи (POST с типом, приоритетом, исполнителем и полями; состав формы —
+   экран создания проекта); Mode=View — просмотр/редактирование существующей, поля — по экрану карточки
    (PATCH Title/Description/StatusId/TypeId/Priority, PATCH /assignee, /schedule, /estimate, DELETE). Содержимое рендерится внутри общего Drawer. *@
 @implements IDisposable
 @inject IFlowApi Api
@@ -24,15 +24,38 @@
                @oninput="e => _title = e.Value?.ToString() ?? string.Empty" />
         @* Дубль дешевле не создать, чем потом склеивать: похожие показываются прямо по ходу набора. *@
         <SimilarTasks Title="@_title" Limit="3" />
+        @* Форма — по экрану создания проекта (docs/TZ_workflow_config.md §3); статус и проект есть всегда. *@
         <div class="meta-grid">
-            <div class="meta-k">Тип</div>
-            <div><TaskTypeSelect Types="Board.TaskTypes" Value="_typeId" OnChange="id => _typeId = id" /></div>
             <div class="meta-k">Статус</div>
             <div><StatusSelect Statuses="Board.Statuses" Value="_statusId" OnChange="id => _statusId = id" /></div>
-            <div class="meta-k">Приоритет</div>
-            <div><PrioritySelect Value="_priority" OnChange="p => _priority = p" /></div>
-            <div class="meta-k">Исполнитель</div>
-            <div><AssigneeSelect Value="_assigneeId" OnlyUserId="OnlyAssigneeId" OnChange="id => _assigneeId = id" /></div>
+            @foreach (var field in CreateLayout.Where(f => ScreenLayout.SystemName(f) != "description"))
+            {
+                @if (field.Section is { } sectionTitle)
+                {
+                    <div class="meta-section">@sectionTitle</div>
+                }
+                @if (ScreenLayout.CustomId(field) is { } customId)
+                {
+                    <CustomFieldsEditor Board="Board" TypeId="_typeId" Values="_newCustomFields" CanEdit="true" Disabled="_busy"
+                                        FieldIds="[customId]" Required="field.Required" OnChange="c => SetNewCustomField(c.FieldId, c.Value)" />
+                }
+                else if (ScreenLayout.SystemName(field) is { } name)
+                {
+                    <div class="meta-k">@ScreenLayout.Label(name)@(field.Required ? " *" : "")</div>
+                    @switch (name)
+                    {
+                        case "type":
+                            <div><TaskTypeSelect Types="Board.TaskTypes" Value="_typeId" OnChange="id => _typeId = id" /></div>
+                            break;
+                        case "priority":
+                            <div><PrioritySelect Value="_priority" OnChange="p => _priority = p" /></div>
+                            break;
+                        case "assignee":
+                            <div><AssigneeSelect Value="_assigneeId" OnlyUserId="OnlyAssigneeId" OnChange="id => _assigneeId = id" /></div>
+                            break;
+                    }
+                }
+            }
             <div class="meta-k">Проект</div>
             <div>
                 @if (Boards.Count > 1)
@@ -44,13 +67,14 @@
                     <div class="meta-v"><KeyChip Value="@Board.Key" /><span class="val" title="@Board.Name">@Board.Name</span></div>
                 }
             </div>
-            <CustomFieldsEditor Board="Board" TypeId="_typeId" Values="_newCustomFields" CanEdit="true" Disabled="_busy"
-                                OnChange="c => SetNewCustomField(c.FieldId, c.Value)" />
         </div>
-        <div class="desc-wrap">
-            <div class="desc-head"><div class="meta-k">Описание</div></div>
-            <MarkdownEditor @bind-Value="_description" MinHeight="120" ShowActions="false" AllowEmpty="true" SubmitHint="создать" OnSubmit="Create" />
-        </div>
+        @if (CreateLayout.FirstOrDefault(f => ScreenLayout.SystemName(f) == "description") is { } descField)
+        {
+            <div class="desc-wrap">
+                <div class="desc-head"><div class="meta-k">Описание@(descField.Required ? " *" : "")</div></div>
+                <MarkdownEditor @bind-Value="_description" MinHeight="120" ShowActions="false" AllowEmpty="true" SubmitHint="создать" OnSubmit="Create" />
+            </div>
+        }
         @if (_error is not null)
         {
             <div class="ds-field-error">@_error</div>
@@ -102,24 +126,8 @@ else if (Item is not null)
                  role="@(CanEdit ? "button" : null)" tabindex="@(CanEdit ? 0 : -1)"
                  @onclick="StartTitleEdit" @onkeydown="OnTitleActivate">@Item.Title</div>
         }
+        @* Поля — по экрану карточки (docs/TZ_workflow_config.md §3): статус всегда первым, проект и дата создания — в конце. *@
         <div class="meta-grid">
-            <div class="meta-k">Тип</div>
-            <div>
-                @if (CanEdit)
-                {
-                    <TaskTypeSelect Types="Board.TaskTypes" Value="Item.TypeId" OnChange="ChangeType" Disabled="_busy" />
-                }
-                else if (TaskMeta.TypeOf(Board, Item.TypeId) is { } type)
-                {
-                    <span class="status-pill"><TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />@type.Name</span>
-                }
-            </div>
-            <div class="meta-k">Родитель</div>
-            <div class="meta-v"><ParentSelect Board="Board" Task="Item" Value="Item.ParentId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetParent" /></div>
-            <div class="meta-k">Спринт</div>
-            <div class="meta-v"><SprintSelect BoardId="Board.Id" Value="Current.SprintId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetSprint" /></div>
-            <div class="meta-k">Веха</div>
-            <div class="meta-v"><MilestoneSelect BoardId="Board.Id" Value="Current.MilestoneId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetMilestone" /></div>
             <div class="meta-k">Статус</div>
             <div>
                 @if (CanEdit)
@@ -133,46 +141,31 @@ else if (Item is not null)
                     <span class="status-pill"><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span>
                 }
             </div>
-            <div class="meta-k">Приоритет</div>
-            <div>
-                @if (CanEdit)
+            @foreach (var field in DetailLayout.Where(f => ScreenLayout.SystemName(f) is not ("description" or "checklist" or "links" or "attachments")))
+            {
+                @if (field.Section is { } sectionTitle)
                 {
-                    <PrioritySelect Value="Item.Priority" OnChange="ChangePriority" Disabled="_busy" />
+                    <div class="meta-section">@sectionTitle</div>
                 }
-                else
+                @if (ScreenLayout.CustomId(field) is { } customId)
                 {
-                    <span class="status-pill"><PriorityIcon Value="Item.Priority" Size="13" ShowNone="true" />@TaskMeta.PriorityLabel(Item.Priority)</span>
+                    <CustomFieldsEditor Board="Board" TypeId="Current.TypeId" Values="Current.CustomFields" CanEdit="CanEdit" Disabled="_busy"
+                                        FieldIds="[customId]" Required="field.Required" OnChange="c => SetCustomField(c.FieldId, c.Value)" />
                 }
-            </div>
-            <div class="meta-k">Исполнитель</div>
-            <div class="meta-v">
-                <AssigneeSelect Value="Item.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" />
-                @if (Item.AssigneeId is { } aid && Users.Find(aid) is { } who)
+                else if (ScreenLayout.SystemName(field) is { } name)
                 {
-                    @* Обёртка — якорь карточки: MudPopover внутри UserCard позиционируется по ней. *@
-                    <span class="ucard-anchor">
-                        <button type="button" id="@_whoId" class="icon-lnk" @onclick="() => _whoOpen = true" title="Карточка"><Icon Name="view" Size="13" />@@@who.Username</button>
-                        @if (_whoOpen)
-                        {
-                            <UserCard User="who" OnClose="() => _whoOpen = false" />
-                        }
-                    </span>
+                    <div class="meta-k @(field.Required && ScreenLayout.IsEmpty(name, Current) ? "req" : "")">@ScreenLayout.Label(name)@(field.Required ? " *" : "")</div>
+                    @SystemValue(name)
                 }
-            </div>
-            <div class="meta-k">Начало</div>
-            <div><DueDateField Value="Item.StartDate" CanEdit="CanEdit" Disabled="_busy" Plain="true" Label="Дата начала" OnChange="SetStartDate" /></div>
-            <div class="meta-k">Срок</div>
-            <div><DueDateField Value="Item.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>
-            <div class="meta-k">Оценка</div>
-            <div><EstimateField StoryPoints="Item.StoryPoints" EstimateMinutes="Item.EstimateMinutes" CanEdit="CanEdit" Disabled="_busy" OnChange="SetEstimate" /></div>
+            }
             <div class="meta-k">Проект</div>
             <div class="meta-v"><KeyChip Value="@Board.Key" /><span class="val" title="@Board.Name">@Board.Name</span></div>
             <div class="meta-k">Создана</div>
             <div class="meta-v">@Ru.DateTimeFull(Item.CreatedAt)</div>
-            <CustomFieldsEditor Board="Board" TypeId="Current.TypeId" Values="Current.CustomFields" CanEdit="CanEdit" Disabled="_busy"
-                                OnChange="c => SetCustomField(c.FieldId, c.Value)" />
         </div>
         @* compact: в просмотре описание занимает высоту по содержимому, иначе оно растянется и отожмёт ленту вниз. *@
+        @if (Shows("description"))
+        {
         <div class="desc-wrap compact">
             <div class="desc-head">
                 <div class="meta-k">Описание</div>
@@ -198,12 +191,22 @@ else if (Item is not null)
                 <MarkdownView Text="@Item.Description" OnClick="OnDescClick" />
             }
         </div>
+        }
         <SubtaskList Board="Board" Parent="Item" CanCreate="Permissions.CanCreateTask(Access.For(Board.Id))"
                      OnCountsChanged="OnChildCountsChanged" OnCreated="HandleSubtaskCreated" />
-        <TaskChecklist TaskId="Item.Id" CanEdit="CanEdit" OnCountsChanged="OnChecklistChanged" />
-        <TaskLinks TaskId="Item.Id" CanEdit="CanEdit" OnBlockedChanged="n => OnUpdated.InvokeAsync(Current with { BlockedByCount = n })"
-                   OnJournal="e => _timeline?.NoteActivity(e.Type, e.Old, e.New)" />
-        <AttachmentList TaskId="Item.Id" BoardId="Item.BoardId" DropZoneId="td-drop" />
+        @if (Shows("checklist"))
+        {
+            <TaskChecklist TaskId="Item.Id" CanEdit="CanEdit" OnCountsChanged="OnChecklistChanged" />
+        }
+        @if (Shows("links"))
+        {
+            <TaskLinks TaskId="Item.Id" CanEdit="CanEdit" OnBlockedChanged="n => OnUpdated.InvokeAsync(Current with { BlockedByCount = n })"
+                       OnJournal="e => _timeline?.NoteActivity(e.Type, e.Old, e.New)" />
+        }
+        @if (Shows("attachments"))
+        {
+            <AttachmentList TaskId="Item.Id" BoardId="Item.BoardId" DropZoneId="td-drop" />
+        }
         <TaskTimeline @ref="_timeline" TaskItem="Item" Board="Board" OnCommentCountChanged="OnCommentCountChanged" />
         @if (_error is not null)
         {
@@ -220,6 +223,61 @@ else if (Item is not null)
 }
 
 @code {
+    /// <summary>Раскладка карточки для типа задачи (экран типа → «для всех типов» → встроенный).</summary>
+    private IReadOnlyList<ScreenFieldDto> DetailLayout => ScreenLayout.Resolve(Board, Current.TypeId, ScreenContext.Detail, Current.CustomFields);
+
+    /// <summary>Форма создания: тип в форме ещё не выбран — тип проекта по умолчанию.</summary>
+    private IReadOnlyList<ScreenFieldDto> CreateLayout =>
+        ScreenLayout.Resolve(Board, _typeId == Guid.Empty ? DefaultTypeId() : _typeId, ScreenContext.Create);
+
+    private bool Shows(string name) => DetailLayout.Any(f => ScreenLayout.SystemName(f) == name);
+
+    /// <summary>Значение системного поля строки мета-сетки — те же компоненты, что были в фиксированной разметке.</summary>
+    private RenderFragment SystemValue(string name) => name switch
+    {
+        "type" => @<div>
+                @if (CanEdit)
+                {
+                    <TaskTypeSelect Types="Board.TaskTypes" Value="Item!.TypeId" OnChange="ChangeType" Disabled="_busy" />
+                }
+                else if (TaskMeta.TypeOf(Board, Item!.TypeId) is { } type)
+                {
+                    <span class="status-pill"><TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />@type.Name</span>
+                }
+            </div>,
+        "parent" => @<div class="meta-v"><ParentSelect Board="Board" Task="Item" Value="Item!.ParentId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetParent" /></div>,
+        "sprint" => @<div class="meta-v"><SprintSelect BoardId="Board.Id" Value="Current.SprintId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetSprint" /></div>,
+        "milestone" => @<div class="meta-v"><MilestoneSelect BoardId="Board.Id" Value="Current.MilestoneId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetMilestone" /></div>,
+        "priority" => @<div>
+                @if (CanEdit)
+                {
+                    <PrioritySelect Value="Item!.Priority" OnChange="ChangePriority" Disabled="_busy" />
+                }
+                else
+                {
+                    <span class="status-pill"><PriorityIcon Value="Item!.Priority" Size="13" ShowNone="true" />@TaskMeta.PriorityLabel(Item.Priority)</span>
+                }
+            </div>,
+        "assignee" => @<div class="meta-v">
+                <AssigneeSelect Value="Item!.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" />
+                @if (Item.AssigneeId is { } aid && Users.Find(aid) is { } who)
+                {
+                    @* Обёртка — якорь карточки: MudPopover внутри UserCard позиционируется по ней. *@
+                    <span class="ucard-anchor">
+                        <button type="button" id="@_whoId" class="icon-lnk" @onclick="() => _whoOpen = true" title="Карточка"><Icon Name="view" Size="13" />@@@who.Username</button>
+                        @if (_whoOpen)
+                        {
+                            <UserCard User="who" OnClose="() => _whoOpen = false" />
+                        }
+                    </span>
+                }
+            </div>,
+        "start" => @<div><DueDateField Value="Item!.StartDate" CanEdit="CanEdit" Disabled="_busy" Plain="true" Label="Дата начала" OnChange="SetStartDate" /></div>,
+        "due" => @<div><DueDateField Value="Item!.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>,
+        "estimate" => @<div><EstimateField StoryPoints="Item!.StoryPoints" EstimateMinutes="Item.EstimateMinutes" CanEdit="CanEdit" Disabled="_busy" OnChange="SetEstimate" /></div>,
+        _ => @<div class="meta-v muted">—</div>
+    };
+
     [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
     /// <summary>Все проекты — чтобы в форме создания можно было выбрать, куда заводится задача.</summary>
     [Parameter] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
@@ -403,7 +461,8 @@ else if (Item is not null)
         _error = null;
         var result = await Api.CreateTask(Board.Id, new CreateTaskRequest(title, NullIfEmpty(_description), _statusId,
             _typeId == Guid.Empty ? null : _typeId, _priority,
-            CustomFields: _newCustomFields.Count == 0 ? null : _newCustomFields.ToDictionary(p => p.Key, p => (System.Text.Json.JsonElement?)p.Value)));
+            CustomFields: _newCustomFields.Count == 0 ? null : _newCustomFields.ToDictionary(p => p.Key, p => (System.Text.Json.JsonElement?)p.Value),
+            AssigneeId: _assigneeId));
         _busy = false;
 
         if (!result.Ok)
@@ -412,16 +471,8 @@ else if (Item is not null)
             return;
         }
 
-        var created = result.Value!;
-        if (_assigneeId is { } assignee)
-        {
-            // Исполнитель — отдельный эндпоинт; задача уже создана, поэтому ошибка назначения не откатывает создание.
-            var assigned = await Api.AssignTask(created.Id, new AssignTaskRequest(assignee));
-            if (assigned.Ok) created = assigned.Value!;
-            else Toasts.Error(assigned.Error ?? "Задача создана, но исполнителя назначить не удалось");
-        }
-
-        await OnCreated.InvokeAsync(created);
+        // Исполнитель приходит в самом запросе: обязательный исполнитель на экране создания проверяет сервер.
+        await OnCreated.InvokeAsync(result.Value!);
     }
 
     private async Task StartTitleEdit()

@@ -597,3 +597,8 @@ a.mud-link:hover {
 .cf-select.mud-input-control { margin: 0; }
 .cf-up svg { transform: rotate(180deg); }
 .cf-required.mud-input-control { margin: 0; }
+.sc-type.mud-input-control { width: 200px; flex: none; }
+.sc-add.mud-input-control { max-width: 320px; }
+/* Модалки настройки проекта со списком полей («Экраны задач», «Поля проекта») — шире стандартных 440px. */
+.mud-dialog.flow-modal.wide { width: 680px; max-width: calc(100vw - 32px); }
+.sc-req .mud-typography { color: var(--text-secondary); font: var(--fw-medium) 12px var(--font-text); }

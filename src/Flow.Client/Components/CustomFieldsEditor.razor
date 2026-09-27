@@ -5,12 +5,13 @@
 @using System.Text.Json
 @inject UserDirectory Users
 
-@foreach (var field in CustomFieldMeta.ForTask(Board, TypeId, Values))
+@foreach (var field in Fields)
 {
     var f = field;
     var value = Values is not null && Values.TryGetValue(f.Id, out var v) ? v : (JsonElement?)null;
     var editable = CanEdit && !f.IsArchived;
-    <div class="meta-k" title="@($"cf.{f.Key}")">@f.Name@(f.IsRequired ? " *" : "")</div>
+    var required = f.IsRequired || Required;
+    <div class="meta-k @(required && value is null ? "req" : "")" title="@($"cf.{f.Key}")">@f.Name@(required ? " *" : "")</div>
     <div class="meta-v cf-value">
         @if (!editable)
         {
@@ -107,8 +108,16 @@
     [Parameter] public IReadOnlyDictionary<Guid, JsonElement>? Values { get; set; }
     [Parameter] public bool CanEdit { get; set; }
     [Parameter] public bool Disabled { get; set; }
+    /// <summary>Только эти поля и в этом порядке (раскладка экрана); null — все поля задачи.</summary>
+    [Parameter] public IReadOnlyList<Guid>? FieldIds { get; set; }
+    /// <summary>Экран отметил поле обязательным — звёздочка и подсветка пустого.</summary>
+    [Parameter] public bool Required { get; set; }
     /// <summary>Правка одного поля: значение в форме хранения или null — очистить.</summary>
     [Parameter] public EventCallback<(Guid FieldId, JsonElement? Value)> OnChange { get; set; }
+
+    private IEnumerable<CustomFieldResponse> Fields => FieldIds is { } ids
+        ? ids.Select(id => Board?.CustomFields?.FirstOrDefault(f => f.Id == id)).OfType<CustomFieldResponse>()
+        : CustomFieldMeta.ForTask(Board, TypeId, Values);
 
     private Task Text(CustomFieldResponse field, string? text) =>
         Change(field, string.IsNullOrWhiteSpace(text) ? null : CustomFieldMeta.Json(text.Trim()));

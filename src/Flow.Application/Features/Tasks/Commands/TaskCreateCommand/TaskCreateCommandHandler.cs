@@ -11,13 +11,14 @@ using MediatR;
 namespace Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 
 /// <summary>Бросает ArgumentException/InvalidOperationException при невалидных данных (см. Board.CreateTask).</summary>
-internal sealed class TaskCreateCommandHandler(IBoardRepository boards, TaskCustomFields customFields, ITaskItemRepository tasks, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
+internal sealed class TaskCreateCommandHandler(IBoardRepository boards, IUserRepository users, TaskCustomFields customFields, ITaskItemRepository tasks, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskCreateCommand, TaskResponse?>
 {
     public async Task<TaskResponse?> Handle(TaskCreateCommand request, CancellationToken cancellationToken)
     {
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
-        permissions.EnsureCanCreateTask(await projectAccess.GetAsync(actor, request.BoardId, cancellationToken));
+        var access = await projectAccess.GetAsync(actor, request.BoardId, cancellationToken);
+        permissions.EnsureCanCreateTask(access);
 
         var board = await boards.GetByIdAsync(request.BoardId, cancellationToken);
         if (board is null)
@@ -46,6 +47,22 @@ internal sealed class TaskCreateCommandHandler(IBoardRepository boards, TaskCust
         if (request.CustomFields is { Count: > 0 } values)
             await customFields.ApplyAsync(board, task, values, actor.Id, journal: false, cancellationToken);
         TaskCustomFields.EnsureRequired(board, task, task.TypeId);
+
+        // Исполнитель сразу при создании — по тем же правилам, что PATCH /assignee: Member назначает только себя,
+        // человек активный. Журнал не пишем: запись Created и есть начальное состояние.
+        if (request.AssigneeId is { } assigneeId)
+        {
+            permissions.EnsureCanAssign(actor, access, task, assigneeId);
+            var assignee = await users.GetByIdAsync(assigneeId, cancellationToken);
+            if (assignee is null || !assignee.IsActive)
+                throw new InvalidOperationException("Исполнитель не найден или деактивирован.");
+            task.Assign(assignee.Id);
+        }
+
+        // Экран создания (docs/TZ_workflow_config.md §3): его «обязательные» проверяет сервер, а не только форма.
+        var missing = board.MissingOnCreateScreen(task);
+        if (missing.Count > 0)
+            throw new InvalidOperationException($"Заполните обязательные поля: {string.Join(", ", missing.Select(m => $"«{m}»"))}.");
 
         // Board.Tasks не подгружен (не нужен для создания), поэтому EF не отследит новую задачу
         // через изменение коллекции сам — регистрируем её явно.

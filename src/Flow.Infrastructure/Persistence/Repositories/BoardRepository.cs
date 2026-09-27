@@ -7,10 +7,10 @@ namespace Flow.Infrastructure.Persistence.Repositories;
 public sealed class BoardRepository(FlowDbContext db) : IBoardRepository
 {
     public Task<Board?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        db.Boards.Include(b => b.Statuses).Include(b => b.TaskTypes).Include(b => b.Transitions).Include(b => b.CustomFields).AsSplitQuery().FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
+        db.Boards.Include(b => b.Statuses).Include(b => b.TaskTypes).Include(b => b.Transitions).Include(b => b.CustomFields).Include(b => b.Screens).AsSplitQuery().FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
 
     public async Task<IReadOnlyList<Board>> GetAllAsync(CancellationToken cancellationToken) =>
-        await db.Boards.Include(b => b.Statuses).Include(b => b.TaskTypes).Include(b => b.Transitions).Include(b => b.CustomFields).AsSplitQuery().AsNoTracking().ToListAsync(cancellationToken);
+        await db.Boards.Include(b => b.Statuses).Include(b => b.TaskTypes).Include(b => b.Transitions).Include(b => b.CustomFields).Include(b => b.Screens).AsSplitQuery().AsNoTracking().ToListAsync(cancellationToken);
 
     public Task<bool> ExistsByKeyAsync(string key, CancellationToken cancellationToken) =>
         db.Boards.AnyAsync(b => b.Key == key, cancellationToken);

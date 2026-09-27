@@ -12,13 +12,15 @@ public enum WorkflowMode
 
 /// <summary>
 /// Условия перехода — все должны выполняться. MinRole — кто может выполнить переход (Admin+ workflow не обходит:
-/// обход — это переход с MinRole = Admin в самом графе). Обязательные пользовательские поля появятся с этапом 1D.
+/// обход — это переход с MinRole = Admin в самом графе). RequireFields — пользовательские поля проекта, которые
+/// должны быть заполнены (этап 3C): «в “На проверке” — только с заполненными “Шагами воспроизведения”».
 /// </summary>
 public sealed record TransitionConditions(
     ProjectRole? MinRole = null,
     bool RequireAssignee = false,
     bool RequireChildrenDone = false,
-    bool RequireChecklistDone = false)
+    bool RequireChecklistDone = false,
+    IReadOnlyList<Guid>? RequireFields = null)
 {
     public static readonly TransitionConditions None = new();
 }
@@ -50,7 +52,12 @@ public sealed class StatusTransition
 
     public bool RequireChecklistDone { get; private set; }
 
-    public TransitionConditions Conditions => new(MinRole, RequireAssignee, RequireChildrenDone, RequireChecklistDone);
+    private List<Guid> _requireFields = [];
+
+    /// <summary>Id пользовательских полей, которые должны быть заполнены (uuid[] в БД).</summary>
+    public IReadOnlyList<Guid> RequireFields => _requireFields;
+
+    public TransitionConditions Conditions => new(MinRole, RequireAssignee, RequireChildrenDone, RequireChecklistDone, _requireFields);
 
     private StatusTransition()
     {
@@ -72,6 +79,7 @@ public sealed class StatusTransition
         RequireAssignee = conditions.RequireAssignee;
         RequireChildrenDone = conditions.RequireChildrenDone;
         RequireChecklistDone = conditions.RequireChecklistDone;
+        _requireFields = conditions.RequireFields?.Distinct().ToList() ?? [];
     }
 }
 
@@ -81,8 +89,9 @@ public sealed record TransitionSpec(Guid? FromStatusId, Guid ToStatusId, string?
 /// <summary>
 /// Что знает о задаче и человеке проверка перехода — это приносит хендлер: у домена нет доступа к пользователям
 /// и соседним задачам (тот же принцип, что с активностью исполнителя).
+/// FilledFields — Id пользовательских полей с непустым значением (для RequireFields); null — не проверялось.
 /// </summary>
-public sealed record TransitionContext(ProjectRole ActorRole, bool HasAssignee, bool ChildrenDone, bool ChecklistDone);
+public sealed record TransitionContext(ProjectRole ActorRole, bool HasAssignee, bool ChildrenDone, bool ChecklistDone, IReadOnlySet<Guid>? FilledFields = null);
 
 /// <summary>Результат проверки: разрешён ли переход и, если нет, почему — по-русски, для подсказки человеку.</summary>
 public sealed record TransitionCheck(bool Allowed, IReadOnlyList<string> Reasons)

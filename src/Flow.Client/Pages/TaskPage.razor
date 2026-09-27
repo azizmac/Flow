@@ -79,6 +79,8 @@ else if (_task is not null && _board is not null)
                          @onclick="StartTitleEdit" @onkeydown="OnTitleActivate">@_task.Title</div>
                 }
             </div>
+            @if (Shows("description"))
+            {
             <div style="display:flex;flex-direction:column;gap:10px;">
                 <div class="desc-head">
                     <div class="section-title">Описание</div>
@@ -104,36 +106,29 @@ else if (_task is not null && _board is not null)
                     <MarkdownView Text="@_task.Description" Class="big" OnClick="OnDescClick" />
                 }
             </div>
+            }
             <SubtaskList Board="_board" Parent="_task" CanCreate="Permissions.CanCreateTask(Access.For(_board.Id))"
                          OnCountsChanged="c => _task = _task with { ChildCount = c.Total, ChildDoneCount = c.Done }"
                          OnCreated="child => _timeline?.NoteChildAdded(child)" />
-            <TaskChecklist TaskId="_task.Id" CanEdit="CanEdit" OnCountsChanged="OnChecklistChanged" />
-            <TaskLinks TaskId="_task.Id" CanEdit="CanEdit" OnBlockedChanged="n => _task = _task with { BlockedByCount = n }"
-                       OnJournal="e => _timeline?.NoteActivity(e.Type, e.Old, e.New)" />
-            <AttachmentList TaskId="_task.Id" BoardId="_task.BoardId" DropZoneId="tp-drop" />
+            @if (Shows("checklist"))
+            {
+                <TaskChecklist TaskId="_task.Id" CanEdit="CanEdit" OnCountsChanged="OnChecklistChanged" />
+            }
+            @if (Shows("links"))
+            {
+                <TaskLinks TaskId="_task.Id" CanEdit="CanEdit" OnBlockedChanged="n => _task = _task with { BlockedByCount = n }"
+                           OnJournal="e => _timeline?.NoteActivity(e.Type, e.Old, e.New)" />
+            }
+            @if (Shows("attachments"))
+            {
+                <AttachmentList TaskId="_task.Id" BoardId="_task.BoardId" DropZoneId="tp-drop" />
+            }
             <TaskTimeline @ref="_timeline" TaskItem="_task" Board="_board" OnCommentCountChanged="OnCommentCountChanged" />
         </div>
 
         <div class="task-page-side">
             <div class="side-card">
                 <div class="meta-grid narrow">
-                    <div class="meta-k">Тип</div>
-                    <div>
-                        @if (CanEdit)
-                        {
-                            <TaskTypeSelect Types="_board.TaskTypes" Value="_task.TypeId" OnChange="ChangeType" Disabled="_busy" />
-                        }
-                        else if (TaskMeta.TypeOf(_board, _task.TypeId) is { } type)
-                        {
-                            <span class="status-pill"><TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />@type.Name</span>
-                        }
-                    </div>
-                    <div class="meta-k">Родитель</div>
-                    <div class="meta-v"><ParentSelect Board="_board" Task="_task" Value="_task.ParentId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetParent" /></div>
-                    <div class="meta-k">Спринт</div>
-                    <div class="meta-v"><SprintSelect BoardId="_board.Id" Value="_task.SprintId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetSprint" /></div>
-                    <div class="meta-k">Веха</div>
-                    <div class="meta-v"><MilestoneSelect BoardId="_board.Id" Value="_task.MilestoneId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetMilestone" /></div>
                     <div class="meta-k">Статус</div>
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         @if (CanEdit)
@@ -155,25 +150,23 @@ else if (_task is not null && _board is not null)
                             <span class="save-state ok" aria-live="polite"><Icon Name="check" Size="13" />Сохранено</span>
                         }
                     </div>
-                    <div class="meta-k">Приоритет</div>
-                    <div>
-                        @if (CanEdit)
+                    @foreach (var field in DetailLayout.Where(f => ScreenLayout.SystemName(f) is not ("description" or "checklist" or "links" or "attachments")))
+                    {
+                        @if (field.Section is { } sectionTitle)
                         {
-                            <PrioritySelect Value="_task.Priority" OnChange="ChangePriority" Disabled="_busy" />
+                            <div class="meta-section">@sectionTitle</div>
                         }
-                        else
+                        @if (ScreenLayout.CustomId(field) is { } customId)
                         {
-                            <span class="status-pill"><PriorityIcon Value="_task.Priority" Size="13" ShowNone="true" />@TaskMeta.PriorityLabel(_task.Priority)</span>
+                            <CustomFieldsEditor Board="_board" TypeId="_task.TypeId" Values="_task.CustomFields" CanEdit="CanEdit" Disabled="_busy"
+                                                FieldIds="[customId]" Required="field.Required" OnChange="c => SetCustomField(c.FieldId, c.Value)" />
                         }
-                    </div>
-                    <div class="meta-k">Исполнитель</div>
-                    <div><AssigneeSelect Value="_task.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" /></div>
-                    <div class="meta-k">Начало</div>
-                    <div><DueDateField Value="_task.StartDate" CanEdit="CanEdit" Disabled="_busy" Plain="true" Label="Дата начала" OnChange="SetStartDate" /></div>
-                    <div class="meta-k">Срок</div>
-                    <div><DueDateField Value="_task.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>
-                    <div class="meta-k">Оценка</div>
-                    <div><EstimateField StoryPoints="_task.StoryPoints" EstimateMinutes="_task.EstimateMinutes" CanEdit="CanEdit" Disabled="_busy" OnChange="SetEstimate" /></div>
+                        else if (ScreenLayout.SystemName(field) is { } name)
+                        {
+                            <div class="meta-k @(field.Required && ScreenLayout.IsEmpty(name, _task) ? "req" : "")">@ScreenLayout.Label(name)@(field.Required ? " *" : "")</div>
+                            @SystemValue(name)
+                        }
+                    }
                     <div class="meta-k">Проект</div>
                     <div class="meta-v"><KeyChip Value="@_board.Key" /><a href="@BackHref" style="color:#fff;" title="@_board.Name">@_board.Name</a></div>
                     <div class="meta-k">Создана</div>
@@ -181,8 +174,6 @@ else if (_task is not null && _board is not null)
                     <div class="meta-k">ID</div>
                     <div class="meta-v mono" title="Скопировать ID" role="button" tabindex="0"
                          @onclick="CopyId" @onkeydown="OnCopyIdKey">@_task.Id</div>
-                    <CustomFieldsEditor Board="_board" TypeId="_task.TypeId" Values="_task.CustomFields" CanEdit="CanEdit" Disabled="_busy"
-                                        OnChange="c => SetCustomField(c.FieldId, c.Value)" />
                 </div>
             </div>
             @if (_task.AssigneeId is { } aid && Users.Find(aid) is { } who)
@@ -222,6 +213,43 @@ else if (_task is not null && _board is not null)
 }
 
 @code {
+    /// <summary>Раскладка карточки по экрану типа задачи (docs/TZ_workflow_config.md §3).</summary>
+    private IReadOnlyList<ScreenFieldDto> DetailLayout => ScreenLayout.Resolve(_board!, _task!.TypeId, ScreenContext.Detail, _task.CustomFields);
+
+    private bool Shows(string name) => DetailLayout.Any(f => ScreenLayout.SystemName(f) == name);
+
+    private RenderFragment SystemValue(string name) => name switch
+    {
+        "type" => @<div>
+                @if (CanEdit)
+                {
+                    <TaskTypeSelect Types="_board!.TaskTypes" Value="_task!.TypeId" OnChange="ChangeType" Disabled="_busy" />
+                }
+                else if (TaskMeta.TypeOf(_board, _task!.TypeId) is { } type)
+                {
+                    <span class="status-pill"><TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />@type.Name</span>
+                }
+            </div>,
+        "parent" => @<div class="meta-v"><ParentSelect Board="_board" Task="_task" Value="_task!.ParentId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetParent" /></div>,
+        "sprint" => @<div class="meta-v"><SprintSelect BoardId="_board!.Id" Value="_task!.SprintId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetSprint" /></div>,
+        "milestone" => @<div class="meta-v"><MilestoneSelect BoardId="_board!.Id" Value="_task!.MilestoneId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetMilestone" /></div>,
+        "priority" => @<div>
+                @if (CanEdit)
+                {
+                    <PrioritySelect Value="_task!.Priority" OnChange="ChangePriority" Disabled="_busy" />
+                }
+                else
+                {
+                    <span class="status-pill"><PriorityIcon Value="_task!.Priority" Size="13" ShowNone="true" />@TaskMeta.PriorityLabel(_task.Priority)</span>
+                }
+            </div>,
+        "assignee" => @<div><AssigneeSelect Value="_task!.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" /></div>,
+        "start" => @<div><DueDateField Value="_task!.StartDate" CanEdit="CanEdit" Disabled="_busy" Plain="true" Label="Дата начала" OnChange="SetStartDate" /></div>,
+        "due" => @<div><DueDateField Value="_task!.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>,
+        "estimate" => @<div><EstimateField StoryPoints="_task!.StoryPoints" EstimateMinutes="_task.EstimateMinutes" CanEdit="CanEdit" Disabled="_busy" OnChange="SetEstimate" /></div>,
+        _ => @<div class="meta-v muted">—</div>
+    };
+
     [Parameter] public Guid Id { get; set; }
 
     private TaskResponse? _task;

@@ -41,6 +41,10 @@ public static class BoardMappingExtensions
         board.CustomFields
             .OrderBy(f => f.SortOrder)
             .Select(f => f.ToResponse())
+            .ToList(),
+        board.Screens
+            .Select(s => new TaskScreenResponse(s.TaskTypeId, (Flow.Shared.Contracts.Boards.ScreenContext)(int)s.Context,
+                s.Fields.Select(f => new ScreenFieldDto(f.Field, f.Required, f.Section)).ToList()))
             .ToList());
 
     public static CustomFieldResponse ToResponse(this CustomFieldDefinition field) => new(
@@ -61,7 +65,7 @@ public static class BoardMappingExtensions
             .OrderBy(t => t.FromStatusId is null ? int.MaxValue : board.Statuses.FirstOrDefault(s => s.Id == t.FromStatusId)?.SortOrder ?? 0)
             .ThenBy(t => board.Statuses.FirstOrDefault(s => s.Id == t.ToStatusId)?.SortOrder ?? 0)
             .Select(t => new TransitionResponse(t.Id, t.FromStatusId, t.ToStatusId, t.Name,
-                new TransitionConditionsDto(t.MinRole?.ToResponseRole(), t.RequireAssignee, t.RequireChildrenDone, t.RequireChecklistDone)))
+                new TransitionConditionsDto(t.MinRole?.ToResponseRole(), t.RequireAssignee, t.RequireChildrenDone, t.RequireChecklistDone, t.RequireFields.ToList())))
             .ToList(),
         board.DeadEnds().Select(s => s.Id).ToList());
 
@@ -70,7 +74,7 @@ public static class BoardMappingExtensions
         request.ToStatusId,
         request.Name,
         request.Conditions is { } c
-            ? new TransitionConditions(c.MinRole?.ToDomainRole(), c.RequireAssignee, c.RequireChildrenDone, c.RequireChecklistDone)
+            ? new TransitionConditions(c.MinRole?.ToDomainRole(), c.RequireAssignee, c.RequireChildrenDone, c.RequireChecklistDone, c.RequireFields)
             : null);
 
     public static BoardMembersResponse ToMembersResponse(this Board board, IEnumerable<BoardMember> members) => new(

@@ -6,7 +6,7 @@
 @inject IFlowApi Api
 @inject ToastService Toasts
 
-<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal wide"
            TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
     <TitleContent>
         <h3>Поля проекта · @_board.Key</h3>

@@ -19,6 +19,8 @@ public sealed class StatusTransitionConfiguration : IEntityTypeConfiguration<Sta
         builder.Property(t => t.Id).ValueGeneratedNever();
         builder.Property(t => t.Name).HasMaxLength(StatusTransition.NameMaxLength);
         builder.Ignore(t => t.Conditions);
+        builder.Ignore(t => t.RequireFields);
+        builder.PrimitiveCollection<List<Guid>>("_requireFields").HasColumnName("RequireFields").IsRequired();
 
         builder.HasOne<Status>().WithMany().HasForeignKey(t => t.FromStatusId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Status>().WithMany().HasForeignKey(t => t.ToStatusId).OnDelete(DeleteBehavior.Cascade);

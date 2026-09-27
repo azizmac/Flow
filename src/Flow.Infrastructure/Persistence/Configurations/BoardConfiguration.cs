@@ -35,6 +35,7 @@ public sealed class BoardConfiguration : IEntityTypeConfiguration<Board>
         builder.Navigation(b => b.TaskTypes).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(b => b.Transitions).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(b => b.CustomFields).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(b => b.Screens).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // Free = 0 — у всех существующих проектов: после миграции статус меняется как раньше.
         builder.Property(b => b.WorkflowMode).IsRequired();
@@ -46,6 +47,11 @@ public sealed class BoardConfiguration : IEntityTypeConfiguration<Board>
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasMany(b => b.Statuses)
+            .WithOne()
+            .HasForeignKey(s => s.BoardId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(b => b.Screens)
             .WithOne()
             .HasForeignKey(s => s.BoardId)
             .OnDelete(DeleteBehavior.Cascade);

@@ -21,4 +21,5 @@ public sealed record BoardResponse(
     BoardVisibility Visibility,
     WorkflowMode WorkflowMode = WorkflowMode.Free,
     int DoneColumnDays = 14,
-    IReadOnlyList<Flow.Shared.Contracts.CustomFields.CustomFieldResponse>? CustomFields = null);
+    IReadOnlyList<Flow.Shared.Contracts.CustomFields.CustomFieldResponse>? CustomFields = null,
+    IReadOnlyList<TaskScreenResponse>? Screens = null);
