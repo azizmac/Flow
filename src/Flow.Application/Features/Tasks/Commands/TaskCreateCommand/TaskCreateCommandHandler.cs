@@ -21,7 +21,11 @@ internal sealed class TaskCreateCommandHandler(IBoardRepository boards, ITaskIte
         if (board is null)
             return null;
 
-        var task = board.CreateTask(request.Title, request.Description, request.StatusId, createdById: actor.Id);
+        var task = board.CreateTask(request.Title, request.Description, request.StatusId, createdById: actor.Id, typeId: request.TypeId);
+
+        // Приоритет в журнал отдельно не пишется: запись Created и так фиксирует начальное состояние задачи.
+        if (request.Priority is { } priority)
+            task.SetPriority(priority);
 
         // Board.Tasks не подгружен (не нужен для создания), поэтому EF не отследит новую задачу
         // через изменение коллекции сам — регистрируем её явно.

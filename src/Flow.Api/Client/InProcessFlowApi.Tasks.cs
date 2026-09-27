@@ -1,7 +1,10 @@
 ﻿using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Application.Features.Tasks;
 using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetEstimateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetScheduleCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskListQuery;
@@ -43,6 +46,8 @@ internal sealed partial class InProcessFlowApi
         int? offset = null,
         TaskSortField? sort = null,
         bool descending = false,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
         CancellationToken ct = default) =>
         Scoped(async mediator =>
         {
@@ -60,7 +65,7 @@ internal sealed partial class InProcessFlowApi
 
             var response = await mediator.Send(
                 new TaskSearchQuery(boardId, assigneeId, unassigned, statusId, statusType, text, limit, page,
-                    offset, sortField, sortDescending),
+                    offset, sortField, sortDescending, typeKind, priority),
                 ct);
 
             return Ok(response);
@@ -78,7 +83,8 @@ internal sealed partial class InProcessFlowApi
         {
             var actor = await ActorAsync();
             var response = await mediator.Send(
-                new TaskCreateCommand(actor, boardId, request.Title, request.Description, request.StatusId),
+                new TaskCreateCommand(actor, boardId, request.Title, request.Description, request.StatusId,
+                    request.TypeId, request.Priority?.ToDomainPriority()),
                 ct);
 
             // null — доски нет; ArgumentException/InvalidOperationException (пустой заголовок, чужой статус)
@@ -91,7 +97,8 @@ internal sealed partial class InProcessFlowApi
         {
             var actor = await ActorAsync();
             var result = await mediator.Send(
-                new TaskUpdateCommand(actor, id, request.Title, request.Description, request.StatusId),
+                new TaskUpdateCommand(actor, id, request.Title, request.Description, request.StatusId,
+                    request.TypeId, request.Priority?.ToDomainPriority()),
                 ct);
 
             if (result.IsNotFound)
@@ -127,14 +134,22 @@ internal sealed partial class InProcessFlowApi
                 : Ok(result.Response!);
         });
 
-    /// <summary>DueDate = null в запросе — снять срок.</summary>
+    /// <summary>DueDate = null в запросе — снять срок. Срок раньше даты начала — ArgumentException, Guard отдаёт 400.</summary>
     public Task<ApiResult<TaskResponse>> SetDueDate(Guid id, SetTaskDueDateRequest request, CancellationToken ct = default) =>
+        SendUpdate(actor => new TaskSetDueDateCommand(actor, id, request.DueDate), ct);
+
+    public Task<ApiResult<TaskResponse>> SetSchedule(Guid id, SetTaskScheduleRequest request, CancellationToken ct = default) =>
+        SendUpdate(actor => new TaskSetScheduleCommand(actor, id, request.StartDate, request.DueDate), ct);
+
+    public Task<ApiResult<TaskResponse>> SetEstimate(Guid id, SetTaskEstimateRequest request, CancellationToken ct = default) =>
+        SendUpdate(actor => new TaskSetEstimateCommand(actor, id, request.StoryPoints, request.EstimateMinutes), ct);
+
+    /// <summary>Команды, различающие только «задачи нет» и успех; ошибки ввода домена ловит Guard (400).</summary>
+    private Task<ApiResult<TaskResponse>> SendUpdate(Func<Guid, MediatR.IRequest<TaskUpdateResult>> command, CancellationToken ct) =>
         Scoped(async mediator =>
         {
             var actor = await ActorAsync();
-            var result = await mediator.Send(new TaskSetDueDateCommand(actor, id, request.DueDate), ct);
-
-            // Валидации у срока нет — команда различает только «задачи нет» и успех.
+            var result = await mediator.Send(command(actor), ct);
             return result.IsNotFound ? NotFound<TaskResponse>() : Ok(result.Response!);
         });
 }

@@ -1,6 +1,9 @@
 ﻿using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
+using Flow.Application.Features.Boards;
 using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
+using Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
+using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
 using Flow.Application.Features.Boards.Queries.BoardListQuery;
 using Flow.Client.Services;
@@ -45,6 +48,25 @@ internal sealed partial class InProcessFlowApi
             var actor = await ActorAsync();
 
             var response = await mediator.Send(new BoardRenameCommand(actor, id, request.Name), ct);
+            return response is null ? NotFound<BoardResponse>() : Ok(response);
+        });
+
+    /// <summary>Ответ — проект целиком: вместе с типом мог переехать флаг «по умолчанию». 400 — занятое имя.</summary>
+    public Task<ApiResult<BoardResponse>> CreateTaskType(Guid boardId, CreateTaskTypeRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var actor = await ActorAsync();
+            var response = await mediator.Send(
+                new TaskTypeCreateCommand(actor, boardId, request.Name, request.Kind.ToDomainKind(), request.IsDefault), ct);
+            return response is null ? NotFound<BoardResponse>() : Ok(response);
+        });
+
+    public Task<ApiResult<BoardResponse>> UpdateTaskType(Guid boardId, Guid typeId, UpdateTaskTypeRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var actor = await ActorAsync();
+            var response = await mediator.Send(
+                new TaskTypeUpdateCommand(actor, boardId, typeId, request.Name, request.IsDefault, request.IsArchived), ct);
             return response is null ? NotFound<BoardResponse>() : Ok(response);
         });
 

@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using System.Text;
 using Flow.Application.Abstractions;
+using Flow.Application.Features.Boards;
 using Flow.Shared.Contracts.Tasks;
 using MediatR;
 using DomainStatusType = Flow.Domain.Entities.StatusType;
@@ -30,7 +31,9 @@ internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCom
             limit,
             request.Offset is { } offset ? Math.Max(0, offset) : null,
             request.Sort,
-            request.Descending);
+            request.Descending,
+            request.TypeKind?.ToDomainKind(),
+            request.Priority?.ToDomainPriority());
 
         var items = await tasks.SearchAsync(filter, cancellationToken);
         var counted = await tasks.CountAsync(filter, cancellationToken);

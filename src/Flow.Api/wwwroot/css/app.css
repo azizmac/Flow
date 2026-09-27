@@ -2173,3 +2173,40 @@ a.task-row { color: inherit; text-decoration: none; }
 .md-editor:has(.att-file:focus-visible) .md-tool[for] { background: rgba(255, 255, 255, 0.1); color: #fff; }
 /* В редакторе очередь загрузки идёт под полем и на всю ширину, а не жмётся вправо, как в блоке вложений. */
 .md-editor > .att-upload { align-items: stretch; padding: 8px 12px 0; }
+
+/* ---------- Тип задачи, приоритет, оценка (docs/TZ_task_model.md, этап 1A) ---------- */
+.type-ico, .prio-ico { display: inline-flex; align-items: center; flex: none; line-height: 0; }
+.prio-ico.none { width: 13px; height: 13px; }
+.row-key .type-ico { margin-right: 6px; vertical-align: -2px; }
+.task-title .prio-ico { margin-right: 5px; vertical-align: -2px; }
+.status-sel .type-ico, .status-sel .prio-ico { margin-right: 2px; }
+.est-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.est-part { display: inline-flex; align-items: center; gap: 5px; }
+.est-input {
+    background: rgba(0, 0, 0, 0.18); border: 1px solid var(--border); border-radius: 8px;
+    color: #fff; font: var(--fw-semibold) 12.5px var(--font-display); padding: 5px 8px; outline: 0;
+}
+.est-input.pts { width: 56px; }
+.est-input.time { width: 96px; }
+.est-input:focus { border-color: var(--accent); }
+.est-input.invalid { border-color: var(--danger); }
+.est-input:disabled { opacity: 0.55; }
+.est-unit { font: var(--fw-bold) 11px var(--font-display); color: var(--text-tertiary); }
+
+/* Модалка «Типы задач» */
+.tt-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
+.tt-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: 8px; min-height: 36px; }
+.tt-row.archived .tt-name, .tt-row.archived .type-ico { opacity: 0.5; }
+.tt-name {
+    background: none; border: 0; padding: 0; color: #fff; cursor: text; text-align: left;
+    font: var(--fw-semibold) 13.5px var(--font-display); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tt-name-input {
+    background: rgba(0, 0, 0, 0.18); border: 1px solid var(--accent); border-radius: 6px; padding: 3px 8px;
+    color: #fff; font: var(--fw-semibold) 13.5px var(--font-display); outline: 0; min-width: 0; width: 180px;
+}
+.tt-kind { font: var(--fw-medium) 11.5px var(--font-text); color: var(--text-tertiary); }
+.tt-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; flex: none; }
+.tt-add { display: flex; flex-direction: column; gap: 10px; }
+.tt-add .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.tt-add .seg-btn { display: inline-flex; align-items: center; gap: 5px; }

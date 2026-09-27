@@ -245,13 +245,32 @@ namespace Flow.Infrastructure.Migrations
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
 
+                    b.Property<int?>("EstimateMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date");
+
                     b.Property<Guid>("StatusId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal?>("StoryPoints")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
 
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -266,7 +285,42 @@ namespace Flow.Infrastructure.Migrations
 
                     b.HasIndex("StatusId");
 
+                    b.HasIndex("TypeId");
+
                     b.ToTable("TaskItems");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoardId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("TaskTypes");
                 });
 
             modelBuilder.Entity("Flow.Domain.Entities.User", b =>
@@ -558,6 +612,21 @@ namespace Flow.Infrastructure.Migrations
                         .HasForeignKey("StatusId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.TaskType", null)
+                        .WithMany()
+                        .HasForeignKey("TypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskType", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany("TaskTypes")
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Flow.Domain.Entities.User", b =>
@@ -589,6 +658,8 @@ namespace Flow.Infrastructure.Migrations
             modelBuilder.Entity("Flow.Domain.Entities.Board", b =>
                 {
                     b.Navigation("Statuses");
+
+                    b.Navigation("TaskTypes");
 
                     b.Navigation("Tasks");
                 });

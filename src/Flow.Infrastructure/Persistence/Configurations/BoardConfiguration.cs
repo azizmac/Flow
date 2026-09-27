@@ -26,10 +26,16 @@ public sealed class BoardConfiguration : IEntityTypeConfiguration<Board>
 
         builder.Navigation(b => b.Statuses).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(b => b.Tasks).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(b => b.TaskTypes).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.HasMany(b => b.Statuses)
             .WithOne()
             .HasForeignKey(s => s.BoardId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(b => b.TaskTypes)
+            .WithOne()
+            .HasForeignKey(t => t.BoardId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasMany(b => b.Tasks)

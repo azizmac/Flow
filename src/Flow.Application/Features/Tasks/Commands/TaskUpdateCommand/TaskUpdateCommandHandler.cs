@@ -8,7 +8,7 @@ using MediatR;
 namespace Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 
 /// <summary>Бросает ArgumentException при пустом названии (см. TaskItem.Rename).</summary>
-internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IBoardRepository boards, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskUpdateCommand, TaskUpdateResult>
 {
     public async Task<TaskUpdateResult> Handle(TaskUpdateCommand request, CancellationToken cancellationToken)
@@ -26,6 +26,16 @@ internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, ITaskA
             var statusBelongsToBoard = await tasks.StatusBelongsToBoardAsync(request.StatusId.Value, task.BoardId, cancellationToken);
             if (!statusBelongsToBoard)
                 return TaskUpdateResult.InvalidStatus(request.StatusId.Value);
+        }
+
+        // Тип живёт в агрегате Board — доску грузим, только когда тип действительно меняют.
+        TaskType? newType = null;
+        if (request.TypeId is { } typeId && typeId != task.TypeId)
+        {
+            var board = await boards.GetByIdAsync(task.BoardId, cancellationToken);
+            newType = board?.TaskTypes.SingleOrDefault(t => t.Id == typeId);
+            if (newType is null)
+                return TaskUpdateResult.InvalidType(typeId);
         }
 
         // Журнал: по записи на каждое реально изменённое поле; то же значение — без записи.
@@ -57,6 +67,21 @@ internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, ITaskA
             statusChanged = true;
         }
 
+        if (newType is not null)
+        {
+            var oldTypeId = task.TypeId;
+            task.ChangeType(newType);
+            activities.Add(TaskActivity.TypeChanged(task.Id, actor.Id, oldTypeId, newType.Id));
+        }
+
+        if (request.Priority is { } priority && priority != task.Priority)
+        {
+            var oldPriority = task.Priority;
+            task.SetPriority(priority);
+            activities.Add(TaskActivity.PriorityChanged(task.Id, actor.Id, oldPriority, priority));
+        }
+
+        // Тип и приоритет в текст чанков не входят — индекс они не трогают, как исполнитель и срок.
         // Смена статуса тоже идёт в очередь, но реэмбеддинга не вызывает: текст чанков не изменился,
         // воркер увидит тот же ContentHash и обновит только флаг IsClosed.
         if (textChanged || statusChanged)

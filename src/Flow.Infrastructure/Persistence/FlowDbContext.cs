@@ -12,6 +12,8 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
 
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
 
+    public DbSet<TaskType> TaskTypes => Set<TaskType>();
+
     public DbSet<User> Users => Set<User>();
 
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();

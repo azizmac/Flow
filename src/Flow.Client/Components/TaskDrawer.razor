@@ -1,6 +1,6 @@
-﻿@* Слайдер задачи. Mode=Create — форма новой задачи (POST; исполнитель — отдельным PATCH /assignee после создания,
-   в CreateTaskRequest его нет); Mode=View — просмотр/редактирование существующей
-   (PATCH Title/Description/StatusId, PATCH /assignee, DELETE). Содержимое рендерится внутри общего Drawer. *@
+﻿@* Слайдер задачи. Mode=Create — форма новой задачи (POST с типом и приоритетом; исполнитель — отдельным
+   PATCH /assignee после создания, в CreateTaskRequest его нет); Mode=View — просмотр/редактирование существующей
+   (PATCH Title/Description/StatusId/TypeId/Priority, PATCH /assignee, /schedule, /estimate, DELETE). Содержимое рендерится внутри общего Drawer. *@
 @implements IDisposable
 @inject IFlowApi Api
 @inject ToastService Toasts
@@ -24,8 +24,12 @@
         @* Дубль дешевле не создать, чем потом склеивать: похожие показываются прямо по ходу набора. *@
         <SimilarTasks Title="@_title" Limit="3" />
         <div class="meta-grid">
+            <div class="meta-k">Тип</div>
+            <div><TaskTypeSelect Types="Board.TaskTypes" Value="_typeId" OnChange="id => _typeId = id" /></div>
             <div class="meta-k">Статус</div>
             <div><StatusSelect Statuses="Board.Statuses" Value="_statusId" OnChange="id => _statusId = id" /></div>
+            <div class="meta-k">Приоритет</div>
+            <div><PrioritySelect Value="_priority" OnChange="p => _priority = p" /></div>
             <div class="meta-k">Исполнитель</div>
             <div><AssigneeSelect Value="_assigneeId" OnlyUserId="OnlyAssigneeId" OnChange="id => _assigneeId = id" /></div>
             <div class="meta-k">Проект</div>
@@ -96,6 +100,17 @@ else if (Item is not null)
                  @onclick="StartTitleEdit" @onkeydown="OnTitleActivate">@Item.Title</div>
         }
         <div class="meta-grid">
+            <div class="meta-k">Тип</div>
+            <div>
+                @if (CanEdit)
+                {
+                    <TaskTypeSelect Types="Board.TaskTypes" Value="Item.TypeId" OnChange="ChangeType" Disabled="_busy" />
+                }
+                else if (TaskMeta.TypeOf(Board, Item.TypeId) is { } type)
+                {
+                    <span class="status-pill"><TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />@type.Name</span>
+                }
+            </div>
             <div class="meta-k">Статус</div>
             <div>
                 @if (CanEdit)
@@ -106,6 +121,17 @@ else if (Item is not null)
                 {
                     var st = Board.Statuses.FirstOrDefault(x => x.Id == Item.StatusId);
                     <span class="status-pill"><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span>
+                }
+            </div>
+            <div class="meta-k">Приоритет</div>
+            <div>
+                @if (CanEdit)
+                {
+                    <PrioritySelect Value="Item.Priority" OnChange="ChangePriority" Disabled="_busy" />
+                }
+                else
+                {
+                    <span class="status-pill"><PriorityIcon Value="Item.Priority" Size="13" ShowNone="true" />@TaskMeta.PriorityLabel(Item.Priority)</span>
                 }
             </div>
             <div class="meta-k">Исполнитель</div>
@@ -123,8 +149,12 @@ else if (Item is not null)
                     </span>
                 }
             </div>
+            <div class="meta-k">Начало</div>
+            <div><DueDateField Value="Item.StartDate" CanEdit="CanEdit" Disabled="_busy" Plain="true" Label="Дата начала" OnChange="SetStartDate" /></div>
             <div class="meta-k">Срок</div>
             <div><DueDateField Value="Item.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>
+            <div class="meta-k">Оценка</div>
+            <div><EstimateField StoryPoints="Item.StoryPoints" EstimateMinutes="Item.EstimateMinutes" CanEdit="CanEdit" Disabled="_busy" OnChange="SetEstimate" /></div>
             <div class="meta-k">Проект</div>
             <div class="meta-v"><KeyChip Value="@Board.Key" /><span class="val" title="@Board.Name">@Board.Name</span></div>
             <div class="meta-k">Создана</div>
@@ -193,6 +223,8 @@ else if (Item is not null)
     private string _title = "";
     private string _description = "";
     private Guid _statusId;
+    private Guid _typeId;
+    private TaskPriority _priority;
     private Guid? _assigneeId;
     private bool _busy;
     private bool _whoOpen;
@@ -207,6 +239,14 @@ else if (Item is not null)
     private CancellationTokenSource? _savedCts;
     private IDisposable? _hotkeys;
     private TaskTimeline? _timeline;
+
+    /// <summary>
+    /// Последний ответ сервера по этой задаче. Родитель присылает обновлённый Item не мгновенно, а правки
+    /// из соседних полей могут идти подряд: «до» для ленты и текущий срок для /schedule берём отсюда.
+    /// </summary>
+    private TaskResponse? _latest;
+
+    private TaskResponse Current => _latest is { } l && l.Id == Item!.Id && l.UpdatedAt >= Item.UpdatedAt ? l : Item!;
 
     protected override void OnInitialized()
     {
@@ -234,8 +274,10 @@ else if (Item is not null)
                 _description = "";
                 _error = null;
                 _assigneeId = null;
+                _priority = TaskPriority.None;
                 _boardId = Board.Id;
                 _statusId = InitialStatusId();
+                _typeId = DefaultTypeId();
                 _focusTitle = true;
             }
             else if (_boardId != Board.Id)
@@ -244,6 +286,7 @@ else if (Item is not null)
                 // Введённые название и описание при этом сохраняем — их писали не для проекта, а для задачи.
                 _boardId = Board.Id;
                 _statusId = InitialStatusId();
+                _typeId = DefaultTypeId();
             }
 
             return;
@@ -275,6 +318,9 @@ else if (Item is not null)
             await Browser.FocusAsync("td-title");
         }
     }
+
+    private Guid DefaultTypeId() =>
+        Board.TaskTypes.FirstOrDefault(t => t.IsDefault)?.Id ?? Guid.Empty;
 
     private Guid InitialStatusId() =>
         Board.Statuses.FirstOrDefault(s => s.IsInitial)?.Id ?? Board.Statuses.FirstOrDefault()?.Id ?? Guid.Empty;
@@ -329,7 +375,8 @@ else if (Item is not null)
 
         _busy = true;
         _error = null;
-        var result = await Api.CreateTask(Board.Id, new CreateTaskRequest(title, NullIfEmpty(_description), _statusId));
+        var result = await Api.CreateTask(Board.Id, new CreateTaskRequest(title, NullIfEmpty(_description), _statusId,
+            _typeId == Guid.Empty ? null : _typeId, _priority));
         _busy = false;
 
         if (!result.Ok)
@@ -382,6 +429,10 @@ else if (Item is not null)
 
     private Task ChangeStatus(Guid statusId) => Patch(new UpdateTaskRequest(null, null, statusId));
 
+    private Task ChangeType(Guid typeId) => Patch(new UpdateTaskRequest(null, null, null, typeId));
+
+    private Task ChangePriority(TaskPriority priority) => Patch(new UpdateTaskRequest(null, null, null, Priority: priority));
+
     private async Task Assign(Guid? userId)
     {
         var before = Item!;
@@ -408,21 +459,34 @@ else if (Item is not null)
 
     private bool IsDone => Board.Statuses.FirstOrDefault(s => s.Id == Item?.StatusId)?.IsFinal == true;
 
-    private async Task SetDueDate(DateOnly? dueDate)
+    private Task SetDueDate(DateOnly? dueDate) =>
+        Apply(id => Api.SetDueDate(id, new SetTaskDueDateRequest(dueDate)), "Не удалось изменить срок");
+
+    private Task SetStartDate(DateOnly? startDate) =>
+        Apply(id => Api.SetSchedule(id, new SetTaskScheduleRequest(startDate, Current.DueDate)), "Не удалось изменить дату начала");
+
+    private Task SetEstimate((decimal? StoryPoints, int? EstimateMinutes) value) =>
+        Apply(id => Api.SetEstimate(id, new SetTaskEstimateRequest(value.StoryPoints, value.EstimateMinutes)), "Не удалось изменить оценку");
+
+    /// <summary>Правка отдельным эндпоинтом (срок, даты, оценка): ошибку показывает тост — текст сервера объясняет,
+    /// что не так («начало позже срока»), а лента получает локальную запись без перезагрузки.</summary>
+    private async Task Apply(Func<Guid, Task<ApiResult<TaskResponse>>> call, string fallbackError)
     {
-        var before = Item!;
+        var before = Current;
         _busy = true;
         _error = null;
-        var result = await Api.SetDueDate(before.Id, new SetTaskDueDateRequest(dueDate));
+        var result = await call(before.Id);
         _busy = false;
         if (!result.Ok)
         {
-            Toasts.Error(result.Error ?? "Не удалось изменить срок");
+            Toasts.Error(result.Error ?? fallbackError);
             return;
         }
 
+        _latest = result.Value!;
         await OnUpdated.InvokeAsync(result.Value!);
         _timeline?.NoteLocalChange(before, result.Value!);
+        _ = FlashSaved();
     }
 
     private Task OnDescClick() => string.IsNullOrWhiteSpace(Item?.Description) ? StartDescEdit() : Task.CompletedTask;
@@ -449,7 +513,7 @@ else if (Item is not null)
 
     private async Task<bool> Patch(UpdateTaskRequest request)
     {
-        var before = Item!;
+        var before = Current;
         _busy = true;
         _error = null;
         var result = await Api.UpdateTask(before.Id, request);
@@ -461,6 +525,7 @@ else if (Item is not null)
             return false;
         }
 
+        _latest = result.Value!;
         await OnUpdated.InvokeAsync(result.Value!);
         _timeline?.NoteLocalChange(before, result.Value!);
         _ = FlashSaved();

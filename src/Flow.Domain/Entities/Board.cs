@@ -12,6 +12,7 @@ public sealed partial class Board
     private static partial Regex KeyPattern();
 
     private readonly List<Status> _statuses = [];
+    private readonly List<TaskType> _taskTypes = [];
     private readonly List<TaskItem> _tasks = [];
 
     public Guid Id { get; private set; }
@@ -27,6 +28,9 @@ public sealed partial class Board
     public int NextTaskNumber { get; private set; }
 
     public IReadOnlyCollection<Status> Statuses => _statuses;
+
+    /// <summary>Типы задач проекта, включая архивные (docs/TZ_task_model.md §1).</summary>
+    public IReadOnlyCollection<TaskType> TaskTypes => _taskTypes;
 
     public IReadOnlyCollection<TaskItem> Tasks => _tasks;
 
@@ -44,13 +48,19 @@ public sealed partial class Board
         NextTaskNumber = 0;
     }
 
-    /// <summary>Создаёт доску и сразу засеивает базовый набор статусов задач из <see cref="DefaultStatuses"/>.</summary>
+    /// <summary>
+    /// Создаёт доску и сразу засеивает базовые наборы статусов (<see cref="DefaultStatuses"/>)
+    /// и типов задач (<see cref="DefaultTaskTypes"/>).
+    /// </summary>
     public static Board Create(string name, string key)
     {
         var board = new Board(name, key);
 
         foreach (var preset in DefaultStatuses.All)
             board.AddStatus(preset.Name, preset.Type, preset.IsInitial, preset.IsFinal);
+
+        foreach (var preset in DefaultTaskTypes.All)
+            board.AddTaskType(preset.Name, preset.Kind, preset.IsDefault);
 
         return board;
     }
@@ -85,12 +95,80 @@ public sealed partial class Board
     }
 
     /// <summary>
+    /// Добавляет тип задачи. Имя уникально в проекте без учёта регистра; <paramref name="isDefault"/> переносит
+    /// флаг «по умолчанию» на новый тип — он всегда ровно один.
+    /// </summary>
+    public TaskType AddTaskType(string name, TaskTypeKind kind, bool isDefault = false)
+    {
+        var normalized = TaskType.ValidateName(name);
+        EnsureTaskTypeNameFree(normalized, exceptId: null);
+
+        var sortOrder = _taskTypes.Count == 0 ? 0 : _taskTypes.Max(t => t.SortOrder) + 1;
+        // Первый тип становится типом по умолчанию сам: иначе CreateTask без типа было бы не во что положить.
+        var type = new TaskType(Id, normalized, kind, sortOrder, isDefault || _taskTypes.Count == 0);
+
+        if (type.IsDefault)
+            foreach (var other in _taskTypes.Where(t => t.IsDefault))
+                other.SetDefault(false);
+
+        _taskTypes.Add(type);
+        return type;
+    }
+
+    public void RenameTaskType(Guid typeId, string name)
+    {
+        var type = GetTaskType(typeId);
+        var normalized = TaskType.ValidateName(name);
+        EnsureTaskTypeNameFree(normalized, exceptId: typeId);
+        type.Rename(normalized);
+    }
+
+    /// <summary>Переносит флаг «по умолчанию» на другой тип. Архивный тип им быть не может.</summary>
+    public void SetDefaultTaskType(Guid typeId)
+    {
+        var target = GetTaskType(typeId);
+        if (target.IsArchived)
+            throw new InvalidOperationException("An archived task type cannot be the default one.");
+
+        foreach (var type in _taskTypes.Where(t => t.IsDefault))
+            type.SetDefault(false);
+
+        target.SetDefault(true);
+    }
+
+    /// <summary>
+    /// Архивирует или возвращает тип. Задачи архивного типа его сохраняют, новые на нём не создаются.
+    /// Тип по умолчанию архивировать нельзя — сначала назначить другой.
+    /// </summary>
+    public void SetTaskTypeArchived(Guid typeId, bool isArchived)
+    {
+        var type = GetTaskType(typeId);
+        if (isArchived && type.IsDefault)
+            throw new InvalidOperationException("The default task type cannot be archived; choose another default first.");
+
+        type.SetArchived(isArchived);
+    }
+
+    public TaskType GetTaskType(Guid typeId) =>
+        _taskTypes.SingleOrDefault(t => t.Id == typeId)
+        ?? throw new InvalidOperationException($"Task type {typeId} does not belong to board {Id}.");
+
+    /// <summary>
     /// Создаёт задачу. Если <paramref name="statusId"/> не передан — задача уходит в статус доски
     /// с <see cref="Status.IsInitial"/> = true (по умолчанию "Не начата"). <paramref name="createdById"/> — actor
-    /// (User.Id), пишется в <see cref="TaskItem.CreatedById"/>.
+    /// (User.Id), пишется в <see cref="TaskItem.CreatedById"/>. Без <paramref name="typeId"/> — тип проекта
+    /// по умолчанию; архивный тип не принимается.
     /// </summary>
-    public TaskItem CreateTask(string title, string? description = null, Guid? statusId = null, Guid? createdById = null)
+    public TaskItem CreateTask(string title, string? description = null, Guid? statusId = null, Guid? createdById = null, Guid? typeId = null)
     {
+        var type = typeId is null
+            ? _taskTypes.SingleOrDefault(t => t.IsDefault)
+              ?? throw new InvalidOperationException($"Board {Id} has no default task type configured.")
+            : GetTaskType(typeId.Value);
+
+        if (type.IsArchived)
+            throw new InvalidOperationException($"Task type {type.Id} is archived.");
+
         Guid resolvedStatusId;
         if (statusId is null)
         {
@@ -109,9 +187,15 @@ public sealed partial class Board
         NextTaskNumber++;
         
         var code = TaskCode.Create(Key, NextTaskNumber);
-        var task = new TaskItem(Id, code, title, description, resolvedStatusId, createdById);
+        var task = new TaskItem(Id, code, title, description, resolvedStatusId, createdById, type.Id);
         _tasks.Add(task);
         return task;
+    }
+
+    private void EnsureTaskTypeNameFree(string name, Guid? exceptId)
+    {
+        if (_taskTypes.Any(t => t.Id != exceptId && string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Task type \"{name}\" already exists on board {Id}.");
     }
 
     private static string ValidateName(string name)

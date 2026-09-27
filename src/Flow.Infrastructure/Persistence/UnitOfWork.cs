@@ -1,4 +1,5 @@
 using Flow.Application.Abstractions;
+using Flow.Domain.Entities;
 using Flow.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +15,8 @@ internal sealed class UnitOfWork(FlowDbContext db, SearchIndexQueue searchQueue)
     /// </summary>
     public async Task SaveChangesAsync(CancellationToken cancellationToken)
     {
+        TouchModifiedTasks();
+
         if (!searchQueue.HasPending)
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -32,5 +35,20 @@ internal sealed class UnitOfWork(FlowDbContext db, SearchIndexQueue searchQueue)
         await db.SaveChangesAsync(cancellationToken);
         await searchQueue.FlushAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// TaskItem.UpdatedAt ставится здесь, а не в каждом доменном методе: новое поле задачи, забывшее «тронуть»
+    /// дату, иначе тихо ломало бы сортировку «по изменению». Entries() сам вызывает DetectChanges, поэтому
+    /// изменённые через методы сущности задачи уже помечены Modified.
+    /// </summary>
+    private void TouchModifiedTasks()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var entry in db.ChangeTracker.Entries<TaskItem>())
+        {
+            if (entry.State == EntityState.Modified)
+                entry.Entity.Touch(now);
+        }
     }
 }

@@ -68,6 +68,25 @@ public sealed class TaskActivity
     public static TaskActivity DueDateChanged(Guid taskId, Guid actorId, DateOnly? oldDueDate, DateOnly? newDueDate) =>
         new(taskId, actorId, TaskActivityType.DueDateChanged, FormatDate(oldDueDate), FormatDate(newDueDate));
 
+    /// <summary>null с любой стороны — «без даты начала».</summary>
+    public static TaskActivity StartDateChanged(Guid taskId, Guid actorId, DateOnly? oldStartDate, DateOnly? newStartDate) =>
+        new(taskId, actorId, TaskActivityType.StartDateChanged, FormatDate(oldStartDate), FormatDate(newStartDate));
+
+    /// <summary>Значения — число enum'а строкой («3»), как везде, где enum хранится в БД.</summary>
+    public static TaskActivity PriorityChanged(Guid taskId, Guid actorId, TaskPriority oldPriority, TaskPriority newPriority) =>
+        new(taskId, actorId, TaskActivityType.PriorityChanged, ((int)oldPriority).ToString(CultureInfo.InvariantCulture), ((int)newPriority).ToString(CultureInfo.InvariantCulture));
+
+    public static TaskActivity TypeChanged(Guid taskId, Guid actorId, Guid oldTypeId, Guid newTypeId) =>
+        new(taskId, actorId, TaskActivityType.TypeChanged, oldTypeId.ToString(), newTypeId.ToString());
+
+    /// <summary>Число с точкой («3.5»), null — «без оценки».</summary>
+    public static TaskActivity StoryPointsChanged(Guid taskId, Guid actorId, decimal? oldPoints, decimal? newPoints) =>
+        new(taskId, actorId, TaskActivityType.StoryPointsChanged, oldPoints?.ToString(CultureInfo.InvariantCulture), newPoints?.ToString(CultureInfo.InvariantCulture));
+
+    /// <summary>Минуты строкой, null — «без оценки».</summary>
+    public static TaskActivity EstimateChanged(Guid taskId, Guid actorId, int? oldMinutes, int? newMinutes) =>
+        new(taskId, actorId, TaskActivityType.EstimateChanged, oldMinutes?.ToString(CultureInfo.InvariantCulture), newMinutes?.ToString(CultureInfo.InvariantCulture));
+
     public static TaskActivity CommentAdded(Guid taskId, Guid actorId, Guid commentId) =>
         new(taskId, actorId, TaskActivityType.CommentAdded, null, commentId.ToString());
 

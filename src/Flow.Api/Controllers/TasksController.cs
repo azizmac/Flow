@@ -2,6 +2,8 @@
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetEstimateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetScheduleCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Application.Features.Search.Queries.SimilarTasksQuery;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
@@ -9,6 +11,8 @@ using Flow.Application.Features.Tasks.Queries.TaskListQuery;
 using Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 using Flow.Shared.Contracts.Boards;
 using Flow.Application.Abstractions;
+using Flow.Application.Features.Boards;
+using Flow.Application.Features.Tasks;
 using Flow.Shared.Contracts.Tasks;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -29,7 +33,8 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         try
         {
             var response = await mediator.Send(
-                new TaskCreateCommand(actor.Require(), boardId, request.Title, request.Description, request.StatusId),
+                new TaskCreateCommand(actor.Require(), boardId, request.Title, request.Description, request.StatusId,
+                    request.TypeId, request.Priority?.ToDomainPriority()),
                 cancellationToken);
 
             return response is null
@@ -69,8 +74,16 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         [FromQuery] int? offset,
         [FromQuery] TaskSortField? sort,
         [FromQuery] string? dir,
+        [FromQuery] TaskTypeKind? typeKind,
+        [FromQuery] TaskPriority? priority,
         CancellationToken cancellationToken)
     {
+        // Неизвестное число в query-string («?priority=42») привязка enum'а пропускает — отсекаем до маппинга.
+        if (typeKind is { } kind && !Enum.IsDefined(kind))
+            return BadRequest(new { Message = $"Unknown task type kind {kind}." });
+        if (priority is { } p && !Enum.IsDefined(p))
+            return BadRequest(new { Message = $"Unknown priority {p}." });
+
         var sortField = sort ?? TaskSortField.Created;
         // По умолчанию новые сверху, для остальных колонок — по возрастанию: так ожидают от списка.
         var descending = dir is null
@@ -79,7 +92,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
 
         var response = await mediator.Send(
             new TaskSearchQuery(boardId, assigneeId, unassigned == true, statusId, statusType, q, limit, cursor,
-                offset, sortField, descending),
+                offset, sortField, descending, typeKind, priority),
             cancellationToken);
 
         return Ok(response);
@@ -98,7 +111,8 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         try
         {
             var result = await mediator.Send(
-                new TaskUpdateCommand(actor.Require(), id, request.Title, request.Description, request.StatusId),
+                new TaskUpdateCommand(actor.Require(), id, request.Title, request.Description, request.StatusId,
+                    request.TypeId, request.Priority?.ToDomainPriority()),
                 cancellationToken);
 
             if (result.IsNotFound)
@@ -109,8 +123,9 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
 
             return Ok(result.Response);
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
+            // InvalidOperationException — архивный тип задачи (TaskItem.ChangeType).
             return BadRequest(new { ex.Message });
         }
     }
@@ -130,12 +145,32 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         return Ok(result.Response);
     }
 
-    /// <summary>DueDate = null в теле — снять срок.</summary>
+    /// <summary>DueDate = null в теле — снять срок. Срок раньше даты начала → 400.</summary>
     [HttpPatch("tasks/{id:guid}/due-date")]
-    public async Task<IActionResult> SetDueDate(Guid id, SetTaskDueDateRequest request, CancellationToken cancellationToken)
+    public Task<IActionResult> SetDueDate(Guid id, SetTaskDueDateRequest request, CancellationToken cancellationToken) =>
+        SendUpdate(new TaskSetDueDateCommand(actor.Require(), id, request.DueDate), cancellationToken);
+
+    /// <summary>Дата начала и срок вместе (null — снять); начало позже срока → 400.</summary>
+    [HttpPatch("tasks/{id:guid}/schedule")]
+    public Task<IActionResult> SetSchedule(Guid id, SetTaskScheduleRequest request, CancellationToken cancellationToken) =>
+        SendUpdate(new TaskSetScheduleCommand(actor.Require(), id, request.StartDate, request.DueDate), cancellationToken);
+
+    /// <summary>Story points и оценка в минутах вместе (null — снять); вне диапазона → 400.</summary>
+    [HttpPatch("tasks/{id:guid}/estimate")]
+    public Task<IActionResult> SetEstimate(Guid id, SetTaskEstimateRequest request, CancellationToken cancellationToken) =>
+        SendUpdate(new TaskSetEstimateCommand(actor.Require(), id, request.StoryPoints, request.EstimateMinutes), cancellationToken);
+
+    private async Task<IActionResult> SendUpdate(MediatR.IRequest<TaskUpdateResult> command, CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new TaskSetDueDateCommand(actor.Require(), id, request.DueDate), cancellationToken);
-        return result.IsNotFound ? NotFound() : Ok(result.Response);
+        try
+        {
+            var result = await mediator.Send(command, cancellationToken);
+            return result.IsNotFound ? NotFound() : Ok(result.Response);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { ex.Message });
+        }
     }
 
     [HttpDelete("tasks/{id:guid}")]

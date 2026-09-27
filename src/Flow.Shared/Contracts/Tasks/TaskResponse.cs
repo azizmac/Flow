@@ -4,6 +4,8 @@ namespace Flow.Shared.Contracts.Tasks;
 /// BoardId нужен странице /tasks/{id}: по нему клиент подгружает ключ и статусы проекта.
 /// CreatedById — кто создал (null у задач до ролей); вместе с AssigneeId определяет «свою задачу» для Member.
 /// DueDate — срок без времени, null — без срока. CommentCount — число комментариев (считается в списке задачи одним GROUP BY).
+/// TypeId — тип из BoardResponse.TaskTypes; StartDate ≤ DueDate; StoryPoints/EstimateMinutes — оценки, null — нет;
+/// UpdatedAt — последнее изменение самой задачи (комментарии и вложения его не двигают).
 /// </summary>
 public sealed record TaskResponse(
     Guid Id,
@@ -16,4 +18,10 @@ public sealed record TaskResponse(
     DateTime CreatedAt,
     Guid? CreatedById,
     DateOnly? DueDate,
-    int CommentCount);
+    int CommentCount,
+    Guid TypeId,
+    TaskPriority Priority,
+    DateOnly? StartDate,
+    decimal? StoryPoints,
+    int? EstimateMinutes,
+    DateTime UpdatedAt);

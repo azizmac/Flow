@@ -110,6 +110,17 @@ else if (_task is not null && _board is not null)
         <div class="task-page-side">
             <div class="side-card">
                 <div class="meta-grid narrow">
+                    <div class="meta-k">Тип</div>
+                    <div>
+                        @if (CanEdit)
+                        {
+                            <TaskTypeSelect Types="_board.TaskTypes" Value="_task.TypeId" OnChange="ChangeType" Disabled="_busy" />
+                        }
+                        else if (TaskMeta.TypeOf(_board, _task.TypeId) is { } type)
+                        {
+                            <span class="status-pill"><TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />@type.Name</span>
+                        }
+                    </div>
                     <div class="meta-k">Статус</div>
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         @if (CanEdit)
@@ -130,10 +141,25 @@ else if (_task is not null && _board is not null)
                             <span class="save-state ok" aria-live="polite"><Icon Name="check" Size="13" />Сохранено</span>
                         }
                     </div>
+                    <div class="meta-k">Приоритет</div>
+                    <div>
+                        @if (CanEdit)
+                        {
+                            <PrioritySelect Value="_task.Priority" OnChange="ChangePriority" Disabled="_busy" />
+                        }
+                        else
+                        {
+                            <span class="status-pill"><PriorityIcon Value="_task.Priority" Size="13" ShowNone="true" />@TaskMeta.PriorityLabel(_task.Priority)</span>
+                        }
+                    </div>
                     <div class="meta-k">Исполнитель</div>
                     <div><AssigneeSelect Value="_task.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" /></div>
+                    <div class="meta-k">Начало</div>
+                    <div><DueDateField Value="_task.StartDate" CanEdit="CanEdit" Disabled="_busy" Plain="true" Label="Дата начала" OnChange="SetStartDate" /></div>
                     <div class="meta-k">Срок</div>
                     <div><DueDateField Value="_task.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>
+                    <div class="meta-k">Оценка</div>
+                    <div><EstimateField StoryPoints="_task.StoryPoints" EstimateMinutes="_task.EstimateMinutes" CanEdit="CanEdit" Disabled="_busy" OnChange="SetEstimate" /></div>
                     <div class="meta-k">Проект</div>
                     <div class="meta-v"><KeyChip Value="@_board.Key" /><a href="@BackHref" style="color:#fff;" title="@_board.Name">@_board.Name</a></div>
                     <div class="meta-k">Создана</div>
@@ -336,6 +362,10 @@ else if (_task is not null && _board is not null)
 
     private Task ChangeStatus(Guid statusId) => Patch(new UpdateTaskRequest(null, null, statusId));
 
+    private Task ChangeType(Guid typeId) => Patch(new UpdateTaskRequest(null, null, null, typeId));
+
+    private Task ChangePriority(TaskPriority priority) => Patch(new UpdateTaskRequest(null, null, null, Priority: priority));
+
     private async Task Assign(Guid? userId)
     {
         _busy = true;
@@ -353,14 +383,24 @@ else if (_task is not null && _board is not null)
         _timeline?.NoteLocalChange(before, _task);
     }
 
-    private async Task SetDueDate(DateOnly? dueDate)
+    private Task SetDueDate(DateOnly? dueDate) =>
+        Apply(id => Api.SetDueDate(id, new SetTaskDueDateRequest(dueDate)), "Не удалось изменить срок");
+
+    private Task SetStartDate(DateOnly? startDate) =>
+        Apply(id => Api.SetSchedule(id, new SetTaskScheduleRequest(startDate, _task!.DueDate)), "Не удалось изменить дату начала");
+
+    private Task SetEstimate((decimal? StoryPoints, int? EstimateMinutes) value) =>
+        Apply(id => Api.SetEstimate(id, new SetTaskEstimateRequest(value.StoryPoints, value.EstimateMinutes)), "Не удалось изменить оценку");
+
+    /// <summary>Правка отдельным эндпоинтом (срок, начало, оценка): текст ошибки сервера — в тост.</summary>
+    private async Task Apply(Func<Guid, Task<ApiResult<TaskResponse>>> call, string fallbackError)
     {
         _busy = true;
-        var result = await Api.SetDueDate(_task!.Id, new SetTaskDueDateRequest(dueDate));
+        var result = await call(_task!.Id);
         _busy = false;
         if (!result.Ok)
         {
-            Toasts.Error(result.Error ?? "Не удалось изменить срок");
+            Toasts.Error(result.Error ?? fallbackError);
             return;
         }
 

@@ -1,3 +1,4 @@
 namespace Flow.Shared.Contracts.Tasks;
 
-public sealed record CreateTaskRequest(string Title, string? Description, Guid? StatusId);
+/// <summary>TypeId = null — тип проекта по умолчанию; Priority = null — None.</summary>
+public sealed record CreateTaskRequest(string Title, string? Description, Guid? StatusId, Guid? TypeId = null, TaskPriority? Priority = null);

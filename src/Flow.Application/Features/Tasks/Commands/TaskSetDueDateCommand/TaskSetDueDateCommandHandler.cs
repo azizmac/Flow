@@ -26,8 +26,11 @@ internal sealed class TaskSetDueDateCommandHandler(
 
         if (task.DueDate != request.DueDate)
         {
-            activities.Add(TaskActivity.DueDateChanged(task.Id, actor.Id, task.DueDate, request.DueDate));
+            // Сначала домен (срок раньше даты начала — ArgumentException), потом журнал: иначе отказ
+            // оставлял бы в журнале запись об изменении, которого не было.
+            var oldDueDate = task.DueDate;
             task.SetDueDate(request.DueDate);
+            activities.Add(TaskActivity.DueDateChanged(task.Id, actor.Id, oldDueDate, request.DueDate));
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 

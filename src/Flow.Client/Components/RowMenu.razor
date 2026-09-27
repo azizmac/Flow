@@ -23,6 +23,10 @@
         {
             <MudMenuItem Class="pop-item" OnClick="OnRename"><Icon Name="edit" Size="15" />Переименовать</MudMenuItem>
         }
+        @if (ShowTaskTypes)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnTaskTypes"><Icon Name="settings" Size="15" />Типы задач</MudMenuItem>
+        }
         <MudMenuItem Class="pop-item" OnClick="OnCopy"><Icon Name="copy" Size="15" />Скопировать код</MudMenuItem>
         @if (ShowDelete)
         {
@@ -37,6 +41,9 @@
     /// <summary>Пункты, требующие прав (Permissions.CanEditTask / CanManageBoards); без них меню — открыть и скопировать.</summary>
     [Parameter] public bool ShowRename { get; set; } = true;
     [Parameter] public bool ShowDelete { get; set; } = true;
+    /// <summary>Пункт «Типы задач» — только у проекта и только для тех, кто может им управлять.</summary>
+    [Parameter] public bool ShowTaskTypes { get; set; }
+    [Parameter] public EventCallback OnTaskTypes { get; set; }
     [Parameter] public int Size { get; set; } = 26;
     [Parameter] public string? Style { get; set; }
     [Parameter] public EventCallback OnOpen { get; set; }

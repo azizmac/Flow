@@ -1,4 +1,5 @@
-﻿@* Лента задачи: комментарии (карточки) и журнал изменений (компактные строки) в одном хронологическом списке.
+﻿@using System.Globalization
+@* Лента задачи: комментарии (карточки) и журнал изменений (компактные строки) в одном хронологическом списке.
    Данные — GET /tasks/{id}/comments + GET /tasks/{id}/activity параллельно, слияние по CreatedAt.
    Соседние записи журнала одного актора в пределах минуты — одна группа. CommentAdded не показываем:
    сам комментарий уже в ленте. Композер внизу — только Member+ (Permissions.CanComment). *@
@@ -246,6 +247,20 @@
         if (before.DueDate != after.DueDate)
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.DueDateChanged,
                 before.DueDate?.ToString("yyyy-MM-dd"), after.DueDate?.ToString("yyyy-MM-dd"), now));
+        if (before.StartDate != after.StartDate)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.StartDateChanged,
+                before.StartDate?.ToString("yyyy-MM-dd"), after.StartDate?.ToString("yyyy-MM-dd"), now));
+        if (before.TypeId != after.TypeId)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.TypeChanged, before.TypeId.ToString(), after.TypeId.ToString(), now));
+        if (before.Priority != after.Priority)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.PriorityChanged,
+                ((int)before.Priority).ToString(CultureInfo.InvariantCulture), ((int)after.Priority).ToString(CultureInfo.InvariantCulture), now));
+        if (before.StoryPoints != after.StoryPoints)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.StoryPointsChanged,
+                before.StoryPoints?.ToString(CultureInfo.InvariantCulture), after.StoryPoints?.ToString(CultureInfo.InvariantCulture), now));
+        if (before.EstimateMinutes != after.EstimateMinutes)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.EstimateChanged,
+                before.EstimateMinutes?.ToString(CultureInfo.InvariantCulture), after.EstimateMinutes?.ToString(CultureInfo.InvariantCulture), now));
 
         StateHasChanged();
     }
@@ -291,6 +306,11 @@
         TaskActivityType.CommentDeleted => Text("комментарий удалён"),
         TaskActivityType.AttachmentAdded => Text("добавлен файл"),
         TaskActivityType.AttachmentRemoved => Text("файл удалён"),
+        TaskActivityType.StartDateChanged => StartDates(a),
+        TaskActivityType.TypeChanged => Types(a),
+        TaskActivityType.PriorityChanged => Priorities(a),
+        TaskActivityType.StoryPointsChanged => Change("story points", a, v => Ru.Points(decimal.Parse(v, CultureInfo.InvariantCulture))),
+        TaskActivityType.EstimateChanged => Change("оценка", a, v => Ru.Duration(int.Parse(v, CultureInfo.InvariantCulture))),
         _ => Text(a.Type.ToString())
     };
 
@@ -332,6 +352,39 @@
         if (to is null && from is not null)
             return @<span>срок снят (был <s class="tl-old">@Ru.DateOnlyShort(from.Value)</s>)</span>;
         return @<span>срок: <s class="tl-old">@(from is { } f ? Ru.DateOnlyShort(f) : "—")</s> <span class="tl-arrow">→</span> <b>@(to is { } t ? Ru.DateOnlyShort(t) : "—")</b></span>;
+    }
+
+    private static RenderFragment StartDates(TaskActivityResponse a) =>
+        Change("начало", a, v => Ru.ParseDateOnly(v) is { } d ? Ru.DateOnlyShort(d) : v);
+
+    /// <summary>«поле: A → B», «поле: B» (было пусто), «поле снято (было A)» — общий вид для простых значений.</summary>
+    private static RenderFragment Change(string field, TaskActivityResponse a, Func<string, string> format)
+    {
+        if (a.OldValue is null && a.NewValue is { } set)
+            return @<span>@field: <b>@format(set)</b></span>;
+        if (a.NewValue is null && a.OldValue is { } was)
+            return @<span>@field снято (было <s class="tl-old">@format(was)</s>)</span>;
+        return @<span>@field: <s class="tl-old">@(a.OldValue is { } o ? format(o) : "—")</s> <span class="tl-arrow">→</span> <b>@(a.NewValue is { } n ? format(n) : "—")</b></span>;
+    }
+
+    private RenderFragment Types(TaskActivityResponse a) =>
+        @<span>тип: @TypePill(a.OldValue) <span class="tl-arrow">→</span> @TypePill(a.NewValue)</span>;
+
+    private RenderFragment TypePill(string? id)
+    {
+        var type = Guid.TryParse(id, out var g) ? TaskMeta.TypeOf(Board, g) : null;
+        if (type is null)
+            return @<span class="status-pill sm">удалённый тип</span>;
+        return @<span class="status-pill sm"><TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="12" />@type.Name</span>;
+    }
+
+    private static RenderFragment Priorities(TaskActivityResponse a) =>
+        @<span>приоритет: @PriorityPill(a.OldValue) <span class="tl-arrow">→</span> @PriorityPill(a.NewValue)</span>;
+
+    private static RenderFragment PriorityPill(string? value)
+    {
+        var priority = int.TryParse(value, out var n) && Enum.IsDefined((TaskPriority)n) ? (TaskPriority)n : TaskPriority.None;
+        return @<span class="status-pill sm"><PriorityIcon Value="priority" Size="12" ShowNone="true" />@TaskMeta.PriorityLabel(priority)</span>;
     }
 
     // ---- комментарии ----

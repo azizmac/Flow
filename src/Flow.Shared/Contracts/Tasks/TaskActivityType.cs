@@ -12,5 +12,10 @@ public enum TaskActivityType
     CommentAdded = 6,
     CommentDeleted = 7,
     AttachmentAdded = 8,
-    AttachmentRemoved = 9
+    AttachmentRemoved = 9,
+    PriorityChanged = 10,
+    StartDateChanged = 11,
+    StoryPointsChanged = 12,
+    EstimateChanged = 13,
+    TypeChanged = 14
 }

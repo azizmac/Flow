@@ -20,4 +20,6 @@ public sealed record TaskSearchQuery(
     string? Cursor = null,
     int? Offset = null,
     TaskSortField Sort = TaskSortField.Created,
-    bool Descending = true) : IRequest<TaskListResponse>;
+    bool Descending = true,
+    TaskTypeKind? TypeKind = null,
+    TaskPriority? Priority = null) : IRequest<TaskListResponse>;

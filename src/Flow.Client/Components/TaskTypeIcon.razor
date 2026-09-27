@@ -1,0 +1,11 @@
+@* Глиф типа задачи по виду (эпик, история, задача, ошибка, подзадача), цвет — токен вида. Подпись — в title. *@
+<span class="type-ico" title="@Title" style="color:@TaskMeta.KindColor(Kind)"><Icon Name="@TaskMeta.KindIcon(Kind)" Size="Size" /></span>
+
+@code {
+    [Parameter] public TaskTypeKind Kind { get; set; } = TaskTypeKind.Task;
+    [Parameter] public int Size { get; set; } = 14;
+    /// <summary>Имя типа проекта («Инцидент»); по умолчанию — подпись вида.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    private string Title => Name ?? TaskMeta.KindLabel(Kind);
+}

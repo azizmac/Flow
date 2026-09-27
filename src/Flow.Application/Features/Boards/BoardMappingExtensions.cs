@@ -2,6 +2,8 @@ using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Boards;
 using DomainStatusType = Flow.Domain.Entities.StatusType;
 using SharedStatusType = Flow.Shared.Contracts.Boards.StatusType;
+using DomainTypeKind = Flow.Domain.Entities.TaskTypeKind;
+using SharedTypeKind = Flow.Shared.Contracts.Boards.TaskTypeKind;
 
 namespace Flow.Application.Features.Boards;
 
@@ -21,7 +23,21 @@ public static class BoardMappingExtensions
         board.Statuses
             .OrderBy(s => s.SortOrder)
             .Select(s => new StatusResponse(s.Id, s.Name, s.IsInitial, s.IsFinal, s.Type.ToResponseStatusType()))
+            .ToList(),
+        board.TaskTypes
+            .OrderBy(t => t.SortOrder)
+            .Select(t => t.ToResponse())
             .ToList());
+
+    public static TaskTypeResponse ToResponse(this TaskType type) =>
+        new(type.Id, type.Name, type.Kind.ToResponseKind(), type.Level, type.IsDefault, type.IsArchived);
+
+    /// <summary>Зеркала с одинаковыми значениями (Shared не ссылается на Domain) — приведение с проверкой.</summary>
+    public static SharedTypeKind ToResponseKind(this DomainTypeKind kind) =>
+        Enum.IsDefined(kind) ? (SharedTypeKind)(int)kind : throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown TaskTypeKind.");
+
+    public static DomainTypeKind ToDomainKind(this SharedTypeKind kind) =>
+        Enum.IsDefined(kind) ? (DomainTypeKind)(int)kind : throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown TaskTypeKind.");
 
     /// <summary>
     /// Явный маппинг вместо приведения типов: Flow.Domain.Entities.StatusType и

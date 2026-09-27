@@ -1,0 +1,81 @@
+using Flow.Shared.Contracts.Boards;
+using Flow.Shared.Contracts.Tasks;
+
+namespace Flow.Client.Services;
+
+/// <summary>
+/// Подписи, глифы и цвета типов задач и приоритетов (docs/TZ_task_model.md, этап 1A). Вид типа, а не сам тип,
+/// задаёт иконку: свой тип «Инцидент» вида Bug выглядит как ошибка. Цвета — только токены (tokens.css).
+/// </summary>
+public static class TaskMeta
+{
+    public static readonly IReadOnlyList<TaskTypeKind> Kinds =
+        [TaskTypeKind.Epic, TaskTypeKind.Story, TaskTypeKind.Task, TaskTypeKind.Bug, TaskTypeKind.Subtask];
+
+    /// <summary>От важного к неважному — в таком порядке их показывает меню.</summary>
+    public static readonly IReadOnlyList<TaskPriority> Priorities =
+        [TaskPriority.Critical, TaskPriority.High, TaskPriority.Medium, TaskPriority.Low, TaskPriority.None];
+
+    public static string KindLabel(TaskTypeKind kind) => kind switch
+    {
+        TaskTypeKind.Epic => "Эпик",
+        TaskTypeKind.Story => "История",
+        TaskTypeKind.Task => "Задача",
+        TaskTypeKind.Bug => "Ошибка",
+        TaskTypeKind.Subtask => "Подзадача",
+        _ => "—"
+    };
+
+    public static string KindIcon(TaskTypeKind kind) => kind switch
+    {
+        TaskTypeKind.Epic => "t-epic",
+        TaskTypeKind.Story => "t-story",
+        TaskTypeKind.Bug => "t-bug",
+        TaskTypeKind.Subtask => "t-subtask",
+        _ => "t-task"
+    };
+
+    public static string KindColor(TaskTypeKind kind) => kind switch
+    {
+        TaskTypeKind.Epic => "var(--tan)",
+        TaskTypeKind.Story => "var(--sage)",
+        TaskTypeKind.Bug => "var(--danger)",
+        TaskTypeKind.Subtask => "rgba(255,255,255,0.5)",
+        _ => "var(--accent)"
+    };
+
+    public static string PriorityLabel(TaskPriority priority) => priority switch
+    {
+        TaskPriority.Critical => "Критический",
+        TaskPriority.High => "Высокий",
+        TaskPriority.Medium => "Средний",
+        TaskPriority.Low => "Низкий",
+        _ => "Без приоритета"
+    };
+
+    /// <summary>null — у «без приоритета» глифа нет: пустое место в строке списка читается лучше лишнего значка.</summary>
+    public static string? PriorityIcon(TaskPriority priority) => priority switch
+    {
+        TaskPriority.Critical => "p-critical",
+        TaskPriority.High => "p-high",
+        TaskPriority.Medium => "p-medium",
+        TaskPriority.Low => "p-low",
+        _ => null
+    };
+
+    public static string PriorityColor(TaskPriority priority) => priority switch
+    {
+        TaskPriority.Critical or TaskPriority.High => "var(--danger)",
+        TaskPriority.Medium => "var(--accent)",
+        TaskPriority.Low => "var(--sage)",
+        _ => "var(--text-tertiary)"
+    };
+
+    /// <summary>Тип задачи по Id в проекте; null — типа нет в загруженном проекте (удалён вместе с проектом и т.п.).</summary>
+    public static TaskTypeResponse? TypeOf(BoardResponse? board, Guid typeId) =>
+        board?.TaskTypes.FirstOrDefault(t => t.Id == typeId);
+
+    /// <summary>Типы для выбора: без архивных, но текущий тип задачи остаётся, даже если его убрали в архив.</summary>
+    public static IReadOnlyList<TaskTypeResponse> Selectable(IReadOnlyList<TaskTypeResponse> types, Guid? current = null) =>
+        types.Where(t => !t.IsArchived || t.Id == current).ToList();
+}

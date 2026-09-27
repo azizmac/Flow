@@ -33,6 +33,7 @@
             @if (CurrentBoard is not null && CanManageBoard)
             {
                 <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
+                <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _typesOpen = true" />
             }
         }
     </div>
@@ -105,7 +106,10 @@
                         <span id="@TaskAnchorId(context.Item.Id)" class="row-key" role="button" tabindex="0"
                               aria-label="@($"{context.Item.Code}: {context.Item.Title}")"
                               @onclick:stopPropagation @onclick="() => OpenTask(context.Item)"
-                              @onkeydown="e => OnRowKey(e, context.Item)">@context.Item.Code</span>
+                              @onkeydown="e => OnRowKey(e, context.Item)">@if (TypeFor(context.Item) is { } type)
+                              {
+                                  <TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />
+                              }@context.Item.Code</span>
                     </CellTemplate>
                 </PropertyColumn>
 
@@ -124,16 +128,20 @@
                             }
                             else
                             {
-                                @context.Item.Title
+                                <PriorityIcon Value="context.Item.Priority" Size="13" />@context.Item.Title
                             }
                         </div>
                         @if (!string.IsNullOrWhiteSpace(context.Item.Description))
                         {
                             <div class="task-desc">@Ru.PlainFirstLine(context.Item.Description)</div>
                         }
-                        @if (context.Item.DueDate is not null || context.Item.CommentCount > 0)
+                        @if (context.Item.DueDate is not null || context.Item.CommentCount > 0 || context.Item.StoryPoints is not null)
                         {
                             <div class="task-meta-chips">
+                                @if (context.Item.StoryPoints is { } sp)
+                                {
+                                    <span class="count-chip" title="Story points">@Ru.Points(sp) SP</span>
+                                }
                                 @if (context.Item.DueDate is { } d)
                                 {
                                     <DueChip Value="d" IsDone="IsDone(context.Item)" />
@@ -238,6 +246,11 @@
     }
 </Drawer>
 
+@if (_typesOpen && CurrentBoard is { } typesBoard)
+{
+    <TaskTypesDialog Board="typesBoard" OnChanged="ReplaceBoard" OnClose="() => _typesOpen = false" />
+}
+
 @if (_deleting is not null)
 {
     <ConfirmDialog Title="@($"Удалить задачу {_deleting.Code}?")"
@@ -300,6 +313,19 @@
     private IDisposable? _hotkeys;
 
     private BoardResponse? CurrentBoard => _boards.FirstOrDefault(b => b.Id == BoardId);
+
+    /// <summary>Открыта модалка типов задач текущего проекта.</summary>
+    private bool _typesOpen;
+
+    private void ReplaceBoard(BoardResponse updated)
+    {
+        var i = _boards.FindIndex(b => b.Id == updated.Id);
+        if (i >= 0)
+            _boards[i] = updated;
+    }
+
+    private TaskTypeResponse? TypeFor(TaskResponse task) =>
+        TaskMeta.TypeOf(_boards.FirstOrDefault(b => b.Id == task.BoardId), task.TypeId);
 
     private StatusType? TypeFilter => Enum.TryParse<StatusType>(Type, out var t) ? t : null;
 

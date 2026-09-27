@@ -2,7 +2,8 @@ namespace Flow.Shared.Contracts.Boards;
 
 /// <summary>
 /// TaskCount и NextTaskNumber нужны карточке проекта в клиенте («12 задач», «следующая FRONT-13»),
-/// чтобы не делать N+1 запросов GET /boards/{id}/tasks ради счётчика.
+/// чтобы не делать N+1 запросов GET /boards/{id}/tasks ради счётчика. TaskTypes — типы задач проекта,
+/// включая архивные (docs/TZ_task_model.md §1).
 /// </summary>
 public sealed record BoardResponse(
     Guid Id,
@@ -11,4 +12,5 @@ public sealed record BoardResponse(
     DateTime CreatedAt,
     int TaskCount,
     int NextTaskNumber,
-    IReadOnlyList<StatusResponse> Statuses);
+    IReadOnlyList<StatusResponse> Statuses,
+    IReadOnlyList<TaskTypeResponse> TaskTypes);

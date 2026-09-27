@@ -27,6 +27,25 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
 
         // DateOnly → date в Postgres (Npgsql маппит сам).
         builder.Property(t => t.DueDate);
+        builder.Property(t => t.StartDate);
+
+        builder.Property(t => t.Priority).IsRequired();
+
+        // 0…999.9 с одним знаком — ровно numeric(4,1); берём (5,1) с запасом, границу держит домен.
+        builder.Property(t => t.StoryPoints).HasPrecision(5, 1);
+
+        builder.Property(t => t.EstimateMinutes);
+
+        builder.Property(t => t.UpdatedAt).IsRequired();
+
+        // Restrict, как у статуса: тип удаляется только вместе с проектом, и тогда задачи уходят первыми
+        // (BoardRepository.RemoveAsync). Индекс — под фильтр «все ошибки» (join TaskTypes по виду).
+        builder.HasOne<TaskType>()
+            .WithMany()
+            .HasForeignKey(t => t.TypeId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(t => t.TypeId);
 
         builder.HasOne<Status>()
             .WithMany()

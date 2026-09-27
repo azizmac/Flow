@@ -1,6 +1,6 @@
 # ТЗ: модель задачи — иерархия, типы, поля, связи, чек-листы, повторения
 
-Статус: **черновик, не начато**. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 1). Образец — Windshift
+Статус: **этап 1A сделан** (типы, приоритет, дата начала, оценки, `UpdatedAt`), 1B–1F — не начаты. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 1). Образец — Windshift
 (`internal/models/item.go`, `internal/database/schema/*`), но решения приняты под модель Flow.
 
 ## Исходное требование
@@ -48,10 +48,14 @@
 
 ```
 TaskType (entity, owned by Board — как Status)
-  Id, BoardId, Name (≤ 50, уникально в проекте), Kind : TaskTypeKind, Level : int (1..4),
-  Icon (ключ глифа FlowIcons), Color (токен палитры), SortOrder, IsDefault, IsArchived
+  Id, BoardId, Name (≤ 50, уникально в проекте), Kind : TaskTypeKind, SortOrder, IsDefault, IsArchived
 TaskTypeKind : Epic=0, Story=1, Task=2, Bug=3, Subtask=4   // только дописывать
 ```
+
+> **Сделано иначе, чем в первой редакции.** `Level`, `Icon` и `Color` не хранятся: уровень выводится из вида
+> (`TaskTypeKind.Level()`), иконка и цвет — тоже (клиент, `Services/TaskMeta`). Свой тип «Инцидент» вида Bug
+> и так должен выглядеть и стоять в иерархии как ошибка, а три колонки, которые всегда совпадают с видом, —
+> это три места для рассинхрона. Нужны будут свои иконки — появится колонка, а не раньше.
 
 - `Board.Create` сажает `DefaultTaskTypes`: Эпик (1), История (2), Задача (3, по умолчанию), Ошибка (3), Подзадача (4).
 - `Board.AddTaskType`, `RenameTaskType`, `ArchiveTaskType`. Удалять тип нельзя, пока на нём есть задачи;
@@ -73,7 +77,12 @@ TaskTypeKind : Epic=0, Story=1, Task=2, Bug=3, Subtask=4   // только до�
 | `StartDate` | `DateOnly?` | `StartDate ≤ DueDate`, если обе заданы; проверяет домен |
 | `StoryPoints` | `decimal(5,1)?` | 0…999.9; шкалу Фибоначчи навязывает клиент, сервер её не проверяет |
 | `EstimateMinutes` | `int?` | 0…(999 × 8 × 60); ввод «1d 2h 30m» разбирает `Services/Ru.cs`, 1d = 8h |
-| `UpdatedAt` | `DateTime` | ставит `UnitOfWork` при любом изменении задачи (перехват в `SaveChangesAsync` по `ChangeTracker`), а не каждый метод вручную |
+| `UpdatedAt` | `DateTime` | ставит `UnitOfWork` при любом изменении задачи (перехват в `SaveChangesAsync` по `ChangeTracker`, `TaskItem.Touch`), а не каждый метод вручную |
+
+Сделано: API — `PATCH /tasks/{id}` (тип, приоритет), `PATCH /tasks/{id}/schedule` (`TaskSetScheduleCommand`, обе
+даты вместе), `PATCH /tasks/{id}/estimate` (`TaskSetEstimateCommand`, обе оценки вместе), типы проекта —
+`POST/PATCH /boards/{id}/task-types`; `GET /tasks` — фильтры `typeKind`, `priority` и сортировка `Priority`,
+`Updated`. Клиент — поля в слайдере и на странице задачи, глифы в строке списка, модалка «Типы задач».
 
 - Доменные методы: `SetPriority`, `SetSchedule(start, due)` (заменяет `SetDueDate`, старый метод остаётся
   обёрткой), `SetStoryPoints`, `SetEstimate`.

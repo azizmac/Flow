@@ -1,4 +1,4 @@
-﻿@* Срок задачи: чип (просрочен — красный, ближайшие 2 дня — акцент) + при CanEdit нативный date-input и «Снять».
+﻿@* Срок задачи (или дата начала при Plain): чип (просрочен — красный, ближайшие 2 дня — акцент) + при CanEdit нативный date-input и «Снять».
 
    Нативный input[type=date] шлёт change на каждое полное значение: пока человек набирает год с клавиатуры,
    поле успевает побывать «0002», «0020», «0202» и только потом «2026». Если отправлять всё подряд, задача
@@ -13,7 +13,7 @@
 @if (CanEdit)
 {
     <div class="due-edit">
-        <input @key="_revision" type="date" value="@(Value?.ToString("yyyy-MM-dd"))" disabled="@Disabled" aria-label="Срок"
+        <input @key="_revision" type="date" value="@(Value?.ToString("yyyy-MM-dd"))" disabled="@Disabled" aria-label="@Label"
                min="@(Min.ToString("yyyy-MM-dd"))" max="@(Max.ToString("yyyy-MM-dd"))"
                @onchange="OnPick" @onblur="OnBlur" />
         @if (Value is not null)
@@ -22,9 +22,13 @@
         }
     </div>
 }
-else if (Value is { } d)
+else if (Value is { } d && Plain)
 {
-    <DueChip Value="d" IsDone="IsDone" />
+    <span class="meta-v">@Ru.DateOnlyShort(d)</span>
+}
+else if (Value is { } d2)
+{
+    <DueChip Value="d2" IsDone="IsDone" />
 }
 else
 {
@@ -37,6 +41,10 @@ else
     [Parameter] public bool Disabled { get; set; }
     [Parameter] public bool IsDone { get; set; }
     [Parameter] public EventCallback<DateOnly?> OnChange { get; set; }
+    /// <summary>Подпись поля для скринридера: тот же компонент служит и сроку, и дате начала.</summary>
+    [Parameter] public string Label { get; set; } = "Срок";
+    /// <summary>Без редактирования — просто дата, без окраски «просрочено» (для даты начала она не имеет смысла).</summary>
+    [Parameter] public bool Plain { get; set; }
 
     /// <summary>Ключ input'а: смена пересоздаёт поле и возвращает в него настоящее значение.</summary>
     private int _revision;

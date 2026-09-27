@@ -111,6 +111,73 @@ public static partial class Ru
         return DateShort(utc);
     }
 
+    /// <summary>Рабочий день в оценке — 8 часов, как в Jira; «1д» в поле оценки — это 480 минут.</summary>
+    public const int MinutesPerWorkDay = 8 * 60;
+
+    /// <summary>Оценка в минутах → «1д 2ч 30м» (нулевые части опускаются); 0 → «0м».</summary>
+    public static string Duration(int minutes)
+    {
+        if (minutes <= 0)
+            return "0м";
+
+        var days = minutes / MinutesPerWorkDay;
+        var hours = minutes % MinutesPerWorkDay / 60;
+        var rest = minutes % 60;
+        var parts = new List<string>(3);
+        if (days > 0) parts.Add($"{days}д");
+        if (hours > 0) parts.Add($"{hours}ч");
+        if (rest > 0) parts.Add($"{rest}м");
+        return string.Join(' ', parts);
+    }
+
+    [GeneratedRegex(@"^\s*(?:(\d+(?:[.,]\d+)?)\s*(д|d|ч|h|м|m)\s*)+$", RegexOptions.IgnoreCase)]
+    private static partial Regex DurationPattern();
+
+    [GeneratedRegex(@"(\d+(?:[.,]\d+)?)\s*(д|d|ч|h|м|m)", RegexOptions.IgnoreCase)]
+    private static partial Regex DurationPart();
+
+    /// <summary>
+    /// «1д 2ч 30м», «1d 2h», «1.5ч», просто «3» (часы). Пустая строка — null и true: поле очистили.
+    /// Нераспознанное — false: поле подсветит ошибку, а не отправит на сервер что-то случайное.
+    /// </summary>
+    public static bool TryParseDuration(string? text, out int? minutes)
+    {
+        minutes = null;
+        if (string.IsNullOrWhiteSpace(text))
+            return true;
+
+        var trimmed = text.Trim();
+        if (decimal.TryParse(trimmed.Replace(',', '.'), System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture, out var bareHours))
+        {
+            if (bareHours < 0) return false;
+            minutes = (int)Math.Round(bareHours * 60);
+            return true;
+        }
+
+        if (!DurationPattern().IsMatch(trimmed))
+            return false;
+
+        decimal total = 0;
+        foreach (Match part in DurationPart().Matches(trimmed))
+        {
+            var value = decimal.Parse(part.Groups[1].Value.Replace(',', '.'), System.Globalization.CultureInfo.InvariantCulture);
+            total += char.ToLowerInvariant(part.Groups[2].Value[0]) switch
+            {
+                'д' or 'd' => value * MinutesPerWorkDay,
+                'ч' or 'h' => value * 60,
+                _ => value
+            };
+        }
+
+        minutes = (int)Math.Round(total);
+        return true;
+    }
+
+    /// <summary>Story points без лишних нулей: 3, 0.5, 13.</summary>
+    public static string Points(decimal points) =>
+        points.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+
     public static string Comments(int n) => $"{n} {Plural(n, "комментарий", "комментария", "комментариев")}";
 
     public static string Files(int n) => $"{n} {Plural(n, "файл", "файла", "файлов")}";

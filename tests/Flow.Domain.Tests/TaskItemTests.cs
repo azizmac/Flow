@@ -89,4 +89,147 @@ public class TaskItemTests
         task.SetDueDate(null);
         Assert.Null(task.DueDate);
     }
+    [Fact]
+    public void NewTask_Should_HaveUpdatedAtEqualToCreatedAt_AndNoPlanning()
+    {
+        var (_, task) = CreateBoardWithTask();
+
+        Assert.Equal(task.CreatedAt, task.UpdatedAt);
+        Assert.Equal(TaskPriority.None, task.Priority);
+        Assert.Null(task.StartDate);
+        Assert.Null(task.StoryPoints);
+        Assert.Null(task.EstimateMinutes);
+    }
+
+    [Fact]
+    public void SetPriority_Should_Update_And_RejectUnknown()
+    {
+        var (_, task) = CreateBoardWithTask();
+
+        task.SetPriority(TaskPriority.Critical);
+        Assert.Equal(TaskPriority.Critical, task.Priority);
+
+        Assert.Throws<ArgumentException>(() => task.SetPriority((TaskPriority)99));
+    }
+
+    [Fact]
+    public void SetSchedule_Should_SetBothDates()
+    {
+        var (_, task) = CreateBoardWithTask();
+
+        task.SetSchedule(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 1));
+
+        Assert.Equal(new DateOnly(2026, 10, 1), task.StartDate);
+        Assert.Equal(new DateOnly(2026, 10, 1), task.DueDate);
+    }
+
+    [Fact]
+    public void SetSchedule_Should_Throw_When_StartAfterDue()
+    {
+        var (_, task) = CreateBoardWithTask();
+
+        Assert.Throws<ArgumentException>(() => task.SetSchedule(new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 1)));
+    }
+
+    [Fact]
+    public void SetDueDate_Should_Throw_When_EarlierThanStart_And_AllowClearing()
+    {
+        var (_, task) = CreateBoardWithTask();
+        task.SetSchedule(new DateOnly(2026, 10, 5), null);
+
+        Assert.Throws<ArgumentException>(() => task.SetDueDate(new DateOnly(2026, 10, 4)));
+
+        task.SetDueDate(new DateOnly(2026, 10, 6));
+        task.SetDueDate(null);
+        Assert.Null(task.DueDate);
+        Assert.Equal(new DateOnly(2026, 10, 5), task.StartDate);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("0.5")]
+    [InlineData("13")]
+    [InlineData("999.9")]
+    public void SetStoryPoints_Should_AcceptValidValues(string value)
+    {
+        var (_, task) = CreateBoardWithTask();
+        var points = decimal.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+
+        task.SetStoryPoints(points);
+
+        Assert.Equal(points, task.StoryPoints);
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("1000")]
+    [InlineData("1.25")]
+    public void SetStoryPoints_Should_RejectInvalidValues(string value)
+    {
+        var (_, task) = CreateBoardWithTask();
+
+        Assert.Throws<ArgumentException>(() => task.SetStoryPoints(decimal.Parse(value, System.Globalization.CultureInfo.InvariantCulture)));
+    }
+
+    [Fact]
+    public void SetEstimate_Should_ValidateRange_And_AllowClearing()
+    {
+        var (_, task) = CreateBoardWithTask();
+
+        task.SetEstimate(90);
+        Assert.Equal(90, task.EstimateMinutes);
+
+        Assert.Throws<ArgumentException>(() => task.SetEstimate(-1));
+        Assert.Throws<ArgumentException>(() => task.SetEstimate(TaskItem.MaxEstimateMinutes + 1));
+
+        task.SetEstimate(null);
+        Assert.Null(task.EstimateMinutes);
+    }
+
+    [Fact]
+    public void ChangeType_Should_AcceptTypeOfSameBoard()
+    {
+        var (board, task) = CreateBoardWithTask();
+        var bug = board.TaskTypes.Single(t => t.Kind == TaskTypeKind.Bug);
+
+        task.ChangeType(bug);
+
+        Assert.Equal(bug.Id, task.TypeId);
+    }
+
+    [Fact]
+    public void ChangeType_Should_Throw_When_ForeignOrArchived()
+    {
+        var (board, task) = CreateBoardWithTask();
+        var foreign = Board.Create("Other", "OTH").TaskTypes.First();
+        var epic = board.TaskTypes.Single(t => t.Kind == TaskTypeKind.Epic);
+        board.SetTaskTypeArchived(epic.Id, true);
+
+        Assert.Throws<InvalidOperationException>(() => task.ChangeType(foreign));
+        Assert.Throws<InvalidOperationException>(() => task.ChangeType(epic));
+    }
+
+    [Fact]
+    public void ChangeType_Should_KeepCurrentArchivedType()
+    {
+        var (board, task) = CreateBoardWithTask();
+        var bug = board.TaskTypes.Single(t => t.Kind == TaskTypeKind.Bug);
+        task.ChangeType(bug);
+        board.SetTaskTypeArchived(bug.Id, true);
+
+        task.ChangeType(bug);
+
+        Assert.Equal(bug.Id, task.TypeId);
+    }
+
+    [Fact]
+    public void Touch_Should_SetUpdatedAt()
+    {
+        var (_, task) = CreateBoardWithTask();
+        var later = task.CreatedAt.AddMinutes(5);
+
+        task.Touch(later);
+
+        Assert.Equal(later, task.UpdatedAt);
+    }
 }

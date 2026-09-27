@@ -1,5 +1,6 @@
 ﻿using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Tasks;
+using TaskPriority = Flow.Domain.Entities.TaskPriority;
 
 namespace Flow.Application.Abstractions;
 
@@ -25,7 +26,9 @@ public sealed record TaskListFilter(
     int Limit = 100,
     int? Offset = null,
     TaskSortField Sort = TaskSortField.Created,
-    bool Descending = true);
+    bool Descending = true,
+    TaskTypeKind? TypeKind = null,
+    TaskPriority? Priority = null);
 
 /// <summary>
 /// Счётчики по отбору: всего (без фильтра статуса), сколько попало под все фильтры (Matched),

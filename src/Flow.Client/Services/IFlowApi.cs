@@ -43,6 +43,8 @@ public interface IFlowApi
     Task<ApiResult<BoardResponse>> CreateBoard(CreateBoardRequest request, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> RenameBoard(Guid id, RenameBoardRequest request, CancellationToken ct = default);
     Task<ApiResult<bool>> DeleteBoard(Guid id, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> CreateTaskType(Guid boardId, CreateTaskTypeRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> UpdateTaskType(Guid boardId, Guid typeId, UpdateTaskTypeRequest request, CancellationToken ct = default);
 
     // ---- Задачи ----
     Task<ApiResult<IReadOnlyList<TaskResponse>>> GetTasks(Guid boardId, Guid? assigneeId = null, CancellationToken ct = default);
@@ -59,6 +61,8 @@ public interface IFlowApi
         int? offset = null,
         TaskSortField? sort = null,
         bool descending = false,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
         CancellationToken ct = default);
 
     Task<ApiResult<TaskResponse>> GetTask(Guid id, CancellationToken ct = default);
@@ -67,6 +71,8 @@ public interface IFlowApi
     Task<ApiResult<bool>> DeleteTask(Guid id, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> AssignTask(Guid id, AssignTaskRequest request, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> SetDueDate(Guid id, SetTaskDueDateRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> SetSchedule(Guid id, SetTaskScheduleRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> SetEstimate(Guid id, SetTaskEstimateRequest request, CancellationToken ct = default);
 
     // ---- Комментарии и журнал ----
     Task<ApiResult<IReadOnlyList<TaskCommentResponse>>> GetComments(Guid taskId, CancellationToken ct = default);

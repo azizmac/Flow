@@ -5,8 +5,9 @@
 <div class="board-card" @onclick="Open" role="link" tabindex="0" @onkeydown="OnCardKey">
     <div class="board-card-head">
         <KeyChip Value="@Board.Key" />
-        <RowMenu ShowOpen="true" ShowRename="CanManage" ShowDelete="CanManage" Size="26" Style="color:rgba(255,255,255,0.5)"
-                 OnOpen="Open" OnRename="StartRename" OnCopy="CopyKey" OnDelete="() => OnDelete.InvokeAsync(Board)" />
+        <RowMenu ShowOpen="true" ShowRename="CanManage" ShowDelete="CanManage" ShowTaskTypes="CanManage" Size="26" Style="color:rgba(255,255,255,0.5)"
+                 OnOpen="Open" OnRename="StartRename" OnCopy="CopyKey" OnDelete="() => OnDelete.InvokeAsync(Board)"
+                 OnTaskTypes="() => OnTaskTypes.InvokeAsync(Board)" />
     </div>
     <div>
         <div class="board-card-name">
@@ -41,6 +42,7 @@
     [Parameter] public EventCallback<BoardResponse> OnOpen { get; set; }
     [Parameter] public EventCallback<(BoardResponse Board, string Name)> OnRename { get; set; }
     [Parameter] public EventCallback<BoardResponse> OnDelete { get; set; }
+    [Parameter] public EventCallback<BoardResponse> OnTaskTypes { get; set; }
     /// <summary>Permissions.CanManageBoards(me): переименование и удаление — Admin+.</summary>
     [Parameter] public bool CanManage { get; set; } = true;
     [Parameter] public EventCallback<string> OnCopy { get; set; }

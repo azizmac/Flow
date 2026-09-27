@@ -26,5 +26,8 @@ public sealed class TaskUpdateResult
     public static TaskUpdateResult InvalidStatus(Guid statusId) =>
         new(false, $"Status {statusId} does not belong to task's board.", null);
 
+    public static TaskUpdateResult InvalidType(Guid typeId) =>
+        new(false, $"Task type {typeId} does not belong to task's board.", null);
+
     public static TaskUpdateResult Success(TaskResponse response) => new(false, null, response);
 }

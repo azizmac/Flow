@@ -2,7 +2,7 @@ namespace Flow.Domain.Entities;
 
 /// <summary>
 /// Что именно изменилось в задаче (docs/TZ_task_activity_comments.md). Значения хранятся в БД как int —
-/// порядок не менять, только дописывать в конец. AttachmentAdded/AttachmentRemoved зарезервированы под вложения.
+/// порядок не менять, только дописывать в конец.
 /// </summary>
 public enum TaskActivityType
 {
@@ -15,5 +15,10 @@ public enum TaskActivityType
     CommentAdded = 6,
     CommentDeleted = 7,
     AttachmentAdded = 8,
-    AttachmentRemoved = 9
+    AttachmentRemoved = 9,
+    PriorityChanged = 10,
+    StartDateChanged = 11,
+    StoryPointsChanged = 12,
+    EstimateChanged = 13,
+    TypeChanged = 14
 }

@@ -45,7 +45,8 @@
         <div class="board-grid stagger">
             @foreach (var b in Filtered)
             {
-                <BoardCard @key="b.Id" Board="b" CanManage="CanManage" OnOpen="Open" OnRename="Rename" OnDelete="AskDelete" OnCopy="CopyKey" />
+                <BoardCard @key="b.Id" Board="b" CanManage="CanManage" OnOpen="Open" OnRename="Rename" OnDelete="AskDelete" OnCopy="CopyKey"
+                           OnTaskTypes="bb => _typesBoard = bb" />
             }
             @if (!HasSearch && CanManage)
             {
@@ -71,6 +72,11 @@
     <CreateBoardDialog OnCreated="OnCreated" OnCancel="() => _createOpen = false" />
 }
 
+@if (_typesBoard is not null)
+{
+    <TaskTypesDialog Board="_typesBoard" OnChanged="Replace" OnClose="() => _typesBoard = null" />
+}
+
 @if (_deleting is not null)
 {
     <ConfirmDialog Title="@($"Удалить проект {_deleting.Key}?")"
@@ -86,6 +92,8 @@
     private string _search = "";
     private bool _createOpen;
     private BoardResponse? _deleting;
+    /// <summary>Проект, чьи типы задач сейчас редактируются в модалке; null — модалка закрыта.</summary>
+    private BoardResponse? _typesBoard;
     private IDisposable? _hotkeys;
 
     private bool HasSearch => _search.Trim().Length > 0;
@@ -205,6 +213,7 @@
     {
         var i = _boards.FindIndex(x => x.Id == updated.Id);
         if (i >= 0) _boards[i] = updated;
+        if (_typesBoard?.Id == updated.Id) _typesBoard = updated;
     }
 
     private void OnUsersChanged() => InvokeAsync(StateHasChanged);

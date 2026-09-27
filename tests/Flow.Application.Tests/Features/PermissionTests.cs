@@ -1,11 +1,15 @@
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
+using Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
+using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Search.Commands.ReindexCommand;
 using Flow.Application.Features.Search.Queries.SearchStatusQuery;
 using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetEstimateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetScheduleCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Application.Features.Users.Commands.UserChangeEmailCommand;
 using Flow.Application.Features.Users.Commands.UserChangePasswordCommand;
@@ -92,6 +96,35 @@ public class PermissionTests
         Assert.True(deleted);
     }
 
+    // ---- типы задач (docs/TZ_task_model.md §1) ----
+
+    [Theory]
+    [InlineData(UserRole.Reader)]
+    [InlineData(UserRole.Member)]
+    [InlineData(UserRole.Developer)]
+    public async Task Below_Admin_Cannot_Manage_Task_Types(UserRole role)
+    {
+        var (mediator, boards, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "user");
+        var boardId = await CreateBoardAsync(mediator);
+        var typeId = (await boards.GetByIdAsync(boardId, CancellationToken.None))!.TaskTypes.First().Id;
+
+        await Forbidden(() => mediator.Send(new TaskTypeCreateCommand(actor, boardId, "Инцидент", TaskTypeKind.Bug), CancellationToken.None));
+        await Forbidden(() => mediator.Send(new TaskTypeUpdateCommand(actor, boardId, typeId, Name: "X"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Admin_Can_Manage_Task_Types()
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var admin = AddUser(users, UserRole.Admin, "admin");
+        var boardId = await CreateBoardAsync(mediator);
+
+        var board = await mediator.Send(new TaskTypeCreateCommand(admin, boardId, "Инцидент", TaskTypeKind.Bug), CancellationToken.None);
+
+        Assert.Contains(board!.TaskTypes, t => t.Name == "Инцидент");
+    }
+
     // ---- задачи ----
 
     [Fact]
@@ -124,6 +157,30 @@ public class PermissionTests
 
         await Forbidden(() => mediator.Send(new TaskUpdateCommand(member, foreign, "Renamed", null, null), CancellationToken.None));
         await Forbidden(() => mediator.Send(new TaskDeleteCommand(member, foreign), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Planning_Fields_Follow_EditTask_Rights()
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var member = AddUser(users, UserRole.Member, "member");
+        var other = AddUser(users, UserRole.Member, "other");
+        var reader = AddUser(users, UserRole.Reader, "reader");
+        var boardId = await CreateBoardAsync(mediator);
+        var own = await CreateTaskAsync(mediator, member, boardId);
+        var foreign = await CreateTaskAsync(mediator, other, boardId);
+
+        var updated = await mediator.Send(new TaskUpdateCommand(member, own, null, null, null, Priority: TaskPriority.High), CancellationToken.None);
+        Assert.Equal(Shared.Contracts.Tasks.TaskPriority.High, updated.Response!.Priority);
+        Assert.NotNull((await mediator.Send(new TaskSetScheduleCommand(member, own, new DateOnly(2026, 10, 1), null), CancellationToken.None)).Response);
+        Assert.NotNull((await mediator.Send(new TaskSetEstimateCommand(member, own, 3m, 60), CancellationToken.None)).Response);
+
+        foreach (var actor in new[] { member, reader })
+        {
+            await Forbidden(() => mediator.Send(new TaskUpdateCommand(actor, foreign, null, null, null, Priority: TaskPriority.High), CancellationToken.None));
+            await Forbidden(() => mediator.Send(new TaskSetScheduleCommand(actor, foreign, new DateOnly(2026, 10, 1), null), CancellationToken.None));
+            await Forbidden(() => mediator.Send(new TaskSetEstimateCommand(actor, foreign, 3m, 60), CancellationToken.None));
+        }
     }
 
     [Fact]

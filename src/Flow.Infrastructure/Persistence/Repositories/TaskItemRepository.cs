@@ -71,6 +71,8 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
                 t => db.Users.Where(u => u.Id == t.AssigneeId).Select(u => u.LastName + " " + u.FirstName).FirstOrDefault(),
                 desc),
             TaskSortField.Due => Order(query.OrderBy(t => t.DueDate == null), t => t.DueDate, desc),
+            TaskSortField.Priority => Order(query, t => t.Priority, desc),
+            TaskSortField.Updated => Order(query, t => t.UpdatedAt, desc),
             _ => Order(query, t => t.CreatedAt, desc)
         };
 
@@ -131,6 +133,13 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
 
         if (filter.StatusType is { } statusType)
             query = query.Where(t => db.Statuses.Any(s => s.Id == t.StatusId && s.Type == statusType));
+
+        // Вид типа — общий ключ для всех проектов, как StatusType: «все ошибки» ищутся без знания Id типов.
+        if (filter.TypeKind is { } typeKind)
+            query = query.Where(t => db.TaskTypes.Any(tt => tt.Id == t.TypeId && tt.Kind == typeKind));
+
+        if (filter.Priority is { } priority)
+            query = query.Where(t => t.Priority == priority);
 
         if (!string.IsNullOrWhiteSpace(filter.Query))
         {
