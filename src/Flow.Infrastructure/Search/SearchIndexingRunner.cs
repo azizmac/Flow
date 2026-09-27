@@ -67,16 +67,22 @@ internal sealed class SearchIndexingRunner(
     /// <summary>
     /// Берёт пачку записей очереди. FOR UPDATE SKIP LOCKED обязателен: несколько экземпляров Flow.Api
     /// разбирают одну очередь и не должны ни ждать друг друга, ни взять одну запись дважды.
+    ///
+    /// «Пора» сравнивается по часам приложения, а не по now() базы: NextAttemptAt пишут постановка
+    /// в очередь и backoff, и оба берут DateTime.UtcNow. Смешай часы — и при отставании часов БД
+    /// только что поставленная запись окажется «в будущем» и пропустит проход (так плавали тесты
+    /// индексации, когда часы Docker VM отставали от хоста на десятки миллисекунд).
     /// </summary>
     private async Task<IReadOnlyList<SearchIndexRequest>> ClaimAsync(CancellationToken cancellationToken)
     {
         var batchSize = Math.Max(1, options.Indexing.BatchSize);
         var maxAttempts = options.Indexing.MaxAttempts;
+        var now = DateTime.UtcNow;
 
         return await db.SearchIndexQueue
             .FromSql($"""
                       SELECT * FROM "SearchIndexQueue"
-                      WHERE "NextAttemptAt" <= now() AND "AttemptCount" < {maxAttempts}
+                      WHERE "NextAttemptAt" <= {now} AND "AttemptCount" < {maxAttempts}
                       ORDER BY "Priority", "EnqueuedAt"
                       LIMIT {batchSize}
                       FOR UPDATE SKIP LOCKED
