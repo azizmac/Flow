@@ -1,6 +1,8 @@
 ﻿using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Application.Features.Tasks.Commands.TaskRankCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetParentCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetEstimateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetScheduleCommand;
@@ -9,6 +11,7 @@ using Flow.Application.Features.Search.Queries.SimilarTasksQuery;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskListQuery;
 using Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
+using Flow.Application.Features.Tasks.Queries.TaskTreeQuery;
 using Flow.Shared.Contracts.Boards;
 using Flow.Application.Abstractions;
 using Flow.Application.Features.Boards;
@@ -34,7 +37,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         {
             var response = await mediator.Send(
                 new TaskCreateCommand(actor.Require(), boardId, request.Title, request.Description, request.StatusId,
-                    request.TypeId, request.Priority?.ToDomainPriority()),
+                    request.TypeId, request.Priority?.ToDomainPriority(), request.ParentId),
                 cancellationToken);
 
             return response is null
@@ -76,6 +79,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         [FromQuery] string? dir,
         [FromQuery] TaskTypeKind? typeKind,
         [FromQuery] TaskPriority? priority,
+        [FromQuery] Guid? parentId,
         CancellationToken cancellationToken)
     {
         // Неизвестное число в query-string («?priority=42») привязка enum'а пропускает — отсекаем до маппинга.
@@ -92,7 +96,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
 
         var response = await mediator.Send(
             new TaskSearchQuery(actor.Require(), boardId, assigneeId, unassigned == true, statusId, statusType, q, limit, cursor,
-                offset, sortField, descending, typeKind, priority),
+                offset, sortField, descending, typeKind, priority, parentId),
             cancellationToken);
 
         return Ok(response);
@@ -160,6 +164,24 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     public Task<IActionResult> SetEstimate(Guid id, SetTaskEstimateRequest request, CancellationToken cancellationToken) =>
         SendUpdate(new TaskSetEstimateCommand(actor.Require(), id, request.StoryPoints, request.EstimateMinutes), cancellationToken);
 
+    /// <summary>Родитель в иерархии (null — снять); другой проект, свой уровень или ниже → 400.</summary>
+    [HttpPatch("tasks/{id:guid}/parent")]
+    public Task<IActionResult> SetParent(Guid id, SetTaskParentRequest request, CancellationToken cancellationToken) =>
+        SendUpdate(new TaskSetParentCommand(actor.Require(), id, request.ParentId), cancellationToken);
+
+    /// <summary>Место в ручном порядке: после afterId и/или перед beforeId; без соседей или соседи из другого проекта → 400.</summary>
+    [HttpPost("tasks/{id:guid}/rank")]
+    public Task<IActionResult> RankTask(Guid id, RankTaskRequest request, CancellationToken cancellationToken) =>
+        SendUpdate(new TaskRankCommand(actor.Require(), id, request.AfterId, request.BeforeId), cancellationToken);
+
+    /// <summary>Дерево задач проекта или поддерево rootId: плоский список в порядке обхода с глубиной.</summary>
+    [HttpGet("boards/{boardId:guid}/tree")]
+    public async Task<IActionResult> GetTree(Guid boardId, [FromQuery] Guid? rootId, CancellationToken cancellationToken)
+    {
+        var tree = await mediator.Send(new TaskTreeQuery(actor.Require(), boardId, rootId), cancellationToken);
+        return tree is null ? NotFound() : Ok(tree);
+    }
+
     private async Task<IActionResult> SendUpdate(MediatR.IRequest<TaskUpdateResult> command, CancellationToken cancellationToken)
     {
         try
@@ -167,17 +189,25 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
             var result = await mediator.Send(command, cancellationToken);
             return result.IsNotFound ? NotFound() : Ok(result.Response);
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             return BadRequest(new { ex.Message });
         }
     }
 
+    /// <summary>Задача с подзадачами без cascade=true → 400; с флагом удаляется всё поддерево.</summary>
     [HttpDelete("tasks/{id:guid}")]
-    public async Task<IActionResult> DeleteTask(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteTask(Guid id, [FromQuery] bool? cascade, CancellationToken cancellationToken)
     {
-        var deleted = await mediator.Send(new TaskDeleteCommand(actor.Require(), id), cancellationToken);
-        return deleted ? NoContent() : NotFound();
+        try
+        {
+            var deleted = await mediator.Send(new TaskDeleteCommand(actor.Require(), id, cascade == true), cancellationToken);
+            return deleted ? NoContent() : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { ex.Message });
+        }
     }
 
     /// <summary>

@@ -1,6 +1,8 @@
 ﻿using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Application.Features.Tasks.Commands.TaskRankCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetParentCommand;
 using Flow.Application.Features.Tasks;
 using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetEstimateCommand;
@@ -9,6 +11,7 @@ using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskListQuery;
 using Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
+using Flow.Application.Features.Tasks.Queries.TaskTreeQuery;
 using Flow.Client.Services;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Tasks;
@@ -48,6 +51,7 @@ internal sealed partial class InProcessFlowApi
         bool descending = false,
         TaskTypeKind? typeKind = null,
         TaskPriority? priority = null,
+        Guid? parentId = null,
         CancellationToken ct = default) =>
         Scoped(async mediator =>
         {
@@ -65,7 +69,7 @@ internal sealed partial class InProcessFlowApi
 
             var response = await mediator.Send(
                 new TaskSearchQuery(await ActorAsync(), boardId, assigneeId, unassigned, statusId, statusType, text, limit, page,
-                    offset, sortField, sortDescending, typeKind, priority),
+                    offset, sortField, sortDescending, typeKind, priority, parentId),
                 ct);
 
             return Ok(response);
@@ -84,7 +88,7 @@ internal sealed partial class InProcessFlowApi
             var actor = await ActorAsync();
             var response = await mediator.Send(
                 new TaskCreateCommand(actor, boardId, request.Title, request.Description, request.StatusId,
-                    request.TypeId, request.Priority?.ToDomainPriority()),
+                    request.TypeId, request.Priority?.ToDomainPriority(), request.ParentId),
                 ct);
 
             // null — доски нет; ArgumentException/InvalidOperationException (пустой заголовок, чужой статус)
@@ -109,11 +113,12 @@ internal sealed partial class InProcessFlowApi
                 : Ok(result.Response!);
         });
 
-    public Task<ApiResult<bool>> DeleteTask(Guid id, CancellationToken ct = default) =>
+    /// <summary>cascade = false и есть подзадачи — 400 (Guard ловит InvalidOperationException).</summary>
+    public Task<ApiResult<bool>> DeleteTask(Guid id, bool cascade = false, CancellationToken ct = default) =>
         Scoped(async mediator =>
         {
             var actor = await ActorAsync();
-            var deleted = await mediator.Send(new TaskDeleteCommand(actor, id), ct);
+            var deleted = await mediator.Send(new TaskDeleteCommand(actor, id, cascade), ct);
 
             // Удаление уже удалённой задачи для экрана не ошибка: HTTP-клиент на 404 отдавал Success(false).
             return deleted ? Ok(true) : Missing();
@@ -143,6 +148,19 @@ internal sealed partial class InProcessFlowApi
 
     public Task<ApiResult<TaskResponse>> SetEstimate(Guid id, SetTaskEstimateRequest request, CancellationToken ct = default) =>
         SendUpdate(actor => new TaskSetEstimateCommand(actor, id, request.StoryPoints, request.EstimateMinutes), ct);
+
+    public Task<ApiResult<TaskResponse>> SetParent(Guid id, SetTaskParentRequest request, CancellationToken ct = default) =>
+        SendUpdate(actor => new TaskSetParentCommand(actor, id, request.ParentId), ct);
+
+    public Task<ApiResult<TaskResponse>> RankTask(Guid id, RankTaskRequest request, CancellationToken ct = default) =>
+        SendUpdate(actor => new TaskRankCommand(actor, id, request.AfterId, request.BeforeId), ct);
+
+    public Task<ApiResult<IReadOnlyList<TaskTreeNode>>> GetTree(Guid boardId, Guid? rootId = null, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var tree = await mediator.Send(new TaskTreeQuery(await ActorAsync(), boardId, rootId), ct);
+            return tree is null ? NotFound<IReadOnlyList<TaskTreeNode>>() : Ok(tree);
+        });
 
     /// <summary>Команды, различающие только «задачи нет» и успех; ошибки ввода домена ловит Guard (400).</summary>
     private Task<ApiResult<TaskResponse>> SendUpdate(Func<Guid, MediatR.IRequest<TaskUpdateResult>> command, CancellationToken ct) =>

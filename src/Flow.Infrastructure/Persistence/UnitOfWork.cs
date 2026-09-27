@@ -1,4 +1,7 @@
 using Flow.Application.Abstractions;
+using Flow.Application.Exceptions;
+using Flow.Infrastructure.Persistence.Configurations;
+using Npgsql;
 using Flow.Domain.Entities;
 using Flow.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +20,20 @@ internal sealed class UnitOfWork(FlowDbContext db, SearchIndexQueue searchQueue)
     {
         TouchModifiedTasks();
 
+        try
+        {
+            await SaveCoreAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg
+                                           && pg.ConstraintName == TaskItemConfiguration.RankIndexName)
+        {
+            // Два запроса вычислили один ранг (docs/TZ_task_model.md §7): хендлер пересчитает ключ и повторит.
+            throw new RankConflictException(ex);
+        }
+    }
+
+    private async Task SaveCoreAsync(CancellationToken cancellationToken)
+    {
         if (!searchQueue.HasPending)
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -47,8 +64,12 @@ internal sealed class UnitOfWork(FlowDbContext db, SearchIndexQueue searchQueue)
         var now = DateTime.UtcNow;
         foreach (var entry in db.ChangeTracker.Entries<TaskItem>())
         {
-            if (entry.State == EntityState.Modified)
+            // Перестановка в ручном порядке — положение задачи, а не её изменение (§7): одна смена ранга дату не двигает.
+            if (entry.State == EntityState.Modified
+                && entry.Properties.Any(p => p.IsModified && p.Metadata.Name != nameof(TaskItem.Rank)))
+            {
                 entry.Entity.Touch(now);
+            }
         }
     }
 }

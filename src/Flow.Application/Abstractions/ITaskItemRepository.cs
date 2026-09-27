@@ -37,6 +37,31 @@ public interface ITaskItemRepository
     /// <summary>Нужно для валидации ChangeStatus — статус должен принадлежать той же доске, что и задача.</summary>
     Task<bool> StatusBelongsToBoardAsync(Guid statusId, Guid boardId, CancellationToken cancellationToken);
 
+    /// <summary>Прямые подзадачи — отслеживаемые (смена типа родителя проверяет их уровни, каскадное удаление их удаляет).</summary>
+    Task<IReadOnlyList<TaskItem>> GetChildrenAsync(Guid parentId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Число прямых подзадач и сколько из них в финальном статусе — одним GROUP BY (docs/TZ_task_model.md §3),
+    /// как CommentCount. Задачи без детей в словаре отсутствуют.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, ChildCounts>> CountChildrenAsync(IReadOnlyCollection<Guid> parentIds, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Дерево в порядке обхода (родитель, затем его поддерево) с глубиной: <paramref name="rootId"/> = null — весь проект
+    /// от задач верхнего уровня (глубина 0), иначе сама задача (глубина 0) и её поддерево. Внутри уровня — по рангу.
+    /// </summary>
+    Task<IReadOnlyList<TaskTreeEntry>> GetTreeAsync(Guid boardId, Guid? rootId, CancellationToken cancellationToken);
+
+    /// <summary>Максимальный ранг в проекте из БД (не из отслеживаемых сущностей); null — задач нет.</summary>
+    Task<string?> GetMaxRankAsync(Guid boardId, Guid? excludeTaskId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Ближайший ранг в проекте по ту сторону от <paramref name="rank"/>: <paramref name="after"/> = true — наименьший
+    /// больший, false — наибольший меньший. <paramref name="excludeTaskId"/> — перемещаемая задача, её старое место
+    /// соседом не считается. null — край проекта.
+    /// </summary>
+    Task<string?> GetNeighborRankAsync(Guid boardId, string rank, bool after, Guid excludeTaskId, CancellationToken cancellationToken);
+
     void Add(TaskItem task);
 
     void Remove(TaskItem task);

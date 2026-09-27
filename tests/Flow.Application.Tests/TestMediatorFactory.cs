@@ -86,6 +86,13 @@ public static class TestMediatorFactory
         return new SearchTestContext(all.Mediator, all.SearchOptions, all.SearchIndex, all.Embeddings, all.Boards, all.Tasks, all.Users, all.Reranker, all.Vision);
     }
 
+    /// <summary>Плюс фейковый UnitOfWork — для проверки повторов сохранения (конфликт ранга).</summary>
+    public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUnitOfWork UnitOfWork) CreateWithUnitOfWork()
+    {
+        var all = Build();
+        return (all.Mediator, all.Boards, all.Tasks, all.UnitOfWork);
+    }
+
     /// <summary>То же, плюс FakeAccountService — для тестов, которым важно, что ушло в Flow.Auth.</summary>
     public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts) CreateWithAccounts()
     {
@@ -93,10 +100,10 @@ public static class TestMediatorFactory
         return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Accounts);
     }
 
-    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings, FakeAttachmentRepository Attachments, InMemoryFileStorage Storage, AttachmentOptions AttachmentOptions, FakeReranker Reranker, FakeVisionEmbeddingGenerator Vision) Build()
+    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings, FakeAttachmentRepository Attachments, InMemoryFileStorage Storage, AttachmentOptions AttachmentOptions, FakeReranker Reranker, FakeVisionEmbeddingGenerator Vision, FakeUnitOfWork UnitOfWork) Build()
     {
         var boards = new FakeBoardRepository();
-        var tasks = new FakeTaskItemRepository();
+        var tasks = new FakeTaskItemRepository(boards);
         var users = new FakeUserRepository();
         var accounts = new FakeAccountService();
         var comments = new FakeTaskCommentRepository();
@@ -137,10 +144,11 @@ public static class TestMediatorFactory
         services.AddSingleton<IEmbeddingGenerator>(embedder);
         // Поиск включён: иначе /search/reindex отвечал бы «выключено» раньше проверки прав.
         services.AddSingleton(searchOptions);
-        services.AddSingleton<IUnitOfWork>(new FakeUnitOfWork());
+        var unitOfWork = new FakeUnitOfWork();
+        services.AddSingleton<IUnitOfWork>(unitOfWork);
         services.AddFlowApplication();
 
         var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
-        return (mediator, boards, tasks, users, accounts, comments, activities, searchQueue, searchOptions, searchIndex, embeddings, attachments, storage, attachmentOptions, reranker, visionEmbedder);
+        return (mediator, boards, tasks, users, accounts, comments, activities, searchQueue, searchOptions, searchIndex, embeddings, attachments, storage, attachmentOptions, reranker, visionEmbedder, unitOfWork);
     }
 }

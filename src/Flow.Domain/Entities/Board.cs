@@ -263,7 +263,11 @@ public sealed partial class Board
     /// (User.Id), пишется в <see cref="TaskItem.CreatedById"/>. Без <paramref name="typeId"/> — тип проекта
     /// по умолчанию; архивный тип не принимается.
     /// </summary>
-    public TaskItem CreateTask(string title, string? description = null, Guid? statusId = null, Guid? createdById = null, Guid? typeId = null)
+    /// <remarks>
+    /// <paramref name="rank"/> — ключ ручного порядка; задачи проекта агрегат не держит, поэтому «в конец проекта»
+    /// вычисляет хендлер по максимальному рангу в БД. null — <see cref="Ranking.FractionalIndex.First"/> (пустой проект, тесты).
+    /// </remarks>
+    public TaskItem CreateTask(string title, string? description = null, Guid? statusId = null, Guid? createdById = null, Guid? typeId = null, string? rank = null)
     {
         var type = typeId is null
             ? _taskTypes.SingleOrDefault(t => t.IsDefault)
@@ -287,11 +291,15 @@ public sealed partial class Board
             resolvedStatusId = statusId.Value;
         }
 
+        // Ранг проверяем до того, как счётчик номеров сдвинется: отказ не должен сжигать номер задачи.
+        rank ??= Ranking.FractionalIndex.First;
+        Ranking.FractionalIndex.Validate(rank);
+
         // DESK-1
         NextTaskNumber++;
         
         var code = TaskCode.Create(Key, NextTaskNumber);
-        var task = new TaskItem(Id, code, title, description, resolvedStatusId, createdById, type.Id);
+        var task = new TaskItem(Id, code, title, description, resolvedStatusId, createdById, type.Id, rank);
         _tasks.Add(task);
         return task;
     }

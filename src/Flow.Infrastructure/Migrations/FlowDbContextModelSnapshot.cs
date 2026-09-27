@@ -279,8 +279,17 @@ namespace Flow.Infrastructure.Migrations
                     b.Property<int?>("EstimateMinutes")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Priority")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Rank")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .UseCollation("C");
 
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
@@ -307,16 +316,20 @@ namespace Flow.Infrastructure.Migrations
 
                     b.HasIndex("AssigneeId");
 
-                    b.HasIndex("BoardId");
-
                     b.HasIndex("Code")
                         .IsUnique();
 
                     b.HasIndex("CreatedById");
 
+                    b.HasIndex("ParentId");
+
                     b.HasIndex("StatusId");
 
                     b.HasIndex("TypeId");
+
+                    b.HasIndex("BoardId", "Rank")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TaskItems_BoardId_Rank");
 
                     b.ToTable("TaskItems");
                 });
@@ -657,6 +670,11 @@ namespace Flow.Infrastructure.Migrations
                     b.HasOne("Flow.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Flow.Domain.Entities.Status", null)

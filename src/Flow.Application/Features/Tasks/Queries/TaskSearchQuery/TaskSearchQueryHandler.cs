@@ -35,20 +35,23 @@ internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCom
             request.Descending,
             request.TypeKind?.ToDomainKind(),
             request.Priority?.ToDomainPriority(),
-            await projectAccess.VisibleBoardIdsAsync(await actors.ResolveAsync(request.ActorId, cancellationToken), cancellationToken));
+            await projectAccess.VisibleBoardIdsAsync(await actors.ResolveAsync(request.ActorId, cancellationToken), cancellationToken),
+            request.ParentId);
 
         var items = await tasks.SearchAsync(filter, cancellationToken);
         var counted = await tasks.CountAsync(filter, cancellationToken);
 
         // Один GROUP BY на всю страницу, не N+1 (как в TaskListQueryHandler).
-        var counts = await comments.CountByTaskIdsAsync(items.Select(t => t.Id).ToList(), cancellationToken);
+        var ids = items.Select(t => t.Id).ToList();
+        var counts = await comments.CountByTaskIdsAsync(ids, cancellationToken);
+        var children = await tasks.CountChildrenAsync(ids, cancellationToken);
 
         // Страница заполнилась целиком — возможно, есть ещё; неполная страница всегда последняя.
         // В offset-режиме курсор не отдаём: листает таблица номерами страниц, и смешивать два способа нельзя.
         var last = request.Offset is null && items.Count == limit ? items[^1] : null;
 
         return new TaskListResponse(
-            items.Select(t => t.ToResponse(counts.GetValueOrDefault(t.Id))).ToList(),
+            items.Select(t => t.ToResponse(counts.GetValueOrDefault(t.Id), children.GetValueOrDefault(t.Id))).ToList(),
             last is null ? null : EncodeCursor(last.CreatedAt, last.Id),
             counted.Total,
             counted.Matched,

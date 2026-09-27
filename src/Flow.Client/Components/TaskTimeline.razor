@@ -153,6 +153,9 @@
     private string _editText = "";
     private TaskCommentResponse? _deleting;
     private Guid? _highlightId;
+
+    /// <summary>Задачи, на которые ссылаются записи об иерархии (родитель, подзадача): код и название для текста. null — удалена или скрыта.</summary>
+    private readonly Dictionary<Guid, TaskResponse?> _taskRefs = [];
     private const string DraftPlaceholder = "Написать комментарий… @username — упомянуть, файл можно перетащить";
 
     private UserResponse? Me => Users.Find(State.CurrentUserId);
@@ -229,6 +232,44 @@
 
         _comments = comments.Result.Value!.ToList();
         _activity = activity.Result.Value!.ToList();
+        await LoadTaskRefsAsync(cts.Token);
+    }
+
+    /// <summary>Подзадачу создали из блока «Подзадачи» этой же задачи — запись у родителя без перезагрузки ленты.</summary>
+    public void NoteChildAdded(TaskResponse child)
+    {
+        if (State.CurrentUserId is not { } me) return;
+        _taskRefs[child.Id] = child;
+        _activity.Add(new TaskActivityResponse(Guid.NewGuid(), TaskItem.Id, me, TaskActivityType.ChildAdded, null, child.Id.ToString(), DateTime.UtcNow));
+        StateHasChanged();
+    }
+
+    private async Task LoadTaskRefsThenRedrawAsync()
+    {
+        await LoadTaskRefsAsync(CancellationToken.None);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static readonly TaskActivityType[] HierarchyTypes =
+        [TaskActivityType.ParentChanged, TaskActivityType.ChildAdded, TaskActivityType.ChildRemoved];
+
+    /// <summary>Коды задач из записей об иерархии — по запросу на задачу; таких записей обычно единицы.</summary>
+    private async Task LoadTaskRefsAsync(CancellationToken ct)
+    {
+        var ids = _activity
+            .Where(a => HierarchyTypes.Contains(a.Type))
+            .SelectMany(a => new[] { a.OldValue, a.NewValue })
+            .Select(v => Guid.TryParse(v, out var g) ? g : (Guid?)null)
+            .OfType<Guid>()
+            .Where(g => !_taskRefs.ContainsKey(g))
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+            return;
+
+        var loaded = await Task.WhenAll(ids.Select(async id => (id, result: await Api.GetTask(id, ct))));
+        foreach (var (id, result) in loaded)
+            _taskRefs[id] = result.Ok ? result.Value : null;
     }
 
     /// <summary>
@@ -248,6 +289,11 @@
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.StatusChanged, before.StatusId.ToString(), after.StatusId.ToString(), now));
         if (before.AssigneeId != after.AssigneeId)
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.AssigneeChanged, before.AssigneeId?.ToString(), after.AssigneeId?.ToString(), now));
+        if (before.ParentId != after.ParentId)
+        {
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.ParentChanged, before.ParentId?.ToString(), after.ParentId?.ToString(), now));
+            _ = LoadTaskRefsThenRedrawAsync();
+        }
         if (before.DueDate != after.DueDate)
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.DueDateChanged,
                 before.DueDate?.ToString("yyyy-MM-dd"), after.DueDate?.ToString("yyyy-MM-dd"), now));
@@ -315,10 +361,30 @@
         TaskActivityType.PriorityChanged => Priorities(a),
         TaskActivityType.StoryPointsChanged => Change("story points", a, v => Ru.Points(decimal.Parse(v, CultureInfo.InvariantCulture))),
         TaskActivityType.EstimateChanged => Change("оценка", a, v => Ru.Duration(int.Parse(v, CultureInfo.InvariantCulture))),
+        TaskActivityType.ParentChanged => Parents(a),
+        TaskActivityType.ChildAdded => @<span>подзадача: @TaskRef(a.NewValue)</span>,
+        TaskActivityType.ChildRemoved => @<span>подзадача убрана: @TaskRef(a.OldValue)</span>,
         _ => Text(a.Type.ToString())
     };
 
     private static RenderFragment Text(string text) => @<span>@text</span>;
+
+    private RenderFragment Parents(TaskActivityResponse a)
+    {
+        if (a.OldValue is null)
+            return @<span>родитель: @TaskRef(a.NewValue)</span>;
+        if (a.NewValue is null)
+            return @<span>родитель снят (был @TaskRef(a.OldValue))</span>;
+        return @<span>родитель: @TaskRef(a.OldValue) <span class="tl-arrow">→</span> @TaskRef(a.NewValue)</span>;
+    }
+
+    private RenderFragment TaskRef(string? id)
+    {
+        var task = Guid.TryParse(id, out var g) ? _taskRefs.GetValueOrDefault(g) : null;
+        return task is null
+            ? @<span class="tl-old">удалённая задача</span>
+            : @<a class="tl-task" href="tasks/@task.Id" title="@task.Title"><span class="code">@task.Code</span> @task.Title</a>;
+    }
 
     private static RenderFragment Titles(TaskActivityResponse a) =>
         @<span>название: <s class="tl-old">@a.OldValue</s> <span class="tl-arrow">→</span> <b>@a.NewValue</b></span>;

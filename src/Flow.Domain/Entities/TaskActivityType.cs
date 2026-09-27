@@ -20,5 +20,8 @@ public enum TaskActivityType
     StartDateChanged = 11,
     StoryPointsChanged = 12,
     EstimateChanged = 13,
-    TypeChanged = 14
+    TypeChanged = 14,
+    ParentChanged = 15,
+    ChildAdded = 16,
+    ChildRemoved = 17
 }

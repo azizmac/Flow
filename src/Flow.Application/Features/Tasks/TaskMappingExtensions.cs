@@ -1,3 +1,4 @@
+using Flow.Application.Abstractions;
 using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Tasks;
 using DomainActivityType = Flow.Domain.Entities.TaskActivityType;
@@ -10,7 +11,7 @@ namespace Flow.Application.Features.Tasks;
 public static class TaskMappingExtensions
 {
     /// <summary>commentCount — из ITaskCommentRepository.CountByTaskIdsAsync (список) или отдельного запроса; по умолчанию 0 там, где не считали.</summary>
-    public static TaskResponse ToResponse(this TaskItem task, int commentCount = 0) => new(
+    public static TaskResponse ToResponse(this TaskItem task, int commentCount = 0, ChildCounts children = default) => new(
         task.Id,
         task.BoardId,
         task.Code.Value,
@@ -27,7 +28,10 @@ public static class TaskMappingExtensions
         task.StartDate,
         task.StoryPoints,
         task.EstimateMinutes,
-        task.UpdatedAt);
+        task.UpdatedAt,
+        task.ParentId,
+        children.Total,
+        children.Done);
 
     public static TaskCommentResponse ToResponse(this TaskComment comment) => new(
         comment.Id,

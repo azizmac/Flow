@@ -23,4 +23,5 @@ public sealed record TaskSearchQuery(
     TaskSortField Sort = TaskSortField.Created,
     bool Descending = true,
     TaskTypeKind? TypeKind = null,
-    TaskPriority? Priority = null) : IRequest<TaskListResponse>;
+    TaskPriority? Priority = null,
+    Guid? ParentId = null) : IRequest<TaskListResponse>;

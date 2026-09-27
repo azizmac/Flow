@@ -19,7 +19,9 @@ internal sealed class TaskListQueryHandler(ITaskItemRepository tasks, ITaskComme
         var items = await tasks.GetByBoardIdAsync(request.BoardId, request.AssigneeId, cancellationToken);
 
         // Один GROUP BY на весь список, не N+1 (как TaskCount у досок).
-        var counts = await comments.CountByTaskIdsAsync(items.Select(t => t.Id).ToList(), cancellationToken);
-        return items.Select(t => t.ToResponse(counts.GetValueOrDefault(t.Id))).ToList();
+        var ids = items.Select(t => t.Id).ToList();
+        var counts = await comments.CountByTaskIdsAsync(ids, cancellationToken);
+        var children = await tasks.CountChildrenAsync(ids, cancellationToken);
+        return items.Select(t => t.ToResponse(counts.GetValueOrDefault(t.Id), children.GetValueOrDefault(t.Id))).ToList();
     }
 }

@@ -76,6 +76,8 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
             TaskSortField.Due => Order(query.OrderBy(t => t.DueDate == null), t => t.DueDate, desc),
             TaskSortField.Priority => Order(query, t => t.Priority, desc),
             TaskSortField.Updated => Order(query, t => t.UpdatedAt, desc),
+            // Ранг уникален только внутри проекта; в сводном списке порядок проектов задаёт ключ.
+            TaskSortField.Rank => Order(Order(query, t => t.BoardId, desc), t => t.Rank, desc),
             _ => Order(query, t => t.CreatedAt, desc)
         };
 
@@ -147,6 +149,9 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
         if (filter.Priority is { } priority)
             query = query.Where(t => t.Priority == priority);
 
+        if (filter.ParentId is { } parentId)
+            query = query.Where(t => t.ParentId == parentId);
+
         if (!string.IsNullOrWhiteSpace(filter.Query))
         {
             // Тот же поиск, что раньше делал клиент по загруженному списку: по названию и по коду задачи.
@@ -196,6 +201,81 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
 
         var normalized = TaskCode.FromValue(code.Trim().ToUpperInvariant());
         return db.TaskItems.FirstOrDefaultAsync(t => t.Code == normalized, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetChildrenAsync(Guid parentId, CancellationToken cancellationToken) =>
+        await db.TaskItems.Where(t => t.ParentId == parentId).OrderBy(t => t.Rank).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, ChildCounts>> CountChildrenAsync(IReadOnlyCollection<Guid> parentIds, CancellationToken cancellationToken)
+    {
+        if (parentIds.Count == 0)
+            return new Dictionary<Guid, ChildCounts>();
+
+        // Финальность — признак статуса, поэтому join до группировки: одна строка на родителя, не N+1.
+        var rows = await db.TaskItems
+            .Where(t => t.ParentId != null && parentIds.Contains(t.ParentId.Value))
+            .Join(db.Statuses, t => t.StatusId, s => s.Id, (t, s) => new { ParentId = t.ParentId!.Value, s.IsFinal })
+            .GroupBy(x => x.ParentId)
+            .Select(g => new { ParentId = g.Key, Total = g.Count(), Done = g.Count(x => x.IsFinal) })
+            .ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(x => x.ParentId, x => new ChildCounts(x.Total, x.Done));
+    }
+
+    public async Task<IReadOnlyList<TaskTreeEntry>> GetTreeAsync(Guid boardId, Guid? rootId, CancellationToken cancellationToken)
+    {
+        // Рекурсивный CTE с путём из рангов: сортировка по пути даёт порядок обхода «родитель, затем его
+        // поддерево», а внутри уровня — ручной порядок. Разделитель '/' меньше любой цифры base-62, поэтому
+        // «a0/…» (дети a0) встаёт между «a0» и «a0V». COLLATE "C" — чтобы сравнение шло по байтам, как у Rank.
+        var rows = rootId is { } root
+            ? await db.Database.SqlQuery<TreeRow>($"""
+                WITH RECURSIVE tree AS (
+                    SELECT t."Id", 0 AS "Depth", (t."Rank" || '/') COLLATE "C" AS "Path"
+                    FROM "TaskItems" t WHERE t."BoardId" = {boardId} AND t."Id" = {root}
+                    UNION ALL
+                    SELECT c."Id", tree."Depth" + 1, (tree."Path" || c."Rank" || '/') COLLATE "C"
+                    FROM "TaskItems" c JOIN tree ON c."ParentId" = tree."Id")
+                SELECT "Id", "Depth", "Path" FROM tree
+                """).OrderBy(r => r.Path).ToListAsync(cancellationToken)
+            : await db.Database.SqlQuery<TreeRow>($"""
+                WITH RECURSIVE tree AS (
+                    SELECT t."Id", 0 AS "Depth", (t."Rank" || '/') COLLATE "C" AS "Path"
+                    FROM "TaskItems" t WHERE t."BoardId" = {boardId} AND t."ParentId" IS NULL
+                    UNION ALL
+                    SELECT c."Id", tree."Depth" + 1, (tree."Path" || c."Rank" || '/') COLLATE "C"
+                    FROM "TaskItems" c JOIN tree ON c."ParentId" = tree."Id")
+                SELECT "Id", "Depth", "Path" FROM tree
+                """).OrderBy(r => r.Path).ToListAsync(cancellationToken);
+
+        var ids = rows.Select(r => r.Id).ToList();
+        var items = await db.TaskItems.Where(t => ids.Contains(t.Id)).AsNoTracking().ToDictionaryAsync(t => t.Id, cancellationToken);
+
+        return rows.Where(r => items.ContainsKey(r.Id)).Select(r => new TaskTreeEntry(items[r.Id], r.Depth)).ToList();
+    }
+
+    /// <summary>Строка рекурсивного CTE дерева; SqlQuery читает колонки по именам свойств.</summary>
+    private sealed class TreeRow
+    {
+        public Guid Id { get; init; }
+        public int Depth { get; init; }
+        public string Path { get; init; } = "";
+    }
+
+    public Task<string?> GetMaxRankAsync(Guid boardId, Guid? excludeTaskId, CancellationToken cancellationToken) =>
+        db.TaskItems
+            .Where(t => t.BoardId == boardId && t.Id != excludeTaskId)
+            .OrderByDescending(t => t.Rank)
+            .Select(t => t.Rank)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<string?> GetNeighborRankAsync(Guid boardId, string rank, bool after, Guid excludeTaskId, CancellationToken cancellationToken)
+    {
+        // Параметр сравнивается с колонкой и получает её COLLATE "C": порядок тот же, что в индексе (BoardId, Rank).
+        var query = db.TaskItems.Where(t => t.BoardId == boardId && t.Id != excludeTaskId);
+
+        return after
+            ? query.Where(t => string.Compare(t.Rank, rank) > 0).OrderBy(t => t.Rank).Select(t => t.Rank).FirstOrDefaultAsync(cancellationToken)
+            : query.Where(t => string.Compare(t.Rank, rank) < 0).OrderByDescending(t => t.Rank).Select(t => t.Rank).FirstOrDefaultAsync(cancellationToken);
     }
 
     public void Add(TaskItem task) => db.TaskItems.Add(task);

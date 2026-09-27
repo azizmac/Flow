@@ -87,6 +87,18 @@ public sealed class TaskActivity
     public static TaskActivity EstimateChanged(Guid taskId, Guid actorId, int? oldMinutes, int? newMinutes) =>
         new(taskId, actorId, TaskActivityType.EstimateChanged, oldMinutes?.ToString(CultureInfo.InvariantCulture), newMinutes?.ToString(CultureInfo.InvariantCulture));
 
+    /// <summary>Родитель сменился: Guid старого и нового, null — «без родителя».</summary>
+    public static TaskActivity ParentChanged(Guid taskId, Guid actorId, Guid? oldParentId, Guid? newParentId) =>
+        new(taskId, actorId, TaskActivityType.ParentChanged, oldParentId?.ToString(), newParentId?.ToString());
+
+    /// <summary>У задачи появилась подзадача (запись у родителя); в NewValue — Guid ребёнка.</summary>
+    public static TaskActivity ChildAdded(Guid taskId, Guid actorId, Guid childId) =>
+        new(taskId, actorId, TaskActivityType.ChildAdded, null, childId.ToString());
+
+    /// <summary>Подзадачу увели к другому родителю или сделали самостоятельной; в OldValue — Guid ребёнка.</summary>
+    public static TaskActivity ChildRemoved(Guid taskId, Guid actorId, Guid childId) =>
+        new(taskId, actorId, TaskActivityType.ChildRemoved, childId.ToString(), null);
+
     public static TaskActivity CommentAdded(Guid taskId, Guid actorId, Guid commentId) =>
         new(taskId, actorId, TaskActivityType.CommentAdded, null, commentId.ToString());
 

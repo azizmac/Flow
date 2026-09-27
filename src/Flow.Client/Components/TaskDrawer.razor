@@ -8,6 +8,7 @@
 @inject HotkeyService Hotkeys
 @inject NavigationManager Nav
 @inject UserDirectory Users
+@inject ProjectAccessState Access
 
 @if (IsCreate)
 {
@@ -111,6 +112,8 @@ else if (Item is not null)
                     <span class="status-pill"><TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />@type.Name</span>
                 }
             </div>
+            <div class="meta-k">Родитель</div>
+            <div class="meta-v"><ParentSelect Board="Board" Task="Item" Value="Item.ParentId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetParent" /></div>
             <div class="meta-k">Статус</div>
             <div>
                 @if (CanEdit)
@@ -186,6 +189,8 @@ else if (Item is not null)
                 <MarkdownView Text="@Item.Description" OnClick="OnDescClick" />
             }
         </div>
+        <SubtaskList Board="Board" Parent="Item" CanCreate="Permissions.CanCreateTask(Access.For(Board.Id))"
+                     OnCountsChanged="OnChildCountsChanged" OnCreated="HandleSubtaskCreated" />
         <AttachmentList TaskId="Item.Id" BoardId="Item.BoardId" DropZoneId="td-drop" />
         <TaskTimeline @ref="_timeline" TaskItem="Item" Board="Board" OnCommentCountChanged="OnCommentCountChanged" />
         @if (_error is not null)
@@ -213,6 +218,11 @@ else if (Item is not null)
     [Parameter] public EventCallback<TaskResponse> OnCreated { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnUpdated { get; set; }
     [Parameter] public EventCallback<TaskResponse> OnDelete { get; set; }
+    /// <summary>
+    /// Иерархия изменилась (создана подзадача, сменился родитель) — у соседних строк списка за слайдером устарели
+    /// счётчики подзадач, а новой подзадачи там ещё нет: списку есть что перечитать.
+    /// </summary>
+    [Parameter] public EventCallback OnHierarchyChanged { get; set; }
     /// <summary>Права actor'а на Item (Permissions.CanEditTask / CanAssign); OnlyAssigneeId — Member назначает только себя.</summary>
     [Parameter] public bool CanEdit { get; set; } = true;
     [Parameter] public bool CanAssign { get; set; } = true;
@@ -429,6 +439,21 @@ else if (Item is not null)
 
     private Task ChangeStatus(Guid statusId) => Patch(new UpdateTaskRequest(null, null, statusId));
 
+    private async Task SetParent(Guid? parentId)
+    {
+        await Apply(id => Api.SetParent(id, new SetTaskParentRequest(parentId)), "Не удалось сменить родителя");
+        await OnHierarchyChanged.InvokeAsync();
+    }
+
+    private Task OnChildCountsChanged((int Total, int Done) counts) =>
+        OnUpdated.InvokeAsync(Current with { ChildCount = counts.Total, ChildDoneCount = counts.Done });
+
+    private async Task HandleSubtaskCreated(TaskResponse child)
+    {
+        _timeline?.NoteChildAdded(child);
+        await OnHierarchyChanged.InvokeAsync();
+    }
+
     private Task ChangeType(Guid typeId) => Patch(new UpdateTaskRequest(null, null, null, typeId));
 
     private Task ChangePriority(TaskPriority priority) => Patch(new UpdateTaskRequest(null, null, null, Priority: priority));
@@ -445,8 +470,9 @@ else if (Item is not null)
             return;
         }
 
-        await OnUpdated.InvokeAsync(result.Value!);
-        _timeline?.NoteLocalChange(before, result.Value!);
+        _latest = result.Value!.WithCountsOf(before);
+        await OnUpdated.InvokeAsync(_latest);
+        _timeline?.NoteLocalChange(before, _latest);
     }
 
     private async Task StartDescEdit()
@@ -483,9 +509,9 @@ else if (Item is not null)
             return;
         }
 
-        _latest = result.Value!;
-        await OnUpdated.InvokeAsync(result.Value!);
-        _timeline?.NoteLocalChange(before, result.Value!);
+        _latest = result.Value!.WithCountsOf(before);
+        await OnUpdated.InvokeAsync(_latest);
+        _timeline?.NoteLocalChange(before, _latest);
         _ = FlashSaved();
     }
 
@@ -525,9 +551,9 @@ else if (Item is not null)
             return false;
         }
 
-        _latest = result.Value!;
-        await OnUpdated.InvokeAsync(result.Value!);
-        _timeline?.NoteLocalChange(before, result.Value!);
+        _latest = result.Value!.WithCountsOf(before);
+        await OnUpdated.InvokeAsync(_latest);
+        _timeline?.NoteLocalChange(before, _latest);
         _ = FlashSaved();
         return true;
     }

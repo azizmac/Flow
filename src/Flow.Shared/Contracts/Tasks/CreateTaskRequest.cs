@@ -1,4 +1,4 @@
 namespace Flow.Shared.Contracts.Tasks;
 
-/// <summary>TypeId = null — тип проекта по умолчанию; Priority = null — None.</summary>
-public sealed record CreateTaskRequest(string Title, string? Description, Guid? StatusId, Guid? TypeId = null, TaskPriority? Priority = null);
+/// <summary>TypeId = null — тип проекта по умолчанию; Priority = null — None; ParentId — сразу подзадачей (тот же проект, тип ниже родителя).</summary>
+public sealed record CreateTaskRequest(string Title, string? Description, Guid? StatusId, Guid? TypeId = null, TaskPriority? Priority = null, Guid? ParentId = null);

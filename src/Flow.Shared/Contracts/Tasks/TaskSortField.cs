@@ -28,5 +28,8 @@ public enum TaskSortField
     Priority,
 
     /// <summary>По времени последнего изменения задачи.</summary>
-    Updated
+    Updated,
+
+    /// <summary>Ручной порядок (ранг, docs/TZ_task_model.md §7): «по возрастанию» — сверху то, что поставили выше.</summary>
+    Rank
 }

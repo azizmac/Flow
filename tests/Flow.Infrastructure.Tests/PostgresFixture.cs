@@ -71,6 +71,13 @@ public sealed class PostgresFixture : IAsyncLifetime
         return await scope.ServiceProvider.GetRequiredService<IMediator>().Send(request, CancellationToken.None);
     }
 
+    /// <summary>Произвольная работа в одном scope — когда тесту нужен сам репозиторий или IUnitOfWork, а не команда.</summary>
+    public async Task InScopeAsync(Func<IServiceProvider, Task> action)
+    {
+        await using var scope = _services.CreateAsyncScope();
+        await action(scope.ServiceProvider);
+    }
+
     /// <summary>Прямой доступ к БД для ассертов, в отдельном scope, без трекинга.</summary>
     public async Task<TResult> QueryAsync<TResult>(Func<FlowDbContext, Task<TResult>> query)
     {

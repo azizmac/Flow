@@ -68,5 +68,28 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(t => t.CreatedById);
+
+        // Иерархия (docs/TZ_task_model.md §3). Restrict, а не каскад: поддерево удаляет хендлер, иначе удаление
+        // прошло бы мимо журнала, очереди индексации и зачистки вложений. Индекс — под «детей задачи» и счётчики.
+        builder.HasOne<TaskItem>()
+            .WithMany()
+            .HasForeignKey(t => t.ParentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(t => t.ParentId);
+
+        // Ранг (§7): COLLATE "C" обязателен — по правилам локали Postgres сравнивал бы 'a' и 'B' не по ASCII,
+        // и порядок ключей дробного индекса сломался бы. Unique — страховка от двух одинаковых ключей в гонке
+        // (UnitOfWork переводит 23505 по нему в RankConflictException, хендлер пересчитывает ключ).
+        builder.Property(t => t.Rank)
+            .IsRequired()
+            .HasMaxLength(200)
+            .UseCollation("C");
+
+        builder.HasIndex(t => new { t.BoardId, t.Rank })
+            .IsUnique()
+            .HasDatabaseName(RankIndexName);
     }
+
+    public const string RankIndexName = "IX_TaskItems_BoardId_Rank";
 }

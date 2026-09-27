@@ -148,7 +148,7 @@
                         {
                             <div class="task-desc">@Ru.PlainFirstLine(context.Item.Description)</div>
                         }
-                        @if (context.Item.DueDate is not null || context.Item.CommentCount > 0 || context.Item.StoryPoints is not null)
+                        @if (context.Item.DueDate is not null || context.Item.CommentCount > 0 || context.Item.StoryPoints is not null || context.Item.ChildCount > 0)
                         {
                             <div class="task-meta-chips">
                                 @if (context.Item.StoryPoints is { } sp)
@@ -158,6 +158,12 @@
                                 @if (context.Item.DueDate is { } d)
                                 {
                                     <DueChip Value="d" IsDone="IsDone(context.Item)" />
+                                }
+                                @if (context.Item.ChildCount > 0)
+                                {
+                                    var ci = context.Item;
+                                    <span class="count-chip @(ci.ChildDoneCount == ci.ChildCount ? "done" : "")"
+                                          title="@($"Подзадачи: выполнено {ci.ChildDoneCount} из {ci.ChildCount}")"><Icon Name="check-square" Size="12" />@ci.ChildDoneCount/@ci.ChildCount</span>
                                 }
                                 @if (context.Item.CommentCount > 0)
                                 {
@@ -257,7 +263,8 @@
                     CanEdit="@(SelectedTask is { } sel && Permissions.CanEditTask(Me, AccessFor(sel), sel))"
                     CanAssign="@(SelectedTask is { } sel2 && Permissions.CanAssign(Me, AccessFor(sel2), sel2))"
                     OnlyAssigneeId="OnlyAssigneeFor(drawerBoard.Id)"
-                    OnClose="CloseDrawer" OnCreated="OnTaskCreated" OnUpdated="OnTaskUpdated" OnDelete="AskDeleteTask" />
+                    OnClose="CloseDrawer" OnCreated="OnTaskCreated" OnUpdated="OnTaskUpdated" OnDelete="AskDeleteTask"
+                    OnHierarchyChanged="Reload" />
     }
 </Drawer>
 
@@ -279,7 +286,7 @@
 @if (_deleting is not null)
 {
     <ConfirmDialog Title="@($"Удалить задачу {_deleting.Code}?")"
-                   Text="@($"«{_deleting.Title}» будет удалена без возможности восстановления.")"
+                   Text="@TaskMeta.DeleteWarning(_deleting)"
                    OnConfirm="ConfirmDeleteTask" OnCancel="() => _deleting = null" />
 }
 
@@ -861,7 +868,7 @@
         var result = await Api.UpdateTask(task.Id, new UpdateTaskRequest(null, null, statusId));
         if (result.Ok)
         {
-            await ReplaceTask(result.Value!);
+            await ReplaceTask(result.Value!.WithCountsOf(task));
             // Счётчики статусов считает сервер: после смены статуса они устарели.
             await RefreshCounts();
         }
@@ -896,7 +903,7 @@
         var result = await Api.AssignTask(task.Id, new AssignTaskRequest(userId));
         if (result.Ok)
         {
-            await ReplaceTask(result.Value!);
+            await ReplaceTask(result.Value!.WithCountsOf(task));
             var who = Users.Find(userId);
             Toasts.Ok(who is null ? $"{task.Code}: исполнитель снят" : $"{task.Code} → {who.FullName}");
         }
@@ -911,7 +918,7 @@
     {
         var result = await Api.UpdateTask(args.Task.Id, new UpdateTaskRequest(args.Title, null, null));
         if (result.Ok)
-            await ReplaceTask(result.Value!);
+            await ReplaceTask(result.Value!.WithCountsOf(args.Task));
         else
             Toasts.Error(result.Error ?? "Не удалось переименовать задачу");
     }
@@ -927,7 +934,7 @@
     private async Task ConfirmDeleteTask()
     {
         var t = _deleting!;
-        var result = await Api.DeleteTask(t.Id);
+        var result = await Api.DeleteTask(t.Id, cascade: t.ChildCount > 0);
         _deleting = null;
         if (!result.Ok)
         {

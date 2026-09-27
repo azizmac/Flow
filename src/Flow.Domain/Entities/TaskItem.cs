@@ -1,3 +1,5 @@
+using Flow.Domain.Ranking;
+
 namespace Flow.Domain.Entities;
 
 /// <summary>
@@ -55,13 +57,27 @@ public sealed class TaskItem
     /// </summary>
     public DateTime UpdatedAt { get; private set; }
 
+    /// <summary>
+    /// Родитель в иерархии (docs/TZ_task_model.md §3); null — задача верхнего уровня. Родитель всегда в том же
+    /// проекте и строго выше по уровню типа, поэтому циклов и глубины больше четырёх не бывает по построению.
+    /// </summary>
+    public Guid? ParentId { get; private set; }
+
+    /// <summary>
+    /// Ручной порядок в проекте — ключ <see cref="FractionalIndex"/> (§7), сравнивается только ординально.
+    /// Порядок в колонке канбана и в бэклоге — этот же ранг, отфильтрованный по статусу или спринту.
+    /// </summary>
+    public string Rank { get; private set; } = FractionalIndex.First;
+
     private TaskItem()
     {
         // EF Core
     }
 
-    internal TaskItem(Guid boardId, TaskCode code, string title, string? description, Guid statusId, Guid? createdById, Guid typeId)
+    internal TaskItem(Guid boardId, TaskCode code, string title, string? description, Guid statusId, Guid? createdById, Guid typeId, string rank)
     {
+        FractionalIndex.Validate(rank);
+        Rank = rank;
         Id = Guid.NewGuid();
         BoardId = boardId;
         Code = code;
@@ -124,10 +140,11 @@ public sealed class TaskItem
     }
 
     /// <summary>
-    /// Меняет тип. Тип должен быть из того же проекта и не архивным; совместимость уровня с родителем и детьми
-    /// появится вместе с иерархией (docs/TZ_task_model.md §3).
+    /// Меняет тип. Тип должен быть из того же проекта и не архивным, а его уровень — строго между уровнем
+    /// родителя и уровнем самого высокого ребёнка (§3): эпик с историями нельзя сделать подзадачей.
+    /// Уровни родителя и детей приносит хендлер — у задачи нет доступа к соседям.
     /// </summary>
-    public void ChangeType(TaskType type)
+    public void ChangeType(TaskType type, int? parentLevel = null, int? minChildLevel = null)
     {
         ArgumentNullException.ThrowIfNull(type);
 
@@ -135,8 +152,49 @@ public sealed class TaskItem
             throw new InvalidOperationException($"Task type {type.Id} does not belong to board {BoardId}.");
         if (type.IsArchived && type.Id != TypeId)
             throw new InvalidOperationException($"Task type {type.Id} is archived.");
+        if (parentLevel is { } parent && type.Level <= parent)
+            throw new InvalidOperationException($"Task type {type.Name} is not below the parent task's type.");
+        if (minChildLevel is { } child && type.Level >= child)
+            throw new InvalidOperationException($"Task type {type.Name} is not above the subtasks' types.");
 
         TypeId = type.Id;
+    }
+
+    /// <summary>
+    /// Ставит или снимает родителя (null). Родитель — из того же проекта, не сама задача, и его тип строго выше
+    /// по уровню. Циклы при таком правиле невозможны: уровень растёт вниз, проверять предков не нужно.
+    /// Типы приносит хендлер (они у проекта); их соответствие задачам проверяется здесь.
+    /// </summary>
+    public void SetParent(TaskItem? parent, TaskType ownType, TaskType? parentType)
+    {
+        ArgumentNullException.ThrowIfNull(ownType);
+        if (ownType.Id != TypeId)
+            throw new ArgumentException($"Type {ownType.Id} is not the task's type.", nameof(ownType));
+
+        if (parent is null)
+        {
+            ParentId = null;
+            return;
+        }
+
+        ArgumentNullException.ThrowIfNull(parentType);
+        if (parentType.Id != parent.TypeId)
+            throw new ArgumentException($"Type {parentType.Id} is not the parent's type.", nameof(parentType));
+        if (parent.Id == Id)
+            throw new InvalidOperationException("A task cannot be its own parent.");
+        if (parent.BoardId != BoardId)
+            throw new InvalidOperationException("The parent task must belong to the same project.");
+        if (parentType.Level >= ownType.Level)
+            throw new InvalidOperationException($"A {parentType.Name} cannot be the parent of a {ownType.Name}: the parent must be higher in the hierarchy.");
+
+        ParentId = parent.Id;
+    }
+
+    /// <summary>Ранг вычисляет сервер по соседям (<see cref="FractionalIndex.Between"/>); здесь — только проверка формата.</summary>
+    public void SetRank(string rank)
+    {
+        FractionalIndex.Validate(rank);
+        Rank = rank;
     }
 
     /// <summary>null — снять оценку.</summary>

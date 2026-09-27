@@ -1,0 +1,181 @@
+@* Родитель задачи (docs/TZ_task_model.md §3): триггер — код и название родителя (или «Нет»), меню с поиском по коду
+   и названию среди задач того же проекта. Предлагаются только задачи строго выше по уровню типа — те же правила,
+   что проверит сервер; саму задачу и её детей (они ниже) правило отсекает само. Выбор → OnChange(parentId | null).
+   Поиск — серверный (GET /tasks, как фильтр списка), с паузой 250 мс и отменой предыдущего запроса.
+   Без права правки — просто ссылка на родителя. *@
+@implements IDisposable
+@inject IFlowApi Api
+@inject BrowserInterop Browser
+
+@if (!CanEdit)
+{
+    @if (_parent is { } p)
+    {
+        <a class="parent-link" href="tasks/@p.Id" title="@p.Title"><KeyChip Value="@p.Code" /><span class="val">@p.Title</span></a>
+    }
+    else
+    {
+        <span class="meta-v muted">—</span>
+    }
+}
+else
+{
+    <MudMenu @bind-Open="_open" PopoverClass="flow-pop flow-pop-wide" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomLeft"
+             TransformOrigin="Origin.TopLeft" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Сменить родителя">
+        <ActivatorContent>
+            <div class="status-sel parent-sel @(Disabled ? "disabled" : "")" @onclick="Toggle" @onclick:stopPropagation
+                 role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-expanded="@(_open ? "true" : "false")"
+                 title="@(_parent?.Title ?? "Сделать подзадачей")">
+                @if (_parent is { } p)
+                {
+                    <span class="code">@p.Code</span><span class="lbl">@p.Title</span>
+                }
+                else
+                {
+                    <span class="lbl muted">Нет</span>
+                }
+                <Icon Name="chevrons" Size="12" />
+            </div>
+        </ActivatorContent>
+        <ChildContent>
+            <label class="pop-search" @onclick:stopPropagation>
+                <Icon Name="search" Size="14" />
+                <input id="@_inputId" placeholder="Код или название" value="@_query" autocomplete="off" spellcheck="false"
+                       @oninput="OnInput" @onkeydown="OnKey" />
+            </label>
+            @if (_results is null)
+            {
+                <div class="pop-empty">Загрузка…</div>
+            }
+            else if (_results.Count == 0)
+            {
+                <div class="pop-empty">@(OwnLevel <= 1 ? "Эпик — верхний уровень, родителя у него нет" : "Не найдено задач уровнем выше")</div>
+            }
+            else
+            {
+                @foreach (var t in _results)
+                {
+                    var type = TaskMeta.TypeOf(Board, t.TypeId);
+                    <MudMenuItem Class="@($"pop-item {(t.Id == Value ? "cur" : "")}")" OnClick="() => Select(t)">
+                        @if (type is not null)
+                        {
+                            <TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="14" />
+                        }
+                        <span class="pop-task"><span class="code">@t.Code</span>@t.Title</span>
+                    </MudMenuItem>
+                }
+            }
+            @if (Value is not null)
+            {
+                <div class="pop-sep"></div>
+                <MudMenuItem Class="pop-item" OnClick="() => Select(null)"><Icon Name="close-simple" Size="14" />Без родителя</MudMenuItem>
+            }
+        </ChildContent>
+    </MudMenu>
+}
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter, EditorRequired] public TaskResponse Task { get; set; } = default!;
+    [Parameter] public Guid? Value { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<Guid?> OnChange { get; set; }
+
+    private const int DebounceMs = 250;
+
+    private readonly string _inputId = "par-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _open;
+    private string _query = "";
+    private List<TaskResponse>? _results;
+    private TaskResponse? _parent;
+    private Guid? _loadedFor;
+    private CancellationTokenSource? _cts;
+
+    private int OwnLevel => TaskMeta.LevelOf(Board, Task.TypeId);
+
+    /// <summary>Родителя читаем по Id только при его смене: код и название нужны триггеру, в TaskResponse их нет.</summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == Value && (_parent is not null || Value is null))
+            return;
+
+        _loadedFor = Value;
+        if (Value is not { } id)
+        {
+            _parent = null;
+            return;
+        }
+
+        if (_parent?.Id == id)
+            return;
+
+        var result = await Api.GetTask(id);
+        _parent = result.Ok ? result.Value : null;
+    }
+
+    private async Task Toggle()
+    {
+        if (Disabled) return;
+        _open = !_open;
+        if (!_open) return;
+
+        _query = "";
+        _results = null;
+        StateHasChanged();
+        _ = SearchAsync("");
+        await System.Threading.Tasks.Task.Delay(50);
+        await Browser.FocusAsync(_inputId);
+    }
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        _query = e.Value?.ToString() ?? string.Empty;
+        _ = SearchAsync(_query);
+    }
+
+    private async Task SearchAsync(string query)
+    {
+        _cts?.Cancel();
+        var cts = _cts = new CancellationTokenSource();
+        try
+        {
+            if (query.Length > 0)
+                await System.Threading.Tasks.Task.Delay(DebounceMs, cts.Token);
+
+            var result = await Api.SearchTasks(Board.Id, query: query, limit: 50, offset: 0, sort: TaskSortField.Rank, ct: cts.Token);
+            if (cts.IsCancellationRequested)
+                return;
+
+            _results = result.Ok
+                ? result.Value!.Items.Where(t => t.Id != Task.Id && TaskMeta.LevelOf(Board, t.TypeId) < OwnLevel).Take(12).ToList()
+                : [];
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+            // Пользователь печатает дальше — ответ на старую строку не нужен.
+        }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && _results is { Count: > 0 } list)
+            await Select(list[0]);
+        else if (e.Key == "Escape")
+            _open = false;
+    }
+
+    private async Task Select(TaskResponse? parent)
+    {
+        _open = false;
+        if (parent?.Id == Value)
+            return;
+
+        _parent = parent;
+        _loadedFor = parent?.Id;
+        await OnChange.InvokeAsync(parent?.Id);
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

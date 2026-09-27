@@ -104,6 +104,9 @@ else if (_task is not null && _board is not null)
                     <MarkdownView Text="@_task.Description" Class="big" OnClick="OnDescClick" />
                 }
             </div>
+            <SubtaskList Board="_board" Parent="_task" CanCreate="Permissions.CanCreateTask(Access.For(_board.Id))"
+                         OnCountsChanged="c => _task = _task with { ChildCount = c.Total, ChildDoneCount = c.Done }"
+                         OnCreated="child => _timeline?.NoteChildAdded(child)" />
             <AttachmentList TaskId="_task.Id" BoardId="_task.BoardId" DropZoneId="tp-drop" />
             <TaskTimeline @ref="_timeline" TaskItem="_task" Board="_board" OnCommentCountChanged="OnCommentCountChanged" />
         </div>
@@ -122,6 +125,8 @@ else if (_task is not null && _board is not null)
                             <span class="status-pill"><TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />@type.Name</span>
                         }
                     </div>
+                    <div class="meta-k">Родитель</div>
+                    <div class="meta-v"><ParentSelect Board="_board" Task="_task" Value="_task.ParentId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetParent" /></div>
                     <div class="meta-k">Статус</div>
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         @if (CanEdit)
@@ -202,7 +207,7 @@ else if (_task is not null && _board is not null)
 @if (_deleting && _task is not null)
 {
     <ConfirmDialog Title="@($"Удалить задачу {_task.Code}?")"
-                   Text="@($"«{_task.Title}» будет удалена без возможности восстановления.")"
+                   Text="@TaskMeta.DeleteWarning(_task)"
                    OnConfirm="ConfirmDelete" OnCancel="() => _deleting = false" />
 }
 
@@ -381,7 +386,7 @@ else if (_task is not null && _board is not null)
         }
 
         var before = _task!;
-        _task = result.Value!;
+        _task = result.Value!.WithCountsOf(before);
         _whoOpen = false;
         _timeline?.NoteLocalChange(before, _task);
     }
@@ -391,6 +396,9 @@ else if (_task is not null && _board is not null)
 
     private Task SetStartDate(DateOnly? startDate) =>
         Apply(id => Api.SetSchedule(id, new SetTaskScheduleRequest(startDate, _task!.DueDate)), "Не удалось изменить дату начала");
+
+    private Task SetParent(Guid? parentId) =>
+        Apply(id => Api.SetParent(id, new SetTaskParentRequest(parentId)), "Не удалось сменить родителя");
 
     private Task SetEstimate((decimal? StoryPoints, int? EstimateMinutes) value) =>
         Apply(id => Api.SetEstimate(id, new SetTaskEstimateRequest(value.StoryPoints, value.EstimateMinutes)), "Не удалось изменить оценку");
@@ -407,8 +415,8 @@ else if (_task is not null && _board is not null)
             return;
         }
 
-        var before = _task;
-        _task = result.Value!;
+        var before = _task!;
+        _task = result.Value!.WithCountsOf(before);
         _timeline?.NoteLocalChange(before, _task);
         _ = FlashSaved();
     }
@@ -449,8 +457,8 @@ else if (_task is not null && _board is not null)
             return false;
         }
 
-        var before = _task;
-        _task = result.Value!;
+        var before = _task!;
+        _task = result.Value!.WithCountsOf(before);
         _timeline?.NoteLocalChange(before, _task);
         _ = FlashSaved();
         return true;
@@ -459,7 +467,7 @@ else if (_task is not null && _board is not null)
     private async Task ConfirmDelete()
     {
         var t = _task!;
-        var result = await Api.DeleteTask(t.Id);
+        var result = await Api.DeleteTask(t.Id, cascade: t.ChildCount > 0);
         _deleting = false;
         if (!result.Ok)
         {

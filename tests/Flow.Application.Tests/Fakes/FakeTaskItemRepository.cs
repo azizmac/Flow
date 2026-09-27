@@ -3,7 +3,8 @@ using Flow.Domain.Entities;
 
 namespace Flow.Application.Tests.Fakes;
 
-public sealed class FakeTaskItemRepository : ITaskItemRepository
+/// <param name="boards">Доски — чтобы знать финальность статусов (счётчик выполненных подзадач); без них — 0.</param>
+public sealed class FakeTaskItemRepository(FakeBoardRepository? boards = null) : ITaskItemRepository
 {
     private readonly List<TaskItem> _tasks = [];
 
@@ -58,6 +59,7 @@ public sealed class FakeTaskItemRepository : ITaskItemRepository
         .Where(t => filter.AssigneeId is null || t.AssigneeId == filter.AssigneeId)
         .Where(t => !filter.Unassigned || t.AssigneeId is null)
         .Where(t => filter.StatusId is null || t.StatusId == filter.StatusId)
+        .Where(t => filter.ParentId is null || t.ParentId == filter.ParentId)
         .Where(t => filter.Query is null
                     || t.Title.Contains(filter.Query, StringComparison.OrdinalIgnoreCase)
                     || t.Code.Value.Contains(filter.Query, StringComparison.OrdinalIgnoreCase))
@@ -71,8 +73,56 @@ public sealed class FakeTaskItemRepository : ITaskItemRepository
             .GroupBy(t => t.BoardId)
             .ToDictionary(g => g.Key, g => g.Count()));
 
-    public Task<bool> StatusBelongsToBoardAsync(Guid statusId, Guid boardId, CancellationToken cancellationToken) =>
-        Task.FromResult(_statusesByBoard.Contains((statusId, boardId)));
+    public async Task<bool> StatusBelongsToBoardAsync(Guid statusId, Guid boardId, CancellationToken cancellationToken) =>
+        _statusesByBoard.Contains((statusId, boardId))
+        || (boards is not null && (await boards.GetByIdAsync(boardId, cancellationToken))?.Statuses.Any(s => s.Id == statusId) == true);
+
+    public Task<IReadOnlyList<TaskItem>> GetChildrenAsync(Guid parentId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TaskItem>>(_tasks.Where(t => t.ParentId == parentId).OrderBy(t => t.Rank, StringComparer.Ordinal).ToList());
+
+    public async Task<IReadOnlyDictionary<Guid, ChildCounts>> CountChildrenAsync(IReadOnlyCollection<Guid> parentIds, CancellationToken cancellationToken)
+    {
+        var finalStatuses = boards is null
+            ? new HashSet<Guid>()
+            : (await boards.GetAllAsync(cancellationToken)).SelectMany(b => b.Statuses).Where(s => s.IsFinal).Select(s => s.Id).ToHashSet();
+
+        return _tasks
+            .Where(t => t.ParentId is { } p && parentIds.Contains(p))
+            .GroupBy(t => t.ParentId!.Value)
+            .ToDictionary(g => g.Key, g => new ChildCounts(g.Count(), g.Count(t => finalStatuses.Contains(t.StatusId))));
+    }
+
+    /// <summary>Обход в глубину по рангу — тот же порядок, что даёт рекурсивный CTE в TaskItemRepository.</summary>
+    public Task<IReadOnlyList<TaskTreeEntry>> GetTreeAsync(Guid boardId, Guid? rootId, CancellationToken cancellationToken)
+    {
+        var result = new List<TaskTreeEntry>();
+
+        void Walk(TaskItem task, int depth)
+        {
+            result.Add(new TaskTreeEntry(task, depth));
+            foreach (var child in _tasks.Where(t => t.ParentId == task.Id).OrderBy(t => t.Rank, StringComparer.Ordinal))
+                Walk(child, depth + 1);
+        }
+
+        var roots = rootId is { } id
+            ? _tasks.Where(t => t.Id == id && t.BoardId == boardId)
+            : _tasks.Where(t => t.BoardId == boardId && t.ParentId is null);
+        foreach (var root in roots.OrderBy(t => t.Rank, StringComparer.Ordinal).ToList())
+            Walk(root, 0);
+
+        return Task.FromResult<IReadOnlyList<TaskTreeEntry>>(result);
+    }
+
+    public Task<string?> GetMaxRankAsync(Guid boardId, Guid? excludeTaskId, CancellationToken cancellationToken) =>
+        Task.FromResult(_tasks.Where(t => t.BoardId == boardId && t.Id != excludeTaskId).Select(t => t.Rank).Max(StringComparer.Ordinal));
+
+    public Task<string?> GetNeighborRankAsync(Guid boardId, string rank, bool after, Guid excludeTaskId, CancellationToken cancellationToken)
+    {
+        var ranks = _tasks.Where(t => t.BoardId == boardId && t.Id != excludeTaskId).Select(t => t.Rank);
+        return Task.FromResult(after
+            ? ranks.Where(r => string.CompareOrdinal(r, rank) > 0).Min(StringComparer.Ordinal)
+            : ranks.Where(r => string.CompareOrdinal(r, rank) < 0).Max(StringComparer.Ordinal));
+    }
 
     public void Add(TaskItem task) => _tasks.Add(task);
 

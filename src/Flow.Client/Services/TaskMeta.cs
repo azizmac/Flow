@@ -71,6 +71,42 @@ public static class TaskMeta
         _ => "var(--text-tertiary)"
     };
 
+    /// <summary>
+    /// Уровень иерархии вида (docs/TZ_task_model.md §3) — зеркало TaskTypeKind.Level() в домене: эпик 1 → история 2 →
+    /// задача и ошибка 3 → подзадача 4. Родитель всегда строго выше ребёнка; сервер проверит то же.
+    /// </summary>
+    public static int Level(TaskTypeKind kind) => kind switch
+    {
+        TaskTypeKind.Epic => 1,
+        TaskTypeKind.Story => 2,
+        TaskTypeKind.Subtask => 4,
+        _ => 3
+    };
+
+    public static int LevelOf(BoardResponse? board, Guid typeId) => TypeOf(board, typeId) is { } type ? Level(type.Kind) : 3;
+
+    /// <summary>
+    /// Тип для быстрой подзадачи: основной тип проекта, если он ниже родителя, иначе самый высокий из допустимых
+    /// (у эпика — история, у истории — задача, у задачи — подзадача). null — ниже родителя ничего нет.
+    /// </summary>
+    public static TaskTypeResponse? ChildTypeFor(BoardResponse board, int parentLevel)
+    {
+        var allowed = board.TaskTypes.Where(t => !t.IsArchived && Level(t.Kind) > parentLevel).ToList();
+        return allowed.FirstOrDefault(t => t.IsDefault) ?? allowed.OrderBy(t => Level(t.Kind)).FirstOrDefault();
+    }
+
+    /// <summary>Текст подтверждения удаления: с подзадачами удаляется всё поддерево (DELETE ?cascade=true).</summary>
+    public static string DeleteWarning(TaskResponse task) => task.ChildCount > 0
+        ? $"«{task.Title}» и все её подзадачи ({task.ChildCount} на первом уровне, вместе с их подзадачами) будут удалены без возможности восстановления."
+        : $"«{task.Title}» будет удалена без возможности восстановления.";
+
+    /// <summary>
+    /// Ответы команд несут нулевые счётчики комментариев и подзадач (сервер их не пересчитывает): прежде чем
+    /// подменить строку или карточку свежим ответом, счётчики берутся из того, что уже на экране.
+    /// </summary>
+    public static TaskResponse WithCountsOf(this TaskResponse fresh, TaskResponse known) =>
+        fresh with { CommentCount = known.CommentCount, ChildCount = known.ChildCount, ChildDoneCount = known.ChildDoneCount };
+
     /// <summary>Тип задачи по Id в проекте; null — типа нет в загруженном проекте (удалён вместе с проектом и т.п.).</summary>
     public static TaskTypeResponse? TypeOf(BoardResponse? board, Guid typeId) =>
         board?.TaskTypes.FirstOrDefault(t => t.Id == typeId);

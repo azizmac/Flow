@@ -76,16 +76,23 @@ public interface IFlowApi
         bool descending = false,
         TaskTypeKind? typeKind = null,
         TaskPriority? priority = null,
+        Guid? parentId = null,
         CancellationToken ct = default);
 
     Task<ApiResult<TaskResponse>> GetTask(Guid id, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> CreateTask(Guid boardId, CreateTaskRequest request, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> UpdateTask(Guid id, UpdateTaskRequest request, CancellationToken ct = default);
-    Task<ApiResult<bool>> DeleteTask(Guid id, CancellationToken ct = default);
+    /// <summary>cascade — вместе с подзадачами; без него задача с подзадачами не удаляется (400).</summary>
+    Task<ApiResult<bool>> DeleteTask(Guid id, bool cascade = false, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> AssignTask(Guid id, AssignTaskRequest request, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> SetDueDate(Guid id, SetTaskDueDateRequest request, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> SetSchedule(Guid id, SetTaskScheduleRequest request, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> SetEstimate(Guid id, SetTaskEstimateRequest request, CancellationToken ct = default);
+    /// <summary>Родитель в иерархии (docs/TZ_task_model.md §3); null — снять.</summary>
+    Task<ApiResult<TaskResponse>> SetParent(Guid id, SetTaskParentRequest request, CancellationToken ct = default);
+    /// <summary>Место в ручном порядке проекта (§7): ключ ранга вычисляет сервер по соседям.</summary>
+    Task<ApiResult<TaskResponse>> RankTask(Guid id, RankTaskRequest request, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskTreeNode>>> GetTree(Guid boardId, Guid? rootId = null, CancellationToken ct = default);
 
     // ---- Комментарии и журнал ----
     Task<ApiResult<IReadOnlyList<TaskCommentResponse>>> GetComments(Guid taskId, CancellationToken ct = default);

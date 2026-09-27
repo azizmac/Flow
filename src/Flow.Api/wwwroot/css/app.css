@@ -2211,6 +2211,40 @@ a.task-row { color: inherit; text-decoration: none; }
 .tt-add .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .tt-add .seg-btn { display: inline-flex; align-items: center; gap: 5px; }
 
+/* Иерархия задачи (docs/TZ_task_model.md §3): родитель, блок «Подзадачи», ссылки в журнале */
+.count-chip.done { color: var(--sage); }
+.parent-sel { max-width: 100%; }
+.parent-sel .code, .pop-task .code, .subtask-row .code, .tl-task .code {
+    font: var(--fw-semibold) 11.5px var(--font-mono, var(--font-display)); color: var(--accent); flex: none;
+}
+.parent-sel .lbl { min-width: 0; }
+.parent-sel .lbl.muted, .meta-v.muted { color: var(--text-tertiary); }
+.parent-link { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: #fff; text-decoration: none; }
+.parent-link .val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pop-task { display: inline-flex; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subtasks { display: flex; flex-direction: column; gap: 2px; }
+.subtasks-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.subtasks-count { font: var(--fw-semibold) 11.5px var(--font-display); color: var(--text-tertiary); }
+.subtasks-bar { flex: 0 0 120px; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.subtasks-bar > span { display: block; height: 100%; background: var(--sage); border-radius: inherit; }
+.subtask-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; min-height: 34px;
+    color: #fff; text-decoration: none;
+}
+.subtask-row .subtask-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subtask-row.done .subtask-title { color: var(--text-tertiary); text-decoration: line-through; }
+.subtask-add { display: flex; align-items: center; gap: 8px; padding: 4px 8px; }
+.subtask-input {
+    flex: 1 1 auto; min-width: 0; background: none; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 5px 0; color: #fff; font: var(--fw-medium) 13px var(--font-text); outline: 0;
+}
+.subtask-input:focus { border-bottom-color: var(--accent); }
+.tl-task { display: inline-flex; gap: 5px; color: #fff; text-decoration: none; font-weight: var(--fw-semibold); }
+@media (hover: hover) and (pointer: fine) {
+    .subtask-row:hover { background: rgba(255, 255, 255, 0.05); }
+    .parent-link:hover .val, .tl-task:hover { text-decoration: underline; }
+}
+
 /* Модалка «Статусы» проекта (docs/TZ_workflow_config.md §1) */
 .st-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
 .st-row { border-radius: 8px; padding: 4px; }

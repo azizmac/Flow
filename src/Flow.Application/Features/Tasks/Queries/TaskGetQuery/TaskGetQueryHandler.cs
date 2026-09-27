@@ -17,6 +17,7 @@ internal sealed class TaskGetQueryHandler(ITaskItemRepository tasks, ITaskCommen
             return null;
 
         var counts = await comments.CountByTaskIdsAsync([task.Id], cancellationToken);
-        return task.ToResponse(counts.GetValueOrDefault(task.Id));
+        var children = await tasks.CountChildrenAsync([task.Id], cancellationToken);
+        return task.ToResponse(counts.GetValueOrDefault(task.Id), children.GetValueOrDefault(task.Id));
     }
 }

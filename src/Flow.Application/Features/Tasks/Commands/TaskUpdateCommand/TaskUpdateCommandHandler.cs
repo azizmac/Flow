@@ -29,13 +29,23 @@ internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IBoard
         }
 
         // Тип живёт в агрегате Board — доску грузим, только когда тип действительно меняют.
+        // Новый уровень обязан остаться между родителем и детьми (docs/TZ_task_model.md §3).
         TaskType? newType = null;
+        int? parentLevel = null;
+        int? minChildLevel = null;
         if (request.TypeId is { } typeId && typeId != task.TypeId)
         {
             var board = await boards.GetByIdAsync(task.BoardId, cancellationToken);
             newType = board?.TaskTypes.SingleOrDefault(t => t.Id == typeId);
             if (newType is null)
                 return TaskUpdateResult.InvalidType(typeId);
+
+            if (task.ParentId is { } parentId && await tasks.GetByIdAsync(parentId, cancellationToken) is { } parent)
+                parentLevel = board!.GetTaskType(parent.TypeId).Level;
+
+            var children = await tasks.GetChildrenAsync(task.Id, cancellationToken);
+            if (children.Count > 0)
+                minChildLevel = children.Min(c => board!.GetTaskType(c.TypeId).Level);
         }
 
         // Журнал: по записи на каждое реально изменённое поле; то же значение — без записи.
@@ -70,7 +80,7 @@ internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IBoard
         if (newType is not null)
         {
             var oldTypeId = task.TypeId;
-            task.ChangeType(newType);
+            task.ChangeType(newType, parentLevel, minChildLevel);
             activities.Add(TaskActivity.TypeChanged(task.Id, actor.Id, oldTypeId, newType.Id));
         }
 
