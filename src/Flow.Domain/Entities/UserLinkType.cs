@@ -11,5 +11,6 @@ public enum UserLinkType
     Telegram = 2,
     LinkedIn = 3,
     Website = 4,
-    Other = 5
+    Other = 5,
+    Gitea = 6
 }

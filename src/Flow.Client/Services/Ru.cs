@@ -53,6 +53,15 @@ public static partial class Ru
         return s.Length >= 2 && s[0] is >= 'a' and <= 'z' ? s : "";
     }
 
+    /// <summary>Имя ветки для задачи: «WEB-12-forma-vhoda» — код и транслит названия, не длиннее 60 символов.</summary>
+    public static string BranchName(string code, string title)
+    {
+        var slug = Slug(title).Replace('.', '-').Replace('_', '-');
+        while (slug.Contains("--")) slug = slug.Replace("--", "-");
+        var name = slug.Trim('-').Length > 0 ? $"{code}-{slug.Trim('-')}" : code;
+        return name.Length <= 60 ? name : name[..60].TrimEnd('-');
+    }
+
     private static string Slug(string value)
     {
         var sb = new System.Text.StringBuilder();

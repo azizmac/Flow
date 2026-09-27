@@ -32,6 +32,8 @@ public static class Permissions
 
     public static bool CanManageMilestones(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageMilestones);
 
+    public static bool CanManageScm(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageScm);
+
     public static bool CanCreateTask(ProjectAccessResponse? access) => Has(access, ProjectPermission.CreateTask);
 
     /// <summary>EditAnyTask — любую задачу; EditOwnTask — свою (создал или исполнитель).</summary>

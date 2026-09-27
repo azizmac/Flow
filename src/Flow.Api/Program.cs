@@ -48,6 +48,8 @@ builder.Services.AddFlowInfrastructure(builder.Configuration);              // 3
 // читался прямо здесь; второй вызов ничего не регистрирует.
 builder.Services.AddFlowSearch(builder.Configuration);
 builder.Services.AddFlowApplication();
+// Токены Git-хостингов и секреты вебхуков — под DataProtection хоста (docs/TZ_scm_integration.md §1).
+builder.Services.AddSingleton<Flow.Application.Abstractions.IScmSecretProtector, Flow.Api.Scm.DataProtectionScmSecretProtector>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<ApiExceptionFilter>();

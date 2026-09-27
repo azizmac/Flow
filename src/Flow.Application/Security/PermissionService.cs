@@ -149,6 +149,15 @@ internal sealed class PermissionService : IPermissionService
             "Удалять чужие вложения может администратор проекта.");
     }
 
+    public void EnsureCanManageScm(ProjectAccessInfo access)
+    {
+        RequireVisible(access);
+        RequireProject(access, ProjectPermission.ManageScm, "Привязывать репозитории к проекту может его администратор.");
+    }
+
+    public void EnsureCanManageIntegrations(User actor) =>
+        Require(actor.Role >= UserRole.Admin, "Подключать Git-хостинги могут Admin и Owner.");
+
     public void EnsureCanViewSearchDiagnostics(User actor) =>
         Require(actor.Role >= UserRole.Admin, "Состояние поискового индекса доступно Admin и Owner.");
 

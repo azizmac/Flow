@@ -48,6 +48,10 @@
                     <DsIconButton Icon="view" Size="30" Title="Экраны задач" Style="color:rgba(255,255,255,0.45)" OnClick="() => _screensOpen = true" />
                 }
                 <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/milestones"))" />
+                @if (Permissions.CanManageScm(boardAccess))
+                {
+                    <DsIconButton Icon="code" Size="30" Title="Репозитории проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _reposOpen = true" />
+                }
                 @if (Permissions.CanManageMembers(boardAccess))
                 {
                     <DsIconButton Icon="users" Size="30" Title="Доступ к проекту" Style="color:rgba(255,255,255,0.45)" OnClick="() => _accessOpen = true" />
@@ -215,7 +219,7 @@
                         {
                             <div class="task-desc">@Ru.PlainFirstLine(context.Item.Description)</div>
                         }
-                        @if (context.Item.DueDate is not null || context.Item.CommentCount > 0 || context.Item.StoryPoints is not null || context.Item.ChildCount > 0 || context.Item.ChecklistTotal > 0 || context.Item.BlockedByCount > 0)
+                        @if (context.Item.DueDate is not null || context.Item.CommentCount > 0 || context.Item.StoryPoints is not null || context.Item.ChildCount > 0 || context.Item.ChecklistTotal > 0 || context.Item.BlockedByCount > 0 || context.Item.PullRequestState is not null)
                         {
                             <div class="task-meta-chips">
                                 @if (context.Item.StoryPoints is { } sp)
@@ -225,6 +229,10 @@
                                 @if (context.Item.DueDate is { } d)
                                 {
                                     <DueChip Value="d" IsDone="IsDone(context.Item)" />
+                                }
+                                @if (context.Item.PullRequestState is { } prState)
+                                {
+                                    <span class="count-chip pr-chip @ScmMeta.StateClass(prState)" title="@($"Последний PR: {ScmMeta.StateLabel(prState)}")"><Icon Name="code" Size="12" />PR</span>
                                 }
                                 @if (context.Item.BlockedByCount > 0)
                                 {
@@ -392,6 +400,12 @@
 @if (_restructureTask is not null && _restructureMode != TaskRestructureMode.None)
 {
     <TaskRestructure Task="_restructureTask" @bind-Mode="_restructureMode" OnDone="_ => Reload()" />
+}
+
+
+@if (_reposOpen && CurrentBoard is not null)
+{
+    <BoardRepositoriesDialog Board="CurrentBoard" OnClose="() => _reposOpen = false" />
 }
 
 @code {
@@ -787,6 +801,7 @@
         await Reload();
     }
 
+    private bool _reposOpen;
     private TaskResponse? _restructureTask;
     private TaskRestructureMode _restructureMode;
 

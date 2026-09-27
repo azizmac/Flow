@@ -36,7 +36,8 @@ public sealed record TaskResponse(
     int ChecklistTotal = 0,
     Guid? SprintId = null,
     Guid? MilestoneId = null,
-    IReadOnlyDictionary<Guid, System.Text.Json.JsonElement>? CustomFields = null);
+    IReadOnlyDictionary<Guid, System.Text.Json.JsonElement>? CustomFields = null,
+    Flow.Shared.Contracts.Scm.ScmLinkState? PullRequestState = null);
 
 /// <summary>Календарь (docs/TZ_task_views.md §5): задачи окна [From, To]; Truncated — лимит сработал, показано не всё.</summary>
 public sealed record TaskCalendarResponse(DateOnly From, DateOnly To, IReadOnlyList<TaskResponse> Items, bool Truncated);

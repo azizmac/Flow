@@ -4,6 +4,7 @@ using Flow.Shared.Contracts.Attachments;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
 using Flow.Shared.Contracts.Dashboards;
+using Flow.Shared.Contracts.Scm;
 using Flow.Shared.Contracts.Milestones;
 using Flow.Shared.Contracts.Sprints;
 using Flow.Shared.Contracts.Tasks;
@@ -145,6 +146,20 @@ public interface IFlowApi
     Task<ApiResult<TaskRecurrenceResponse>> SetRecurrence(Guid taskId, TaskRecurrenceRequest request, CancellationToken ct = default);
     Task<ApiResult<bool>> DeleteRecurrence(Guid taskId, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<DateOnly>>> PreviewRecurrence(Guid taskId, TaskRecurrenceRequest request, int count = 5, CancellationToken ct = default);
+
+    // Git-хостинги (docs/TZ_scm_integration.md): подключения и репозитории — Admin+, привязка к проекту — ManageScm.
+    Task<ApiResult<IReadOnlyList<ScmConnectionResponse>>> GetScmConnections(CancellationToken ct = default);
+    Task<ApiResult<ScmConnectionResponse>> CreateScmConnection(CreateScmConnectionRequest request, CancellationToken ct = default);
+    Task<ApiResult<ScmConnectionResponse>> UpdateScmConnection(Guid id, UpdateScmConnectionRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteScmConnection(Guid id, CancellationToken ct = default);
+    Task<ApiResult<ScmConnectionResponse>> CheckScmConnection(Guid id, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<ScmRemoteRepositoryResponse>>> GetAvailableRepositories(Guid connectionId, string? query, CancellationToken ct = default);
+    Task<ApiResult<ScmRepositoryResponse>> AddScmRepository(AddScmRepositoryRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DisableScmRepository(Guid repositoryId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<ScmDeliveryResponse>>> GetScmDeliveries(Guid repositoryId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> GetBoardRepositories(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> SetBoardRepository(Guid boardId, Guid repositoryId, bool bound, CancellationToken ct = default);
+    Task<ApiResult<TaskDevelopmentResponse>> GetTaskDevelopment(Guid taskId, CancellationToken ct = default);
 
     // Дашборды (docs/TZ_task_views.md §8): данные каждого виджета — отдельным вызовом; ошибка виджета — в WidgetDataResponse.Error.
     Task<ApiResult<IReadOnlyList<DashboardResponse>>> GetDashboards(CancellationToken ct = default);

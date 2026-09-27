@@ -1,0 +1,81 @@
+@* Блок «Разработка» (docs/TZ_scm_integration.md §7): ветки, PR (номер, заголовок, состояние чипом, автор, целевая
+   ветка) и последние коммиты задачи из привязанных репозиториев. Заголовки и сообщения — недоверенный текст с
+   хостинга: выводятся как текст, без Markdown. Ссылки открываются на хостинге в новой вкладке. «Ветка» копирует
+   git checkout -b КОД-название — без обращения к API. Проект без репозиториев — блока нет. *@
+@inject IFlowApi Api
+@inject BrowserInterop Browser
+@inject ToastService Toasts
+@inject UserDirectory Users
+
+@if (_data is { HasRepositories: true } d)
+{
+    <div class="dev">
+        <div class="subtasks-head">
+            <div class="meta-k">Разработка</div>
+            <button type="button" class="icon-lnk" title="@Checkout" @onclick="CopyBranch"><Icon Name="copy" Size="13" />Ветка</button>
+        </div>
+        @if (d.PullRequests.Count == 0 && d.Branches.Count == 0 && d.CommitCount == 0)
+        {
+            <div class="hint">Пока пусто: упомяните @Task.Code в имени ветки, коммите или PR.</div>
+        }
+        @foreach (var pr in d.PullRequests)
+        {
+            <a class="dev-row" href="@pr.Url" target="_blank" rel="noopener noreferrer">
+                <span class="dev-kind">PR #@pr.ExternalId</span>
+                <span class="dev-title">@pr.Title</span>
+                <span class="dev-state @ScmMeta.StateClass(pr.State)">@ScmMeta.StateLabel(pr.State)</span>
+                <span class="hint">@Who(pr)@(pr.TargetBranch is { } target ? $" → {target}" : "")</span>
+            </a>
+        }
+        @foreach (var branch in d.Branches)
+        {
+            <a class="dev-row" href="@branch.Url" target="_blank" rel="noopener noreferrer">
+                <span class="dev-kind">ветка</span>
+                <span class="dev-title mono @(branch.State == ScmLinkState.Closed ? "gone" : "")">@branch.ExternalId</span>
+                <span class="hint">@branch.RepositoryName</span>
+            </a>
+        }
+        @foreach (var commit in d.Commits)
+        {
+            <a class="dev-row" href="@commit.Url" target="_blank" rel="noopener noreferrer">
+                <span class="dev-kind mono">@commit.ExternalId[..Math.Min(7, commit.ExternalId.Length)]</span>
+                <span class="dev-title">@commit.Title</span>
+                <span class="hint">@Who(commit) · @Ru.DateShort(commit.OccurredAt)</span>
+            </a>
+        }
+        @if (d.CommitCount > d.Commits.Count)
+        {
+            <div class="hint">и ещё @Ru.Plural(d.CommitCount - d.Commits.Count, "коммит", "коммита", "коммитов")</div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public TaskResponse Task { get; set; } = default!;
+
+    private TaskDevelopmentResponse? _data;
+    private Guid _loadedFor;
+
+    private string Checkout => $"git checkout -b {Ru.BranchName(Task.Code, Task.Title)}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == Task.Id)
+            return;
+        _loadedFor = Task.Id;
+        var result = await Api.GetTaskDevelopment(Task.Id);
+        _data = result.Ok ? result.Value : null;
+    }
+
+    /// <summary>Сопоставленный человек Flow — его имя, иначе логин хостинга.</summary>
+    private string Who(ScmLinkResponse link) =>
+        Users.Find(link.AuthorUserId) is { } user ? $"{user.FirstName} {user.LastName}".Trim() : link.AuthorLogin ?? "";
+
+    private async Task CopyBranch()
+    {
+        if (await Browser.CopyAsync(Checkout))
+            Toasts.Ok("Команда скопирована");
+        else
+            Toasts.Error("Не удалось скопировать");
+    }
+}

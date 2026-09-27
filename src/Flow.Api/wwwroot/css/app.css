@@ -2724,3 +2724,33 @@ a.task-row { color: inherit; text-decoration: none; }
 .rec-checks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
 .rec-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
 .rec-date { padding: 2px 8px; border-radius: 999px; background: rgba(109, 151, 115, 0.18); color: var(--sage); font: var(--fw-semibold) 12px var(--font-display); }
+
+/* ---- Интеграция с Git (docs/TZ_scm_integration.md, этап 5A) ---- */
+.dev { display: flex; flex-direction: column; gap: 4px; }
+.dev .subtasks-head .icon-lnk { margin-left: auto; }
+.dev-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; color: var(--text-primary); text-decoration: none; font: var(--fw-medium) 13px var(--font-text); }
+.dev-row:hover { background: rgba(255, 255, 255, 0.04); }
+.dev-kind { color: var(--text-tertiary); font: var(--fw-semibold) 12px var(--font-display); white-space: nowrap; }
+.dev-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dev-title.gone { text-decoration: line-through; color: var(--text-tertiary); }
+.dev .mono, .dev-kind.mono { font-family: var(--font-mono); }
+.dev-state { padding: 1px 8px; border-radius: 999px; font: var(--fw-bold) 11px var(--font-display); background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); }
+.dev-state.open { background: rgba(255, 186, 0, 0.16); color: var(--accent); }
+.dev-state.merged { background: rgba(109, 151, 115, 0.2); color: var(--sage); }
+.count-chip.pr-chip.open { color: var(--accent); }
+.count-chip.pr-chip.merged { color: var(--sage); }
+.scm-conn { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--border); }
+.scm-conn-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scm-conn-head b { color: #fff; font: var(--fw-semibold) 14px var(--font-display); }
+.scm-check { margin-left: auto; }
+.scm-repos tr.off td { opacity: 0.55; }
+.scm-repos a { color: var(--text-primary); text-decoration: none; }
+.scm-hint { margin-top: 6px; }
+.scm-hint a { margin-left: 6px; color: var(--accent); }
+.scm-remote { display: flex; flex-direction: column; max-height: 320px; overflow: auto; margin-top: 8px; }
+.scm-remote-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--text-primary); font: var(--fw-medium) 13px var(--font-text); text-align: left; cursor: pointer; }
+.scm-remote-row:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); }
+.scm-remote-row:disabled { cursor: default; opacity: 0.55; }
+.scm-manual { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.scm-manual code { padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); font: 12px var(--font-mono); word-break: break-all; }
+.scm-bind { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

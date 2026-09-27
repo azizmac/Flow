@@ -117,6 +117,7 @@ else if (_task is not null && _board is not null)
                 <TaskChecklist TaskId="_task.Id" CanEdit="CanEdit" OnCountsChanged="OnChecklistChanged" />
             }
             <TaskRecurrenceBlock TaskId="_task.Id" CanEdit="CanEdit" />
+            <TaskDevelopment Task="_task" />
             @if (Shows("links"))
             {
                 <TaskLinks TaskId="_task.Id" CanEdit="CanEdit" OnBlockedChanged="n => _task = _task with { BlockedByCount = n }"

@@ -36,6 +36,15 @@ public sealed record SearchTestContext(
     FakeReranker Reranker,
     FakeVisionEmbeddingGenerator Vision);
 
+public sealed record ScmTestContext(
+    IMediator Mediator,
+    FakeBoardRepository Boards,
+    FakeTaskItemRepository Tasks,
+    FakeUserRepository Users,
+    FakeScmStore Scm,
+    FakeScmProviderClient Client,
+    Flow.Application.Features.Scm.ScmOptions Options);
+
 public static class TestMediatorFactory
 {
     /// <summary>Owner, который сеется в FakeUserRepository при создании: actor для команд в тестах, где права не проверяются.</summary>
@@ -86,6 +95,13 @@ public static class TestMediatorFactory
         return new SearchTestContext(all.Mediator, all.SearchOptions, all.SearchIndex, all.Embeddings, all.Boards, all.Tasks, all.Users, all.Reranker, all.Vision);
     }
 
+    /// <summary>Интеграция с Git: хранилище связей и доставок, хостинг в памяти, настройки (PublicBaseUrl задан).</summary>
+    public static ScmTestContext CreateScmContext()
+    {
+        var all = Build();
+        return new ScmTestContext(all.Mediator, all.Boards, all.Tasks, all.Users, all.Scm, all.ScmClient, all.ScmOptions);
+    }
+
     /// <summary>Плюс фейковый UnitOfWork — для проверки повторов сохранения (конфликт ранга).</summary>
     public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUnitOfWork UnitOfWork) CreateWithUnitOfWork()
     {
@@ -100,7 +116,7 @@ public static class TestMediatorFactory
         return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Accounts);
     }
 
-    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings, FakeAttachmentRepository Attachments, InMemoryFileStorage Storage, AttachmentOptions AttachmentOptions, FakeReranker Reranker, FakeVisionEmbeddingGenerator Vision, FakeUnitOfWork UnitOfWork) Build()
+    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings, FakeAttachmentRepository Attachments, InMemoryFileStorage Storage, AttachmentOptions AttachmentOptions, FakeReranker Reranker, FakeVisionEmbeddingGenerator Vision, FakeUnitOfWork UnitOfWork, FakeScmStore Scm, FakeScmProviderClient ScmClient, Flow.Application.Features.Scm.ScmOptions ScmOptions) Build()
     {
         var boards = new FakeBoardRepository();
         var tasks = new FakeTaskItemRepository(boards);
@@ -136,6 +152,13 @@ public static class TestMediatorFactory
         services.AddSingleton<IDashboardRepository>(new FakeDashboardRepository());
         services.AddSingleton<ITaskCodeAliasRepository>(new FakeTaskCodeAliasRepository(tasks));
         services.AddSingleton<ITaskRecurrenceRepository>(new FakeTaskRecurrenceRepository());
+        var scm = new FakeScmStore();
+        var scmClient = new FakeScmProviderClient();
+        var scmOptions = new Flow.Application.Features.Scm.ScmOptions { PublicBaseUrl = "https://flow.example.com" };
+        services.AddSingleton<IScmStore>(scm);
+        services.AddSingleton<IScmProviderClient>(scmClient);
+        services.AddSingleton(scmOptions);
+        services.AddSingleton<IScmSecretProtector>(new FakeScmSecretProtector());
         services.AddSingleton<IUserRepository>(users);
         services.AddSingleton<IAccountService>(accounts);
         services.AddSingleton<ITaskCommentRepository>(comments);
@@ -157,6 +180,6 @@ public static class TestMediatorFactory
         services.AddFlowApplication();
 
         var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
-        return (mediator, boards, tasks, users, accounts, comments, activities, searchQueue, searchOptions, searchIndex, embeddings, attachments, storage, attachmentOptions, reranker, visionEmbedder, unitOfWork);
+        return (mediator, boards, tasks, users, accounts, comments, activities, searchQueue, searchOptions, searchIndex, embeddings, attachments, storage, attachmentOptions, reranker, visionEmbedder, unitOfWork, scm, scmClient, scmOptions);
     }
 }

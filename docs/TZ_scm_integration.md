@@ -1,6 +1,6 @@
 # ТЗ: интеграция с Git-хостингами — GitHub, GitLab, Gitea, Forgejo
 
-Статус: **черновик, не начато**. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 5). Образец — Windshift
+Статус: **этап 5A сделан** (подключения по токену, репозитории, вебхуки, разбор push/PR/веток, блок «Разработка»), 5B–5E — не начаты. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 5). Образец — Windshift
 (`internal/scm/*`, `internal/database/schema/scm_postgres.sql`).
 
 ## Исходное требование
@@ -155,6 +155,31 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 
 Создание ветки и PR через API из карточки задачи, комментарий в PR со ссылкой на задачу. Отложено: это
 запись в чужую систему, нужны права токена на запись и отдельная матрица «кто в Flow может пушить в репозиторий».
+
+## Как сделано (этап 5A)
+
+- Домен — `Domain/Entities/Scm.cs`: `ScmConnection` (токен только зашифрованным, результат проверки), `ScmRepository`
+  (`Reactivate` при повторном подключении — связи задач не теряются), `ScmRepositoryBoard`, `ScmLink` (unique по задаче,
+  репозиторию, виду и внешнему id), `ScmDelivery` (backoff 5 с → 5 мин, 8 попыток). `ProjectPermission.ManageScm`
+  (администратор проекта), `UserLinkType.Gitea = 6`. Миграция `AddScmIntegration`.
+- Чистые функции Application (`Features/Scm`): `TaskCodeDetector` (коды на границах слова; в имени ветки — без учёта
+  регистра, `web-12-login` тоже WEB-12), `ScmSignatures` (HMAC-SHA256 и токен GitLab, `FixedTimeEquals`),
+  `ScmPayloadParser` → `ScmEvent`. Нормализованное событие и есть `Payload` доставки: в очереди лежат только поля Flow.
+  У GitLab создание и удаление ветки — тот же Push Hook с нулевым before/after.
+- Приём — `ScmWebhookController` (`POST /hooks/scm/{id}`, вне `/api`, `[AllowAnonymous]`, 5 МБ): подпись → повтор
+  (Id доставки; у старого GitLab без UUID — SHA-256 тела) → нормализация → очередь → 202. Разбор — `ScmWorker`
+  (Infrastructure, scope на доставку, сбой — `ScmDeliveryFailCommand`, чистка доставок старше 30 дней). Вместо
+  `FOR UPDATE SKIP LOCKED` — идемпотентность: связь уникальна и обновляется, повтор даёт то же состояние.
+- Клиенты хостингов — `Infrastructure/Scm/ScmProviderClient` (GitHub, GitLab, Gitea/Forgejo): проверка, список, репозиторий по id,
+  создание и удаление вебхука; тело запроса — с Content-Length, ошибки — понятным текстом. Шифрование —
+  `Flow.Api/Scm/DataProtectionScmSecretProtector` (purpose «Flow.Scm»); не расшифровалось — «нужно ввести токен заново».
+- Автор — по e-mail коммита, иначе по логину: последний сегмент ссылки профиля нужного хостинга (GitHub/GitLab/Gitea).
+- Отступления: FQL `development` и дозагрузка истории — этап 5B; `AutoTransitions` у привязки не заведены — этап 5C;
+  без `Scm:PublicBaseUrl` вебхук не создаётся, и экран показывает адрес и секрет для ручной настройки.
+- Клиент: «Настройки → Интеграции» (`Components/ScmIntegrations`, `ScmConnectionDialog`, `ScmRepositoryDialog`), значок
+  «Репозитории проекта» в топбаре «Задач» (`BoardRepositoriesDialog`, ManageScm), блок «Разработка» в карточке и
+  слайдере (`Components/TaskDevelopment`: PR с состоянием, ветки, последние 5 коммитов, «Ветка» копирует
+  `git checkout -b`), значок PR в строке списка и на карточке канбана (`TaskResponse.PullRequestState`).
 
 ## API
 

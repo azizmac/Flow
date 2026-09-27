@@ -44,6 +44,16 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
 
     public DbSet<TaskRecurrenceOccurrence> TaskRecurrenceOccurrences => Set<TaskRecurrenceOccurrence>();
 
+    public DbSet<ScmConnection> ScmConnections => Set<ScmConnection>();
+
+    public DbSet<ScmRepository> ScmRepositories => Set<ScmRepository>();
+
+    public DbSet<ScmRepositoryBoard> ScmRepositoryBoards => Set<ScmRepositoryBoard>();
+
+    public DbSet<ScmLink> ScmLinks => Set<ScmLink>();
+
+    public DbSet<ScmDelivery> ScmDeliveries => Set<ScmDelivery>();
+
     /// <summary>
     /// Поисковый индекс — проекция, а не домен: наружу из сборки не торчит, Application работает
     /// с ним через ISearchIndexQueue и ISearchIndexRepository.

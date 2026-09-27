@@ -139,7 +139,7 @@ else
                         }
                     </div>
                     <div class="kb-card-title">@task.Title</div>
-                    @if (task.DueDate is not null || task.StoryPoints is not null || task.ChildCount > 0 || task.ChecklistTotal > 0 || task.BlockedByCount > 0 || task.CommentCount > 0)
+                    @if (task.DueDate is not null || task.StoryPoints is not null || task.ChildCount > 0 || task.ChecklistTotal > 0 || task.BlockedByCount > 0 || task.CommentCount > 0 || task.PullRequestState is not null)
                     {
                         <div class="task-meta-chips">
                             @if (task.StoryPoints is { } sp)
@@ -149,6 +149,10 @@ else
                             @if (task.DueDate is { } d)
                             {
                                 <DueChip Value="d" IsDone="IsDone(task)" />
+                            }
+                            @if (task.PullRequestState is { } prState)
+                            {
+                                <span class="count-chip pr-chip @ScmMeta.StateClass(prState)" title="@($"Последний PR: {ScmMeta.StateLabel(prState)}")"><Icon Name="code" Size="12" />PR</span>
                             }
                             @if (task.BlockedByCount > 0)
                             {

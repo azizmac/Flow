@@ -1,4 +1,5 @@
-@* Экран «Настройки» (/settings, ?tab=ui|search|about).
+@* Экран «Настройки» (/settings, ?tab=ui|search|integrations|about).
+   «Интеграции» — подключения к Git-хостингам и репозитории (Admin+, Components/ScmIntegrations).
    «Интерфейс» — личные настройки (GET/PATCH /users/me/preferences): хранятся на сервере и едут за человеком
    на любой компьютер; каждое поле сохраняется сразу по клику, кнопки «Сохранить» нет.
    «Поиск» — состояние индекса (GET /search/status, Admin+) и переиндексация (POST /search/reindex, Owner).
@@ -24,6 +25,10 @@
         @if (CanViewSearch)
         {
             <button type="button" class="tab @(Tab == "search" ? "on" : "")" role="tab" @onclick="@(() => SetTab("search"))">Поиск</button>
+        }
+        @if (CanManageIntegrations)
+        {
+            <button type="button" class="tab @(Tab == "integrations" ? "on" : "")" role="tab" @onclick="@(() => SetTab("integrations"))">Интеграции</button>
         }
         <button type="button" class="tab @(Tab == "about" ? "on" : "")" role="tab" @onclick="@(() => SetTab("about"))">О системе</button>
     </div>
@@ -96,6 +101,10 @@
                     </div>
                 </div>
             }
+        }
+        else if (Tab == "integrations")
+        {
+            <ScmIntegrations />
         }
         else if (Tab == "search")
         {
@@ -312,10 +321,14 @@
 
     private bool CanReindex => Permissions.CanReindex(Me);
 
+    /// <summary>Подключения к Git-хостингам (docs/TZ_scm_integration.md §6) — глобальные Admin и Owner.</summary>
+    private bool CanManageIntegrations => Me?.Role >= UserRole.Admin;
+
     /// <summary>Вкладка «Поиск» без прав не показывается; прямая ссылка на неё открывает «Интерфейс».</summary>
     private string Tab => TabParam switch
     {
         "search" when CanViewSearch => "search",
+        "integrations" when CanManageIntegrations => "integrations",
         "about" => "about",
         _ => "ui"
     };

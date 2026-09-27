@@ -12,12 +12,13 @@ public static class UserLinks
         UserLinkType.Telegram => "Telegram",
         UserLinkType.LinkedIn => "LinkedIn",
         UserLinkType.Website => "Сайт",
+        UserLinkType.Gitea => "Gitea / Forgejo",
         _ => "Другое"
     };
 
     public static readonly UserLinkType[] Order =
     [
-        UserLinkType.GitHub, UserLinkType.GitLab, UserLinkType.Telegram,
+        UserLinkType.GitHub, UserLinkType.GitLab, UserLinkType.Gitea, UserLinkType.Telegram,
         UserLinkType.LinkedIn, UserLinkType.Website, UserLinkType.Other
     ];
 

@@ -28,6 +28,12 @@ public interface IPermissionService
     /// <summary>Создавать, править, закрывать и удалять вехи проекта — ManageMilestones (Developer+).</summary>
     void EnsureCanManageMilestones(ProjectAccessInfo access);
 
+    /// <summary>Привязка репозиториев к проекту (docs/TZ_scm_integration.md §6) — ManageScm, администратор проекта.</summary>
+    void EnsureCanManageScm(ProjectAccessInfo access);
+
+    /// <summary>Подключения к Git-хостингам и репозитории (экран «Интеграции») — глобальные Admin и Owner.</summary>
+    void EnsureCanManageIntegrations(User actor);
+
     /// <summary>Участники и роль по умолчанию — ManageMembers; выдаваемая роль не выше своей роли в проекте.</summary>
     void EnsureCanManageMembers(ProjectAccessInfo access, ProjectRole? grantedRole = null);
 

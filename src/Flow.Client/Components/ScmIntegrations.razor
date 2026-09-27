@@ -1,0 +1,148 @@
+@* Интеграции (docs/TZ_scm_integration.md §6): подключения к GitHub, GitLab, Gitea и Forgejo — токен хранится
+   зашифрованным и наружу не отдаётся; проверка показывает логин владельца токена или причину отказа. Под каждым
+   подключением — его репозитории: вебхук создан или нужна ручная настройка, к каким проектам привязан, когда пришла
+   последняя доставка. Привязка к проектам — в самих проектах (значок «Репозитории» в топбаре «Задач»). *@
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject UserDirectory Users
+
+<div class="side-card">
+    <div class="card-head">
+        <div class="section-title">Git-хостинги</div>
+        <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="() => _editing = NewConnection">Подключить</DsButton>
+    </div>
+    <div class="hint">Задачи связываются с ветками, коммитами и pull request'ами по коду задачи в тексте — только в проектах, к которым привязан репозиторий.</div>
+
+    @if (_connections is null)
+    {
+        <Skeleton Kind="rows" Count="2" />
+    }
+    else if (_connections.Count == 0)
+    {
+        <div class="empty"><div class="empty-title">Хостинги не подключены</div></div>
+    }
+    else
+    {
+        @foreach (var c in _connections)
+        {
+            <div class="scm-conn">
+                <div class="scm-conn-head">
+                    <b>@c.Name</b>
+                    <span class="hint">@ScmMeta.Name(c.Provider)@(c.BaseUrl is { } url ? $" · {url}" : "")</span>
+                    <span class="scm-check">
+                        @if (c.NeedsReconnect)
+                        {
+                            <OnOff On="false" Problem="true" Label="нужно ввести токен заново" />
+                        }
+                        else if (c.LastError is { } error)
+                        {
+                            <OnOff On="false" Problem="true" Label="@error" />
+                        }
+                        else if (c.CheckedLogin is { } login)
+                        {
+                            <OnOff On="true" Label="@($"токен {login}")" />
+                        }
+                    </span>
+                    <DsIconButton Icon="history" Size="26" Title="Проверить токен" OnClick="() => Check(c)" />
+                    <DsIconButton Icon="edit" Size="26" Title="Изменить" OnClick="() => _editing = c" />
+                    <DsIconButton Icon="trash" Size="26" Title="Удалить подключение" OnClick="() => _deleting = c" />
+                </div>
+                <MudSimpleTable Dense="true" Elevation="0" Class="scm-repos">
+                    <tbody>
+                        @foreach (var r in c.Repositories)
+                        {
+                            <tr class="@(r.IsActive ? "" : "off")">
+                                <td><a href="@r.WebUrl" target="_blank" rel="noopener noreferrer">@r.FullName</a></td>
+                                <td class="hint">@(r.IsActive ? r.WebhookCreated ? "вебхук создан" : "вебхук вручную" : "отключён")</td>
+                                <td class="hint">@BoardsText(r)</td>
+                                <td class="hint">@(r.LastDeliveryAt is { } at ? $"событие {Ru.DateShort(at)}" : "событий не было")</td>
+                                <td>
+                                    @if (r.IsActive)
+                                    {
+                                        <DsIconButton Icon="close-simple" Size="24" Title="Отключить репозиторий" OnClick="() => Disable(r)" />
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+                <button type="button" class="icon-lnk" @onclick="() => _adding = c"><Icon Name="plus" Size="13" />Репозиторий</button>
+            </div>
+        }
+    }
+</div>
+
+@if (_editing is not null)
+{
+    <ScmConnectionDialog Connection="@(ReferenceEquals(_editing, NewConnection) ? null : _editing)" OnSaved="Saved" OnClose="() => _editing = null" />
+}
+
+@if (_adding is not null)
+{
+    <ScmRepositoryDialog Connection="_adding" OnAdded="_ => Reload()" OnClose="() => _adding = null" />
+}
+
+@if (_deleting is not null)
+{
+    <ConfirmDialog Title="@($"Удалить подключение «{_deleting.Name}»?")"
+                   Text="Вебхуки у хостинга будут удалены, а связи задач с ветками, коммитами и PR этого подключения пропадут."
+                   OnConfirm="Delete" OnCancel="() => _deleting = null" />
+}
+
+@code {
+    private static readonly ScmConnectionResponse NewConnection = new(Guid.Empty, ScmProvider.GitHub, "", null, default, null, null, null, false, []);
+
+    private List<ScmConnectionResponse>? _connections;
+    private ScmConnectionResponse? _editing;
+    private ScmConnectionResponse? _adding;
+    private ScmConnectionResponse? _deleting;
+
+    protected override Task OnInitializedAsync() => Reload();
+
+    private static string BoardsText(ScmRepositoryResponse r) =>
+        r.BoardIds.Count == 0 ? "не привязан к проектам" : $"{r.BoardIds.Count} {Ru.Plural(r.BoardIds.Count, "проект", "проекта", "проектов")}";
+
+    private async Task Reload()
+    {
+        var result = await Api.GetScmConnections();
+        _connections = result.Ok ? result.Value!.ToList() : [];
+        if (!result.Ok)
+            Toasts.Error(result.Error ?? "Не удалось загрузить подключения");
+    }
+
+    private async Task Saved(ScmConnectionResponse connection)
+    {
+        _editing = null;
+        await Reload();
+        if (connection.LastError is { } error)
+            Toasts.Error($"Подключение сохранено, но токен не прошёл проверку: {error}");
+    }
+
+    private async Task Check(ScmConnectionResponse connection)
+    {
+        var result = await Api.CheckScmConnection(connection.Id);
+        await Reload();
+        if (result.Ok && result.Value!.LastError is null)
+            Toasts.Ok($"Токен работает: {result.Value.CheckedLogin}");
+        else
+            Toasts.Error(result.Value?.LastError ?? result.Error ?? "Проверка не прошла");
+    }
+
+    private async Task Disable(ScmRepositoryResponse repository)
+    {
+        var result = await Api.DisableScmRepository(repository.Id);
+        if (!result.Ok)
+            Toasts.Error(result.Error ?? "Не удалось отключить");
+        await Reload();
+    }
+
+    private async Task Delete()
+    {
+        var connection = _deleting!;
+        _deleting = null;
+        var result = await Api.DeleteScmConnection(connection.Id);
+        if (!result.Ok)
+            Toasts.Error(result.Error ?? "Не удалось удалить");
+        await Reload();
+    }
+}

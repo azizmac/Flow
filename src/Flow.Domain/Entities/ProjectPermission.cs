@@ -26,5 +26,8 @@ public enum ProjectPermission
     ManageSprints = 13,
 
     /// <summary>Создавать, править, закрывать и удалять вехи (docs/TZ_task_views.md §6): Developer и выше.</summary>
-    ManageMilestones = 14
+    ManageMilestones = 14,
+
+    /// <summary>Привязывать репозитории Git-хостинга к проекту (docs/TZ_scm_integration.md §6): администратор проекта.</summary>
+    ManageScm = 15
 }

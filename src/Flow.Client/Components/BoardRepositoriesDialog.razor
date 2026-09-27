@@ -1,0 +1,90 @@
+@* Репозитории проекта (docs/TZ_scm_integration.md §6): какие подключённые репозитории связываются с задачами этого
+   проекта — код задачи из непривязанного репозитория молча пропускается. Один репозиторий можно привязать к нескольким
+   проектам (монорепозиторий). Право — ManageScm (администратор проекта); подключают репозитории Admin и Owner в настройках. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject ToastService Toasts
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Репозитории проекта @Board.Key</h3>
+        <div class="hint">Ветки, коммиты и PR с кодом задачи @(Board.Key)-N появятся в её блоке «Разработка».</div>
+    </TitleContent>
+    <DialogContent>
+        @if (_repositories is null)
+        {
+            <Skeleton Kind="rows" Count="3" />
+        }
+        else if (_repositories.Count == 0)
+        {
+            <div class="hint">Репозитории ещё не подключены: это делают Admin и Owner в «Настройки → Интеграции».</div>
+        }
+        else
+        {
+            @foreach (var r in _repositories)
+            {
+                <div class="scm-bind">
+                    <MudCheckBox T="bool" Value="r.IsBound" ValueChanged="v => Set(r, v)" Disabled="_busy" Size="Size.Small" Color="Color.Primary" Dense="true"
+                                 Label="@r.FullName" />
+                    <span class="hint">@ScmMeta.Name(r.Provider)</span>
+                </div>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="primary" Size="md" OnClick="Close">Готово</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private IReadOnlyList<ScmBoardRepositoryResponse>? _repositories;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Api.GetBoardRepositories(Board.Id);
+        _repositories = result.Ok ? result.Value : [];
+        if (!result.Ok)
+            Toasts.Error(result.Error ?? "Не удалось загрузить репозитории");
+    }
+
+    private async Task Set(ScmBoardRepositoryResponse repository, bool bound)
+    {
+        _busy = true;
+        var result = await Api.SetBoardRepository(Board.Id, repository.RepositoryId, bound);
+        _busy = false;
+        if (result.Ok)
+            _repositories = result.Value;
+        else
+            Toasts.Error(result.Error ?? "Не удалось сохранить");
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

@@ -1,3 +1,5 @@
+using Flow.Application.Features.Scm;
+using Flow.Infrastructure.Scm;
 using Flow.Application.Features.Tasks.Recurrence;
 using Flow.Infrastructure.Recurrence;
 using Amazon.Runtime;
@@ -47,6 +49,15 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<ITaskCodeAliasRepository, TaskCodeAliasRepository>();
         services.AddScoped<ITaskRecurrenceRepository, TaskRecurrenceRepository>();
+        services.AddScoped<IScmStore, ScmStore>();
+
+        // Git-хостинги (docs/TZ_scm_integration.md): клиенты API, настройки секции Scm и разбор доставок вебхуков.
+        var scm = configuration.GetSection(ScmOptions.SectionName).Get<ScmOptions>() ?? new ScmOptions();
+        services.AddSingleton(scm);
+        services.AddHttpClient(ScmProviderClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
+        services.AddScoped<IScmProviderClient, ScmProviderClient>();
+        if (scm.WorkerEnabled)
+            services.AddHostedService<ScmWorker>();
 
         // Повторяющиеся задачи (docs/TZ_task_model.md §9): настройки секции Recurrence и фоновый генератор.
         var recurrence = configuration.GetSection(RecurrenceOptions.SectionName).Get<RecurrenceOptions>() ?? new RecurrenceOptions();

@@ -2,6 +2,7 @@ using Flow.Application.Features.Dashboards;
 using Flow.Application.Features.Filters;
 using Flow.Application.Features.Tasks.Restructure;
 using Flow.Application.Features.Tasks.Recurrence;
+using Flow.Application.Features.Scm;
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
@@ -589,5 +590,32 @@ public class PermissionTests
         Task Set() => mediator.Send(new TaskRecurrenceSetCommand(actor, task, rule), CancellationToken.None);
 
         if (allowed) await Set(); else await Forbidden(Set);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Developer, false)]
+    [InlineData(UserRole.Admin, true)]
+    public async Task Integrations_Are_Managed_By_Global_Admins(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+
+        Task List() => mediator.Send(new ScmConnectionListQuery(actor), CancellationToken.None);
+
+        if (allowed) await List(); else await Forbidden(List);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Developer, false)]
+    [InlineData(UserRole.Admin, true)]
+    public async Task Repositories_Are_Bound_By_Project_Admins(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var board = await CreateBoardAsync(mediator);
+
+        Task List() => mediator.Send(new ScmBoardRepositoriesQuery(actor, board), CancellationToken.None);
+
+        if (allowed) await List(); else await Forbidden(List);
     }
 }
