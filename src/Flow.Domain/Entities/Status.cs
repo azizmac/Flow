@@ -23,6 +23,14 @@ public sealed class Status
     /// <summary>Из какого пресета DefaultStatuses создан статус; null — кастомный статус, добавленный вручную.</summary>
     public StatusType? Type { get; private set; }
 
+    /// <summary>
+    /// Мягкий лимит незавершённой работы колонки канбана (docs/TZ_task_views.md §1): превышение подсвечивает
+    /// заголовок, но перенос не запрещает. null — лимита нет.
+    /// </summary>
+    public int? WipLimit { get; private set; }
+
+    public const int MaxWipLimit = 999;
+
     private Status()
     {
         // EF Core
@@ -50,6 +58,14 @@ public sealed class Status
     internal void SetType(StatusType? type) => Type = type;
 
     internal void SetSortOrder(int sortOrder) => SortOrder = sortOrder;
+
+    internal void SetWipLimit(int? limit)
+    {
+        if (limit is < 1 or > MaxWipLimit)
+            throw new ArgumentException($"WIP limit must be between 1 and {MaxWipLimit}.", nameof(limit));
+
+        WipLimit = limit;
+    }
 
     internal static string ValidateName(string name)
     {

@@ -1,4 +1,4 @@
-﻿@* Экран «Задачи» (GET /tasks): плоский список задач по всем проектам или по одному — проект выбирается
+﻿@* Экран «Задачи» (GET /tasks): список задач или канбан (?view=board, docs/TZ_task_views.md §1) по всем проектам или по одному — проект выбирается
    селектором в топбаре и живёт в query (?board=). Фильтры (?status= внутри проекта, ?type= в сводном режиме,
    ?who= — id, "none" — без исполнителя) и поиск считает сервер, страница грузится порциями по курсору.
    Слайдер создания (N) и слайдер задачи (?task=) — как раньше.
@@ -83,11 +83,18 @@
     {
         <div class="filter-row">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                @if (CurrentBoard is { } board)
+                <div class="seg" role="radiogroup" aria-label="Вид">
+                    <button type="button" class="seg-btn @(IsBoardView ? "" : "on")" role="radio" aria-checked="@(!IsBoardView)"
+                            title="Список" @onclick="() => SetView(false)"><Icon Name="list" Size="14" />Список</button>
+                    <button type="button" class="seg-btn @(IsBoardView ? "on" : "")" role="radio" aria-checked="@IsBoardView"
+                            title="Доска: колонки по статусам" @onclick="() => SetView(true)"><Icon Name="grid" Size="14" />Доска</button>
+                </div>
+                @* В доске фильтр статуса не нужен: колонки и есть статусы. *@
+                @if (!IsBoardView && CurrentBoard is { } board)
                 {
                     <StatusFilter Statuses="board.Statuses" Counts="_countsByStatus" Total="_total" Value="StatusId" ValueChanged="SetStatusFilter" />
                 }
-                else
+                else if (!IsBoardView)
                 {
                     <StatusTypeFilter Counts="_countsByType" Total="_total" Value="TypeFilter" ValueChanged="SetTypeFilter" />
                 }
@@ -102,7 +109,10 @@
                         title="@(HasPanelFilters && !FqlVisible ? "Показать фильтры строкой FQL" : "Строка запроса FQL")">FQL</button>
             </div>
             <div class="meta-line">
-                @Ru.Tasks(_total)@(CurrentBoard is { } b ? $" · создан {Ru.Date(b.CreatedAt)}" : $" · {Ru.Projects(_boards.Count)}")
+                @if (!IsBoardView)
+                {
+                    @Ru.Tasks(_total)@(" · ")
+                }@(CurrentBoard is { } b ? $"создан {Ru.Date(b.CreatedAt)}" : Ru.Projects(_boards.Count))
             </div>
         </div>
 
@@ -111,6 +121,15 @@
             <FqlBar Value="@EffectiveFql" Error="_fqlError" OnApply="ApplyFql" OnSave="OpenSave" OnClose="CloseFql" />
         }
 
+        @if (IsBoardView)
+        {
+            <KanbanBoard @ref="_kanban" Boards="_boards" BoardId="BoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
+                         Query="@_search" Fql="@EffectiveFql" Me="Me" SelectedId="TaskId"
+                         OnOpen="OpenTask" OnLoaded="OnKanbanLoaded" OnFqlError="e => _fqlError = e"
+                         OnBoardChanged="ReplaceBoard" OnCreated="OnQuickCreated" />
+        }
+        else
+        {
         @* Страницу и размер страницы, как и сортировку, ведём сами: встроенные переключатели таблицы в
            серверном режиме меняют только подписи пейджера, а повторный запрос не делают. *@
         <MudDataGrid @ref="_grid" T="TaskResponse" ServerData="LoadTasks" Class="flow-grid panel"
@@ -274,6 +293,7 @@
                 <MudDataGridPager T="TaskResponse" RowsPerPageString="Задач на странице" InfoFormat="{first_item}–{last_item} из {all_items}" />
             </PagerContent>
         </MudDataGrid>
+        }
     }
 </div>
 
@@ -340,10 +360,48 @@
     /// <summary>Запрос FQL (docs/TZ_task_views.md §7); складывается с панелью фильтров через AND.</summary>
     [SupplyParameterFromQuery(Name = "fql")] public string? Fql { get; set; }
 
+    /// <summary>Представление: list | board; без параметра — из личных настроек (docs/TZ_task_views.md).</summary>
+    [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
+
     /// <summary>Открытый сохранённый фильтр; его запрос действует, пока в адресе нет своего ?fql= (правки до «Сохранить»).</summary>
     [SupplyParameterFromQuery(Name = "filter")] public Guid? FilterId { get; set; }
 
     private MudDataGrid<TaskResponse>? _grid;
+    private KanbanBoard? _kanban;
+
+    private bool IsBoardView => View switch
+    {
+        "board" => true,
+        "list" => false,
+        _ => Preferences.TasksView == TaskView.Board
+    };
+
+    /// <summary>
+    /// Смена вида. Фильтр статуса в доске не нужен — колонки и есть статусы, — поэтому он снимается; остальные
+    /// фильтры едут с адресом.
+    /// </summary>
+    private void SetView(bool board)
+    {
+        if (board == IsBoardView)
+            return;
+
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["view"] = board ? "board" : "list",
+            ["status"] = null,
+            ["type"] = null
+        }));
+    }
+
+    /// <summary>Карточки доски — те же _tasks, по которым ходят слайдер и ↑↓.</summary>
+    private void OnKanbanLoaded(IReadOnlyList<TaskResponse> cards) => _tasks = cards.ToList();
+
+    private async Task OnQuickCreated(TaskResponse t)
+    {
+        BumpNextNumber(t.BoardId);
+        Toasts.Ok($"Задача {t.Code} создана");
+        await Task.CompletedTask;
+    }
     private TaskSortField _sortField = TaskSortField.Created;
     private bool _sortDescending = true;
     private int _page;
@@ -487,7 +545,7 @@
             await Filters.EnsureLoadedAsync();
 
         // Фильтры считает сервер, поэтому любое их изменение — это новый запрос списка.
-        var key = $"{BoardId}|{StatusId}|{Type}|{Who}|{_search.Trim()}|{EffectiveFql}";
+        var key = $"{BoardId}|{StatusId}|{Type}|{Who}|{_search.Trim()}|{EffectiveFql}|{IsBoardView}";
         if (_loadedKey != key)
         {
             _loadedKey = key;
@@ -527,6 +585,10 @@
             _loading = false;
             return;
         }
+
+        // Доска перечитывается сама, когда меняются её параметры (фильтры в адресе).
+        if (IsBoardView)
+            return;
 
         // Первый заход: таблица ещё не смонтирована и запросит данные сама, когда появится.
         // Фильтры сменились — показываем первую страницу отбора.
@@ -634,6 +696,13 @@
 
     private async Task Reload()
     {
+        if (IsBoardView)
+        {
+            if (_kanban is not null)
+                await _kanban.ReloadAsync();
+            return;
+        }
+
         if (_grid is not null)
             await _grid.ReloadServerData();
     }
@@ -1089,7 +1158,10 @@
 
         _tasks.RemoveAll(x => x.Id == t.Id);
         _total = Math.Max(0, _total - 1);
-        await Reload();
+        if (IsBoardView)
+            _kanban?.Remove(t.Id);
+        else
+            await Reload();
         var i = _boards.FindIndex(b => b.Id == t.BoardId);
         if (i >= 0)
             _boards[i] = _boards[i] with { TaskCount = Math.Max(0, _boards[i].TaskCount - 1) };
@@ -1108,6 +1180,7 @@
             return;
 
         _tasks[i] = t;
+        _kanban?.Replace(t);
         await Redraw();
     }
 

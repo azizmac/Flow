@@ -27,7 +27,7 @@ public static class BoardMappingExtensions
         board.NextTaskNumber + 1,
         board.Statuses
             .OrderBy(s => s.SortOrder)
-            .Select(s => new StatusResponse(s.Id, s.Name, s.IsInitial, s.IsFinal, s.Type.ToResponseStatusType()))
+            .Select(s => new StatusResponse(s.Id, s.Name, s.IsInitial, s.IsFinal, s.Type.ToResponseStatusType(), s.WipLimit))
             .ToList(),
         board.TaskTypes
             .OrderBy(t => t.SortOrder)
@@ -35,7 +35,8 @@ public static class BoardMappingExtensions
             .ToList(),
         board.DefaultRole?.ToResponseRole(),
         board.Visibility.ToResponseVisibility(),
-        (Flow.Shared.Contracts.Boards.WorkflowMode)(int)board.WorkflowMode);
+        (Flow.Shared.Contracts.Boards.WorkflowMode)(int)board.WorkflowMode,
+        board.DoneColumnDays);
 
     public static WorkflowResponse ToWorkflowResponse(this Board board) => new(
         board.Id,

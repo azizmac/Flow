@@ -59,6 +59,24 @@ public interface IFlowApi
     Task<ApiResult<WorkflowResponse>> SetWorkflow(Guid boardId, SetWorkflowRequest request, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<TaskTransitionResponse>>> GetTransitions(Guid taskId, CancellationToken ct = default);
 
+    // Канбан (docs/TZ_task_views.md §1): без колонки — все колонки первой страницей, с колонкой — её страница с offset.
+    Task<ApiResult<TaskBoardResponse>> GetTaskBoard(
+        Guid? boardId = null,
+        Guid? assigneeId = null,
+        bool unassigned = false,
+        string? query = null,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
+        string? fql = null,
+        Guid? statusId = null,
+        StatusType? statusType = null,
+        bool other = false,
+        int offset = 0,
+        int? limit = null,
+        CancellationToken ct = default);
+
+    Task<ApiResult<BoardResponse>> SetDoneColumnDays(Guid boardId, int days, CancellationToken ct = default);
+
     // ---- Доступ к проектам ----
     Task<ApiResult<IReadOnlyList<ProjectAccessResponse>>> GetMyAccess(CancellationToken ct = default);
     Task<ApiResult<BoardMembersResponse>> GetBoardMembers(Guid boardId, CancellationToken ct = default);

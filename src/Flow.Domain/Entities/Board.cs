@@ -51,6 +51,15 @@ public sealed partial class Board
     /// <summary>Граф переходов. В режиме Free хранится (можно готовить заранее), но не применяется.</summary>
     public IReadOnlyCollection<StatusTransition> Transitions => _transitions;
 
+    /// <summary>
+    /// Финальная колонка канбана показывает задачи, закрытые за столько последних дней (docs/TZ_task_views.md §1):
+    /// иначе через полгода колонка «Сделана» грузила бы тысячи карточек. Список задач это окно не трогает.
+    /// </summary>
+    public int DoneColumnDays { get; private set; } = DefaultDoneColumnDays;
+
+    public const int DefaultDoneColumnDays = 14;
+    public const int MaxDoneColumnDays = 365;
+
     private Board()
     {
         // EF Core
@@ -154,6 +163,17 @@ public sealed partial class Board
             throw new InvalidOperationException("A board must keep at least one final status.");
 
         status.SetFinal(isFinal);
+    }
+
+    /// <summary>Мягкий WIP-лимит колонки; null снимает.</summary>
+    public void SetStatusWipLimit(Guid statusId, int? limit) => GetStatus(statusId).SetWipLimit(limit);
+
+    public void SetDoneColumnDays(int days)
+    {
+        if (days is < 1 or > MaxDoneColumnDays)
+            throw new ArgumentException($"Done column window must be between 1 and {MaxDoneColumnDays} days.", nameof(days));
+
+        DoneColumnDays = days;
     }
 
     /// <summary>Вид статуса — общий для проектов ключ фильтров («в работе» во всех проектах); null — свой статус без вида.</summary>

@@ -9,4 +9,5 @@ public sealed record UserPreferencesResponse(
     SidebarMode SidebarMode,
     StartPage StartPage,
     int TasksPageSize,
-    IReadOnlyList<int> AllowedTasksPageSizes);
+    IReadOnlyList<int> AllowedTasksPageSizes,
+    TaskView TasksView = TaskView.List);

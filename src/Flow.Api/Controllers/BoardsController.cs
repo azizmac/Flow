@@ -1,5 +1,6 @@
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
+using Flow.Application.Features.Boards.Commands.BoardDoneColumnDaysSetCommand;
 using Flow.Application.Features.Boards;
 using Flow.Application.Features.Boards.Commands.BoardDefaultRoleSetCommand;
 using Flow.Application.Features.Boards.Commands.BoardMemberRemoveCommand;
@@ -19,6 +20,7 @@ using Flow.Application.Features.Boards.Queries.BoardGetQuery;
 using Flow.Application.Features.Boards.Queries.BoardListQuery;
 using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Boards;
+using Flow.Shared.Contracts.Tasks;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -147,7 +149,7 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
         {
             var response = await mediator.Send(
                 new StatusUpdateCommand(actor.Require(), id, statusId, request.Name, request.IsFinal, request.IsInitial,
-                    request.Type?.ToDomainStatusType(), request.ClearType),
+                    request.Type?.ToDomainStatusType(), request.ClearType, request.WipLimit, request.ClearWipLimit),
                 cancellationToken);
 
             return response is null ? NotFound() : Ok(response);
@@ -204,6 +206,21 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
             return workflow is null ? NotFound() : Ok(workflow);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
+    /// <summary>Окно финальной колонки канбана, дней (docs/TZ_task_views.md §1). 400 — вне 1…365.</summary>
+    [HttpPut("{id:guid}/done-column-days")]
+    public async Task<IActionResult> SetDoneColumnDays(Guid id, SetDoneColumnDaysRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await mediator.Send(new BoardDoneColumnDaysSetCommand(actor.Require(), id, request.Days), cancellationToken);
+            return response is null ? NotFound() : Ok(response);
+        }
+        catch (ArgumentException ex)
         {
             return BadRequest(new { ex.Message });
         }

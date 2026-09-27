@@ -25,6 +25,8 @@ internal sealed class StatusUpdateCommandHandler(
             throw new ArgumentException("Initial flag can only be moved to another status, not cleared.", nameof(request.IsInitial));
         if (request.ClearType && request.Type is not null)
             throw new ArgumentException("Type and ClearType are mutually exclusive.", nameof(request.ClearType));
+        if (request.ClearWipLimit && request.WipLimit is not null)
+            throw new ArgumentException("WipLimit and ClearWipLimit are mutually exclusive.", nameof(request.ClearWipLimit));
 
         var board = await boards.GetByIdAsync(request.BoardId, cancellationToken);
         if (board is null)
@@ -37,6 +39,9 @@ internal sealed class StatusUpdateCommandHandler(
 
         if (request.Type is not null || request.ClearType)
             board.SetStatusType(status.Id, request.Type);
+
+        if (request.WipLimit is not null || request.ClearWipLimit)
+            board.SetStatusWipLimit(status.Id, request.WipLimit);
 
         // Порядок как у типов задач: «снять финальность и сделать начальным» одним запросом должно работать.
         var wasFinal = status.IsFinal;

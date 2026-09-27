@@ -16,7 +16,8 @@ internal sealed class UserUpdatePreferencesCommandHandler(ActorResolver actors, 
         var preferences = actor.Preferences.With(
             request.SidebarMode?.ToDomainSidebarMode(),
             request.StartPage?.ToDomainStartPage(),
-            request.TasksPageSize);
+            request.TasksPageSize,
+            request.TasksView?.ToDomainTaskView());
 
         if (actor.ChangePreferences(preferences))
             await unitOfWork.SaveChangesAsync(cancellationToken);

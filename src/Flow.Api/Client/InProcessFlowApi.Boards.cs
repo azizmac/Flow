@@ -96,7 +96,7 @@ internal sealed partial class InProcessFlowApi
             var actor = await ActorAsync();
             var response = await mediator.Send(
                 new StatusUpdateCommand(actor, boardId, statusId, request.Name, request.IsFinal, request.IsInitial,
-                    request.Type?.ToDomainStatusType(), request.ClearType), ct);
+                    request.Type?.ToDomainStatusType(), request.ClearType, request.WipLimit, request.ClearWipLimit), ct);
             return response is null ? NotFound<BoardResponse>() : Ok(response);
         });
 

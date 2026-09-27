@@ -12,4 +12,5 @@ public sealed record UserUpdatePreferencesCommand(
     Guid ActorId,
     SidebarMode? SidebarMode,
     StartPage? StartPage,
-    int? TasksPageSize) : IRequest<UserPreferencesResponse>;
+    int? TasksPageSize,
+    TaskView? TasksView = null) : IRequest<UserPreferencesResponse>;

@@ -157,8 +157,9 @@ TransitionConditions (value object, jsonb):
   `CreateTask` в `Restricted` не в начальный статус — только при переходе «из любого» в него.
 - Application: `Features/Tasks/TransitionGuard` собирает контекст (роль в проекте, исполнитель, чек-лист; дети
   грузятся, только если какой-то переход требует `RequireChildrenDone`). Проверяет `TaskUpdate` до любых правок —
-  отказ не оставляет ни записи в журнале, ни частично применённых полей. Других путей смены статуса пока нет
-  (канбан — 2B, смарт-коммиты — `TZ_scm_integration`); новые обязаны звать тот же `TransitionGuard`.
+  отказ не оставляет ни записи в журнале, ни частично применённых полей. Второй путь — перенос карточки канбана
+  (`TaskRankCommand` со `StatusId`, этап 2B) — зовёт тот же guard; смарт-коммиты (`TZ_scm_integration`) обязаны
+  тоже.
 - `WorkflowGet` (чтение — любая роль с доступом), `WorkflowSet` (`EnsureCanManageConfig`), `TaskTransitions`.
   API: GET/PUT `/boards/{id}/workflow`, GET `/tasks/{id}/transitions`, PATCH `/tasks/{id}` при отказе — 400
   `{ message, reasons }`.

@@ -12,7 +12,7 @@ public sealed class UserPreferences
 
     public const int DefaultTasksPageSize = 100;
 
-    public static UserPreferences Default { get; } = new(SidebarMode.Auto, StartPage.Projects, DefaultTasksPageSize);
+    public static UserPreferences Default { get; } = new(SidebarMode.Auto, StartPage.Projects, DefaultTasksPageSize, TaskView.List);
 
     public SidebarMode SidebarMode { get; private set; }
 
@@ -21,20 +21,27 @@ public sealed class UserPreferences
     /// <summary>Строк на странице списка задач при открытии экрана.</summary>
     public int TasksPageSize { get; private set; }
 
+    /// <summary>Представление экрана «Задачи», когда в адресе нет ?view= (docs/TZ_task_views.md).</summary>
+    public TaskView TasksView { get; private set; }
+
     private UserPreferences()
     {
         // EF Core
     }
 
-    private UserPreferences(SidebarMode sidebarMode, StartPage startPage, int tasksPageSize)
+    private UserPreferences(SidebarMode sidebarMode, StartPage startPage, int tasksPageSize, TaskView tasksView)
     {
         SidebarMode = sidebarMode;
         StartPage = startPage;
         TasksPageSize = tasksPageSize;
+        TasksView = tasksView;
     }
 
-    public static UserPreferences Create(SidebarMode sidebarMode, StartPage startPage, int tasksPageSize)
+    public static UserPreferences Create(SidebarMode sidebarMode, StartPage startPage, int tasksPageSize, TaskView tasksView = TaskView.List)
     {
+        if (!Enum.IsDefined(tasksView))
+            throw new ArgumentException($"Unknown tasks view {tasksView}.", nameof(tasksView));
+
         if (!Enum.IsDefined(sidebarMode))
             throw new ArgumentException($"Unknown sidebar mode {sidebarMode}.", nameof(sidebarMode));
 
@@ -46,13 +53,13 @@ public sealed class UserPreferences
                 $"Tasks page size must be one of {string.Join(", ", AllowedTasksPageSizes)}.",
                 nameof(tasksPageSize));
 
-        return new UserPreferences(sidebarMode, startPage, tasksPageSize);
+        return new UserPreferences(sidebarMode, startPage, tasksPageSize, tasksView);
     }
 
     /// <summary>Копия с заменой заданных полей; null — оставить как есть (PATCH-семантика команды).</summary>
-    public UserPreferences With(SidebarMode? sidebarMode = null, StartPage? startPage = null, int? tasksPageSize = null)
-        => Create(sidebarMode ?? SidebarMode, startPage ?? StartPage, tasksPageSize ?? TasksPageSize);
+    public UserPreferences With(SidebarMode? sidebarMode = null, StartPage? startPage = null, int? tasksPageSize = null, TaskView? tasksView = null)
+        => Create(sidebarMode ?? SidebarMode, startPage ?? StartPage, tasksPageSize ?? TasksPageSize, tasksView ?? TasksView);
 
     public bool SameAs(UserPreferences other)
-        => SidebarMode == other.SidebarMode && StartPage == other.StartPage && TasksPageSize == other.TasksPageSize;
+        => SidebarMode == other.SidebarMode && StartPage == other.StartPage && TasksPageSize == other.TasksPageSize && TasksView == other.TasksView;
 }

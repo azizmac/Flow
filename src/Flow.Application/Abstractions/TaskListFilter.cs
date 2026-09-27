@@ -17,6 +17,9 @@ namespace Flow.Application.Abstractions;
 /// ParentId — только прямые подзадачи этой задачи (блок «Подзадачи», docs/TZ_task_model.md §3).
 /// Condition — условие FQL после биндинга (docs/TZ_task_views.md §7), складывается с остальными полями через AND;
 /// Orders — ORDER BY из FQL, в offset-режиме заменяет Sort/Descending.
+/// UntypedStatus — только задачи в статусах без вида (колонка «Другие» сводного канбана); DoneWindowAt — «сейчас» для
+/// окна финальной колонки канбана: задачи в финальных статусах остаются, только если сменили статус не раньше
+/// Board.DoneColumnDays дней до этого момента (docs/TZ_task_views.md §1); null — окна нет, как в списке.
 /// Sort/Descending задают порядок; при keyset-пагинации применим только порядок по умолчанию (Created desc).
 /// </summary>
 public sealed record TaskListFilter(
@@ -37,7 +40,9 @@ public sealed record TaskListFilter(
     IReadOnlyCollection<Guid>? VisibleBoardIds = null,
     Guid? ParentId = null,
     TaskFilterNode? Condition = null,
-    IReadOnlyList<TaskOrder>? Orders = null);
+    IReadOnlyList<TaskOrder>? Orders = null,
+    bool UntypedStatus = false,
+    DateTime? DoneWindowAt = null);
 
 /// <summary>
 /// Счётчики по отбору: всего (без фильтра статуса), сколько попало под все фильтры (Matched),

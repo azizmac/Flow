@@ -528,3 +528,9 @@ a.mud-link:hover {
 .mud-popover.flow-pop[data-mudpopover-flip] {
     transform: translateY(-6px);
 }
+
+/* Канбан: зона MudDropZone — наша колонка, без отступов и фона Material; призрак переносимой карточки — полупрозрачный. */
+.kb .mud-drop-zone { background: transparent; }
+.kb .mud-drop-item-preview-start { opacity: 0.4; }
+.kb .mud-drop-item { display: block; }
+.kb-col.denied .mud-dropitem-placeholder { display: none; }

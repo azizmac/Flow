@@ -63,6 +63,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             preferences.Property(p => p.SidebarMode).HasColumnName("PrefSidebarMode").IsRequired();
             preferences.Property(p => p.StartPage).HasColumnName("PrefStartPage").IsRequired();
             preferences.Property(p => p.TasksPageSize).HasColumnName("PrefTasksPageSize").IsRequired();
+            preferences.Property(p => p.TasksView).HasColumnName("PrefTasksView").IsRequired();
         });
 
         // Ссылки — owned-коллекция: живут только внутри агрегата User, своего DbSet и репозитория у них нет.

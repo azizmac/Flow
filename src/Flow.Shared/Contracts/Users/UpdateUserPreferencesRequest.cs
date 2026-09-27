@@ -4,4 +4,5 @@ namespace Flow.Shared.Contracts.Users;
 public sealed record UpdateUserPreferencesRequest(
     SidebarMode? SidebarMode = null,
     StartPage? StartPage = null,
-    int? TasksPageSize = null);
+    int? TasksPageSize = null,
+    TaskView? TasksView = null);

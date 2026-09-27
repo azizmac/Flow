@@ -83,6 +83,18 @@
                         }
                     </div>
                 </div>
+
+                <div class="side-card">
+                    <div class="section-title">Вид экрана «Задачи»</div>
+                    <div class="hint">Что открывается, когда в адресе нет вида. Переключатель на самом экране меняет вид только для открытой ссылки.</div>
+                    <div class="seg" role="radiogroup" aria-label="Вид экрана задач">
+                        @foreach (var (view, label) in TaskViews)
+                        {
+                            <button type="button" class="seg-btn @(prefs.TasksView == view ? "on" : "")" role="radio" aria-checked="@(prefs.TasksView == view)"
+                                    disabled="@_saving" @onclick="() => Save(new UpdateUserPreferencesRequest(TasksView: view))">@label</button>
+                        }
+                    </div>
+                </div>
             }
         }
         else if (Tab == "search")
@@ -262,6 +274,12 @@
         (SidebarMode.Auto, "Авто"),
         (SidebarMode.Expanded, "Развёрнуто"),
         (SidebarMode.Collapsed, "Иконки")
+    ];
+
+    private static readonly (TaskView View, string Label)[] TaskViews =
+    [
+        (TaskView.List, "Список"),
+        (TaskView.Board, "Доска")
     ];
 
     private static readonly (StartPage Page, string Label)[] StartPages =

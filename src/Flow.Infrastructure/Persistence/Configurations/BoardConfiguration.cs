@@ -37,6 +37,7 @@ public sealed class BoardConfiguration : IEntityTypeConfiguration<Board>
 
         // Free = 0 — у всех существующих проектов: после миграции статус меняется как раньше.
         builder.Property(b => b.WorkflowMode).IsRequired();
+        builder.Property(b => b.DoneColumnDays).IsRequired().HasDefaultValue(Board.DefaultDoneColumnDays);
 
         builder.HasMany(b => b.Transitions)
             .WithOne()

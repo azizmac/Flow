@@ -5,7 +5,8 @@ namespace Flow.Shared.Contracts.Boards;
 /// чтобы не делать N+1 запросов GET /boards/{id}/tasks ради счётчика. TaskTypes — типы задач проекта,
 /// включая архивные (docs/TZ_task_model.md §1). DefaultRole — потолок роли в проекте без участия
 /// (docs/TZ_project_access.md), null — без ограничения. WorkflowMode — Restricted: статус меняется только
-/// по переходам (клиент тогда спрашивает GET /tasks/{id}/transitions перед показом списка статусов).
+/// по переходам (клиент тогда спрашивает GET /tasks/{id}/transitions перед показом списка статусов). DoneColumnDays —
+/// окно финальной колонки канбана в днях (docs/TZ_task_views.md §1).
 /// </summary>
 public sealed record BoardResponse(
     Guid Id,
@@ -18,4 +19,5 @@ public sealed record BoardResponse(
     IReadOnlyList<TaskTypeResponse> TaskTypes,
     ProjectRole? DefaultRole,
     BoardVisibility Visibility,
-    WorkflowMode WorkflowMode = WorkflowMode.Free);
+    WorkflowMode WorkflowMode = WorkflowMode.Free,
+    int DoneColumnDays = 14);

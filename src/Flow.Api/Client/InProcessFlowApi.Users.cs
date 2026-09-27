@@ -191,7 +191,7 @@ internal sealed partial class InProcessFlowApi
         {
             var actor = await ActorAsync();
             return Ok(await mediator.Send(
-                new UserUpdatePreferencesCommand(actor, request.SidebarMode, request.StartPage, request.TasksPageSize),
+                new UserUpdatePreferencesCommand(actor, request.SidebarMode, request.StartPage, request.TasksPageSize, request.TasksView),
                 ct));
         });
 

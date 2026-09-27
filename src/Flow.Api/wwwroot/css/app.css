@@ -2405,3 +2405,62 @@ a.task-row { color: inherit; text-decoration: none; }
 .lock-ico { display: inline-flex; align-items: center; line-height: 0; color: var(--text-tertiary); flex: none; }
 .board-card-key { display: inline-flex; align-items: center; gap: 8px; }
 .pa-warn { color: var(--tan); }
+
+/* ---- Канбан (docs/TZ_task_views.md §1, этап 2B) ---- */
+.kb-toolbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; flex: none; }
+.kb-window { display: inline-flex; align-items: center; gap: 6px; color: var(--text-tertiary); font: var(--fw-medium) 12.5px var(--font-text); }
+.kb-window b { color: var(--text-secondary); font-weight: var(--fw-semibold); }
+.kb-select {
+    background: rgba(0, 0, 0, 0.15); color: #fff; border: 1px solid var(--border); border-radius: var(--r-sm);
+    padding: 3px 6px; font: var(--fw-semibold) 12px var(--font-display); cursor: pointer;
+}
+.kb-scroll { flex: 1; min-height: 0; overflow: auto; padding-bottom: 8px; }
+.kb { min-width: min-content; }
+.kb-heads, .kb-row { display: grid; gap: 12px; }
+.kb-heads { position: sticky; top: 0; z-index: 2; background: var(--bg-content); padding-bottom: 8px; }
+.kb-head {
+    display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: var(--r-md);
+    background: var(--surface); border: 1px solid var(--border); color: #fff; font: var(--fw-semibold) 13px var(--font-display);
+    transition: opacity 150ms ease;
+}
+.kb-head .sd { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.kb-head-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-count { color: var(--text-tertiary); font: var(--fw-bold) 11.5px var(--font-display); }
+.kb-head.over { border-color: var(--danger); }
+.kb-head.over .kb-count { color: var(--danger); }
+.kb-lane-title {
+    display: flex; align-items: center; gap: 8px; margin: 14px 0 8px; color: var(--text-secondary);
+    font: var(--fw-semibold) 12.5px var(--font-display);
+}
+.kb-col {
+    display: flex; flex-direction: column; gap: 8px; padding: 8px; min-height: 72px;
+    background: rgba(0, 0, 0, 0.12); border-radius: var(--r-md); transition: opacity 150ms ease;
+}
+.kb-col.denied, .kb-head.denied { opacity: 0.35; }
+.kb-zone { display: flex; flex-direction: column; gap: 8px; min-height: 36px; }
+.kb-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+    padding: 10px 12px; cursor: grab; display: flex; flex-direction: column; gap: 6px;
+    transition: border-color 150ms ease, transform 160ms var(--ease-out);
+}
+.kb-card.locked { cursor: pointer; }
+.kb-card:active { transform: scale(0.98); }
+.kb-card.sel { border-color: var(--accent); }
+.kb-card.done .kb-card-title { color: var(--text-tertiary); }
+.kb-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kb-card-top { display: flex; align-items: center; gap: 6px; }
+.kb-card-top .code { font: var(--fw-semibold) 11.5px var(--font-mono); color: var(--text-tertiary); }
+.kb-spacer { flex: 1; }
+.kb-card-title { color: #fff; font: var(--fw-medium) 13.5px/1.35 var(--font-text); overflow-wrap: anywhere; }
+.kb-card .task-meta-chips { margin-top: 0; }
+.kb-more, .kb-add { align-self: flex-start; font-size: 12px; }
+.kb-new {
+    background: var(--surface); color: #fff; border: 1px solid var(--accent); border-radius: var(--r-sm);
+    padding: 7px 10px; font: var(--fw-medium) 13px var(--font-text); outline: none;
+}
+@media (hover: hover) and (pointer: fine) { .kb-card:hover { border-color: var(--border-strong); } }
+@media (prefers-reduced-motion: reduce) { .kb-card, .kb-card:active { transform: none; transition: none; } }
+.st-wip {
+    width: 58px; background: rgba(0, 0, 0, 0.15); color: #fff; border: 1px solid var(--border); border-radius: var(--r-sm);
+    padding: 3px 6px; font: var(--fw-semibold) 12px var(--font-display);
+}

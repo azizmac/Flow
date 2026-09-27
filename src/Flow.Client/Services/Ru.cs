@@ -70,6 +70,8 @@ public static partial class Ru
 
     public static string Tasks(int n) => $"{n} {Plural(n, "задача", "задачи", "задач")}";
 
+    public static string Days(int n) => $"{n} {Plural(n, "день", "дня", "дней")}";
+
     public static string Projects(int n) => $"{n} {Plural(n, "проект", "проекта", "проектов")}";
 
     /// <summary>«6 сен» — для строк списка (год добавляется, если отличается от текущего).</summary>

@@ -69,6 +69,10 @@ internal sealed class UnitOfWork(FlowDbContext db, SearchIndexQueue searchQueue)
                 && entry.Properties.Any(p => p.IsModified && p.Metadata.Name != nameof(TaskItem.Rank)))
             {
                 entry.Entity.Touch(now);
+
+                // Окно финальной колонки канбана считается от смены статуса (docs/TZ_task_views.md §1).
+                if (entry.Property(t => t.StatusId).IsModified)
+                    entry.Entity.MarkStatusChanged(now);
             }
         }
 

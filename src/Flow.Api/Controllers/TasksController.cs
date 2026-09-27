@@ -15,6 +15,7 @@ using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Application.Features.Search.Queries.SimilarTasksQuery;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskListQuery;
+using Flow.Application.Features.Tasks.Queries.TaskBoardQuery;
 using Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 using Flow.Application.Features.Tasks.Queries.TaskTreeQuery;
 using Flow.Application.Features.Tasks.Fql;
@@ -193,7 +194,53 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     /// <summary>Место в ручном порядке: после afterId и/или перед beforeId; без соседей или соседи из другого проекта → 400.</summary>
     [HttpPost("tasks/{id:guid}/rank")]
     public Task<IActionResult> RankTask(Guid id, RankTaskRequest request, CancellationToken cancellationToken) =>
-        SendUpdate(new TaskRankCommand(actor.Require(), id, request.AfterId, request.BeforeId), cancellationToken);
+        SendUpdate(new TaskRankCommand(actor.Require(), id, request.AfterId, request.BeforeId, request.StatusId), cancellationToken);
+
+    /// <summary>
+    /// Канбан (docs/TZ_task_views.md §1): boardId — колонки-статусы проекта, без него — виды статусов по всем проектам.
+    /// statusId / statusType / other с offset — одна колонка со следующей страницы (догрузка при прокрутке).
+    /// </summary>
+    [HttpGet("tasks/board")]
+    public async Task<IActionResult> GetTaskBoard(
+        [FromQuery] Guid? boardId,
+        [FromQuery] Guid? assigneeId,
+        [FromQuery] bool? unassigned,
+        [FromQuery] string? q,
+        [FromQuery] TaskTypeKind? typeKind,
+        [FromQuery] TaskPriority? priority,
+        [FromQuery] string? fql,
+        [FromQuery] Guid? statusId,
+        [FromQuery] StatusType? statusType,
+        [FromQuery] bool? other,
+        [FromQuery] int? offset,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        if (typeKind is { } kind && !Enum.IsDefined(kind))
+            return BadRequest(new { Message = $"Unknown task type kind {kind}." });
+        if (priority is { } p && !Enum.IsDefined(p))
+            return BadRequest(new { Message = $"Unknown priority {p}." });
+        if (statusType is { } st && !Enum.IsDefined(st))
+            return BadRequest(new { Message = $"Unknown status type {st}." });
+
+        try
+        {
+            var response = await mediator.Send(
+                new TaskBoardQuery(actor.Require(), boardId, assigneeId, unassigned == true, q, typeKind, priority, fql,
+                    statusId, statusType, other == true, offset ?? 0, limit),
+                cancellationToken);
+
+            return response is null ? NotFound() : Ok(response);
+        }
+        catch (FqlException ex)
+        {
+            return BadRequest(new FqlErrorResponse(ex.Message, ex.Position, ex.Length));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
 
     /// <summary>Куда можно перевести задачу по workflow проекта: по каждому статусу — можно ли и почему нет.</summary>
     [HttpGet("tasks/{id:guid}/transitions")]
@@ -292,7 +339,14 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         try
         {
             var result = await mediator.Send(command, cancellationToken);
-            return result.IsNotFound ? NotFound() : Ok(result.Response);
+            if (result.IsNotFound)
+                return NotFound();
+
+            // Перенос в колонку канбана проходит workflow: отказ — 400 с причинами, как у PATCH /tasks/{id}.
+            if (result.ValidationError is { } error)
+                return BadRequest(result.Reasons is { } reasons ? new { Message = error, Reasons = reasons } : new { Message = error });
+
+            return Ok(result.Response);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {

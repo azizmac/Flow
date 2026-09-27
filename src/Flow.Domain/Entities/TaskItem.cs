@@ -63,6 +63,13 @@ public sealed class TaskItem
     public DateTime UpdatedAt { get; private set; }
 
     /// <summary>
+    /// Когда задача последний раз сменила статус — по нему финальная колонка канбана отбирает «закрытые за N дней».
+    /// Ставит IUnitOfWork при сохранении, как и UpdatedAt: любой путь смены статуса (правка, перетаскивание,
+    /// перенос при удалении статуса) не сможет её забыть.
+    /// </summary>
+    public DateTime StatusChangedAt { get; private set; }
+
+    /// <summary>
     /// Родитель в иерархии (docs/TZ_task_model.md §3); null — задача верхнего уровня. Родитель всегда в том же
     /// проекте и строго выше по уровню типа, поэтому циклов и глубины больше четырёх не бывает по построению.
     /// </summary>
@@ -100,6 +107,7 @@ public sealed class TaskItem
         TypeId = typeId;
         CreatedAt = DateTime.UtcNow;
         UpdatedAt = CreatedAt;
+        StatusChangedAt = CreatedAt;
     }
 
     public void Rename(string title) => Title = ValidateTitle(title);
@@ -285,6 +293,9 @@ public sealed class TaskItem
 
     /// <summary>Ставит IUnitOfWork при сохранении изменённой задачи; вызывать из хендлеров не нужно.</summary>
     public void Touch(DateTime utcNow) => UpdatedAt = utcNow;
+
+    /// <summary>Ставит IUnitOfWork, когда при сохранении изменился StatusId.</summary>
+    public void MarkStatusChanged(DateTime utcNow) => StatusChangedAt = utcNow;
 
     private static string ValidateTitle(string title)
     {

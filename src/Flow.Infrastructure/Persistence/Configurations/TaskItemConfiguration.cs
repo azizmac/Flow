@@ -37,6 +37,7 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(t => t.EstimateMinutes);
 
         builder.Property(t => t.UpdatedAt).IsRequired();
+        builder.Property(t => t.StatusChangedAt).IsRequired();
 
         // Restrict, как у статуса: тип удаляется только вместе с проектом, и тогда задачи уходят первыми
         // (BoardRepository.RemoveAsync). Индекс — под фильтр «все ошибки» (join TaskTypes по виду).

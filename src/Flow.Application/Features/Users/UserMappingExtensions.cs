@@ -73,7 +73,11 @@ public static class UserMappingExtensions
         preferences.SidebarMode.ToResponseSidebarMode(),
         preferences.StartPage.ToResponseStartPage(),
         preferences.TasksPageSize,
-        UserPreferences.AllowedTasksPageSizes);
+        UserPreferences.AllowedTasksPageSizes,
+        (Flow.Shared.Contracts.Users.TaskView)(int)preferences.TasksView);
+
+    public static Flow.Domain.Entities.TaskView ToDomainTaskView(this Flow.Shared.Contracts.Users.TaskView view) =>
+        Enum.IsDefined(view) ? (Flow.Domain.Entities.TaskView)(int)view : throw new ArgumentOutOfRangeException(nameof(view), view, "Unknown TaskView.");
 
     /// <summary>Значения зеркал совпадают, как у UserRole; неизвестное значение из запроса — ArgumentException (400).</summary>
     public static SharedSidebarMode ToResponseSidebarMode(this DomainSidebarMode mode) =>

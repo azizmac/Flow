@@ -114,7 +114,7 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
     public async Task<TaskCounts> CountAsync(TaskListFilter filter, CancellationToken cancellationToken)
     {
         // Счётчики показывают, сколько задач найдётся в каждом статусе, поэтому сам фильтр статуса здесь снят.
-        var query = Filtered(filter with { StatusId = null, StatusType = null });
+        var query = Filtered(filter with { StatusId = null, StatusType = null, UntypedStatus = false });
 
         // Matched — число задач с учётом всех фильтров: по нему таблица считает количество страниц.
         var matched = await Filtered(filter).CountAsync(cancellationToken);
@@ -162,6 +162,15 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
 
         if (filter.StatusType is { } statusType)
             query = query.Where(t => db.Statuses.Any(s => s.Id == t.StatusId && s.Type == statusType));
+
+        if (filter.UntypedStatus)
+            query = query.Where(t => db.Statuses.Any(s => s.Id == t.StatusId && s.Type == null));
+
+        // Окно финальной колонки канбана: у каждого проекта своё число дней, поэтому оно берётся из доски задачи.
+        if (filter.DoneWindowAt is { } now)
+            query = query.Where(t =>
+                !db.Statuses.Any(s => s.Id == t.StatusId && s.IsFinal)
+                || t.StatusChangedAt >= now.AddDays(-db.Boards.Where(b => b.Id == t.BoardId).Select(b => b.DoneColumnDays).First()));
 
         // Вид типа — общий ключ для всех проектов, как StatusType: «все ошибки» ищутся без знания Id типов.
         if (filter.TypeKind is { } typeKind)

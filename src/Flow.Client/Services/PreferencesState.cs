@@ -20,6 +20,9 @@ public sealed class PreferencesState(IFlowApi api, AppState state, Authenticatio
 
     public int TasksPageSize => Current?.TasksPageSize ?? DefaultTasksPageSize;
 
+    /// <summary>Вид экрана «Задачи», когда в адресе нет ?view= (docs/TZ_task_views.md).</summary>
+    public TaskView TasksView => Current?.TasksView ?? TaskView.List;
+
     public event Action? Changed;
 
     /// <summary>Один запрос на circuit; неудача не запоминается — следующий вызов попробует снова.</summary>
