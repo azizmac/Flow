@@ -2,8 +2,8 @@ namespace Flow.Domain.Entities;
 
 /// <summary>
 /// Статус задачи, настраиваемый на уровне доски (как колонка в канбане).
-/// Создаётся только через <see cref="Board.AddStatus"/>, чтобы инвариант
-/// "не более одного начального и одного финального статуса на доску" проверялся в одном месте.
+/// Создаётся и меняется только через методы <see cref="Board"/>, чтобы инварианты «ровно один начальный,
+/// хотя бы один финальный, имя уникально в проекте» проверялись в одном месте (docs/TZ_workflow_config.md §1).
 /// </summary>
 public sealed class Status
 {
@@ -39,17 +39,27 @@ public sealed class Status
         Type = type;
     }
 
-    public void Rename(string name) => Name = ValidateName(name);
+    public const int NameMaxLength = 100;
+
+    internal void Rename(string name) => Name = ValidateName(name);
 
     internal void SetInitial(bool isInitial) => IsInitial = isInitial;
 
     internal void SetFinal(bool isFinal) => IsFinal = isFinal;
 
-    private static string ValidateName(string name)
+    internal void SetType(StatusType? type) => Type = type;
+
+    internal void SetSortOrder(int sortOrder) => SortOrder = sortOrder;
+
+    internal static string ValidateName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Status name must not be empty.", nameof(name));
 
-        return name.Trim();
+        var trimmed = name.Trim();
+        if (trimmed.Length > NameMaxLength)
+            throw new ArgumentException($"Status name must be at most {NameMaxLength} characters.", nameof(name));
+
+        return trimmed;
     }
 }

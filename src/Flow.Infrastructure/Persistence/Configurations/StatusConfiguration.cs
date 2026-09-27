@@ -9,6 +9,9 @@ public sealed class StatusConfiguration : IEntityTypeConfiguration<Status>
     public void Configure(EntityTypeBuilder<Status> builder)
     {
         builder.HasKey(s => s.Id);
+        // Id задаёт домен. Без ValueGeneratedNever EF принимает статус, добавленный в уже сохранённый проект
+        // (этап 3A), за существующий и шлёт UPDATE вместо INSERT — та же ловушка, что у TaskType.
+        builder.Property(s => s.Id).ValueGeneratedNever();
 
         builder.Property(s => s.Name)
             .IsRequired()

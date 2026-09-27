@@ -1,0 +1,51 @@
+@* Вид статуса «в строке» — как ProjectRoleSelect: пилюля с точкой + меню видов. null — «Без вида»:
+   статус проекта, который не попадает ни в одну группу фильтра по видам. *@
+
+<MudMenu @bind-Open="_open" PopoverClass="flow-pop" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomLeft"
+         TransformOrigin="Origin.TopLeft" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Сменить вид статуса">
+    <ActivatorContent>
+        <div class="status-sel @(Disabled ? "disabled" : "")" @onclick="Toggle" @onclick:stopPropagation
+             @onkeydown="OnKey" @onkeydown:stopPropagation
+             role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-disabled="@(Disabled ? "true" : "false")"
+             aria-expanded="@(_open ? "true" : "false")" title="Вид статуса: по нему фильтруют задачи во всех проектах">
+            <span class="sd" style="background:@StatusColors.For(Value)"></span>
+            <span class="lbl">@StatusColors.TypeLabel(Value)</span>
+            <Icon Name="chevrons" Size="12" />
+        </div>
+    </ActivatorContent>
+    <ChildContent>
+        @foreach (var type in StatusColors.TypeOptions)
+        {
+            <MudMenuItem Class="@($"pop-item {(type == Value ? "cur" : "")}")" OnClick="() => Select(type)">
+                <span class="sd" style="background:@StatusColors.For(type)"></span>@StatusColors.TypeLabel(type)
+            </MudMenuItem>
+        }
+    </ChildContent>
+</MudMenu>
+
+@code {
+    [Parameter] public StatusType? Value { get; set; }
+    [Parameter] public EventCallback<StatusType?> OnChange { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private bool _open;
+
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (!Disabled && e.Key is "Enter" or " " or "ArrowDown")
+            _open = true;
+    }
+
+    private void Toggle()
+    {
+        if (!Disabled)
+            _open = !_open;
+    }
+
+    private async Task Select(StatusType? type)
+    {
+        _open = false;
+        if (type != Value)
+            await OnChange.InvokeAsync(type);
+    }
+}

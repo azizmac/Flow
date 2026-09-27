@@ -27,6 +27,10 @@
         {
             <MudMenuItem Class="pop-item" OnClick="OnAccess"><Icon Name="users" Size="15" />Доступ</MudMenuItem>
         }
+        @if (ShowStatuses)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnStatuses"><Icon Name="list" Size="15" />Статусы</MudMenuItem>
+        }
         @if (ShowTaskTypes)
         {
             <MudMenuItem Class="pop-item" OnClick="OnTaskTypes"><Icon Name="settings" Size="15" />Типы задач</MudMenuItem>
@@ -48,6 +52,9 @@
     /// <summary>Пункт «Типы задач» — только у проекта и только для тех, кто может им управлять.</summary>
     [Parameter] public bool ShowTaskTypes { get; set; }
     [Parameter] public EventCallback OnTaskTypes { get; set; }
+    /// <summary>Пункт «Статусы» — на тех же условиях, что «Типы задач» (право настраивать проект).</summary>
+    [Parameter] public bool ShowStatuses { get; set; }
+    [Parameter] public EventCallback OnStatuses { get; set; }
     /// <summary>Пункт «Доступ» (участники и роль по умолчанию) — для администратора проекта.</summary>
     [Parameter] public bool ShowAccess { get; set; }
     [Parameter] public EventCallback OnAccess { get; set; }

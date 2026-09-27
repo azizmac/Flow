@@ -40,6 +40,7 @@
                 }
                 @if (Permissions.CanManageConfig(boardAccess))
                 {
+                    <DsIconButton Icon="list" Size="30" Title="Статусы проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _statusesOpen = true" />
                     <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _typesOpen = true" />
                 }
                 @if (Permissions.CanManageMembers(boardAccess))
@@ -265,6 +266,11 @@
     <ProjectAccessDialog Board="accessBoard" OnClose="() => _accessOpen = false" />
 }
 
+@if (_statusesOpen && CurrentBoard is { } statusesBoard)
+{
+    <StatusesDialog Board="statusesBoard" OnChanged="OnStatusesChanged" OnClose="() => _statusesOpen = false" />
+}
+
 @if (_typesOpen && CurrentBoard is { } typesBoard)
 {
     <TaskTypesDialog Board="typesBoard" OnChanged="ReplaceBoard" OnClose="() => _typesOpen = false" />
@@ -335,6 +341,19 @@
 
     /// <summary>Открыта модалка типов задач текущего проекта.</summary>
     private bool _typesOpen;
+
+    /// <summary>Открыта модалка статусов текущего проекта.</summary>
+    private bool _statusesOpen;
+
+    /// <summary>
+    /// Статусы — часть строки задачи (пилюля, порядок сортировки, «закрыта»), а удаление статуса переносит задачи:
+    /// после любой правки список перечитывается, не только проект в шапке.
+    /// </summary>
+    private async Task OnStatusesChanged(BoardResponse updated)
+    {
+        ReplaceBoard(updated);
+        await Reload();
+    }
 
     private void ReplaceBoard(BoardResponse updated)
     {

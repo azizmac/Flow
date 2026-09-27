@@ -11,10 +11,10 @@
                 <span class="lock-ico" title="Приватный проект: видят только участники"><Icon Name="lock" Size="13" /></span>
             }
         </span>
-        <RowMenu ShowOpen="true" ShowRename="CanRename" ShowDelete="CanDelete" ShowTaskTypes="CanConfigure" ShowAccess="CanManageMembers"
+        <RowMenu ShowOpen="true" ShowRename="CanRename" ShowDelete="CanDelete" ShowTaskTypes="CanConfigure" ShowStatuses="CanConfigure" ShowAccess="CanManageMembers"
                  Size="26" Style="color:rgba(255,255,255,0.5)"
                  OnOpen="Open" OnRename="StartRename" OnCopy="CopyKey" OnDelete="() => OnDelete.InvokeAsync(Board)"
-                 OnTaskTypes="() => OnTaskTypes.InvokeAsync(Board)" OnAccess="() => OnAccess.InvokeAsync(Board)" />
+                 OnTaskTypes="() => OnTaskTypes.InvokeAsync(Board)" OnStatuses="() => OnStatuses.InvokeAsync(Board)" OnAccess="() => OnAccess.InvokeAsync(Board)" />
     </div>
     <div>
         <div class="board-card-name">
@@ -50,6 +50,7 @@
     [Parameter] public EventCallback<(BoardResponse Board, string Name)> OnRename { get; set; }
     [Parameter] public EventCallback<BoardResponse> OnDelete { get; set; }
     [Parameter] public EventCallback<BoardResponse> OnTaskTypes { get; set; }
+    [Parameter] public EventCallback<BoardResponse> OnStatuses { get; set; }
     /// <summary>Права в этом проекте (Permissions.CanRenameBoard / CanDeleteBoard / CanManageConfig / CanManageMembers).</summary>
     [Parameter] public bool CanRename { get; set; }
     [Parameter] public bool CanDelete { get; set; }

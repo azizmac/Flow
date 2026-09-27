@@ -9,6 +9,9 @@ public interface ITaskItemRepository
     /// <summary>assigneeId = null — все задачи доски; иначе только назначенные на этого пользователя.</summary>
     Task<IReadOnlyList<TaskItem>> GetByBoardIdAsync(Guid boardId, Guid? assigneeId, CancellationToken cancellationToken);
 
+    /// <summary>Задачи в статусе — отслеживаемые: их переводят в другой статус при удалении этого (docs/TZ_workflow_config.md §1).</summary>
+    Task<IReadOnlyList<TaskItem>> GetByStatusIdAsync(Guid statusId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Страница задач по отбору, от новых к старым. Возвращает не больше <see cref="TaskListFilter.Limit"/> задач;
     /// «есть ли ещё» вызывающая сторона определяет по тому, заполнилась ли страница целиком.

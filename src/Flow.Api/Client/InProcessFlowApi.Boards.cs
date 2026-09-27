@@ -8,6 +8,10 @@ using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
 using Flow.Application.Features.Boards.Commands.BoardVisibilitySetCommand;
 using Flow.Application.Features.Boards.Queries.BoardMembersQuery;
 using Flow.Application.Features.Boards.Queries.BoardMyAccessQuery;
+using Flow.Application.Features.Boards.Commands.StatusCreateCommand;
+using Flow.Application.Features.Boards.Commands.StatusDeleteCommand;
+using Flow.Application.Features.Boards.Commands.StatusReorderCommand;
+using Flow.Application.Features.Boards.Commands.StatusUpdateCommand;
 using Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
 using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
@@ -73,6 +77,42 @@ internal sealed partial class InProcessFlowApi
             var actor = await ActorAsync();
             var response = await mediator.Send(
                 new TaskTypeUpdateCommand(actor, boardId, typeId, request.Name, request.IsDefault, request.IsArchived), ct);
+            return response is null ? NotFound<BoardResponse>() : Ok(response);
+        });
+
+    /// <summary>Статусы (этап 3A): ответ — проект целиком, флаги «начальный»/«финальный» могли переехать.</summary>
+    public Task<ApiResult<BoardResponse>> CreateStatus(Guid boardId, CreateStatusRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var actor = await ActorAsync();
+            var response = await mediator.Send(
+                new StatusCreateCommand(actor, boardId, request.Name, request.Type?.ToDomainStatusType(), request.IsFinal), ct);
+            return response is null ? NotFound<BoardResponse>() : Ok(response);
+        });
+
+    public Task<ApiResult<BoardResponse>> UpdateStatus(Guid boardId, Guid statusId, UpdateStatusRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var actor = await ActorAsync();
+            var response = await mediator.Send(
+                new StatusUpdateCommand(actor, boardId, statusId, request.Name, request.IsFinal, request.IsInitial,
+                    request.Type?.ToDomainStatusType(), request.ClearType), ct);
+            return response is null ? NotFound<BoardResponse>() : Ok(response);
+        });
+
+    public Task<ApiResult<BoardResponse>> DeleteStatus(Guid boardId, Guid statusId, Guid moveTo, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var actor = await ActorAsync();
+            var response = await mediator.Send(new StatusDeleteCommand(actor, boardId, statusId, moveTo), ct);
+            return response is null ? NotFound<BoardResponse>() : Ok(response);
+        });
+
+    public Task<ApiResult<BoardResponse>> ReorderStatuses(Guid boardId, ReorderStatusesRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var actor = await ActorAsync();
+            var response = await mediator.Send(new StatusReorderCommand(actor, boardId, request.StatusIds), ct);
             return response is null ? NotFound<BoardResponse>() : Ok(response);
         });
 

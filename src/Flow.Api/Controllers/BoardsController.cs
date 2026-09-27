@@ -8,6 +8,10 @@ using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
 using Flow.Application.Features.Boards.Commands.BoardVisibilitySetCommand;
 using Flow.Application.Features.Boards.Queries.BoardMembersQuery;
 using Flow.Application.Features.Boards.Queries.BoardMyAccessQuery;
+using Flow.Application.Features.Boards.Commands.StatusCreateCommand;
+using Flow.Application.Features.Boards.Commands.StatusDeleteCommand;
+using Flow.Application.Features.Boards.Commands.StatusReorderCommand;
+using Flow.Application.Features.Boards.Commands.StatusUpdateCommand;
 using Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
 using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
@@ -106,6 +110,75 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
                 new TaskTypeUpdateCommand(actor.Require(), id, typeId, request.Name, request.IsDefault, request.IsArchived),
                 cancellationToken);
 
+            return response is null ? NotFound() : Ok(response);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
+    // ---- Статусы (docs/TZ_workflow_config.md §1, этап 3A). Ответ — проект целиком: флаги могли переехать. ----
+
+    /// <summary>Добавить статус в конец списка. 400 — занятое имя или неизвестный вид.</summary>
+    [HttpPost("{id:guid}/statuses")]
+    public async Task<IActionResult> CreateStatus(Guid id, CreateStatusRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await mediator.Send(
+                new StatusCreateCommand(actor.Require(), id, request.Name, request.Type?.ToDomainStatusType(), request.IsFinal),
+                cancellationToken);
+
+            return response is null ? NotFound() : Ok(response);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
+    /// <summary>PATCH статуса: имя, вид, «финальный», «начальный» (только true). 400 — нарушение инварианта.</summary>
+    [HttpPatch("{id:guid}/statuses/{statusId:guid}")]
+    public async Task<IActionResult> UpdateStatus(Guid id, Guid statusId, UpdateStatusRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await mediator.Send(
+                new StatusUpdateCommand(actor.Require(), id, statusId, request.Name, request.IsFinal, request.IsInitial,
+                    request.Type?.ToDomainStatusType(), request.ClearType),
+                cancellationToken);
+
+            return response is null ? NotFound() : Ok(response);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
+    /// <summary>Удалить статус, переведя задачи в <paramref name="moveTo"/>. 400 — начальный, последний финальный, moveTo не из проекта.</summary>
+    [HttpDelete("{id:guid}/statuses/{statusId:guid}")]
+    public async Task<IActionResult> DeleteStatus(Guid id, Guid statusId, [FromQuery] Guid moveTo, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await mediator.Send(new StatusDeleteCommand(actor.Require(), id, statusId, moveTo), cancellationToken);
+            return response is null ? NotFound() : Ok(response);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
+    /// <summary>Новый порядок статусов — полный список Id. 400 — неполный или с чужими Id.</summary>
+    [HttpPut("{id:guid}/statuses/order")]
+    public async Task<IActionResult> ReorderStatuses(Guid id, ReorderStatusesRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await mediator.Send(new StatusReorderCommand(actor.Require(), id, request.StatusIds), cancellationToken);
             return response is null ? NotFound() : Ok(response);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)

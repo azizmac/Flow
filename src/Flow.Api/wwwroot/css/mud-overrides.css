@@ -227,6 +227,9 @@ a.mud-link:hover {
     box-shadow: var(--shadow-modal);
 }
 
+/* «Статусы»: в строке имя, вид, два флага и корзина — в 440px имя сжималось до пары букв. */
+.mud-dialog.flow-modal.st-modal { width: 640px; }
+
 .flow-modal .flow-modal-title {
     padding: 0;
 }

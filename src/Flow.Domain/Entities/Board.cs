@@ -91,32 +91,112 @@ public sealed partial class Board
         DefaultRole = role;
     }
 
-    /// <summary>Добавляет статус задачи на доску. На доске может быть максимум один начальный и один финальный статус.</summary>
+    /// <summary>
+    /// Добавляет статус в конец списка. Начальный — ровно один (перенести флаг — <see cref="SetInitialStatus"/>),
+    /// финальных может быть несколько («Сделана», «Отменена»): статус закрывает задачу, если он финальный.
+    /// Начальный не может быть финальным — иначе новые задачи рождались бы закрытыми.
+    /// </summary>
     public Status AddStatus(string name, StatusType? type = null, bool isInitial = false, bool isFinal = false)
     {
         if (isInitial && _statuses.Any(s => s.IsInitial))
             throw new InvalidOperationException($"Board {Id} already has an initial status.");
 
-        if (isFinal && _statuses.Any(s => s.IsFinal))
-            throw new InvalidOperationException($"Board {Id} already has a final status.");
+        if (isInitial && isFinal)
+            throw new InvalidOperationException("The initial status cannot be final.");
 
-        var sortOrder = _statuses.Count == 0 ? 0 : _statuses.Max(s => s.SortOrder) + 1;
-        var status = new Status(Id, name, sortOrder, isInitial, isFinal, type);
+        if (type is { } t && !Enum.IsDefined(t))
+            throw new ArgumentException($"Unknown status type {t}.", nameof(type));
+
+        var normalized = Status.ValidateName(name);
+        EnsureStatusNameFree(normalized, exceptId: null);
+
+        var sortOrder = NextStatusSortOrder();
+        var status = new Status(Id, normalized, sortOrder, isInitial, isFinal, type);
         _statuses.Add(status);
         return status;
     }
 
-    /// <summary>Переносит флаг "начальный статус" на другой статус доски. Название статуса при этом не важно.</summary>
+    /// <summary>Переносит флаг "начальный статус" на другой статус доски. Финальный начальным быть не может.</summary>
     public void SetInitialStatus(Guid statusId)
     {
-        var target = _statuses.SingleOrDefault(s => s.Id == statusId)
-            ?? throw new InvalidOperationException($"Status {statusId} does not belong to board {Id}.");
+        var target = GetStatus(statusId);
+        if (target.IsFinal)
+            throw new InvalidOperationException("A final status cannot be the initial one.");
 
         foreach (var status in _statuses.Where(s => s.IsInitial))
             status.SetInitial(false);
 
         target.SetInitial(true);
     }
+
+    public void RenameStatus(Guid statusId, string name)
+    {
+        var status = GetStatus(statusId);
+        var normalized = Status.ValidateName(name);
+        EnsureStatusNameFree(normalized, exceptId: statusId);
+        status.Rename(normalized);
+    }
+
+    /// <summary>Финальный статус закрывает задачу. Последний финальный снять нельзя, начальный финальным не сделать.</summary>
+    public void SetStatusFinal(Guid statusId, bool isFinal)
+    {
+        var status = GetStatus(statusId);
+        if (isFinal && status.IsInitial)
+            throw new InvalidOperationException("The initial status cannot be final.");
+        if (!isFinal && status.IsFinal && _statuses.Count(s => s.IsFinal) == 1)
+            throw new InvalidOperationException("A board must keep at least one final status.");
+
+        status.SetFinal(isFinal);
+    }
+
+    /// <summary>Вид статуса — общий для проектов ключ фильтров («в работе» во всех проектах); null — свой статус без вида.</summary>
+    public void SetStatusType(Guid statusId, StatusType? type)
+    {
+        if (type is { } t && !Enum.IsDefined(t))
+            throw new ArgumentException($"Unknown status type {t}.", nameof(type));
+
+        GetStatus(statusId).SetType(type);
+    }
+
+    /// <summary>
+    /// Новый порядок статусов — полный список Id проекта. SortOrder переписывается значениями выше текущего
+    /// максимума: unique (BoardId, SortOrder) в БД проверяется построчно, и обмен двух значений на месте упёрся бы
+    /// в него на первой же строке. Числа растут, но служат только для ORDER BY.
+    /// </summary>
+    public void ReorderStatuses(IReadOnlyList<Guid> statusIds)
+    {
+        if (statusIds.Count != _statuses.Count || statusIds.Distinct().Count() != statusIds.Count
+            || statusIds.Any(id => _statuses.All(s => s.Id != id)))
+            throw new ArgumentException("The new order must list every status of the board exactly once.", nameof(statusIds));
+
+        var next = NextStatusSortOrder();
+        for (var i = 0; i < statusIds.Count; i++)
+            GetStatus(statusIds[i]).SetSortOrder(next + i);
+    }
+
+    /// <summary>
+    /// Удаляет статус. Задачи из него хендлер переводит в <paramref name="moveTasksTo"/> заранее (со своим журналом):
+    /// доска свои задачи не держит. Нельзя удалить начальный и последний финальный.
+    /// </summary>
+    public void RemoveStatus(Guid statusId, Guid moveTasksTo)
+    {
+        var status = GetStatus(statusId);
+        if (moveTasksTo == statusId)
+            throw new InvalidOperationException("Tasks must move to another status.");
+
+        GetStatus(moveTasksTo);
+
+        if (status.IsInitial)
+            throw new InvalidOperationException("The initial status cannot be removed; make another status initial first.");
+        if (status.IsFinal && _statuses.Count(s => s.IsFinal) == 1)
+            throw new InvalidOperationException("The last final status cannot be removed.");
+
+        _statuses.Remove(status);
+    }
+
+    public Status GetStatus(Guid statusId) =>
+        _statuses.SingleOrDefault(s => s.Id == statusId)
+        ?? throw new InvalidOperationException($"Status {statusId} does not belong to board {Id}.");
 
     /// <summary>
     /// Добавляет тип задачи. Имя уникально в проекте без учёта регистра; <paramref name="isDefault"/> переносит
@@ -214,6 +294,14 @@ public sealed partial class Board
         var task = new TaskItem(Id, code, title, description, resolvedStatusId, createdById, type.Id);
         _tasks.Add(task);
         return task;
+    }
+
+    private int NextStatusSortOrder() => _statuses.Count == 0 ? 0 : _statuses.Max(s => s.SortOrder) + 1;
+
+    private void EnsureStatusNameFree(string name, Guid? exceptId)
+    {
+        if (_statuses.Any(s => s.Id != exceptId && string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Status \"{name}\" already exists on board {Id}.");
     }
 
     private void EnsureTaskTypeNameFree(string name, Guid? exceptId)

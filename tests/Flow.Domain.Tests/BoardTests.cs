@@ -114,11 +114,15 @@ public class BoardTests
     }
 
     [Fact]
-    public void AddStatus_Should_Throw_When_SecondFinalStatusAdded()
+    public void AddStatus_Should_Allow_Several_Final_Statuses()
     {
+        // docs/TZ_workflow_config.md §1: «Сделана» и «Отменена» закрывают задачу одинаково.
         var board = Board.Create("Flow Project", "FLW");
 
-        Assert.Throws<InvalidOperationException>(() => board.AddStatus("Another final", isFinal: true));
+        var cancelled = board.AddStatus("Отменена", isFinal: true);
+
+        Assert.True(cancelled.IsFinal);
+        Assert.Equal(2, board.Statuses.Count(s => s.IsFinal));
     }
 
     [Fact]

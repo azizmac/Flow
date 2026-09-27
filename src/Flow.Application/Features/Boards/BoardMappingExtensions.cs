@@ -90,4 +90,14 @@ public static class BoardMappingExtensions
         DomainStatusType.Done => SharedStatusType.Done,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown StatusType.")
     };
+
+    /// <summary>Обратный маппинг вида статуса для команд; неизвестное значение — ArgumentOutOfRangeException (400).</summary>
+    public static DomainStatusType ToDomainStatusType(this SharedStatusType type) => type switch
+    {
+        SharedStatusType.NotStarted => DomainStatusType.NotStarted,
+        SharedStatusType.InProgress => DomainStatusType.InProgress,
+        SharedStatusType.InReview => DomainStatusType.InReview,
+        SharedStatusType.Done => DomainStatusType.Done,
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown StatusType.")
+    };
 }

@@ -18,6 +18,9 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<TaskItem>> GetByStatusIdAsync(Guid statusId, CancellationToken cancellationToken) =>
+        await db.TaskItems.Where(t => t.StatusId == statusId).ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<TaskItem>> SearchAsync(TaskListFilter filter, CancellationToken cancellationToken)
     {
         var query = Filtered(filter);

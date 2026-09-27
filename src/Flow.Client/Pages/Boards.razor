@@ -50,7 +50,7 @@
                 <BoardCard @key="b.Id" Board="b" OnOpen="Open" OnRename="Rename" OnDelete="AskDelete" OnCopy="CopyKey"
                            CanRename="Permissions.CanRenameBoard(access)" CanDelete="Permissions.CanDeleteBoard(Me, access)"
                            CanConfigure="Permissions.CanManageConfig(access)" CanManageMembers="Permissions.CanManageMembers(access)"
-                           OnTaskTypes="bb => _typesBoard = bb" OnAccess="bb => _accessBoard = bb" />
+                           OnTaskTypes="bb => _typesBoard = bb" OnStatuses="bb => _statusesBoard = bb" OnAccess="bb => _accessBoard = bb" />
             }
             @if (!HasSearch && CanManage)
             {
@@ -81,6 +81,11 @@
     <TaskTypesDialog Board="_typesBoard" OnChanged="Replace" OnClose="() => _typesBoard = null" />
 }
 
+@if (_statusesBoard is not null)
+{
+    <StatusesDialog Board="_statusesBoard" OnChanged="Replace" OnClose="() => _statusesBoard = null" />
+}
+
 @if (_accessBoard is not null)
 {
     <ProjectAccessDialog Board="_accessBoard" OnClose="() => _accessBoard = null" />
@@ -103,6 +108,8 @@
     private BoardResponse? _deleting;
     /// <summary>Проект, чьи типы задач сейчас редактируются в модалке; null — модалка закрыта.</summary>
     private BoardResponse? _typesBoard;
+    /// <summary>Проект, чьи статусы сейчас редактируются; null — модалка закрыта.</summary>
+    private BoardResponse? _statusesBoard;
     private IDisposable? _hotkeys;
 
     private bool HasSearch => _search.Trim().Length > 0;
@@ -231,6 +238,7 @@
         var i = _boards.FindIndex(x => x.Id == updated.Id);
         if (i >= 0) _boards[i] = updated;
         if (_typesBoard?.Id == updated.Id) _typesBoard = updated;
+        if (_statusesBoard?.Id == updated.Id) _statusesBoard = updated;
     }
 
     private void OnUsersChanged() => InvokeAsync(StateHasChanged);

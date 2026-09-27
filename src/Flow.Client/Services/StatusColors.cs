@@ -14,6 +14,19 @@ public static class StatusColors
         _ => "var(--danger)"
     };
 
+    /// <summary>Подпись вида статуса: вид общий для всех проектов, по нему работают фильтры «Задач» и поиска.</summary>
+    public static string TypeLabel(StatusType? type) => type switch
+    {
+        StatusType.NotStarted => "Не начата",
+        StatusType.InProgress => "В работе",
+        StatusType.InReview => "На проверке",
+        StatusType.Done => "Сделана",
+        _ => "Без вида"
+    };
+
+    public static readonly IReadOnlyList<StatusType?> TypeOptions =
+        [StatusType.NotStarted, StatusType.InProgress, StatusType.InReview, StatusType.Done, null];
+
     /// <summary>Статуса может не быть в списке проекта (Current = null) — тогда цвет «неизвестного».</summary>
     public static string For(StatusResponse? status) => For(status?.Type);
 }

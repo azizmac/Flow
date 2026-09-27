@@ -148,7 +148,6 @@ namespace Flow.Infrastructure.Migrations
             modelBuilder.Entity("Flow.Domain.Entities.Status", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("BoardId")

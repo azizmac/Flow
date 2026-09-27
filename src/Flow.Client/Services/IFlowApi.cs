@@ -45,6 +45,11 @@ public interface IFlowApi
     Task<ApiResult<bool>> DeleteBoard(Guid id, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> CreateTaskType(Guid boardId, CreateTaskTypeRequest request, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> UpdateTaskType(Guid boardId, Guid typeId, UpdateTaskTypeRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> CreateStatus(Guid boardId, CreateStatusRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> UpdateStatus(Guid boardId, Guid statusId, UpdateStatusRequest request, CancellationToken ct = default);
+    /// <summary>Удалить статус, переведя его задачи в <paramref name="moveTo"/> (в журнал задач — смена статуса).</summary>
+    Task<ApiResult<BoardResponse>> DeleteStatus(Guid boardId, Guid statusId, Guid moveTo, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> ReorderStatuses(Guid boardId, ReorderStatusesRequest request, CancellationToken ct = default);
 
     // ---- Доступ к проектам ----
     Task<ApiResult<IReadOnlyList<ProjectAccessResponse>>> GetMyAccess(CancellationToken ct = default);

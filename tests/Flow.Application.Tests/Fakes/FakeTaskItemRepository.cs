@@ -22,6 +22,9 @@ public sealed class FakeTaskItemRepository : ITaskItemRepository
             .Where(t => assigneeId is null || t.AssigneeId == assigneeId)
             .ToList());
 
+    public Task<IReadOnlyList<TaskItem>> GetByStatusIdAsync(Guid statusId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TaskItem>>(_tasks.Where(t => t.StatusId == statusId).ToList());
+
     public Task<IReadOnlyList<TaskItem>> SearchAsync(TaskListFilter filter, CancellationToken cancellationToken)
     {
         var ordered = Filtered(filter)
