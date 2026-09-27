@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using Flow.Application.Abstractions;
 using Flow.Application.Features.Attachments.Commands.AttachmentDeleteCommand;
 using Flow.Application.Features.Attachments.Commands.AttachmentUploadCommand;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
@@ -11,6 +12,7 @@ using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
 using Flow.Shared.Contracts.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Fonts.Standard14Fonts;
@@ -213,6 +215,46 @@ public class AttachmentIndexingTests(SearchFixture fixture)
 
         // Прогон картинки дороже текстового на порядок — переиндексация не должна платить за него дважды.
         Assert.Equal(before, fixture.Vision.ImageCalls);
+    }
+
+    [Fact]
+    public async Task Image_Found_By_Its_Frame_Is_Marked_Visual_And_By_Its_Name_Is_Not()
+    {
+        var (board, task) = await CreateTaskAsync();
+        var attachmentId = await UploadAsync(task.Id, "схема склада.png", Png);
+        await fixture.DrainIndexingAsync();
+        // Тот же вектор, что получил кадр при индексации: фейк детерминирован по байтам картинки.
+        var frame = await fixture.Vision.EmbedImageAsync(Png, "image/png", CancellationToken.None);
+
+        var byFrame = await SearchHitsAsync(board.Id, "что-то на картинке", useText: false, vision: frame);
+        var byName = await SearchHitsAsync(board.Id, "схема склада", useText: true, vision: null);
+
+        // По кадру картинку находит визуальная половина, и лучший её чанк — визуальный: в нём только имя
+        // файла, поэтому реранкер эту находку не трогает. По имени её находит полнотекст — там это обычный текст.
+        Assert.True(Assert.Single(byFrame, hit => hit.SourceId == attachmentId).IsVisual);
+        Assert.False(Assert.Single(byName, hit => hit.SourceId == attachmentId).IsVisual);
+    }
+
+    private async Task<IReadOnlyList<SearchHit>> SearchHitsAsync(Guid boardId, string query, bool useText, float[]? vision)
+    {
+        await using var scope = fixture.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<ISearchQueryRepository>();
+        var page = await repository.SearchAsync(
+            new SearchCriteria(
+                query,
+                QueryEmbedding: null,
+                UseText: useText,
+                Types: [SearchSourceType.Attachment],
+                BoardId: boardId,
+                IncludeArchived: true,
+                VectorTopN: 50,
+                TextTopN: 50,
+                RrfK: fixture.Options.Query.RrfK,
+                Limit: 10,
+                Offset: 0,
+                VisionQueryEmbedding: vision),
+            CancellationToken.None);
+        return page.Items;
     }
 
     [Fact]

@@ -61,6 +61,8 @@ public sealed record SearchPage(IReadOnlyList<SearchHit> Items, int Total);
 /// <param name="Content">Лучший чанк источника без подсветки — то, что читает реранкер. Наружу не уходит:
 /// клиенту показывается Snippet с &lt;mark&gt;, а модели нужен чистый текст.</param>
 /// <param name="IsClosed">Флаг чанка: задача в финальном статусе. Уходит наружу пометкой «архив».</param>
+/// <param name="IsVisual">Лучший чанк источника — из визуальной половины: картинку нашли по кадру, а в её
+/// <paramref name="Content"/> лежит только имя файла. Реранкер такую находку не видит (см. SearchQueryHandler).</param>
 public sealed record SearchHit(
     SearchSourceType SourceType,
     Guid SourceId,
@@ -72,4 +74,5 @@ public sealed record SearchHit(
     DateTime UpdatedAt,
     Guid? ParentId,
     string Content = "",
-    bool IsClosed = false);
+    bool IsClosed = false,
+    bool IsVisual = false);
