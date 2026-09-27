@@ -12,11 +12,7 @@ namespace Flow.Infrastructure.Tests;
 /// <summary>
 /// Хранилище против настоящего MinIO: подпись запросов, контрольные суммы и path-style адресация
 /// у S3-совместимых сервисов расходятся с AWS, и на заглушке этого не увидеть. Требует Docker.
-///
-/// Из CI временно исключены фильтром Category!=S3: образ MinIO сняли и с quay.io (реестр отвечает
-/// «unauthorized»), и контейнер в CI не поднимается. Локально идут, пока образ лежит в кэше Docker:
-/// dotnet test tests/Flow.Infrastructure.Tests --filter "Category=S3"
-/// Вернуть в CI — вместе с заменой образа (своё зеркало или другой S3-совместимый сервер).
+/// Категория S3 — только чтобы гонять набор отдельно: dotnet test tests/Flow.Infrastructure.Tests --filter "Category=S3".
 /// </summary>
 [Trait("Category", "S3")]
 public sealed class S3FileStorageTests : IAsyncLifetime
@@ -24,11 +20,10 @@ public sealed class S3FileStorageTests : IAsyncLifetime
     private const string Bucket = "flow-test";
 
     /// <summary>
-    /// Образ с quay.io и тот же тег, что в docker-compose.data.yml: из Docker Hub образы MinIO сняты
-    /// («pull access denied»), а модуль Testcontainers по умолчанию тянет именно оттуда.
+    /// Тот же образ и тег, что в docker-compose.data.yml, — форк pgsty: апстримных образов MinIO нет
+    /// ни на Docker Hub, ни на quay.io, а модуль Testcontainers по умолчанию тянет именно их.
     /// </summary>
-    private readonly MinioContainer _container = new MinioBuilder()
-        .WithImage("quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z")
+    private readonly MinioContainer _container = new MinioBuilder("pgsty/minio:RELEASE.2026-08-04T00-00-00Z")
         .Build();
 
     private IAmazonS3 _client = null!;
