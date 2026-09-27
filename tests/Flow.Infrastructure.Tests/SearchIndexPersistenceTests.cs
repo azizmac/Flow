@@ -10,6 +10,7 @@ using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Infrastructure.Persistence;
+using Flow.Infrastructure.Search.Entities;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
 using Flow.Shared.Contracts.Tasks;
@@ -306,6 +307,106 @@ public class SearchIndexPersistenceTests(SearchFixture fixture)
             // Застрявшая запись осталась бы в очереди с LastError и мешала остальным тестам.
             await fixture.ClearQueueAsync();
         }
+    }
+
+    /// <summary>
+    /// Запись, исчерпавшая MaxAttempts, воркером больше не берётся. Так в проде застряли задачи, пока сайдкар
+    /// модели лежал: после его починки reindex обязан вернуть их в работу, а не отсечь как «уже в очереди».
+    /// </summary>
+    [Fact]
+    public async Task Reindex_Revives_Exhausted_Queue_Row()
+    {
+        var board = await CreateBoardAsync();
+        await fixture.DrainIndexingAsync();
+
+        var task = await CreateTaskAsync(board.Id, "Выгрузка накладных в бухгалтерию");
+        try
+        {
+            await ExhaustQueueRowAsync(SearchSourceType.Task, task!.Id);
+            Assert.Equal(0, await fixture.RunIndexingAsync());
+
+            var enqueued = await fixture.SendAsync(new ReindexCommand(Owner, [SearchSourceType.Task], board.Id));
+
+            Assert.Equal(1, enqueued);
+            var row = Assert.Single(await QueueForAsync(SearchSourceType.Task, task.Id));
+            Assert.Equal(0, row.AttemptCount);
+            Assert.Null(row.LastError);
+            // Живая правка остаётся живой: массовый прогон её приоритет не понижает.
+            Assert.Equal(0, row.Priority);
+
+            await fixture.DrainIndexingAsync();
+
+            Assert.Empty(await QueueForAsync(SearchSourceType.Task, task.Id));
+            Assert.NotEmpty(await ChunksForAsync(SearchSourceType.Task, task.Id));
+        }
+        finally
+        {
+            await fixture.ClearQueueAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Missing_Vectors_Backfill_Revives_Exhausted_Queue_Row()
+    {
+        var board = await CreateBoardAsync();
+        var task = await CreateTaskAsync(board.Id, "Сверка остатков по складу");
+        await fixture.DrainIndexingAsync();
+
+        // Чанк без вектора — след работы без модели; запись очереди при этом успела исчерпать попытки.
+        await fixture.QueryAsync(db => db.SearchChunks
+            .Where(c => c.SourceType == SearchSourceType.Task && c.SourceId == task!.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(c => c.Embedding, (Pgvector.HalfVector?)null)));
+        try
+        {
+            await fixture.QueryAsync(async db =>
+            {
+                db.SearchIndexQueue.Add(new SearchIndexRequest
+                {
+                    SourceType = SearchSourceType.Task,
+                    SourceId = task!.Id,
+                    BoardId = board.Id,
+                    Operation = SearchIndexOperation.Upsert,
+                    Priority = 1,
+                    EnqueuedAt = DateTime.UtcNow,
+                    NextAttemptAt = DateTime.UtcNow
+                });
+                return await db.SaveChangesAsync();
+            });
+            await ExhaustQueueRowAsync(SearchSourceType.Task, task!.Id);
+            Assert.Equal(0, await fixture.RunIndexingAsync());
+
+            await using (var scope = fixture.CreateScope())
+            {
+                var index = scope.ServiceProvider.GetRequiredService<ISearchIndexRepository>();
+                // Другие тесты коллекции могли оставить свои чанки без векторов — считаем не меньше одного.
+                Assert.True(await index.EnqueueMissingVectorsAsync(fixture.Embedder.ModelVersion, CancellationToken.None) >= 1);
+            }
+
+            var row = Assert.Single(await QueueForAsync(SearchSourceType.Task, task.Id));
+            Assert.Equal(0, row.AttemptCount);
+            Assert.Null(row.LastError);
+
+            await fixture.DrainIndexingAsync();
+
+            Assert.Empty(await QueueForAsync(SearchSourceType.Task, task.Id));
+            Assert.Equal(0, await fixture.QueryAsync(db => db.SearchChunks.CountAsync(c => c.SourceId == task.Id && c.Embedding == null)));
+        }
+        finally
+        {
+            await fixture.ClearQueueAsync();
+        }
+    }
+
+    /// <summary>Доводит запись очереди до состояния «попытки кончились, модель не отвечала».</summary>
+    private Task<int> ExhaustQueueRowAsync(SearchSourceType sourceType, Guid sourceId)
+    {
+        var maxAttempts = fixture.Options.Indexing.MaxAttempts;
+
+        return fixture.QueryAsync(db => db.SearchIndexQueue
+            .Where(r => r.SourceType == sourceType && r.SourceId == sourceId)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(r => r.AttemptCount, maxAttempts)
+                .SetProperty(r => r.LastError, "Resource temporarily unavailable (ai:8081)")));
     }
 
     [Fact]
