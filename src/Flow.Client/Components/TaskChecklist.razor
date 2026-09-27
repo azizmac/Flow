@@ -25,13 +25,9 @@
             var item = _items[i];
             var index = i;
             <div class="check-row @(item.IsDone ? "done" : "")" @key="item.Id">
-                <button type="button" class="check-box @(item.IsDone ? "on" : "")" role="checkbox" aria-checked="@(item.IsDone ? "true" : "false")"
-                        disabled="@(!CanEdit || _busy)" title="@(item.IsDone ? "Снять отметку" : "Отметить")" @onclick="() => Toggle(item)">
-                    @if (item.IsDone)
-                    {
-                        <Icon Name="check" Size="11" />
-                    }
-                </button>
+                <MudCheckBox T="bool" Value="item.IsDone" ValueChanged="_ => Toggle(item)" Disabled="@(!CanEdit || _busy)"
+                             Size="Size.Small" Color="Color.Primary" Dense="true" Class="check-mud"
+                             title="@(item.IsDone ? "Снять отметку" : "Отметить")" />
                 @if (_editingId == item.Id)
                 {
                     <input id="@_editInputId" class="check-edit" value="@_editText" maxlength="500"

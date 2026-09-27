@@ -50,9 +50,10 @@
                             <button type="button" class="st-flag @(s.IsFinal ? "on" : "")" role="switch" aria-checked="@(s.IsFinal ? "true" : "false")"
                                     title="@FinalTitle(s)" disabled="@(_busy || !CanToggleFinal(s))"
                                     @onclick="() => Update(s, new UpdateStatusRequest(IsFinal: !s.IsFinal))">финальный</button>
-                            <input type="number" class="st-wip" min="1" max="999" placeholder="WIP" value="@s.WipLimit" disabled="@_busy"
-                                   title="Лимит задач в колонке канбана: превышение подсвечивается, перенос не запрещается. Пусто — без лимита."
-                                   aria-label="WIP-лимит" @onchange="e => SetWip(s, e.Value?.ToString())" />
+                            <MudNumericField T="int?" Value="s.WipLimit" ValueChanged="v => SetWip(s, v)" Min="1" Max="999" Placeholder="WIP"
+                                             HideSpinButtons="true" Disabled="_busy" Underline="false" Variant="Variant.Text" Margin="Margin.None"
+                                             Class="st-wip" aria-label="WIP-лимит"
+                                             title="Лимит задач в колонке канбана: превышение подсвечивается, перенос не запрещается. Пусто — без лимита." />
                             <DsIconButton Icon="trash" Size="26" Title="@DeleteTitle(s)" Style="color:rgba(255,255,255,0.45)"
                                           Disabled="@(_busy || !CanDelete(s))" OnClick="() => StartDelete(s)" />
                         </span>
@@ -212,14 +213,14 @@
     }
 
     /// <summary>WIP-лимит колонки канбана (docs/TZ_task_views.md §1): пусто — снять, иначе 1…999.</summary>
-    private Task SetWip(StatusResponse status, string? value)
+    private Task SetWip(StatusResponse status, int? limit)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            return status.WipLimit is null ? Task.CompletedTask : Update(status, new UpdateStatusRequest(ClearWipLimit: true));
+        if (limit == status.WipLimit)
+            return Task.CompletedTask;
 
-        return int.TryParse(value, out var limit) && limit != status.WipLimit
-            ? Update(status, new UpdateStatusRequest(WipLimit: limit))
-            : Task.CompletedTask;
+        return limit is null
+            ? Update(status, new UpdateStatusRequest(ClearWipLimit: true))
+            : Update(status, new UpdateStatusRequest(WipLimit: limit));
     }
 
     private Task Update(StatusResponse status, UpdateStatusRequest request) =>

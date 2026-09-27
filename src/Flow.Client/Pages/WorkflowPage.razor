@@ -72,7 +72,7 @@
         }
 
         <div class="panel wf-matrix-wrap">
-            <table class="wf-matrix">
+            <MudSimpleTable Dense="true" Elevation="0" Class="wf-matrix">
                 <thead>
                     <tr>
                         <th class="wf-corner">из ↓ / в →</th>
@@ -109,13 +109,9 @@
                                 var selected = _selected is { } sel && sel.From == fromId && sel.To == to.Id;
                                 <td class="@(selected ? "sel" : "")">
                                     <span class="wf-cell">
-                                        <button type="button" class="check-box @(t is not null ? "on" : "")" role="checkbox" aria-checked="@(t is not null ? "true" : "false")"
-                                                disabled="@(!CanEdit)" title="@(from?.Name ?? "Из любого") → @to.Name" @onclick="() => Toggle(fromId, to.Id)">
-                                            @if (t is not null)
-                                            {
-                                                <Icon Name="check" Size="11" />
-                                            }
-                                        </button>
+                                        <MudCheckBox T="bool" Value="@(t is not null)" ValueChanged="_ => Toggle(fromId, to.Id)" Disabled="!CanEdit"
+                                                     Size="Size.Small" Color="Color.Primary" Dense="true" Class="wf-check"
+                                                     title="@($"{from?.Name ?? "Из любого"} → {to.Name}")" />
                                         @if (t is not null)
                                         {
                                             <button type="button" class="wf-gear @(HasConditions(t) ? "on" : "")" title="Условия перехода"
@@ -127,7 +123,7 @@
                         </tr>
                     }
                 </tbody>
-            </table>
+            </MudSimpleTable>
         </div>
 
         @if (_selected is { } cell && Find(cell.From, cell.To) is { } edit)
@@ -158,12 +154,12 @@
                     }
                 </div>
                 <div class="wf-flags">
-                    <label><input type="checkbox" checked="@edit.Conditions!.RequireAssignee" disabled="@(!CanEdit)"
-                                  @onchange="e => Update(cell, edit with { Conditions = edit.Conditions with { RequireAssignee = e.Value is true } })" /> Назначен исполнитель</label>
-                    <label><input type="checkbox" checked="@edit.Conditions.RequireChildrenDone" disabled="@(!CanEdit)"
-                                  @onchange="e => Update(cell, edit with { Conditions = edit.Conditions with { RequireChildrenDone = e.Value is true } })" /> Все подзадачи закрыты</label>
-                    <label><input type="checkbox" checked="@edit.Conditions.RequireChecklistDone" disabled="@(!CanEdit)"
-                                  @onchange="e => Update(cell, edit with { Conditions = edit.Conditions with { RequireChecklistDone = e.Value is true } })" /> Чек-лист выполнен</label>
+                    <MudCheckBox T="bool" Value="edit.Conditions!.RequireAssignee" Disabled="!CanEdit" Size="Size.Small" Color="Color.Primary" Dense="true"
+                                 Label="Назначен исполнитель" ValueChanged="v => Update(cell, edit with { Conditions = edit.Conditions with { RequireAssignee = v } })" />
+                    <MudCheckBox T="bool" Value="edit.Conditions.RequireChildrenDone" Disabled="!CanEdit" Size="Size.Small" Color="Color.Primary" Dense="true"
+                                 Label="Все подзадачи закрыты" ValueChanged="v => Update(cell, edit with { Conditions = edit.Conditions with { RequireChildrenDone = v } })" />
+                    <MudCheckBox T="bool" Value="edit.Conditions.RequireChecklistDone" Disabled="!CanEdit" Size="Size.Small" Color="Color.Primary" Dense="true"
+                                 Label="Чек-лист выполнен" ValueChanged="v => Update(cell, edit with { Conditions = edit.Conditions with { RequireChecklistDone = v } })" />
                 </div>
             </div>
         }

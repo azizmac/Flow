@@ -534,3 +534,33 @@ a.mud-link:hover {
 .kb .mud-drop-item-preview-start { opacity: 0.4; }
 .kb .mud-drop-item { display: block; }
 .kb-col.denied .mud-dropitem-placeholder { display: none; }
+
+/* Дерево задач — тот же .flow-grid, свои ширины колонок: название, прогресс, исполнитель, статус. */
+.flow-grid.tree-grid { flex: 1; min-height: 0; }
+.flow-grid.tree-grid th:nth-child(1), .flow-grid.tree-grid td:nth-child(1) { width: auto; }
+.flow-grid.tree-grid th:nth-child(2), .flow-grid.tree-grid td:nth-child(2) { width: 230px; }
+.flow-grid.tree-grid th:nth-child(3), .flow-grid.tree-grid td:nth-child(3) { width: 56px; }
+.flow-grid.tree-grid th:nth-child(4), .flow-grid.tree-grid td:nth-child(4) { width: 170px; }
+.flow-grid.tree-grid tr.task-row.ctx .tree-title,
+.flow-grid.tree-grid tr.task-row.ctx .code { color: var(--text-tertiary); }
+.flow-grid.tree-grid tr.task-row.done .tree-title { color: var(--text-tertiary); }
+
+/* Флажки MudCheckBox в своих местах (матрица workflow, чек-лист, условия, общий фильтр): без лишних отступов Material,
+   отмеченный — цвет sage, как прежний свой флажок. */
+.wf-check.mud-input-control, .check-mud.mud-input-control { margin: 0; flex: none; }
+.wf-check .mud-button-root, .check-mud .mud-button-root { padding: 2px; }
+.check-mud .mud-checkbox-true .mud-icon-root { color: var(--sage); }
+.wf-flags .mud-input-control { margin: 0; }
+.wf-flags .mud-checkbox .mud-typography, .sf-shared .mud-typography { color: #fff; font: var(--fw-medium) 13px var(--font-text); }
+
+/* Таблица-матрица workflow — MudSimpleTable на прозрачном фоне панели. */
+.wf-matrix.mud-simple-table { background: transparent; }
+.wf-matrix.mud-simple-table table { width: auto; }
+.wf-matrix.mud-simple-table table * tr > td, .wf-matrix.mud-simple-table table * tr > th { border-bottom: 0; padding: 6px 10px; }
+
+/* Селект окна финальной колонки и поле WIP — компактные, без подчёркивания Material. */
+.kb-select.mud-input-control { width: 110px; flex: none; margin: 0; }
+.kb-select .mud-input { color: #fff; font: var(--fw-semibold) 12.5px var(--font-display); }
+.st-wip.mud-input-control { width: 64px; flex: none; margin: 0; }
+.st-wip .mud-input { background: rgba(0, 0, 0, 0.15); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 6px; }
+.st-wip input { color: #fff; font: var(--fw-semibold) 12px var(--font-display); }

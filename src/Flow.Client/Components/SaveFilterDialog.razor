@@ -14,10 +14,8 @@
     </TitleContent>
     <DialogContent>
         <DsInput Id="sf-name" Label="Название" MaxLength="80" Value="@_name" ValueChanged="v => { _name = v; _error = null; }" />
-        <label class="sf-shared">
-            <input type="checkbox" checked="@_shared" @onchange="e => _shared = e.Value is true" />
-            Виден всем — каждый увидит только задачи тех проектов, которые ему доступны
-        </label>
+        <MudCheckBox T="bool" @bind-Value="_shared" Size="Size.Small" Color="Color.Primary" Dense="true" Class="sf-shared"
+                     Label="Виден всем — каждый увидит только задачи тех проектов, которые ему доступны" />
         @if (_error is not null)
         {
             <div class="ds-field-error">@_error</div>

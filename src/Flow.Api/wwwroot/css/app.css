@@ -2249,14 +2249,6 @@ a.task-row { color: inherit; text-decoration: none; }
 .count-chip.blocked { color: var(--danger); }
 .checklist, .links { display: flex; flex-direction: column; gap: 2px; }
 .check-row { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border-radius: 8px; min-height: 32px; }
-.check-box {
-    flex: none; width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid rgba(255, 255, 255, 0.35);
-    background: none; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--surface);
-    cursor: pointer; transition: background-color 150ms var(--ease-out), transform 150ms var(--ease-out);
-}
-.check-box.on { background: var(--sage); border-color: var(--sage); }
-.check-box:disabled { cursor: default; }
-.check-box:active:not(:disabled) { transform: scale(0.92); }
 .check-text { flex: 1 1 auto; min-width: 0; color: #fff; font: var(--fw-medium) 13px var(--font-text); overflow-wrap: anywhere; }
 .check-row.done .check-text { color: var(--text-tertiary); text-decoration: line-through; }
 .check-edit {
@@ -2347,7 +2339,6 @@ a.task-row { color: inherit; text-decoration: none; }
 .wf-conditions { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; margin-bottom: 12px; max-width: 720px; }
 .wf-cond-head { display: flex; align-items: center; justify-content: space-between; color: #fff; }
 .wf-conditions .seg { display: flex; flex-wrap: wrap; gap: 6px; }
-.wf-flags input { accent-color: var(--accent); }
 .wf-flags { display: flex; flex-direction: column; gap: 6px; color: #fff; font: var(--fw-medium) 13px var(--font-text); }
 .wf-graph { padding: 12px 16px; overflow-x: auto; }
 .wf-graph svg { min-width: 480px; display: block; margin: 0 auto; }
@@ -2410,10 +2401,6 @@ a.task-row { color: inherit; text-decoration: none; }
 .kb-toolbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; flex: none; }
 .kb-window { display: inline-flex; align-items: center; gap: 6px; color: var(--text-tertiary); font: var(--fw-medium) 12.5px var(--font-text); }
 .kb-window b { color: var(--text-secondary); font-weight: var(--fw-semibold); }
-.kb-select {
-    background: rgba(0, 0, 0, 0.15); color: #fff; border: 1px solid var(--border); border-radius: var(--r-sm);
-    padding: 3px 6px; font: var(--fw-semibold) 12px var(--font-display); cursor: pointer;
-}
 .kb-scroll { flex: 1; min-height: 0; overflow: auto; padding-bottom: 8px; }
 .kb { min-width: min-content; }
 .kb-heads, .kb-row { display: grid; gap: 12px; }
@@ -2460,38 +2447,15 @@ a.task-row { color: inherit; text-decoration: none; }
 }
 @media (hover: hover) and (pointer: fine) { .kb-card:hover { border-color: var(--border-strong); } }
 @media (prefers-reduced-motion: reduce) { .kb-card, .kb-card:active { transform: none; transition: none; } }
-.st-wip {
-    width: 58px; background: rgba(0, 0, 0, 0.15); color: #fff; border: 1px solid var(--border); border-radius: var(--r-sm);
-    padding: 3px 6px; font: var(--fw-semibold) 12px var(--font-display);
-}
 
-/* ---- Дерево задач (docs/TZ_task_views.md §3, этап 2C) ---- */
-.tree { flex: 1; min-height: 0; overflow: auto; padding: 6px 0; }
-.tree-row {
-    display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 16px 4px calc(12px + var(--depth) * 24px);
-    border-bottom: 1px solid var(--border-subtle); cursor: pointer; color: #fff;
-}
-.tree-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.tree-row.sel { background: rgba(255, 255, 255, 0.06); }
-.tree-row.ctx .tree-title, .tree-row.ctx .code { color: var(--text-tertiary); }
-.tree-row.ctx { opacity: 0.75; }
-.tree-row.done .tree-title { color: var(--text-tertiary); }
-.tree-row .code { font: var(--fw-semibold) 12px var(--font-mono); color: var(--accent); white-space: nowrap; }
-.tree-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--fw-medium) 13.5px var(--font-text); }
-.tree-toggle {
-    width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex: none;
-    background: none; border: 0; padding: 0; color: var(--text-tertiary); cursor: pointer; border-radius: 6px;
-    transform: rotate(-90deg); transition: transform 160ms var(--ease-out), color 150ms ease;
-}
+/* ---- Дерево задач (docs/TZ_task_views.md §3, этап 2C): ячейки MudDataGrid, сама таблица — .flow-grid ---- */
+.tree-cell { display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: calc(var(--depth) * 24px); }
+.tree-cell .row-key { display: inline-flex; align-items: center; gap: 6px; }
+.tree-cell .code { font: var(--fw-semibold) 12px var(--font-mono); color: var(--accent); white-space: nowrap; }
+.tree-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--fw-medium) 13.5px var(--font-text); color: #fff; }
+.tree-toggle { color: var(--text-tertiary); transform: rotate(-90deg); transition: transform 160ms var(--ease-out); flex: none; }
 .tree-toggle.open { transform: rotate(0); }
-.tree-toggle-space { width: 20px; flex: none; }
-.tree-progress { display: inline-flex; align-items: center; gap: 8px; width: 210px; flex: none; }
-.tree-bar { width: 70px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.1); overflow: hidden; flex: none; }
-.tree-bar > span { display: block; height: 100%; background: var(--sage); border-radius: 2px; }
-.tree-who { width: 24px; flex: none; display: inline-flex; justify-content: center; }
-.tree-status { width: 150px; flex: none; display: inline-flex; justify-content: flex-end; }
-@media (hover: hover) and (pointer: fine) {
-    .tree-row:hover { background: rgba(255, 255, 255, 0.04); }
-    .tree-toggle:hover { color: #fff; }
-}
+.tree-toggle-space { width: 24px; flex: none; }
+.tree-progress { display: flex; align-items: center; gap: 8px; }
+.tree-progress .tree-bar { width: 70px; flex: none; }
 @media (prefers-reduced-motion: reduce) { .tree-toggle { transition: none; } }

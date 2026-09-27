@@ -1,7 +1,7 @@
 @* Дерево задач проекта (docs/TZ_task_views.md §3, этап 2C) поверх GET /boards/{id}/tree. Сначала приходят два
    верхних уровня (maxDepth = 1), глубже ветка догружается при раскрытии (rootId = узел). Фильтры экрана действуют
    и здесь: подходящие задачи видны как есть, их предки — серым «контекстом», ветки без подходящих скрыты.
-   Прогресс — по всему поддереву: задачи и story points. Родитель меняется полем «Родитель» в слайдере;
+   Прогресс — по всему поддереву: задачи и story points. Таблица — MudDataGrid, как у списка. Родитель меняется полем «Родитель» в слайдере;
    перетаскивания в дереве пока нет. *@
 @inject IFlowApi Api
 @inject ToastService Toasts
@@ -37,71 +37,92 @@ else if (_nodes.Count == 0)
 }
 else
 {
-    <div class="panel tree" role="tree" aria-label="Дерево задач">
-        @foreach (var node in VisibleNodes)
-        {
-            var task = node.Task;
-            var expanded = _expanded.Contains(task.Id);
-            <div id="@RowId(task.Id)" class="tree-row @(node.IsContextOnly ? "ctx" : "") @(task.Id == SelectedId ? "sel" : "") @(IsDone(task) ? "done" : "")"
-                 role="treeitem" aria-level="@(node.Depth + 1)" aria-expanded="@(node.VisibleChildCount > 0 ? expanded.ToString().ToLowerInvariant() : null)"
-                 tabindex="0" style="--depth:@node.Depth" title="@(node.IsContextOnly ? "Не подходит под фильтр — показана ради подзадач" : null)"
-                 @onclick="() => OnOpen.InvokeAsync(task)" @onkeydown="e => OnRowKey(e, node)">
-                @if (node.VisibleChildCount > 0)
-                {
-                    <button type="button" class="tree-toggle @(expanded ? "open" : "")" tabindex="-1" aria-label="@(expanded ? "Свернуть" : "Раскрыть")"
-                            @onclick:stopPropagation @onclick="() => Toggle(node)"><Icon Name="chevron-down" Size="14" /></button>
-                }
-                else
-                {
-                    <span class="tree-toggle-space"></span>
-                }
-                @if (TypeFor(task) is { } type)
-                {
-                    <TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />
-                }
-                <span class="code">@task.Code</span>
-                <PriorityIcon Value="task.Priority" Size="13" />
-                <span class="tree-title">@task.Title</span>
-                @if (task.BlockedByCount > 0)
-                {
-                    <span class="count-chip blocked" title="@($"Заблокирована незакрытыми задачами: {task.BlockedByCount}")"><Icon Name="lock" Size="12" /></span>
-                }
-                @if (task.DueDate is { } due)
-                {
-                    <DueChip Value="due" IsDone="IsDone(task)" />
-                }
-                <span class="tree-progress">
-                    @if (node.Progress is { Total: > 0 } p)
-                    {
-                        <span class="tree-bar" title="@($"Поддерево: закрыто {p.Done} из {p.Total}")"><span style="width:@Percent(p.Done, p.Total)"></span></span>
-                        <span class="count-chip @(p.Done == p.Total ? "done" : "")">@p.Done/@p.Total</span>
-                        @if (p.Points > 0)
+    @* Тот же MudDataGrid, что у списка (flow-grid), только строки — видимые узлы дерева в порядке обхода: отступ
+       по глубине и стрелка раскрытия живут в первой колонке. Данные клиентские (Items): дерево и его раскрытие
+       держит компонент, гриду нужна только готовая последовательность строк. *@
+    <MudDataGrid T="TaskTreeNode" Items="VisibleNodes.ToList()" Class="flow-grid tree-grid panel" Dense="true" Hover="true"
+                 Elevation="0" SortMode="SortMode.None" Filterable="false" RowClass="task-row" RowClassFunc="RowClass"
+                 RowClick="@(args => OnOpen.InvokeAsync(args.Item.Task))">
+        <Columns>
+            <TemplateColumn T="TaskTreeNode" Title="Задача" Sortable="false">
+                <CellTemplate>
+                    @{ var node = context.Item; var task = node.Task; var expanded = _expanded.Contains(task.Id); }
+                    <div class="tree-cell" style="--depth:@node.Depth">
+                        @if (node.VisibleChildCount > 0)
                         {
-                            <span class="count-chip" title="Story points поддерева: закрыто / всего">@Ru.Points(p.DonePoints)/@Ru.Points(p.Points) SP</span>
+                            <DsIconButton Icon="chevron-down" Size="24" Class="@($"tree-toggle {(expanded ? "open" : "")}")"
+                                          Title="@(expanded ? "Свернуть" : "Раскрыть")" OnClick="() => Toggle(node)" />
                         }
-                    }
-                </span>
-                <span class="tree-who">
-                    @if (Users.Find(task.AssigneeId) is { } who)
+                        else
+                        {
+                            <span class="tree-toggle-space"></span>
+                        }
+                        @* Точка входа строки с клавиатуры, как ячейка кода в списке: Tab останавливается здесь. *@
+                        <span id="@RowId(task.Id)" class="row-key" role="treeitem" tabindex="0" aria-level="@(node.Depth + 1)"
+                              aria-expanded="@(node.VisibleChildCount > 0 ? expanded.ToString().ToLowerInvariant() : null)"
+                              aria-label="@($"{task.Code}: {task.Title}")"
+                              @onclick:stopPropagation @onclick="() => OnOpen.InvokeAsync(task)" @onkeydown="e => OnRowKey(e, node)">
+                            @if (TypeFor(task) is { } type)
+                            {
+                                <TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />
+                            }
+                            <span class="code">@task.Code</span>
+                        </span>
+                        <PriorityIcon Value="task.Priority" Size="13" />
+                        <span class="tree-title" title="@(node.IsContextOnly ? "Не подходит под фильтр — показана ради подзадач" : null)">@task.Title</span>
+                        @if (task.BlockedByCount > 0)
+                        {
+                            <span class="count-chip blocked" title="@($"Заблокирована незакрытыми задачами: {task.BlockedByCount}")"><Icon Name="lock" Size="12" /></span>
+                        }
+                        @if (task.DueDate is { } due)
+                        {
+                            <DueChip Value="due" IsDone="IsDone(task)" />
+                        }
+                    </div>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="TaskTreeNode" Title="Прогресс" Sortable="false">
+                <CellTemplate>
+                    @if (context.Item.Progress is { Total: > 0 } p)
                     {
-                        <Avatar User="who" Size="20" Title="@who.FullName" />
+                        <div class="tree-progress" title="@($"Поддерево: закрыто {p.Done} из {p.Total}")">
+                            <MudProgressLinear Value="@(100.0 * p.Done / p.Total)" Color="Color.Success" Rounded="true" Size="Size.Small" Class="tree-bar" />
+                            <span class="count-chip @(p.Done == p.Total ? "done" : "")">@p.Done/@p.Total</span>
+                            @if (p.Points > 0)
+                            {
+                                <span class="count-chip" title="Story points поддерева: закрыто / всего">@Ru.Points(p.DonePoints)/@Ru.Points(p.Points) SP</span>
+                            }
+                        </div>
                     }
-                </span>
-                <span class="tree-status" @onclick:stopPropagation>
-                    @if (Permissions.CanEditTask(Me, Access.For(task.BoardId), task) && Board is { } board)
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="TaskTreeNode" Title="Кто" Sortable="false">
+                <CellTemplate>
+                    @if (Users.Find(context.Item.Task.AssigneeId) is { } who)
                     {
-                        <StatusSelect Statuses="board.Statuses" Value="task.StatusId" TaskId="task.Id"
-                                      Restricted="@(board.WorkflowMode == WorkflowMode.Restricted)" OnChange="id => ChangeStatus(task, id)" />
+                        <Avatar User="who" Size="22" Title="@who.FullName" />
                     }
-                    else
-                    {
-                        var st = StatusOf(task);
-                        <span class="status-pill"><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span>
-                    }
-                </span>
-            </div>
-        }
-    </div>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="TaskTreeNode" Title="Статус" Sortable="false">
+                <CellTemplate>
+                    @{ var task = context.Item.Task; }
+                    <span @onclick:stopPropagation>
+                        @if (Permissions.CanEditTask(Me, Access.For(task.BoardId), task) && Board is { } board)
+                        {
+                            <StatusSelect Statuses="board.Statuses" Value="task.StatusId" TaskId="task.Id"
+                                          Restricted="@(board.WorkflowMode == WorkflowMode.Restricted)" OnChange="id => ChangeStatus(task, id)" />
+                        }
+                        else
+                        {
+                            var st = StatusOf(task);
+                            <span class="status-pill"><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span>
+                        }
+                    </span>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </MudDataGrid>
 }
 
 @code {
@@ -278,8 +299,14 @@ else
 
     private static string RowId(Guid id) => "tree-" + id.ToString("N");
 
-    private static string Percent(int done, int total) =>
-        FormattableString.Invariant($"{Math.Round(100.0 * done / total)}%");
+    private string RowClass(TaskTreeNode node, int _)
+    {
+        var classes = new List<string>();
+        if (node.IsContextOnly) classes.Add("ctx");
+        if (IsDone(node.Task)) classes.Add("done");
+        if (node.Task.Id == SelectedId) classes.Add("sel");
+        return string.Join(' ', classes);
+    }
 
     private StatusResponse? StatusOf(TaskResponse task) => Board?.Statuses.FirstOrDefault(s => s.Id == task.StatusId);
 

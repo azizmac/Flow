@@ -25,12 +25,13 @@
             Закрытые — за
             @if (Permissions.CanManageConfig(Access.For(board.Id)))
             {
-                <select class="kb-select" aria-label="Окно финальной колонки" value="@board.DoneColumnDays" @onchange="SetDoneDays">
+                <MudSelect T="int" Value="board.DoneColumnDays" ValueChanged="SetDoneDays" Dense="true" Underline="false"
+                           Variant="Variant.Text" Margin="Margin.None" PopoverClass="flow-pop" Class="kb-select" aria-label="Окно финальной колонки">
                     @foreach (var days in DoneWindowOptions(board.DoneColumnDays))
                     {
-                        <option value="@days">@Ru.Days(days)</option>
+                        <MudSelectItem T="int" Value="days">@Ru.Days(days)</MudSelectItem>
                     }
-                </select>
+                </MudSelect>
             }
             else
             {
@@ -716,9 +717,9 @@ else
     private static IEnumerable<int> DoneWindowOptions(int current) =>
         new[] { 7, 14, 30, 90, current }.Distinct().Order();
 
-    private async Task SetDoneDays(ChangeEventArgs e)
+    private async Task SetDoneDays(int days)
     {
-        if (Board is not { } board || !int.TryParse(e.Value?.ToString(), out var days) || days == board.DoneColumnDays)
+        if (Board is not { } board || days == board.DoneColumnDays)
             return;
 
         var result = await Api.SetDoneColumnDays(board.Id, days);
