@@ -15,13 +15,25 @@ public sealed class FakeBoardMemberRepository(FakeBoardRepository boards) : IBoa
         var board = await boards.GetByIdAsync(boardId, cancellationToken);
         return board is null
             ? null
-            : new BoardAccessData(board.Id, board.DefaultRole, _members.SingleOrDefault(m => m.BoardId == boardId && m.UserId == userId)?.Role);
+            : new BoardAccessData(board.Id, board.Visibility, board.DefaultRole, _members.SingleOrDefault(m => m.BoardId == boardId && m.UserId == userId)?.Role);
     }
 
     public async Task<IReadOnlyList<BoardAccessData>> GetAccessDataForUserAsync(Guid userId, CancellationToken cancellationToken) =>
         (await boards.GetAllAsync(cancellationToken))
-            .Select(b => new BoardAccessData(b.Id, b.DefaultRole, _members.SingleOrDefault(m => m.BoardId == b.Id && m.UserId == userId)?.Role))
+            .Select(b => new BoardAccessData(b.Id, b.Visibility, b.DefaultRole, _members.SingleOrDefault(m => m.BoardId == b.Id && m.UserId == userId)?.Role))
             .ToList();
+
+    public async Task<IReadOnlyList<Guid>?> GetVisibleBoardIdsAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var all = await boards.GetAllAsync(cancellationToken);
+        if (all.All(b => b.Visibility == BoardVisibility.Open))
+            return null;
+
+        return all
+            .Where(b => b.Visibility == BoardVisibility.Open || _members.Any(m => m.BoardId == b.Id && m.UserId == userId))
+            .Select(b => b.Id)
+            .ToList();
+    }
 
     public Task<BoardMember?> GetAsync(Guid boardId, Guid userId, CancellationToken cancellationToken) =>
         Task.FromResult(_members.SingleOrDefault(m => m.BoardId == boardId && m.UserId == userId));

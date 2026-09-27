@@ -15,4 +15,5 @@ public sealed record BoardResponse(
     int NextTaskNumber,
     IReadOnlyList<StatusResponse> Statuses,
     IReadOnlyList<TaskTypeResponse> TaskTypes,
-    ProjectRole? DefaultRole);
+    ProjectRole? DefaultRole,
+    BoardVisibility Visibility);

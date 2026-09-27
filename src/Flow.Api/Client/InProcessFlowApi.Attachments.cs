@@ -16,7 +16,7 @@ internal sealed partial class InProcessFlowApi
     public Task<ApiResult<IReadOnlyList<AttachmentResponse>>> GetAttachments(Guid taskId, CancellationToken ct = default) =>
         Scoped<IReadOnlyList<AttachmentResponse>>(async mediator =>
         {
-            var attachments = await mediator.Send(new AttachmentListQuery(taskId), ct);
+            var attachments = await mediator.Send(new AttachmentListQuery(await ActorAsync(), taskId), ct);
             return attachments is null ? NotFound<IReadOnlyList<AttachmentResponse>>() : Ok(attachments);
         });
 

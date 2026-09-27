@@ -33,21 +33,30 @@ public static class BoardMappingExtensions
             .OrderBy(t => t.SortOrder)
             .Select(t => t.ToResponse())
             .ToList(),
-        board.DefaultRole?.ToResponseRole());
+        board.DefaultRole?.ToResponseRole(),
+        board.Visibility.ToResponseVisibility());
 
     public static BoardMembersResponse ToMembersResponse(this Board board, IEnumerable<BoardMember> members) => new(
         board.Id,
         board.DefaultRole?.ToResponseRole(),
+        board.Visibility.ToResponseVisibility(),
         members
             .OrderByDescending(m => m.Role)
             .ThenBy(m => m.AddedAt)
             .Select(m => new BoardMemberResponse(m.UserId, m.Role.ToResponseRole(), m.AddedById, m.AddedAt))
             .ToList());
 
+    /// <summary>Только для видимого проекта: у скрытого роли нет, и в ответы он не попадает.</summary>
     public static ProjectAccessResponse ToResponse(this ProjectAccessInfo access) => new(
         access.BoardId,
-        access.Role.ToResponseRole(),
+        (access.Role ?? throw new InvalidOperationException("Hidden project has no access to report.")).ToResponseRole(),
         access.Permissions.OrderBy(p => p).Select(p => p.ToResponsePermission()).ToList());
+
+    public static Flow.Shared.Contracts.Boards.BoardVisibility ToResponseVisibility(this Flow.Domain.Entities.BoardVisibility visibility) =>
+        Enum.IsDefined(visibility) ? (Flow.Shared.Contracts.Boards.BoardVisibility)(int)visibility : throw new ArgumentOutOfRangeException(nameof(visibility), visibility, "Unknown BoardVisibility.");
+
+    public static Flow.Domain.Entities.BoardVisibility ToDomainVisibility(this Flow.Shared.Contracts.Boards.BoardVisibility visibility) =>
+        Enum.IsDefined(visibility) ? (Flow.Domain.Entities.BoardVisibility)(int)visibility : throw new ArgumentOutOfRangeException(nameof(visibility), visibility, "Unknown BoardVisibility.");
 
     public static SharedProjectRole ToResponseRole(this DomainProjectRole role) =>
         Enum.IsDefined(role) ? (SharedProjectRole)(int)role : throw new ArgumentOutOfRangeException(nameof(role), role, "Unknown ProjectRole.");

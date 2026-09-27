@@ -27,6 +27,8 @@ internal sealed class BoardMemberRemoveCommandHandler(
         if (member is null)
             return BoardMemberResult.NotFound();
 
+        BoardMemberSetCommandHandler.EnsureNotLastPrivateAdmin(board, await members.GetByBoardAsync(board.Id, cancellationToken), member, newRole: null);
+
         members.Remove(member);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

@@ -51,6 +51,7 @@ public sealed class FakeTaskItemRepository : ITaskItemRepository
 
     private IEnumerable<TaskItem> Filtered(TaskListFilter filter) => _tasks
         .Where(t => filter.BoardId is null || t.BoardId == filter.BoardId)
+        .Where(t => filter.VisibleBoardIds is null || filter.VisibleBoardIds.Contains(t.BoardId))
         .Where(t => filter.AssigneeId is null || t.AssigneeId == filter.AssigneeId)
         .Where(t => !filter.Unassigned || t.AssigneeId is null)
         .Where(t => filter.StatusId is null || t.StatusId == filter.StatusId)

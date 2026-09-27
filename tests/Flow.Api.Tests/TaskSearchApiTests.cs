@@ -68,7 +68,9 @@ public sealed class TaskSearchApiTests(ApiFixture api)
         var board = await CreateBoardAsync(owner, "SRD");
         await CreateTaskAsync(owner, board.Id, "Видна читателю");
         using var createUser = await owner.PostAsJsonAsync("/api/users",
-            new CreateUserRequest("search.reader", "search.reader@example.com", "A", "B", "correct horse battery", UserRole.Reader));
+            new CreateUserRequest("tasks.reader", "tasks.reader@example.com", "A", "B", "correct horse battery", UserRole.Reader));
+        // Своё имя, не как в SearchApiTests: при общем хосте второй тест получил бы 409 и токен без профиля (401).
+        Assert.Equal(HttpStatusCode.Created, createUser.StatusCode);
         var reader = (await createUser.Content.ReadFromJsonAsync<UserResponse>())!;
 
         using var asReader = api.CreateClientAs(reader.Id);

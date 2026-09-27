@@ -25,7 +25,7 @@ public class AttachmentsController(IMediator mediator, IActorAccessor actor) : C
     [HttpGet("tasks/{taskId:guid}/attachments")]
     public async Task<IActionResult> GetAttachments(Guid taskId, CancellationToken cancellationToken)
     {
-        var attachments = await mediator.Send(new AttachmentListQuery(taskId), cancellationToken);
+        var attachments = await mediator.Send(new AttachmentListQuery(actor.Require(), taskId), cancellationToken);
         return attachments is null ? NotFound() : Ok(attachments);
     }
 
@@ -72,7 +72,7 @@ public class AttachmentsController(IMediator mediator, IActorAccessor actor) : C
     [HttpGet("attachments/{id:guid}/content")]
     public async Task<IActionResult> GetContent(Guid id, CancellationToken cancellationToken, [FromQuery] bool inline = false)
     {
-        var content = await mediator.Send(new AttachmentContentQuery(id), cancellationToken);
+        var content = await mediator.Send(new AttachmentContentQuery(actor.Require(), id), cancellationToken);
         if (content is null)
             return NotFound();
 

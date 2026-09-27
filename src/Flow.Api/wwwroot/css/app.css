@@ -2225,3 +2225,8 @@ a.task-row { color: inherit; text-decoration: none; }
 .pa-results .pop-item { width: 100%; background: none; border: 0; cursor: pointer; color: var(--text-secondary); font: var(--fw-semibold) 12.5px var(--font-display); }
 .pa-results .pop-item:disabled { opacity: 0.55; cursor: progress; }
 .role-item .pop-user-un { white-space: normal; }
+
+/* Приватный проект (docs/TZ_project_access.md, этап 4B) */
+.lock-ico { display: inline-flex; align-items: center; line-height: 0; color: var(--text-tertiary); flex: none; }
+.board-card-key { display: inline-flex; align-items: center; gap: 8px; }
+.pa-warn { color: var(--tan); }

@@ -16,8 +16,8 @@ using Flow.Shared.Contracts.Tasks;
 namespace Flow.Api.Client;
 
 /// <summary>
-/// Задачи: те же исходы, что у TasksController. Запросы (список, поиск, карточка) actor не получают —
-/// читать может любая роль; команды берут его через ActorAsync внутри Guard, чтобы протухшая сессия
+/// Задачи: те же исходы, что у TasksController. И запросы, и команды берут actor через ActorAsync внутри Guard:
+/// запросам он нужен для фильтра приватных проектов (docs/TZ_project_access.md, 4B), а протухшая сессия
 /// стала 401, а не необработанным исключением в середине рендера.
 /// </summary>
 internal sealed partial class InProcessFlowApi
@@ -26,7 +26,7 @@ internal sealed partial class InProcessFlowApi
         Scoped(async mediator =>
         {
             // GET boards/{boardId}/tasks всегда 200: несуществующая доска даёт пустой список, а не 404.
-            var tasks = await mediator.Send(new TaskListQuery(boardId, assigneeId), ct);
+            var tasks = await mediator.Send(new TaskListQuery(await ActorAsync(), boardId, assigneeId), ct);
             return Ok(tasks);
         });
 
@@ -64,7 +64,7 @@ internal sealed partial class InProcessFlowApi
             var page = string.IsNullOrWhiteSpace(cursor) ? null : cursor;
 
             var response = await mediator.Send(
-                new TaskSearchQuery(boardId, assigneeId, unassigned, statusId, statusType, text, limit, page,
+                new TaskSearchQuery(await ActorAsync(), boardId, assigneeId, unassigned, statusId, statusType, text, limit, page,
                     offset, sortField, sortDescending, typeKind, priority),
                 ct);
 
@@ -74,7 +74,7 @@ internal sealed partial class InProcessFlowApi
     public Task<ApiResult<TaskResponse>> GetTask(Guid id, CancellationToken ct = default) =>
         Scoped(async mediator =>
         {
-            var task = await mediator.Send(new TaskGetQuery(id), ct);
+            var task = await mediator.Send(new TaskGetQuery(await ActorAsync(), id), ct);
             return task is null ? NotFound<TaskResponse>() : Ok(task);
         });
 

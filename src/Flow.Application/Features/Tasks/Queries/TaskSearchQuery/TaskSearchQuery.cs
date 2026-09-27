@@ -10,6 +10,7 @@ namespace Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 /// способ листания для таблицы с сортировкой (взаимоисключающи, приоритет у Offset).
 /// </summary>
 public sealed record TaskSearchQuery(
+    Guid ActorId,
     Guid? BoardId = null,
     Guid? AssigneeId = null,
     bool Unassigned = false,

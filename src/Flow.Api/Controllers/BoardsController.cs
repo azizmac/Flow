@@ -5,6 +5,7 @@ using Flow.Application.Features.Boards.Commands.BoardDefaultRoleSetCommand;
 using Flow.Application.Features.Boards.Commands.BoardMemberRemoveCommand;
 using Flow.Application.Features.Boards.Commands.BoardMemberSetCommand;
 using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
+using Flow.Application.Features.Boards.Commands.BoardVisibilitySetCommand;
 using Flow.Application.Features.Boards.Queries.BoardMembersQuery;
 using Flow.Application.Features.Boards.Queries.BoardMyAccessQuery;
 using Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
@@ -46,14 +47,14 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
     [HttpGet]
     public async Task<IActionResult> GetBoards(CancellationToken cancellationToken)
     {
-        var boards = await mediator.Send(new BoardListQuery(), cancellationToken);
+        var boards = await mediator.Send(new BoardListQuery(actor.Require()), cancellationToken);
         return Ok(boards);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetBoard(Guid id, CancellationToken cancellationToken)
     {
-        var board = await mediator.Send(new BoardGetQuery(id), cancellationToken);
+        var board = await mediator.Send(new BoardGetQuery(actor.Require(), id), cancellationToken);
         return board is null ? NotFound() : Ok(board);
     }
 
@@ -142,14 +143,26 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
         if (!Enum.IsDefined(request.Role))
             return BadRequest(new { Message = $"Unknown project role {request.Role}." });
 
-        return MemberResult(await mediator.Send(
+        return await MemberResult(() => mediator.Send(
             new BoardMemberSetCommand(actor.Require(), id, userId, request.Role.ToDomainRole()), cancellationToken));
     }
 
     /// <summary>Убрать участие: роль вернётся к роли по умолчанию. 404 — человек не участник.</summary>
     [HttpDelete("{id:guid}/members/{userId:guid}")]
-    public async Task<IActionResult> RemoveMember(Guid id, Guid userId, CancellationToken cancellationToken) =>
-        MemberResult(await mediator.Send(new BoardMemberRemoveCommand(actor.Require(), id, userId), cancellationToken));
+    public Task<IActionResult> RemoveMember(Guid id, Guid userId, CancellationToken cancellationToken) =>
+        MemberResult(() => mediator.Send(new BoardMemberRemoveCommand(actor.Require(), id, userId), cancellationToken));
+
+    /// <summary>Open или Private (только участники и глобальные Admin/Owner). Права — ManageMembers.</summary>
+    [HttpPut("{id:guid}/visibility")]
+    public async Task<IActionResult> SetVisibility(Guid id, SetVisibilityRequest request, CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(request.Visibility))
+            return BadRequest(new { Message = $"Unknown visibility {request.Visibility}." });
+
+        var response = await mediator.Send(
+            new BoardVisibilitySetCommand(actor.Require(), id, request.Visibility.ToDomainVisibility()), cancellationToken);
+        return response is null ? NotFound() : Ok(response);
+    }
 
     /// <summary>Потолок роли без участия: Viewer, Member, Developer или null. Admin и неизвестное — 400.</summary>
     [HttpPut("{id:guid}/default-role")]
@@ -170,8 +183,19 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
         }
     }
 
-    private IActionResult MemberResult(BoardMemberResult result)
+    /// <summary>InvalidOperationException — последний администратор приватного проекта (400).</summary>
+    private async Task<IActionResult> MemberResult(Func<Task<BoardMemberResult>> send)
     {
+        BoardMemberResult result;
+        try
+        {
+            result = await send();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { ex.Message });
+        }
+
         if (result.IsNotFound)
             return NotFound();
 

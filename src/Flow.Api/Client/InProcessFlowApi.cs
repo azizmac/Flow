@@ -83,6 +83,10 @@ internal sealed partial class InProcessFlowApi(IServiceScopeFactory scopes, Auth
         {
             return ApiResult<T>.Fail(ex.Message, HttpStatusCode.Forbidden);
         }
+        catch (ProjectNotFoundException ex)
+        {
+            return ApiResult<T>.Fail(ex.Message, HttpStatusCode.NotFound);
+        }
         catch (ArgumentException ex)
         {
             return ApiResult<T>.Fail(ex.Message, HttpStatusCode.BadRequest);

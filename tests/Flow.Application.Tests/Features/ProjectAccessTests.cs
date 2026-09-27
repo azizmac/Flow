@@ -69,7 +69,17 @@ public class ProjectAccessTests
     [InlineData(UserRole.Reader, null, ProjectRole.Admin, ProjectRole.Admin)]
     [InlineData(UserRole.Developer, null, ProjectRole.Member, ProjectRole.Developer)]
     public void Effective_Should_TakeMaxOfCappedGlobalAndMembership(UserRole global, ProjectRole? ceiling, ProjectRole? member, ProjectRole expected) =>
-        Assert.Equal(expected, ProjectRoles.Effective(global, ceiling, member));
+        Assert.Equal(expected, ProjectRoles.Effective(global, BoardVisibility.Open, ceiling, member));
+
+    [Theory]
+    [InlineData(UserRole.Developer, null, null)]
+    [InlineData(UserRole.Reader, ProjectRole.Developer, ProjectRole.Developer)]
+    [InlineData(UserRole.Developer, ProjectRole.Viewer, ProjectRole.Viewer)]
+    [InlineData(UserRole.Admin, null, ProjectRole.Admin)]
+    [InlineData(UserRole.Owner, null, ProjectRole.Admin)]
+    public void Effective_In_Private_Project_Should_Come_Only_From_Membership_Or_Global_Admin(UserRole global, ProjectRole? member, ProjectRole? expected) =>
+        // Роль по умолчанию в приватном проекте не действует: без участия проекта просто нет.
+        Assert.Equal(expected, ProjectRoles.Effective(global, BoardVisibility.Private, ProjectRole.Developer, member));
 
     [Fact]
     public void PermissionsOf_Should_FollowTheLadder()

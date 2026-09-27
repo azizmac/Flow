@@ -34,6 +34,9 @@ public sealed partial class Board
     /// </summary>
     public ProjectRole? DefaultRole { get; private set; }
 
+    /// <summary>Private — проект видят только участники и глобальные Admin/Owner (этап 4B); у старых проектов Open.</summary>
+    public BoardVisibility Visibility { get; private set; }
+
     public IReadOnlyCollection<Status> Statuses => _statuses;
 
     /// <summary>Типы задач проекта, включая архивные (docs/TZ_task_model.md §1).</summary>
@@ -73,6 +76,11 @@ public sealed partial class Board
     }
 
     public void Rename(string name) => Name = ValidateName(name);
+
+    public void SetVisibility(BoardVisibility visibility) =>
+        Visibility = Enum.IsDefined(visibility)
+            ? visibility
+            : throw new ArgumentException($"Unknown board visibility {visibility}.", nameof(visibility));
 
     /// <summary>null — снять ограничение. Admin смысла не имеет (потолок выше любой производной роли) и не принимается.</summary>
     public void SetDefaultRole(ProjectRole? role)

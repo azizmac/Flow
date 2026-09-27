@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using System.Text;
 using Flow.Application.Abstractions;
+using Flow.Application.Security;
 using Flow.Application.Features.Boards;
 using Flow.Shared.Contracts.Tasks;
 using MediatR;
@@ -8,7 +9,7 @@ using DomainStatusType = Flow.Domain.Entities.StatusType;
 
 namespace Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 
-internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCommentRepository comments)
+internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCommentRepository comments, ActorResolver actors, IProjectAccess projectAccess)
     : IRequestHandler<TaskSearchQuery, TaskListResponse>
 {
     private const int DefaultLimit = 100;
@@ -33,7 +34,8 @@ internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCom
             request.Sort,
             request.Descending,
             request.TypeKind?.ToDomainKind(),
-            request.Priority?.ToDomainPriority());
+            request.Priority?.ToDomainPriority(),
+            await projectAccess.VisibleBoardIdsAsync(await actors.ResolveAsync(request.ActorId, cancellationToken), cancellationToken));
 
         var items = await tasks.SearchAsync(filter, cancellationToken);
         var counted = await tasks.CountAsync(filter, cancellationToken);

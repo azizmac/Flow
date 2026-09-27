@@ -42,7 +42,7 @@ public class ProjectAccessPersistenceTests(PostgresFixture db)
         Assert.Equal(SharedRole.Admin, all.Single(a => a.BoardId == board.Id).Role);
         Assert.Equal(SharedRole.Member, all.Single(a => a.BoardId == other.Id).Role);
         Assert.Equal(1, await db.QueryAsync(ctx => ctx.BoardMembers.CountAsync(m => m.BoardId == board.Id)));
-        Assert.Equal(SharedRole.Viewer, (await db.SendAsync(new BoardGetQuery(board.Id)))!.DefaultRole);
+        Assert.Equal(SharedRole.Viewer, (await db.SendAsync(new BoardGetQuery(PostgresFixture.OwnerId, board.Id)))!.DefaultRole);
 
         await db.SendAsync(new BoardMemberRemoveCommand(PostgresFixture.OwnerId, board.Id, user));
         Assert.Equal(SharedRole.Viewer, Assert.Single(await db.SendAsync(new BoardMyAccessQuery(user, board.Id))).Role);

@@ -31,7 +31,7 @@ public class BoardFeatureTests
         await mediator.Send(new BoardCreateCommand(TestMediatorFactory.OwnerId, "Board One", "ONE"), CancellationToken.None);
         await mediator.Send(new BoardCreateCommand(TestMediatorFactory.OwnerId, "Board Two", "TWO"), CancellationToken.None);
 
-        var boards = await mediator.Send(new BoardListQuery(), CancellationToken.None);
+        var boards = await mediator.Send(new BoardListQuery(TestMediatorFactory.OwnerId), CancellationToken.None);
 
         Assert.Equal(2, boards.Count);
     }
@@ -47,7 +47,7 @@ public class BoardFeatureTests
         Assert.NotNull(response);
         Assert.Equal("New name", response!.Name);
 
-        var refetched = await mediator.Send(new BoardGetQuery(created.Id), CancellationToken.None);
+        var refetched = await mediator.Send(new BoardGetQuery(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None);
         Assert.Equal("New name", refetched!.Name);
     }
 
@@ -70,7 +70,7 @@ public class BoardFeatureTests
         var deleted = await mediator.Send(new BoardDeleteCommand(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None);
 
         Assert.True(deleted);
-        var afterDelete = await mediator.Send(new BoardGetQuery(created.Id), CancellationToken.None);
+        var afterDelete = await mediator.Send(new BoardGetQuery(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None);
         Assert.Null(afterDelete);
     }
 
@@ -135,7 +135,7 @@ public class BoardFeatureTests
         var deleted = await mediator.Send(new BoardDeleteCommand(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None);
 
         Assert.True(deleted);
-        Assert.Null(await mediator.Send(new BoardGetQuery(created.Id), CancellationToken.None));
+        Assert.Null(await mediator.Send(new BoardGetQuery(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None));
     }
 
     [Fact]
@@ -148,8 +148,8 @@ public class BoardFeatureTests
         await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, withTasks.Id, "Task 1", null, null), CancellationToken.None);
         await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, withTasks.Id, "Task 2", null, null), CancellationToken.None);
 
-        var list = await mediator.Send(new BoardListQuery(), CancellationToken.None);
-        var single = await mediator.Send(new BoardGetQuery(withTasks.Id), CancellationToken.None);
+        var list = await mediator.Send(new BoardListQuery(TestMediatorFactory.OwnerId), CancellationToken.None);
+        var single = await mediator.Send(new BoardGetQuery(TestMediatorFactory.OwnerId, withTasks.Id), CancellationToken.None);
 
         Assert.Equal(2, list.Single(b => b.Id == withTasks.Id).TaskCount);
         Assert.Equal(3, list.Single(b => b.Id == withTasks.Id).NextTaskNumber);

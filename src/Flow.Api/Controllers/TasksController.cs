@@ -50,7 +50,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     [HttpGet("boards/{boardId:guid}/tasks")]
     public async Task<IActionResult> GetBoardTasks(Guid boardId, [FromQuery] Guid? assigneeId, CancellationToken cancellationToken)
     {
-        var tasks = await mediator.Send(new TaskListQuery(boardId, assigneeId), cancellationToken);
+        var tasks = await mediator.Send(new TaskListQuery(actor.Require(), boardId, assigneeId), cancellationToken);
         return Ok(tasks);
     }
 
@@ -91,7 +91,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
             : string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
 
         var response = await mediator.Send(
-            new TaskSearchQuery(boardId, assigneeId, unassigned == true, statusId, statusType, q, limit, cursor,
+            new TaskSearchQuery(actor.Require(), boardId, assigneeId, unassigned == true, statusId, statusType, q, limit, cursor,
                 offset, sortField, descending, typeKind, priority),
             cancellationToken);
 
@@ -101,7 +101,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     [HttpGet("tasks/{id:guid}")]
     public async Task<IActionResult> GetTask(Guid id, CancellationToken cancellationToken)
     {
-        var task = await mediator.Send(new TaskGetQuery(id), cancellationToken);
+        var task = await mediator.Send(new TaskGetQuery(actor.Require(), id), cancellationToken);
         return task is null ? NotFound() : Ok(task);
     }
 

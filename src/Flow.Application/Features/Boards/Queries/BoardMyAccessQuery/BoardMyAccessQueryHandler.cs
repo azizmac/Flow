@@ -16,8 +16,11 @@ internal sealed class BoardMyAccessQueryHandler(IBoardMemberRepository members, 
             ? await members.GetAccessDataAsync(boardId, actor.Id, cancellationToken) is { } one ? [one] : []
             : await members.GetAccessDataForUserAsync(actor.Id, cancellationToken);
 
+        // Скрытые проекты в ответ не попадают: их права — «ничего», и сам факт существования не нужен клиенту.
         return data
-            .Select(d => ProjectRoles.Access(d.BoardId, ProjectRoles.Effective(actor.Role, d.DefaultRole, d.MemberRole)).ToResponse())
+            .Select(d => ProjectRoles.Access(d.BoardId, ProjectRoles.Effective(actor.Role, d.Visibility, d.DefaultRole, d.MemberRole)))
+            .Where(a => a.CanView)
+            .Select(a => a.ToResponse())
             .ToList();
     }
 }

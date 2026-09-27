@@ -39,11 +39,28 @@ internal sealed class BoardMemberSetCommandHandler(
             members.Add(BoardMember.Create(board.Id, user.Id, request.Role, actor.Id));
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
-        else if (member.ChangeRole(request.Role))
+        else
         {
+            EnsureNotLastPrivateAdmin(board, await members.GetByBoardAsync(board.Id, cancellationToken), member, request.Role);
+            if (!member.ChangeRole(request.Role))
+                return BoardMemberResult.Success(board.ToMembersResponse(await members.GetByBoardAsync(board.Id, cancellationToken)));
+
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
         return BoardMemberResult.Success(board.ToMembersResponse(await members.GetByBoardAsync(board.Id, cancellationToken)));
+    }
+
+    /// <summary>
+    /// В приватном проекте нельзя снять или понизить последнего участника-администратора: глобальные Admin/Owner
+    /// проект всё равно увидят, но терять единственного локального администратора незачем (docs/TZ_project_access.md §4).
+    /// </summary>
+    internal static void EnsureNotLastPrivateAdmin(Board board, IReadOnlyList<BoardMember> current, BoardMember member, ProjectRole? newRole)
+    {
+        if (board.Visibility != BoardVisibility.Private || member.Role != ProjectRole.Admin || newRole == ProjectRole.Admin)
+            return;
+
+        if (current.Count(m => m.Role == ProjectRole.Admin) <= 1)
+            throw new InvalidOperationException("Это последний администратор приватного проекта: сначала назначьте другого.");
     }
 }

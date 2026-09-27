@@ -12,6 +12,7 @@ public sealed class BoardMemberRepository(FlowDbContext db) : IBoardMemberReposi
             .Where(b => b.Id == boardId)
             .Select(b => new BoardAccessData(
                 b.Id,
+                b.Visibility,
                 b.DefaultRole,
                 db.BoardMembers.Where(m => m.BoardId == b.Id && m.UserId == userId).Select(m => (ProjectRole?)m.Role).FirstOrDefault()))
             .FirstOrDefaultAsync(cancellationToken);
@@ -20,9 +21,22 @@ public sealed class BoardMemberRepository(FlowDbContext db) : IBoardMemberReposi
         await db.Boards
             .Select(b => new BoardAccessData(
                 b.Id,
+                b.Visibility,
                 b.DefaultRole,
                 db.BoardMembers.Where(m => m.BoardId == b.Id && m.UserId == userId).Select(m => (ProjectRole?)m.Role).FirstOrDefault()))
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<Guid>?> GetVisibleBoardIdsAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        // Приватных проектов нет — фильтр не нужен: запросы чтения идут как до этапа 4B, без ANY(@visible).
+        if (!await db.Boards.AnyAsync(b => b.Visibility == BoardVisibility.Private, cancellationToken))
+            return null;
+
+        return await db.Boards
+            .Where(b => b.Visibility == BoardVisibility.Open || db.BoardMembers.Any(m => m.BoardId == b.Id && m.UserId == userId))
+            .Select(b => b.Id)
+            .ToListAsync(cancellationToken);
+    }
 
     public Task<BoardMember?> GetAsync(Guid boardId, Guid userId, CancellationToken cancellationToken) =>
         db.BoardMembers.FirstOrDefaultAsync(m => m.BoardId == boardId && m.UserId == userId, cancellationToken);

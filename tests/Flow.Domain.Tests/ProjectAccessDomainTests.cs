@@ -68,4 +68,16 @@ public class ProjectAccessDomainTests
         Assert.Throws<ArgumentException>(() => board.SetDefaultRole(ProjectRole.Admin));
         Assert.Throws<ArgumentException>(() => board.SetDefaultRole((ProjectRole)9));
     }
+
+    [Fact]
+    public void SetVisibility_Should_Toggle_And_RejectUnknown()
+    {
+        var board = Board.Create("Flow", "FLW");
+        Assert.Equal(BoardVisibility.Open, board.Visibility);
+
+        board.SetVisibility(BoardVisibility.Private);
+        Assert.Equal(BoardVisibility.Private, board.Visibility);
+
+        Assert.Throws<ArgumentException>(() => board.SetVisibility((BoardVisibility)5));
+    }
 }

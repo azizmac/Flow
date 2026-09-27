@@ -32,23 +32,36 @@ public static class ProjectRoles
         Defaults.TryGetValue(role, out var set) ? set : throw new ArgumentOutOfRangeException(nameof(role), role, "Unknown project role.");
 
     /// <summary>
-    /// Глобальные Admin и Owner — администраторы любого проекта. Остальным глобальная роль даёт свою ступень,
-    /// но не выше <paramref name="defaultRole"/> проекта; прямое участие поднимает до своей роли.
+    /// Глобальные Admin и Owner — администраторы любого проекта, в том числе приватного. В открытом проекте
+    /// остальным глобальная роль даёт свою ступень, но не выше <paramref name="defaultRole"/>; прямое участие
+    /// поднимает до своей роли. В приватном роль есть только у участников: null — проект actor'у не виден.
     /// </summary>
-    public static ProjectRole Effective(UserRole globalRole, ProjectRole? defaultRole, ProjectRole? memberRole)
+    public static ProjectRole? Effective(UserRole globalRole, BoardVisibility visibility, ProjectRole? defaultRole, ProjectRole? memberRole)
     {
         var derived = globalRole.ToProjectRole();
-        if (derived != ProjectRole.Admin && defaultRole is { } ceiling && ceiling < derived)
+        if (derived == ProjectRole.Admin)
+            return ProjectRole.Admin;
+
+        if (visibility == BoardVisibility.Private)
+            return memberRole;
+
+        if (defaultRole is { } ceiling && ceiling < derived)
             derived = ceiling;
 
         return memberRole is { } member && member > derived ? member : derived;
     }
 
-    public static ProjectAccessInfo Access(Guid boardId, ProjectRole role) => new(boardId, role, PermissionsOf(role));
+    public static ProjectAccessInfo Access(Guid boardId, ProjectRole? role) =>
+        new(boardId, role, role is { } r ? PermissionsOf(r) : new HashSet<ProjectPermission>());
 }
 
-/// <summary>Роль actor'а в проекте и её права — то, что получают проверки PermissionService.</summary>
-public sealed record ProjectAccessInfo(Guid BoardId, ProjectRole Role, IReadOnlySet<ProjectPermission> Permissions)
+/// <summary>
+/// Роль actor'а в проекте и её права — то, что получают проверки PermissionService. Role = null — проект
+/// actor'у не виден: любая проверка отвечает 404 (ProjectNotFoundException), а не 403.
+/// </summary>
+public sealed record ProjectAccessInfo(Guid BoardId, ProjectRole? Role, IReadOnlySet<ProjectPermission> Permissions)
 {
+    public bool CanView => Role is not null;
+
     public bool Has(ProjectPermission permission) => Permissions.Contains(permission);
 }

@@ -4,7 +4,13 @@
 
 <div class="board-card" @onclick="Open" role="link" tabindex="0" @onkeydown="OnCardKey">
     <div class="board-card-head">
-        <KeyChip Value="@Board.Key" />
+        <span class="board-card-key">
+            <KeyChip Value="@Board.Key" />
+            @if (Board.Visibility == BoardVisibility.Private)
+            {
+                <span class="lock-ico" title="Приватный проект: видят только участники"><Icon Name="lock" Size="13" /></span>
+            }
+        </span>
         <RowMenu ShowOpen="true" ShowRename="CanRename" ShowDelete="CanDelete" ShowTaskTypes="CanConfigure" ShowAccess="CanManageMembers"
                  Size="26" Style="color:rgba(255,255,255,0.5)"
                  OnOpen="Open" OnRename="StartRename" OnCopy="CopyKey" OnDelete="() => OnDelete.InvokeAsync(Board)"

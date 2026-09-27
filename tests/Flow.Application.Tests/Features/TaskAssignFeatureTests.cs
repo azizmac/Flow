@@ -89,8 +89,8 @@ public class TaskAssignFeatureTests
         await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, boardId, "Unassigned", null, null), CancellationToken.None);
         await mediator.Send(new TaskAssignCommand(TestMediatorFactory.OwnerId, task.Id, user.Id), CancellationToken.None);
 
-        var all = await mediator.Send(new TaskListQuery(boardId), CancellationToken.None);
-        var mine = await mediator.Send(new TaskListQuery(boardId, user.Id), CancellationToken.None);
+        var all = await mediator.Send(new TaskListQuery(TestMediatorFactory.OwnerId, boardId), CancellationToken.None);
+        var mine = await mediator.Send(new TaskListQuery(TestMediatorFactory.OwnerId, boardId, user.Id), CancellationToken.None);
 
         Assert.Equal(2, all.Count);
         Assert.Equal(task.Id, Assert.Single(mine).Id);

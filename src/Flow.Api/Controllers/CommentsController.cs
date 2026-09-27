@@ -20,7 +20,7 @@ public class CommentsController(IMediator mediator, IActorAccessor actor) : Cont
     [HttpGet("tasks/{taskId:guid}/comments")]
     public async Task<IActionResult> GetComments(Guid taskId, CancellationToken cancellationToken)
     {
-        var comments = await mediator.Send(new TaskCommentListQuery(taskId), cancellationToken);
+        var comments = await mediator.Send(new TaskCommentListQuery(actor.Require(), taskId), cancellationToken);
         return comments is null ? NotFound() : Ok(comments);
     }
 
@@ -64,7 +64,7 @@ public class CommentsController(IMediator mediator, IActorAccessor actor) : Cont
     [HttpGet("tasks/{taskId:guid}/activity")]
     public async Task<IActionResult> GetActivity(Guid taskId, CancellationToken cancellationToken)
     {
-        var activity = await mediator.Send(new TaskActivityListQuery(taskId), cancellationToken);
+        var activity = await mediator.Send(new TaskActivityListQuery(actor.Require(), taskId), cancellationToken);
         return activity is null ? NotFound() : Ok(activity);
     }
 }

@@ -8,6 +8,7 @@
 @inject UserDirectory Users
 @inject AppState State
 @inject ProjectAccessState Access
+@inject NavigationManager Nav
 
 <MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
            TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
@@ -24,16 +25,49 @@
         else
         {
             <div class="pa-section">
+                <div class="meta-k">Видимость</div>
+                <div class="seg pa-seg" role="radiogroup" aria-label="Видимость проекта">
+                    @foreach (var option in new[] { BoardVisibility.Open, BoardVisibility.Private })
+                    {
+                        var on = option == _members.Visibility;
+                        <button type="button" class="seg-btn @(on ? "on" : "")" role="radio" aria-checked="@(on ? "true" : "false")"
+                                disabled="@_busy" @onclick="() => SetVisibility(option)">
+                            @if (option == BoardVisibility.Private)
+                            {
+                                <Icon Name="lock" Size="12" />
+                            }
+                            @(option == BoardVisibility.Open ? "Открытый" : "Приватный")
+                        </button>
+                    }
+                </div>
+                @if (_members.Visibility == BoardVisibility.Private)
+                {
+                    <div class="hint">Проект, его задачи, файлы и выдача поиска видны только участникам и Admin/Owner Flow;
+                        остальным он отвечает «не найдено».</div>
+                    @if (_members.Members.All(m => m.Role != ProjectRole.Admin))
+                    {
+                        <div class="hint pa-warn">Среди участников нет администратора: управлять доступом смогут только Admin и Owner Flow.</div>
+                    }
+                }
+                else
+                {
+                    <div class="hint">Проект видят все по своей роли во Flow (не выше роли по умолчанию).</div>
+                }
+            </div>
+
+            <div class="pa-section">
                 <div class="meta-k">Роль по умолчанию</div>
                 <div class="seg pa-seg" role="radiogroup" aria-label="Роль по умолчанию">
                     @foreach (var option in DefaultOptions)
                     {
                         var on = option == _members.DefaultRole;
                         <button type="button" class="seg-btn @(on ? "on" : "")" role="radio" aria-checked="@(on ? "true" : "false")"
-                                disabled="@_busy" @onclick="() => SetDefault(option)">@DefaultLabel(option)</button>
+                                disabled="@(_busy || _members.Visibility == BoardVisibility.Private)" @onclick="() => SetDefault(option)">@DefaultLabel(option)</button>
                     }
                 </div>
-                <div class="hint">@DefaultHint(_members.DefaultRole)</div>
+                <div class="hint">@(_members.Visibility == BoardVisibility.Private
+                    ? "В приватном проекте не действует: без участия проекта просто не видно."
+                    : DefaultHint(_members.DefaultRole))</div>
             </div>
 
             <div class="pa-section">
@@ -172,6 +206,11 @@
         await OnClose.InvokeAsync();
     }
 
+    private Task SetVisibility(BoardVisibility visibility) =>
+        visibility == _members?.Visibility
+            ? Task.CompletedTask
+            : Send(() => Api.SetBoardVisibility(Board.Id, new SetVisibilityRequest(visibility)), affectsMe: true);
+
     private Task SetDefault(ProjectRole? role) =>
         role == _members?.DefaultRole ? Task.CompletedTask : Send(() => Api.SetBoardDefaultRole(Board.Id, new SetDefaultRoleRequest(role)), affectsMe: true);
 
@@ -203,7 +242,17 @@
 
         _members = result.Value!;
         if (affectsMe)
+        {
             await Access.EnsureLoadedAsync(force: true);
+
+            // Убрал себя из приватного проекта — он пропал из видимых: оставаться на его экране незачем.
+            if (Access.For(Board.Id) is null)
+            {
+                await CloseDialog();
+                Nav.NavigateTo("boards", forceLoad: true);
+                return true;
+            }
+        }
 
         return true;
     }

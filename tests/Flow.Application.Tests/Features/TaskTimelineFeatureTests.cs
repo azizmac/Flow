@@ -133,7 +133,7 @@ public class TaskTimelineFeatureTests
         Assert.Equal(2, entries.Count);
         Assert.Equal("2026-09-15", entries[0].NewValue);
         Assert.Null(entries[1].NewValue);
-        Assert.Null((await mediator.Send(new TaskGetQuery(task.Id), CancellationToken.None))!.DueDate);
+        Assert.Null((await mediator.Send(new TaskGetQuery(TestMediatorFactory.OwnerId, task.Id), CancellationToken.None))!.DueDate);
     }
 
     [Fact]
@@ -157,11 +157,11 @@ public class TaskTimelineFeatureTests
         var task = await CreateTaskAsync(mediator, board.Id);
         await mediator.Send(new TaskUpdateCommand(Owner, task.Id, "Renamed", null, null), CancellationToken.None);
 
-        var list = await mediator.Send(new TaskActivityListQuery(task.Id), CancellationToken.None);
+        var list = await mediator.Send(new TaskActivityListQuery(TestMediatorFactory.OwnerId, task.Id), CancellationToken.None);
 
         Assert.NotNull(list);
         Assert.Equal(new[] { SharedActivityType.Created, SharedActivityType.TitleChanged }, list!.Select(a => a.Type));
-        Assert.Null(await mediator.Send(new TaskActivityListQuery(Guid.NewGuid()), CancellationToken.None));
+        Assert.Null(await mediator.Send(new TaskActivityListQuery(TestMediatorFactory.OwnerId, Guid.NewGuid()), CancellationToken.None));
     }
 
     // ---- comments ----
@@ -185,8 +185,8 @@ public class TaskTimelineFeatureTests
         Assert.Single(comments.All);
         var logged = Assert.Single(activities.ForTask(task.Id), a => a.Type == TaskActivityType.CommentAdded);
         Assert.Equal(response.Id.ToString(), logged.NewValue);
-        Assert.Equal(1, (await mediator.Send(new TaskGetQuery(task.Id), CancellationToken.None))!.CommentCount);
-        Assert.Equal(1, Assert.Single(await mediator.Send(new TaskListQuery(board.Id, null), CancellationToken.None)).CommentCount);
+        Assert.Equal(1, (await mediator.Send(new TaskGetQuery(TestMediatorFactory.OwnerId, task.Id), CancellationToken.None))!.CommentCount);
+        Assert.Equal(1, Assert.Single(await mediator.Send(new TaskListQuery(TestMediatorFactory.OwnerId, board.Id, null), CancellationToken.None)).CommentCount);
     }
 
     [Fact]
@@ -252,7 +252,7 @@ public class TaskTimelineFeatureTests
         Assert.Empty(comments.All);
         var deleted = activities.ForTask(task.Id).Where(a => a.Type == TaskActivityType.CommentDeleted).ToList();
         Assert.Equal(new[] { first.Id.ToString(), second.Id.ToString() }, deleted.Select(a => a.OldValue));
-        Assert.Empty((await mediator.Send(new TaskCommentListQuery(task.Id), CancellationToken.None))!);
+        Assert.Empty((await mediator.Send(new TaskCommentListQuery(TestMediatorFactory.OwnerId, task.Id), CancellationToken.None))!);
     }
 
     [Fact]
@@ -260,6 +260,6 @@ public class TaskTimelineFeatureTests
     {
         var (mediator, _, _, _, _, _) = TestMediatorFactory.CreateWithTimeline();
 
-        Assert.Null(await mediator.Send(new TaskCommentListQuery(Guid.NewGuid()), CancellationToken.None));
+        Assert.Null(await mediator.Send(new TaskCommentListQuery(TestMediatorFactory.OwnerId, Guid.NewGuid()), CancellationToken.None));
     }
 }

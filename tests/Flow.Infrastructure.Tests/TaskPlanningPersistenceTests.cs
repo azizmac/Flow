@@ -32,7 +32,7 @@ public class TaskPlanningPersistenceTests(PostgresFixture db)
     {
         var board = (await db.SendAsync(new BoardCreateCommand(PostgresFixture.OwnerId, "Types seed", "TTS"))).Response!;
 
-        var reloaded = (await db.SendAsync(new BoardGetQuery(board.Id)))!;
+        var reloaded = (await db.SendAsync(new BoardGetQuery(PostgresFixture.OwnerId, board.Id)))!;
         Assert.Equal(5, reloaded.TaskTypes.Count);
         var @default = Assert.Single(reloaded.TaskTypes, t => t.IsDefault);
         Assert.Equal(SharedTypeKind.Task, @default.Kind);
@@ -51,7 +51,7 @@ public class TaskPlanningPersistenceTests(PostgresFixture db)
         var incident = afterCreate.TaskTypes.Single(t => t.Name == "Инцидент");
         await db.SendAsync(new TaskTypeUpdateCommand(PostgresFixture.OwnerId, board.Id, epic.Id, Name: "Большая цель", IsArchived: true));
 
-        var reloaded = (await db.SendAsync(new BoardGetQuery(board.Id)))!;
+        var reloaded = (await db.SendAsync(new BoardGetQuery(PostgresFixture.OwnerId, board.Id)))!;
         Assert.Equal(incident.Id, Assert.Single(reloaded.TaskTypes, t => t.IsDefault).Id);
         var renamed = reloaded.TaskTypes.Single(t => t.Id == epic.Id);
         Assert.Equal("Большая цель", renamed.Name);
@@ -69,7 +69,7 @@ public class TaskPlanningPersistenceTests(PostgresFixture db)
         await db.SendAsync(new TaskSetScheduleCommand(PostgresFixture.OwnerId, task.Id, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 3)));
         await db.SendAsync(new TaskSetEstimateCommand(PostgresFixture.OwnerId, task.Id, 3.5m, 150));
 
-        var reloaded = (await db.SendAsync(new TaskGetQuery(task.Id)))!;
+        var reloaded = (await db.SendAsync(new TaskGetQuery(PostgresFixture.OwnerId, task.Id)))!;
         Assert.Equal(bug.Id, reloaded.TypeId);
         Assert.Equal(TaskPriority.High, reloaded.Priority);
         Assert.Equal(new DateOnly(2026, 10, 1), reloaded.StartDate);
@@ -103,12 +103,12 @@ public class TaskPlanningPersistenceTests(PostgresFixture db)
         var critical = (await db.SendAsync(new TaskCreateCommand(PostgresFixture.OwnerId, board.Id, "Срочный баг", null, null, bugType.Id, DomainPriority.Critical)))!;
         var plain = (await db.SendAsync(new TaskCreateCommand(PostgresFixture.OwnerId, board.Id, "Обычная", null, null, null, DomainPriority.Critical)))!;
 
-        var bugs = await db.SendAsync(new TaskSearchQuery(BoardId: board.Id, TypeKind: SharedTypeKind.Bug, Offset: 0,
+        var bugs = await db.SendAsync(new TaskSearchQuery(PostgresFixture.OwnerId, BoardId: board.Id, TypeKind: SharedTypeKind.Bug, Offset: 0,
             Sort: TaskSortField.Priority, Descending: true));
         Assert.Equal([critical.Id, low.Id], bugs.Items.Select(t => t.Id));
         Assert.Equal(2, bugs.Matched);
 
-        var criticalOnly = await db.SendAsync(new TaskSearchQuery(BoardId: board.Id, Priority: TaskPriority.Critical));
+        var criticalOnly = await db.SendAsync(new TaskSearchQuery(PostgresFixture.OwnerId, BoardId: board.Id, Priority: TaskPriority.Critical));
         Assert.Equal(new HashSet<Guid> { critical.Id, plain.Id }, criticalOnly.Items.Select(t => t.Id).ToHashSet());
     }
 

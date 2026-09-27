@@ -51,6 +51,7 @@ public interface IFlowApi
     Task<ApiResult<BoardMembersResponse>> GetBoardMembers(Guid boardId, CancellationToken ct = default);
     Task<ApiResult<BoardMembersResponse>> SetBoardMember(Guid boardId, Guid userId, SetBoardMemberRequest request, CancellationToken ct = default);
     Task<ApiResult<BoardMembersResponse>> RemoveBoardMember(Guid boardId, Guid userId, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> SetBoardVisibility(Guid boardId, SetVisibilityRequest request, CancellationToken ct = default);
     Task<ApiResult<BoardMembersResponse>> SetBoardDefaultRole(Guid boardId, SetDefaultRoleRequest request, CancellationToken ct = default);
 
     // ---- Задачи ----

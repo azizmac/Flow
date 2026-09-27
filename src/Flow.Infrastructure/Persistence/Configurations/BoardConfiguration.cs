@@ -27,6 +27,9 @@ public sealed class BoardConfiguration : IEntityTypeConfiguration<Board>
         // null — роль в проекте равна глобальной (docs/TZ_project_access.md): у существующих проектов так и есть.
         builder.Property(b => b.DefaultRole);
 
+        // Open = 0 — у всех существующих проектов: после миграции каждый видит ровно то, что видел.
+        builder.Property(b => b.Visibility).IsRequired();
+
         builder.Navigation(b => b.Statuses).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(b => b.Tasks).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(b => b.TaskTypes).UsePropertyAccessMode(PropertyAccessMode.Field);

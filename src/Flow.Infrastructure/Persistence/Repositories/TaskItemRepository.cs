@@ -123,6 +123,9 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
         if (filter.BoardId is { } boardId)
             query = query.Where(t => t.BoardId == boardId);
 
+        if (filter.VisibleBoardIds is { } visible)
+            query = query.Where(t => visible.Contains(t.BoardId));
+
         if (filter.AssigneeId is { } assigneeId)
             query = query.Where(t => t.AssigneeId == assigneeId);
         else if (filter.Unassigned)

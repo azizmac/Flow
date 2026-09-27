@@ -32,11 +32,11 @@ public class TaskTimelinePersistenceTests(PostgresFixture db)
         var stored = await db.QueryAsync(ctx => ctx.TaskComments.SingleAsync(c => c.Id == comment.Id));
         Assert.Equal(user.Id, Assert.Single(stored.Mentions).UserId);
 
-        var activity = (await db.SendAsync(new TaskActivityListQuery(task.Id)))!;
+        var activity = (await db.SendAsync(new TaskActivityListQuery(PostgresFixture.OwnerId, task.Id)))!;
         Assert.Equal(
             new[] { TaskActivityType.Created, TaskActivityType.TitleChanged, TaskActivityType.CommentAdded },
             activity.Select(a => a.Type));
-        Assert.Equal(comment.Id, Assert.Single((await db.SendAsync(new TaskCommentListQuery(task.Id)))!).Id);
+        Assert.Equal(comment.Id, Assert.Single((await db.SendAsync(new TaskCommentListQuery(PostgresFixture.OwnerId, task.Id)))!).Id);
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public class TaskTimelinePersistenceTests(PostgresFixture db)
         Assert.True(await db.SendAsync(new TaskCommentDeleteCommand(PostgresFixture.OwnerId, comment.Id)));
 
         Assert.False(await db.QueryAsync(ctx => ctx.TaskComments.AnyAsync(c => c.Id == comment.Id)));
-        var activity = (await db.SendAsync(new TaskActivityListQuery(task.Id)))!;
+        var activity = (await db.SendAsync(new TaskActivityListQuery(PostgresFixture.OwnerId, task.Id)))!;
         Assert.Contains(activity, a => a.Type == TaskActivityType.CommentDeleted && a.OldValue == comment.Id.ToString());
     }
 

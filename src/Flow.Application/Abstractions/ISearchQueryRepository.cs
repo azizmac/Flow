@@ -16,7 +16,8 @@ public interface ISearchQueryRepository
     /// индексации. Исходная задача из выдачи исключается, закрытые не показываются.
     /// Пустой список — у задачи ещё нет чанков (индексация не дошла).
     /// </summary>
-    Task<IReadOnlyList<SearchHit>> FindSimilarAsync(Guid taskId, int limit, CancellationToken cancellationToken);
+    /// <param name="visibleBoardIds">Проекты, которые видит actor; null — все. Фильтр стоит внутри HNSW-запроса.</param>
+    Task<IReadOnlyList<SearchHit>> FindSimilarAsync(Guid taskId, int limit, IReadOnlyCollection<Guid>? visibleBoardIds, CancellationToken cancellationToken);
 }
 
 /// <param name="Query">Нормализованная строка запроса — уходит в websearch_to_tsquery и в подсветку.</param>
@@ -30,6 +31,8 @@ public interface ISearchQueryRepository
 /// <param name="StatusIds">Статусы с подходящим названием: имя статуса своё у каждого проекта.</param>
 /// <param name="OverdueOnly">Только просроченные: срок в прошлом и задача не закрыта.</param>
 /// <param name="UpdatedSince">Окно по дате источника («за неделю»).</param>
+/// <param name="VisibleBoardIds">Проекты, которые видит actor (docs/TZ_project_access.md, 4B); null — все.
+/// Чанки без проекта (люди) видны всем: справочник людей общий.</param>
 public sealed record SearchCriteria(
     string Query,
     float[]? QueryEmbedding,
@@ -46,7 +49,8 @@ public sealed record SearchCriteria(
     IReadOnlyCollection<Guid>? StatusIds = null,
     bool OverdueOnly = false,
     DateTime? UpdatedSince = null,
-    float[]? VisionQueryEmbedding = null)
+    float[]? VisionQueryEmbedding = null,
+    IReadOnlyCollection<Guid>? VisibleBoardIds = null)
 {
     /// <summary>
     /// Есть ли фильтры, которых нет в чанке: исполнитель, статус, срок. Они живут в TaskItems,

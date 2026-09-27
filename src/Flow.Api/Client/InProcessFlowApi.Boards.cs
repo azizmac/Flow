@@ -5,6 +5,7 @@ using Flow.Application.Features.Boards.Commands.BoardDefaultRoleSetCommand;
 using Flow.Application.Features.Boards.Commands.BoardMemberRemoveCommand;
 using Flow.Application.Features.Boards.Commands.BoardMemberSetCommand;
 using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
+using Flow.Application.Features.Boards.Commands.BoardVisibilitySetCommand;
 using Flow.Application.Features.Boards.Queries.BoardMembersQuery;
 using Flow.Application.Features.Boards.Queries.BoardMyAccessQuery;
 using Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
@@ -24,12 +25,12 @@ namespace Flow.Api.Client;
 internal sealed partial class InProcessFlowApi
 {
     public Task<ApiResult<IReadOnlyList<BoardResponse>>> GetBoards(CancellationToken ct = default) =>
-        Scoped(async mediator => Ok(await mediator.Send(new BoardListQuery(), ct)));
+        Scoped(async mediator => Ok(await mediator.Send(new BoardListQuery(await ActorAsync()), ct)));
 
     public Task<ApiResult<BoardResponse>> GetBoard(Guid id, CancellationToken ct = default) =>
         Scoped(async mediator =>
         {
-            var board = await mediator.Send(new BoardGetQuery(id), ct);
+            var board = await mediator.Send(new BoardGetQuery(await ActorAsync(), id), ct);
             return board is null ? NotFound<BoardResponse>() : Ok(board);
         });
 
@@ -98,6 +99,14 @@ internal sealed partial class InProcessFlowApi
         {
             var response = await mediator.Send(
                 new BoardDefaultRoleSetCommand(await ActorAsync(), boardId, request.Role?.ToDomainRole()), ct);
+            return response is null ? NotFound<BoardMembersResponse>() : Ok(response);
+        });
+
+    public Task<ApiResult<BoardMembersResponse>> SetBoardVisibility(Guid boardId, SetVisibilityRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var response = await mediator.Send(
+                new BoardVisibilitySetCommand(await ActorAsync(), boardId, request.Visibility.ToDomainVisibility()), ct);
             return response is null ? NotFound<BoardMembersResponse>() : Ok(response);
         });
 
