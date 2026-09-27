@@ -326,12 +326,42 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         }
     }
 
-    /// <summary>Дерево задач проекта или поддерево rootId: плоский список в порядке обхода с глубиной.</summary>
+    /// <summary>
+    /// Дерево задач проекта или поддерево rootId: плоский список в порядке обхода с глубиной (docs/TZ_task_views.md §3).
+    /// Фильтры — как у GET /tasks, предки подходящих задач приходят с isContextOnly; maxDepth — глубина от корня обхода.
+    /// </summary>
     [HttpGet("boards/{boardId:guid}/tree")]
-    public async Task<IActionResult> GetTree(Guid boardId, [FromQuery] Guid? rootId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetTree(
+        Guid boardId,
+        [FromQuery] Guid? rootId,
+        [FromQuery] Guid? assigneeId,
+        [FromQuery] bool? unassigned,
+        [FromQuery] string? q,
+        [FromQuery] TaskTypeKind? typeKind,
+        [FromQuery] TaskPriority? priority,
+        [FromQuery] Guid? statusId,
+        [FromQuery] string? fql,
+        [FromQuery] int? maxDepth,
+        CancellationToken cancellationToken)
     {
-        var tree = await mediator.Send(new TaskTreeQuery(actor.Require(), boardId, rootId), cancellationToken);
-        return tree is null ? NotFound() : Ok(tree);
+        if (typeKind is { } kind && !Enum.IsDefined(kind))
+            return BadRequest(new { Message = $"Unknown task type kind {kind}." });
+        if (priority is { } p && !Enum.IsDefined(p))
+            return BadRequest(new { Message = $"Unknown priority {p}." });
+        if (maxDepth is < 0)
+            return BadRequest(new { Message = "maxDepth must not be negative." });
+
+        try
+        {
+            var tree = await mediator.Send(
+                new TaskTreeQuery(actor.Require(), boardId, rootId, assigneeId, unassigned == true, q, typeKind, priority, statusId, fql, maxDepth),
+                cancellationToken);
+            return tree is null ? NotFound() : Ok(tree);
+        }
+        catch (FqlException ex)
+        {
+            return BadRequest(new FqlErrorResponse(ex.Message, ex.Position, ex.Length));
+        }
     }
 
     private async Task<IActionResult> SendUpdate(MediatR.IRequest<TaskUpdateResult> command, CancellationToken cancellationToken)

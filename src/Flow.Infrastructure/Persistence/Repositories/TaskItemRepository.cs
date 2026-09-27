@@ -142,6 +142,9 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
             byStatus.Select(x => (x.StatusId, x.Count)).ToList());
     }
 
+    public async Task<IReadOnlyList<Guid>> MatchingIdsAsync(TaskListFilter filter, CancellationToken cancellationToken) =>
+        await Filtered(filter).Select(t => t.Id).ToListAsync(cancellationToken);
+
     private IQueryable<TaskItem> Filtered(TaskListFilter filter)
     {
         var query = db.TaskItems.AsQueryable();

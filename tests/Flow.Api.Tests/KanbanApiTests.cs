@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Flow.Api.Tests;
 
-/// <summary>Канбан через HTTP (этап 2B): маршруты, разбор query-string колонки и коды ответов.</summary>
+/// <summary>Канбан и дерево через HTTP (этапы 2B, 2C): маршруты, разбор query-string и коды ответов.</summary>
 [Collection(ApiCollection.Name)]
 public sealed class KanbanApiTests(ApiFixture api)
 {
@@ -48,6 +48,14 @@ public sealed class KanbanApiTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.BadRequest, badFql.StatusCode);
         using var missing = await owner.GetAsync($"/api/tasks/board?boardId={Guid.NewGuid()}");
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+
+        // Дерево того же проекта: фильтр и глубина разбираются из query-string.
+        var tree = await owner.GetFromJsonAsync<List<TaskTreeNode>>($"/api/boards/{board.Id}/tree?q=T&maxDepth=1");
+        Assert.Equal(task.Id, Assert.Single(tree!).Task.Id);
+        using var badDepth = await owner.GetAsync($"/api/boards/{board.Id}/tree?maxDepth=-1");
+        Assert.Equal(HttpStatusCode.BadRequest, badDepth.StatusCode);
+        using var badTreeFql = await owner.GetAsync($"/api/boards/{board.Id}/tree?fql=status%20%3D");
+        Assert.Equal(HttpStatusCode.BadRequest, badTreeFql.StatusCode);
 
         using var window = await owner.PutAsJsonAsync($"/api/boards/{board.Id}/done-column-days", new SetDoneColumnDaysRequest(30));
         Assert.Equal(30, (await window.Content.ReadFromJsonAsync<BoardResponse>())!.DoneColumnDays);

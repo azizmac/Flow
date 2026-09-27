@@ -4,5 +4,8 @@ namespace Flow.Shared.Contracts.Users;
 public enum TaskView
 {
     List = 0,
-    Board = 1
+    Board = 1,
+
+    /// <summary>Дерево — только внутри проекта; в «Все проекты» экран покажет список.</summary>
+    Tree = 2
 }

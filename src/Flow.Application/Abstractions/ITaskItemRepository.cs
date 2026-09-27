@@ -25,6 +25,9 @@ public interface ITaskItemRepository
     /// </summary>
     Task<TaskCounts> CountAsync(TaskListFilter filter, CancellationToken cancellationToken);
 
+    /// <summary>Id всех задач под фильтром, без страниц и порядка — дереву, чтобы отметить подходящие узлы.</summary>
+    Task<IReadOnlyList<Guid>> MatchingIdsAsync(TaskListFilter filter, CancellationToken cancellationToken);
+
     /// <summary>
     /// Количество задач по каждой доске одним запросом (GROUP BY BoardId) — для BoardResponse.TaskCount.
     /// Доски без задач в словаре отсутствуют, вызывающая сторона трактует это как 0.

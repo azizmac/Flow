@@ -161,10 +161,25 @@ internal sealed partial class InProcessFlowApi
     public Task<ApiResult<TaskResponse>> RankTask(Guid id, RankTaskRequest request, CancellationToken ct = default) =>
         SendUpdate(actor => new TaskRankCommand(actor, id, request.AfterId, request.BeforeId, request.StatusId), ct);
 
-    public Task<ApiResult<IReadOnlyList<TaskTreeNode>>> GetTree(Guid boardId, Guid? rootId = null, CancellationToken ct = default) =>
+    public Task<ApiResult<IReadOnlyList<TaskTreeNode>>> GetTree(
+        Guid boardId,
+        Guid? rootId = null,
+        Guid? assigneeId = null,
+        bool unassigned = false,
+        string? query = null,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
+        Guid? statusId = null,
+        string? fql = null,
+        int? maxDepth = null,
+        CancellationToken ct = default) =>
         Scoped(async mediator =>
         {
-            var tree = await mediator.Send(new TaskTreeQuery(await ActorAsync(), boardId, rootId), ct);
+            var tree = await mediator.Send(
+                new TaskTreeQuery(await ActorAsync(), boardId, rootId, assigneeId, unassigned,
+                    string.IsNullOrWhiteSpace(query) ? null : query.Trim(), typeKind, priority, statusId,
+                    string.IsNullOrWhiteSpace(fql) ? null : fql, maxDepth),
+                ct);
             return tree is null ? NotFound<IReadOnlyList<TaskTreeNode>>() : Ok(tree);
         });
 

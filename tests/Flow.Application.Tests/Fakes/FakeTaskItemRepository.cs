@@ -53,6 +53,9 @@ public sealed class FakeTaskItemRepository(FakeBoardRepository? boards = null) :
         return Task.FromResult(new TaskCounts(byStatus.Sum(x => x.Count), matched, [], byStatus));
     }
 
+    public Task<IReadOnlyList<Guid>> MatchingIdsAsync(TaskListFilter filter, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Guid>>(Filtered(filter).Select(t => t.Id).ToList());
+
     private IEnumerable<TaskItem> Filtered(TaskListFilter filter) => _tasks
         .Where(t => filter.BoardId is null || t.BoardId == filter.BoardId)
         .Where(t => filter.VisibleBoardIds is null || filter.VisibleBoardIds.Contains(t.BoardId))

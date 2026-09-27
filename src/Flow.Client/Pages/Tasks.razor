@@ -84,17 +84,20 @@
         <div class="filter-row">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <div class="seg" role="radiogroup" aria-label="Вид">
-                    <button type="button" class="seg-btn @(IsBoardView ? "" : "on")" role="radio" aria-checked="@(!IsBoardView)"
-                            title="Список" @onclick="() => SetView(false)"><Icon Name="list" Size="14" />Список</button>
+                    <button type="button" class="seg-btn @(CurrentView == TaskView.List ? "on" : "")" role="radio" aria-checked="@(CurrentView == TaskView.List)"
+                            title="Список" @onclick="() => SetView(TaskView.List)"><Icon Name="list" Size="14" />Список</button>
                     <button type="button" class="seg-btn @(IsBoardView ? "on" : "")" role="radio" aria-checked="@IsBoardView"
-                            title="Доска: колонки по статусам" @onclick="() => SetView(true)"><Icon Name="grid" Size="14" />Доска</button>
+                            title="Доска: колонки по статусам" @onclick="() => SetView(TaskView.Board)"><Icon Name="grid" Size="14" />Доска</button>
+                    <button type="button" class="seg-btn @(IsTreeView ? "on" : "")" role="radio" aria-checked="@IsTreeView" disabled="@(BoardId is null)"
+                            title="@(BoardId is null ? "Дерево — внутри одного проекта: выберите проект" : "Дерево: эпики, истории и подзадачи")"
+                            @onclick="() => SetView(TaskView.Tree)"><Icon Name="list-ordered" Size="14" />Дерево</button>
                 </div>
                 @* В доске фильтр статуса не нужен: колонки и есть статусы. *@
-                @if (!IsBoardView && CurrentBoard is { } board)
+                @if (CurrentView == TaskView.List && CurrentBoard is { } board)
                 {
                     <StatusFilter Statuses="board.Statuses" Counts="_countsByStatus" Total="_total" Value="StatusId" ValueChanged="SetStatusFilter" />
                 }
-                else if (!IsBoardView)
+                else if (CurrentView == TaskView.List)
                 {
                     <StatusTypeFilter Counts="_countsByType" Total="_total" Value="TypeFilter" ValueChanged="SetTypeFilter" />
                 }
@@ -109,7 +112,7 @@
                         title="@(HasPanelFilters && !FqlVisible ? "Показать фильтры строкой FQL" : "Строка запроса FQL")">FQL</button>
             </div>
             <div class="meta-line">
-                @if (!IsBoardView)
+                @if (CurrentView == TaskView.List)
                 {
                     @Ru.Tasks(_total)@(" · ")
                 }@(CurrentBoard is { } b ? $"создан {Ru.Date(b.CreatedAt)}" : Ru.Projects(_boards.Count))
@@ -121,7 +124,13 @@
             <FqlBar Value="@EffectiveFql" Error="_fqlError" OnApply="ApplyFql" OnSave="OpenSave" OnClose="CloseFql" />
         }
 
-        @if (IsBoardView)
+        @if (IsTreeView && BoardId is { } treeBoardId)
+        {
+            <TaskTree @ref="_tree" Boards="_boards" BoardId="treeBoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
+                      Query="@_search" Fql="@EffectiveFql" Me="Me" SelectedId="TaskId"
+                      OnOpen="OpenTask" OnLoaded="OnKanbanLoaded" OnFqlError="e => _fqlError = e" />
+        }
+        else if (IsBoardView)
         {
             <KanbanBoard @ref="_kanban" Boards="_boards" BoardId="BoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
                          Query="@_search" Fql="@EffectiveFql" Me="Me" SelectedId="TaskId"
@@ -369,25 +378,43 @@
     private MudDataGrid<TaskResponse>? _grid;
     private KanbanBoard? _kanban;
 
-    private bool IsBoardView => View switch
-    {
-        "board" => true,
-        "list" => false,
-        _ => Preferences.TasksView == TaskView.Board
-    };
+    private TaskTree? _tree;
 
     /// <summary>
-    /// Смена вида. Фильтр статуса в доске не нужен — колонки и есть статусы, — поэтому он снимается; остальные
-    /// фильтры едут с адресом.
+    /// Вид экрана: из адреса, без него — из личных настроек. Дерево — только внутри проекта (docs/TZ_task_views.md §3):
+    /// в «Все проекты» оно показывает список.
     /// </summary>
-    private void SetView(bool board)
+    private TaskView CurrentView
     {
-        if (board == IsBoardView)
+        get
+        {
+            var view = View switch
+            {
+                "board" => TaskView.Board,
+                "tree" => TaskView.Tree,
+                "list" => TaskView.List,
+                _ => Preferences.TasksView
+            };
+            return view == TaskView.Tree && BoardId is null ? TaskView.List : view;
+        }
+    }
+
+    private bool IsBoardView => CurrentView == TaskView.Board;
+
+    private bool IsTreeView => CurrentView == TaskView.Tree;
+
+    /// <summary>
+    /// Смена вида. Фильтр статуса есть только у списка (в доске колонки и есть статусы, в дереве статус виден в строке),
+    /// поэтому он снимается; остальные фильтры едут с адресом.
+    /// </summary>
+    private void SetView(TaskView view)
+    {
+        if (view == CurrentView)
             return;
 
         Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
         {
-            ["view"] = board ? "board" : "list",
+            ["view"] = view.ToString().ToLowerInvariant(),
             ["status"] = null,
             ["type"] = null
         }));
@@ -545,7 +572,7 @@
             await Filters.EnsureLoadedAsync();
 
         // Фильтры считает сервер, поэтому любое их изменение — это новый запрос списка.
-        var key = $"{BoardId}|{StatusId}|{Type}|{Who}|{_search.Trim()}|{EffectiveFql}|{IsBoardView}";
+        var key = $"{BoardId}|{StatusId}|{Type}|{Who}|{_search.Trim()}|{EffectiveFql}|{CurrentView}";
         if (_loadedKey != key)
         {
             _loadedKey = key;
@@ -586,8 +613,8 @@
             return;
         }
 
-        // Доска перечитывается сама, когда меняются её параметры (фильтры в адресе).
-        if (IsBoardView)
+        // Доска и дерево перечитываются сами, когда меняются их параметры (фильтры в адресе).
+        if (CurrentView != TaskView.List)
             return;
 
         // Первый заход: таблица ещё не смонтирована и запросит данные сама, когда появится.
@@ -700,6 +727,13 @@
         {
             if (_kanban is not null)
                 await _kanban.ReloadAsync();
+            return;
+        }
+
+        if (IsTreeView)
+        {
+            if (_tree is not null)
+                await _tree.ReloadAsync();
             return;
         }
 
@@ -1181,6 +1215,7 @@
 
         _tasks[i] = t;
         _kanban?.Replace(t);
+        _tree?.Replace(t);
         await Redraw();
     }
 

@@ -137,7 +137,19 @@ public interface IFlowApi
     Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> UpdateChecklistItem(Guid taskId, Guid itemId, UpdateChecklistItemRequest request, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> DeleteChecklistItem(Guid taskId, Guid itemId, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> ReorderChecklist(Guid taskId, ReorderChecklistRequest request, CancellationToken ct = default);
-    Task<ApiResult<IReadOnlyList<TaskTreeNode>>> GetTree(Guid boardId, Guid? rootId = null, CancellationToken ct = default);
+    /// <summary>Дерево проекта (docs/TZ_task_views.md §3): фильтры как у списка, maxDepth — глубина от корня обхода.</summary>
+    Task<ApiResult<IReadOnlyList<TaskTreeNode>>> GetTree(
+        Guid boardId,
+        Guid? rootId = null,
+        Guid? assigneeId = null,
+        bool unassigned = false,
+        string? query = null,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
+        Guid? statusId = null,
+        string? fql = null,
+        int? maxDepth = null,
+        CancellationToken ct = default);
 
     // ---- Комментарии и журнал ----
     Task<ApiResult<IReadOnlyList<TaskCommentResponse>>> GetComments(Guid taskId, CancellationToken ct = default);
