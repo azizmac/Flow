@@ -1,0 +1,48 @@
+using Flow.Application.Abstractions;
+using Flow.Application.Security;
+using Flow.Domain.Entities;
+
+namespace Flow.Application.Features.Tasks.Fql;
+
+/// <summary>
+/// <see cref="IFqlLookup"/> поверх репозиториев для конкретного actor'а: проекты и задачи — только из видимых
+/// проектов (docs/TZ_project_access.md). Экземпляр на один запрос: список видимых проектов считается один раз.
+/// </summary>
+internal sealed class FqlLookup(
+    User actor,
+    IBoardRepository boards,
+    IUserRepository users,
+    ITaskItemRepository tasks,
+    ITaskLinkRepository links,
+    IProjectAccess projectAccess) : IFqlLookup
+{
+    private IReadOnlyList<Board>? _visible;
+
+    public async Task<IReadOnlyList<Board>> VisibleBoardsAsync(CancellationToken cancellationToken)
+    {
+        if (_visible is not null)
+            return _visible;
+
+        var all = await boards.GetAllAsync(cancellationToken);
+        var visible = await projectAccess.VisibleBoardIdsAsync(actor, cancellationToken);
+        return _visible = visible is null ? all : all.Where(b => visible.Contains(b.Id)).ToList();
+    }
+
+    public async Task<IReadOnlyDictionary<string, Guid>> UsersByUsernameAsync(IReadOnlyCollection<string> usernames, CancellationToken cancellationToken) =>
+        (await users.GetByUsernamesAsync(usernames, cancellationToken)).ToDictionary(u => u.Username, u => u.Id);
+
+    public async Task<TaskItem?> TaskByCodeAsync(string code, CancellationToken cancellationToken)
+    {
+        var task = await tasks.GetByCodeAsync(code, cancellationToken);
+        return task is not null && (await VisibleBoardsAsync(cancellationToken)).Any(b => b.Id == task.BoardId) ? task : null;
+    }
+
+    public async Task<IReadOnlyList<Guid>> DescendantsAsync(TaskItem root, CancellationToken cancellationToken) =>
+        (await tasks.GetTreeAsync(root.BoardId, root.Id, cancellationToken)).Where(e => e.Depth > 0).Select(e => e.Task.Id).ToList();
+
+    public async Task<IReadOnlyList<Guid>> LinkedAsync(Guid taskId, CancellationToken cancellationToken) =>
+        (await links.GetByTaskIdAsync(taskId, cancellationToken)).Select(l => l.OtherTaskId(taskId)).Distinct().ToList();
+
+    public Task<IReadOnlyList<Guid>> BlockedByAsync(Guid taskId, CancellationToken cancellationToken) =>
+        links.GetBlockedTargetsAsync([taskId], cancellationToken);
+}

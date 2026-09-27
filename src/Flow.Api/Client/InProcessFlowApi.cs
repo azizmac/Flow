@@ -83,6 +83,10 @@ internal sealed partial class InProcessFlowApi(IServiceScopeFactory scopes, Auth
         {
             return ApiResult<T>.Fail(ex.Message, HttpStatusCode.Forbidden);
         }
+        catch (Flow.Application.Features.Tasks.Fql.FqlException ex)
+        {
+            return ApiResult<T>.Fail(ex.Message, HttpStatusCode.BadRequest) with { FqlError = new(ex.Message, ex.Position, ex.Length) };
+        }
         catch (ProjectNotFoundException ex)
         {
             return ApiResult<T>.Fail(ex.Message, HttpStatusCode.NotFound);

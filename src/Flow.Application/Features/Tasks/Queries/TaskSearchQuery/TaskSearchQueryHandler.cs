@@ -3,13 +3,21 @@ using System.Text;
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Application.Features.Boards;
+using Flow.Application.Features.Tasks.Fql;
 using Flow.Shared.Contracts.Tasks;
 using MediatR;
 using DomainStatusType = Flow.Domain.Entities.StatusType;
 
 namespace Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 
-internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, TaskResponses responses, ActorResolver actors, IProjectAccess projectAccess)
+internal sealed class TaskSearchQueryHandler(
+    ITaskItemRepository tasks,
+    TaskResponses responses,
+    ActorResolver actors,
+    IProjectAccess projectAccess,
+    IBoardRepository boards,
+    IUserRepository users,
+    ITaskLinkRepository links)
     : IRequestHandler<TaskSearchQuery, TaskListResponse>
 {
     private const int DefaultLimit = 100;
@@ -19,6 +27,16 @@ internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, TaskResp
     {
         var limit = Math.Clamp(request.Limit ?? DefaultLimit, 1, MaxLimit);
         var (beforeCreatedAt, beforeId) = DecodeCursor(request.Cursor);
+
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
+
+        // FQL биндится до запроса: ошибка в строке — 400 с позицией, а не пустая страница.
+        FqlBound? fql = null;
+        if (!string.IsNullOrWhiteSpace(request.Fql))
+        {
+            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess);
+            fql = await FqlBinder.BindAsync(request.Fql, lookup, actor.Id, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
+        }
 
         var filter = new TaskListFilter(
             request.BoardId,
@@ -35,8 +53,10 @@ internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, TaskResp
             request.Descending,
             request.TypeKind?.ToDomainKind(),
             request.Priority?.ToDomainPriority(),
-            await projectAccess.VisibleBoardIdsAsync(await actors.ResolveAsync(request.ActorId, cancellationToken), cancellationToken),
-            request.ParentId);
+            await projectAccess.VisibleBoardIdsAsync(actor, cancellationToken),
+            request.ParentId,
+            fql?.Filter,
+            fql?.Orders is { Count: > 0 } orders ? orders : null);
 
         var items = await tasks.SearchAsync(filter, cancellationToken);
         var counted = await tasks.CountAsync(filter, cancellationToken);

@@ -58,37 +58,58 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
     /// </summary>
     private IQueryable<TaskItem> Ordered(IQueryable<TaskItem> query, TaskListFilter filter)
     {
-        var desc = filter.Descending;
+        // ORDER BY из FQL — список ключей; без него — одна колонка таблицы.
+        var orders = filter.Orders is { Count: > 0 } fromFql ? fromFql : [new TaskOrder(filter.Sort, filter.Descending)];
 
-        IOrderedQueryable<TaskItem> ordered = filter.Sort switch
+        IOrderedQueryable<TaskItem>? ordered = null;
+        void By<TKey>(Expression<Func<TaskItem, TKey>> key, bool desc) =>
+            ordered = ordered is null
+                ? desc ? query.OrderByDescending(key) : query.OrderBy(key)
+                : desc ? ordered.ThenByDescending(key) : ordered.ThenBy(key);
+
+        foreach (var (field, desc) in orders)
         {
-            // Внутри проекта разворачиваем и номера: при обратной сортировке ожидается WEB-9, WEB-8, …
-            TaskSortField.Code => Order(
-                Order(query, t => db.Boards.Where(b => b.Id == t.BoardId).Select(b => b.Key).FirstOrDefault(), desc),
-                t => t.CreatedAt, desc),
-            TaskSortField.Title => Order(query, t => t.Title, desc),
-            TaskSortField.Status => Order(query, t => db.Statuses.Where(s => s.Id == t.StatusId).Select(s => s.SortOrder).FirstOrDefault(), desc),
-            // Без исполнителя — в конец при любом направлении: пустые строки иначе всплывали бы наверх.
-            TaskSortField.Assignee => Order(
-                query.OrderBy(t => t.AssigneeId == null),
-                t => db.Users.Where(u => u.Id == t.AssigneeId).Select(u => u.LastName + " " + u.FirstName).FirstOrDefault(),
-                desc),
-            TaskSortField.Due => Order(query.OrderBy(t => t.DueDate == null), t => t.DueDate, desc),
-            TaskSortField.Priority => Order(query, t => t.Priority, desc),
-            TaskSortField.Updated => Order(query, t => t.UpdatedAt, desc),
-            // Ранг уникален только внутри проекта; в сводном списке порядок проектов задаёт ключ.
-            TaskSortField.Rank => Order(Order(query, t => t.BoardId, desc), t => t.Rank, desc),
-            _ => Order(query, t => t.CreatedAt, desc)
-        };
+            switch (field)
+            {
+                // Внутри проекта разворачиваем и номера: при обратной сортировке ожидается WEB-9, WEB-8, …
+                case TaskSortField.Code:
+                    By(t => db.Boards.Where(b => b.Id == t.BoardId).Select(b => b.Key).FirstOrDefault(), desc);
+                    By(t => t.CreatedAt, desc);
+                    break;
+                case TaskSortField.Title:
+                    By(t => t.Title, desc);
+                    break;
+                case TaskSortField.Status:
+                    By(t => db.Statuses.Where(s => s.Id == t.StatusId).Select(s => s.SortOrder).FirstOrDefault(), desc);
+                    break;
+                // Без исполнителя — в конец при любом направлении: пустые строки иначе всплывали бы наверх.
+                case TaskSortField.Assignee:
+                    By(t => t.AssigneeId == null, false);
+                    By(t => db.Users.Where(u => u.Id == t.AssigneeId).Select(u => u.LastName + " " + u.FirstName).FirstOrDefault(), desc);
+                    break;
+                case TaskSortField.Due:
+                    By(t => t.DueDate == null, false);
+                    By(t => t.DueDate, desc);
+                    break;
+                case TaskSortField.Priority:
+                    By(t => t.Priority, desc);
+                    break;
+                case TaskSortField.Updated:
+                    By(t => t.UpdatedAt, desc);
+                    break;
+                // Ранг уникален только внутри проекта; в сводном списке порядок проектов задаёт ключ.
+                case TaskSortField.Rank:
+                    By(t => t.BoardId, desc);
+                    By(t => t.Rank, desc);
+                    break;
+                default:
+                    By(t => t.CreatedAt, desc);
+                    break;
+            }
+        }
 
-        return ordered.ThenBy(t => t.Id);
+        return ordered!.ThenBy(t => t.Id);
     }
-
-    private static IOrderedQueryable<TaskItem> Order<TKey>(IQueryable<TaskItem> query, Expression<Func<TaskItem, TKey>> key, bool desc) =>
-        desc ? query.OrderByDescending(key) : query.OrderBy(key);
-
-    private static IOrderedQueryable<TaskItem> Order<TKey>(IOrderedQueryable<TaskItem> query, Expression<Func<TaskItem, TKey>> key, bool desc) =>
-        desc ? query.ThenByDescending(key) : query.ThenBy(key);
 
     public async Task<TaskCounts> CountAsync(TaskListFilter filter, CancellationToken cancellationToken)
     {
@@ -152,6 +173,10 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
         if (filter.ParentId is { } parentId)
             query = query.Where(t => t.ParentId == parentId);
 
+        // Условие FQL (docs/TZ_task_views.md §7) — тем же Where, поэтому и страница, и счётчики считаются с ним.
+        if (filter.Condition is { } condition)
+            query = query.Where(TaskFilterTranslator.ToPredicate(condition, db));
+
         if (!string.IsNullOrWhiteSpace(filter.Query))
         {
             // Тот же поиск, что раньше делал клиент по загруженному списку: по названию и по коду задачи.
@@ -170,6 +195,8 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
     }
 
     // ILIKE трактует % и _ как шаблон: в пользовательском запросе они должны искаться буквально.
+    internal static string EscapeLike(string value) => Escape(value);
+
     private static string Escape(string value) =>
         value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 

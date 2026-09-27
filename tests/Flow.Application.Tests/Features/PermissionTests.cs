@@ -1,3 +1,4 @@
+using Flow.Application.Features.Filters;
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
@@ -407,5 +408,36 @@ public class PermissionTests
 
         await mediator.Send(new ReindexCommand(Owner, null, null), CancellationToken.None);
         await Forbidden(() => mediator.Send(new ReindexCommand(admin, null, null), CancellationToken.None));
+    }
+
+    // ---- Сохранённые фильтры (docs/TZ_task_views.md §7) ----
+
+    [Theory]
+    [InlineData(UserRole.Owner, false)]
+    [InlineData(UserRole.Member, false)]
+    public async Task SavedFilter_Edit_Only_Author(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var filter = await mediator.Send(new SavedFilterCreateCommand(Owner, "Общий", "", true), CancellationToken.None);
+
+        Task Edit() => mediator.Send(new SavedFilterUpdateCommand(actor, filter.Id, "X", null, null), CancellationToken.None);
+
+        if (allowed) await Edit(); else await Forbidden(Edit);
+        Assert.NotNull(await mediator.Send(new SavedFilterUpdateCommand(Owner, filter.Id, "Своё", null, null), CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Admin, true)]
+    public async Task SavedFilter_Delete_Shared_Author_Or_Admin(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var filter = await mediator.Send(new SavedFilterCreateCommand(Owner, "Общий", "", true), CancellationToken.None);
+
+        Task Delete() => mediator.Send(new SavedFilterDeleteCommand(actor, filter.Id), CancellationToken.None);
+
+        if (allowed) await Delete(); else await Forbidden(Delete);
     }
 }

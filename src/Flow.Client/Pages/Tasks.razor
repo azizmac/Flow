@@ -15,6 +15,7 @@
 @inject UserDirectory Users
 @inject ProjectAccessState Access
 @inject PreferencesState Preferences
+@inject SavedFiltersState Filters
 
 <PageTitle>@(CurrentBoard?.Name ?? "Задачи") — Flow</PageTitle>
 
@@ -95,11 +96,19 @@
                     <button type="button" class="seg-btn solo @(Who == me.Id.ToString() ? "on" : "")"
                             title="Задачи, где я исполнитель" @onclick="ToggleMine">Мои задачи</button>
                 }
+                <FilterMenu Current="CurrentFilter" />
+                <button type="button" class="seg-btn solo @(FqlVisible ? "on" : "")" @onclick="OpenFql"
+                        title="@(HasPanelFilters && !FqlVisible ? "Показать фильтры строкой FQL" : "Строка запроса FQL")">FQL</button>
             </div>
             <div class="meta-line">
                 @Ru.Tasks(_total)@(CurrentBoard is { } b ? $" · создан {Ru.Date(b.CreatedAt)}" : $" · {Ru.Projects(_boards.Count)}")
             </div>
         </div>
+
+        @if (FqlVisible)
+        {
+            <FqlBar Value="@EffectiveFql" Error="_fqlError" OnApply="ApplyFql" OnSave="OpenSave" OnClose="CloseFql" />
+        }
 
         @* Страницу и размер страницы, как и сортировку, ведём сами: встроенные переключатели таблицы в
            серверном режиме меняют только подписи пейджера, а повторный запрос не делают. *@
@@ -283,6 +292,11 @@
     <ProjectAccessDialog Board="accessBoard" OnClose="() => _accessOpen = false" />
 }
 
+@if (_saveQuery is not null)
+{
+    <SaveFilterDialog Query="@_saveQuery" Current="CurrentFilter" OnSaved="OnFilterSaved" OnClose="() => _saveQuery = null" />
+}
+
 @if (_statusesOpen && CurrentBoard is { } statusesBoard)
 {
     <StatusesDialog Board="statusesBoard" OnChanged="OnStatusesChanged" OnClose="() => _statusesOpen = false" />
@@ -320,6 +334,12 @@
 
     /// <summary>Фильтр по исполнителю: Guid пользователя или "none" — без исполнителя.</summary>
     [SupplyParameterFromQuery(Name = "who")] public string? Who { get; set; }
+
+    /// <summary>Запрос FQL (docs/TZ_task_views.md §7); складывается с панелью фильтров через AND.</summary>
+    [SupplyParameterFromQuery(Name = "fql")] public string? Fql { get; set; }
+
+    /// <summary>Открытый сохранённый фильтр; его запрос действует, пока в адресе нет своего ?fql= (правки до «Сохранить»).</summary>
+    [SupplyParameterFromQuery(Name = "filter")] public Guid? FilterId { get; set; }
 
     private MudDataGrid<TaskResponse>? _grid;
     private TaskSortField _sortField = TaskSortField.Created;
@@ -393,7 +413,20 @@
         ? _boards.FirstOrDefault(b => b.Id == (_createBoardId ?? BoardId)) ?? CreatableBoards.FirstOrDefault() ?? _boards.FirstOrDefault()
         : SelectedTask is { } t ? _boards.FirstOrDefault(b => b.Id == t.BoardId) : null;
 
-    private bool HasFilters => StatusId is not null || TypeFilter is not null || Who is not null || _search.Trim().Length > 0;
+    private bool HasPanelFilters => StatusId is not null || TypeFilter is not null || Who is not null || _search.Trim().Length > 0;
+
+    private bool HasFilters => HasPanelFilters || !string.IsNullOrWhiteSpace(EffectiveFql);
+
+    private SavedFilterResponse? CurrentFilter => Filters.Find(FilterId);
+
+    /// <summary>Действующий запрос: свой из адреса или сохранённого фильтра.</summary>
+    private string? EffectiveFql => Fql ?? CurrentFilter?.Query;
+
+    private bool _fqlOpen;
+    private FqlErrorResponse? _fqlError;
+    private string? _saveQuery;
+
+    private bool FqlVisible => _fqlOpen || !string.IsNullOrWhiteSpace(EffectiveFql) || _fqlError is not null;
 
     // Права по матрице docs/TZ_user_roles.md; Flow.Api — источник истины, здесь только показ кнопок.
     private UserResponse? Me => Users.Find(State.CurrentUserId);
@@ -445,8 +478,11 @@
             await LoadBoards();
         }
 
+        if (FilterId is not null)
+            await Filters.EnsureLoadedAsync();
+
         // Фильтры считает сервер, поэтому любое их изменение — это новый запрос списка.
-        var key = $"{BoardId}|{StatusId}|{Type}|{Who}|{_search.Trim()}";
+        var key = $"{BoardId}|{StatusId}|{Type}|{Who}|{_search.Trim()}|{EffectiveFql}";
         if (_loadedKey != key)
         {
             _loadedKey = key;
@@ -519,8 +555,20 @@
         var result = await Api.SearchTasks(
             BoardId, AssigneeFilterId, Who == "none", StatusId, BoardId is null ? TypeFilter : null, _search,
             limit: _pageSize, offset: _page * _pageSize, sort: _sortField, descending: _sortDescending,
-            ct: cancellationToken);
+            fql: EffectiveFql, ct: cancellationToken);
         _loading = false;
+
+        // Ошибка в строке FQL — не поломка экрана: показываем её под строкой, таблица пустая.
+        _fqlError = result.FqlError;
+        if (result.FqlError is not null)
+        {
+            _tasks = [];
+            _matched = 0;
+            _total = 0;
+            _countsByType = [];
+            _countsByStatus = new();
+            return new GridData<TaskResponse> { Items = [], TotalItems = 0 };
+        }
 
         if (!result.Ok)
         {
@@ -713,6 +761,88 @@
     private void SetWhoFilter(string? who) =>
         Nav.NavigateTo(Nav.GetUriWithQueryParameter("who", who), replace: true);
 
+    // ---- FQL и сохранённые фильтры ----
+
+    /// <summary>
+    /// Кнопка «FQL»: при пустой строке и включённой панели — «Показать как FQL»: фильтры панели переезжают в строку
+    /// (проект остаётся в селекторе), дальше их можно править текстом. Иначе просто открывает строку.
+    /// </summary>
+    private async Task OpenFql()
+    {
+        if (FqlVisible && string.IsNullOrWhiteSpace(EffectiveFql))
+        {
+            _fqlOpen = false;
+            return;
+        }
+
+        _fqlOpen = true;
+        if (string.IsNullOrWhiteSpace(EffectiveFql) && HasPanelFilters)
+        {
+            var fql = PanelAsFql();
+            _search = "";
+            Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+            {
+                ["status"] = null,
+                ["type"] = null,
+                ["who"] = null,
+                ["fql"] = fql
+            }), replace: true);
+        }
+
+        await Task.Delay(50);
+        await Browser.FocusAsync(FqlBar.InputId);
+    }
+
+    /// <summary>Панель фильтров строкой FQL — то же условие, что сервер строит из query-параметров.</summary>
+    private string PanelAsFql()
+    {
+        var parts = new List<string>();
+        if (StatusId is { } statusId && CurrentBoard?.Statuses.FirstOrDefault(s => s.Id == statusId) is { } status)
+            parts.Add($"status = {FqlValue(status.Name)}");
+        if (BoardId is null && TypeFilter is { } type)
+            parts.Add($"statusCategory = {char.ToLowerInvariant(type.ToString()[0])}{type.ToString()[1..]}");
+        if (Who == "none")
+            parts.Add("assignee IS EMPTY");
+        else if (AssigneeFilterId is { } who)
+            parts.Add(who == State.CurrentUserId ? "assignee = me()" : $"assignee = @{Users.Find(who)?.Username ?? who.ToString()}");
+        if (_search.Trim().Length > 0)
+            parts.Add($"text ~ {FqlValue(_search.Trim())}");
+        return string.Join(" AND ", parts);
+    }
+
+    private static string FqlValue(string value) =>
+        value.All(c => char.IsLetterOrDigit(c) || c is '_' or '-' or '.') ? value : $"\"{value.Replace("\"", "\\\"")}\"";
+
+    /// <summary>Применить строку: запрос уходит в адрес. Совпал с открытым сохранённым фильтром — адрес без ?fql=.</summary>
+    private void ApplyFql(string text)
+    {
+        var fql = string.IsNullOrWhiteSpace(text) || text == CurrentFilter?.Query ? null : text;
+        _page = 0;
+        if (fql == Fql && _grid is not null)
+        {
+            _ = Reload();
+            return;
+        }
+
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("fql", fql), replace: true);
+    }
+
+    private void CloseFql()
+    {
+        _fqlOpen = false;
+        _fqlError = null;
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["fql"] = null, ["filter"] = null }), replace: true);
+    }
+
+    private void OpenSave(string query) => _saveQuery = query;
+
+    private void OnFilterSaved(SavedFilterResponse filter)
+    {
+        _saveQuery = null;
+        Toasts.Ok($"Фильтр «{filter.Name}» сохранён");
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["fql"] = null, ["filter"] = filter.Id.ToString() }), replace: true);
+    }
+
     private void ToggleMine()
     {
         if (Me is not { } me)
@@ -893,7 +1023,7 @@
     private async Task RefreshCounts()
     {
         var result = await Api.SearchTasks(
-            BoardId, AssigneeFilterId, Who == "none", StatusId, BoardId is null ? TypeFilter : null, _search, limit: 1);
+            BoardId, AssigneeFilterId, Who == "none", StatusId, BoardId is null ? TypeFilter : null, _search, limit: 1, fql: EffectiveFql);
 
         if (!result.Ok)
             return;

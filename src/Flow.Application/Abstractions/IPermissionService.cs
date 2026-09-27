@@ -75,4 +75,10 @@ public interface IPermissionService
 
     /// <summary>Массовая переиндексация (POST /search/reindex) — только Owner: она грузит модель и БД надолго.</summary>
     void EnsureCanReindex(User actor);
+
+    /// <summary>Править сохранённый фильтр — только владелец.</summary>
+    void EnsureCanEditSavedFilter(User actor, SavedFilter filter);
+
+    /// <summary>Удалить — владелец; чужой общий — ещё и Admin+ (уборка брошенных общих фильтров).</summary>
+    void EnsureCanDeleteSavedFilter(User actor, SavedFilter filter);
 }

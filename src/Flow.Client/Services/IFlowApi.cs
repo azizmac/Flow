@@ -22,6 +22,9 @@ public sealed record ApiResult<T>(T? Value, string? Error, HttpStatusCode Status
     public bool Unauthorized => Status == HttpStatusCode.Unauthorized;
     public bool Forbidden => Status == HttpStatusCode.Forbidden;
 
+    /// <summary>Ошибка в строке FQL — с местом, чтобы подчеркнуть его; у остальных ошибок null.</summary>
+    public Flow.Shared.Contracts.Filters.FqlErrorResponse? FqlError { get; init; }
+
     public static ApiResult<T> Success(T value, HttpStatusCode status) => new(value, null, status);
     public static ApiResult<T> Fail(string error, HttpStatusCode status) => new(default, error, status);
 }
@@ -77,7 +80,17 @@ public interface IFlowApi
         TaskTypeKind? typeKind = null,
         TaskPriority? priority = null,
         Guid? parentId = null,
+        string? fql = null,
         CancellationToken ct = default);
+
+    // ---- FQL и сохранённые фильтры (docs/TZ_task_views.md §7); ошибка FQL — ApiResult.FqlError ----
+    Task<ApiResult<Flow.Shared.Contracts.Filters.FqlSuggestResponse>> SuggestQuery(string query, int position, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Filters.SavedFilterResponse>>> GetFilters(CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Filters.SavedFilterResponse>> GetFilter(Guid id, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Filters.SavedFilterResponse>> CreateFilter(Flow.Shared.Contracts.Filters.CreateSavedFilterRequest request, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Filters.SavedFilterResponse>> UpdateFilter(Guid id, Flow.Shared.Contracts.Filters.UpdateSavedFilterRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteFilter(Guid id, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Filters.SavedFilterResponse>> StarFilter(Guid id, bool starred, CancellationToken ct = default);
 
     Task<ApiResult<TaskResponse>> GetTask(Guid id, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> CreateTask(Guid boardId, CreateTaskRequest request, CancellationToken ct = default);

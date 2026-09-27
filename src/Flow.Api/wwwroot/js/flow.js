@@ -150,6 +150,19 @@ window.flow = (function () {
             if (el && el.isConnected && typeof el.focus === 'function') el.focus();
         },
 
+        // Позиция курсора в поле ввода — подсказкам FQL нужна она, а не конец строки.
+        caret: function (id) {
+            var el = document.getElementById(id);
+            return el && typeof el.selectionStart === 'number' ? el.selectionStart : -1;
+        },
+
+        setCaret: function (id, pos) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.focus();
+            if (typeof el.setSelectionRange === 'function') el.setSelectionRange(pos, pos);
+        },
+
         focus: function (id, select) {
             const el = document.getElementById(id);
             if (!el) return;

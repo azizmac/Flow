@@ -57,6 +57,7 @@ internal sealed partial class InProcessFlowApi
         TaskTypeKind? typeKind = null,
         TaskPriority? priority = null,
         Guid? parentId = null,
+        string? fql = null,
         CancellationToken ct = default) =>
         Scoped(async mediator =>
         {
@@ -74,7 +75,7 @@ internal sealed partial class InProcessFlowApi
 
             var response = await mediator.Send(
                 new TaskSearchQuery(await ActorAsync(), boardId, assigneeId, unassigned, statusId, statusType, text, limit, page,
-                    offset, sortField, sortDescending, typeKind, priority, parentId),
+                    offset, sortField, sortDescending, typeKind, priority, parentId, string.IsNullOrWhiteSpace(fql) ? null : fql),
                 ct);
 
             return Ok(response);

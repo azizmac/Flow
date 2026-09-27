@@ -8,6 +8,8 @@ namespace Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 /// Сводный список задач. BoardId = null — по всем проектам; остальные поля — необязательные фильтры.
 /// Cursor берётся из <see cref="TaskListResponse.NextCursor"/> предыдущей страницы; Offset — альтернативный
 /// способ листания для таблицы с сортировкой (взаимоисключающи, приоритет у Offset).
+/// Fql — запрос на FQL (docs/TZ_task_views.md §7): складывается с остальными фильтрами через AND, его ORDER BY
+/// заменяет Sort. Ошибка синтаксиса или неизвестное имя — FqlException (400 с позицией).
 /// </summary>
 public sealed record TaskSearchQuery(
     Guid ActorId,
@@ -24,4 +26,5 @@ public sealed record TaskSearchQuery(
     bool Descending = true,
     TaskTypeKind? TypeKind = null,
     TaskPriority? Priority = null,
-    Guid? ParentId = null) : IRequest<TaskListResponse>;
+    Guid? ParentId = null,
+    string? Fql = null) : IRequest<TaskListResponse>;

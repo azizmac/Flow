@@ -11,6 +11,7 @@
 @inject AuthenticationStateProvider AuthState
 @inject BrowserInterop Browser
 @inject PreferencesState Preferences
+@inject SavedFiltersState Filters
 
 <nav class="sb @SidebarModeClass">
     <div class="sb-top">
@@ -46,6 +47,18 @@
     <a class="sb-item @(IsUsers ? "active" : "")" href="users" title="Люди"><Icon Name="users" Size="18" /><span>Люди</span></a>
     <span class="sb-item disabled" aria-disabled="true" title="Раздел появится позже"><Icon Name="chart" Size="18" /><span>Дашборды</span><span class="sb-soon">скоро</span></span>
     <a class="sb-item @(IsSettings ? "active" : "")" href="settings" title="Настройки"><Icon Name="settings" Size="18" /><span>Настройки</span></a>
+
+    @if (Filters.Starred.Count > 0)
+    {
+        @* Избранные фильтры (docs/TZ_task_views.md §7): звезда ставится в меню «Фильтры» экрана задач. *@
+        <div class="sb-section">Фильтры</div>
+        @foreach (var f in Filters.Starred)
+        {
+            <a class="sb-item @(ActiveFilter == f.Id ? "active" : "")" href="@($"tasks?filter={f.Id}")" title="@f.Name">
+                <Icon Name="list" Size="18" /><span>@f.Name</span>
+            </a>
+        }
+    }
 
     <div class="sb-foot">
         @if (Me is { } me)
@@ -103,11 +116,15 @@
 
     private UserResponse? Me => Users.Find(State.CurrentUserId);
 
+    private Guid? ActiveFilter =>
+        Path == "tasks" && Guid.TryParse(System.Web.HttpUtility.ParseQueryString(new Uri(Nav.Uri).Query)["filter"], out var id) ? id : null;
+
     protected override async Task OnInitializedAsync()
     {
         Nav.LocationChanged += OnLocationChanged;
         State.Changed += OnStateChanged;
         Users.Changed += OnStateChanged;
+        Filters.Changed += OnStateChanged;
 
         var auth = await AuthState.GetAuthenticationStateAsync();
         if (auth.User.Identity?.IsAuthenticated != true)
@@ -132,6 +149,7 @@
             Users.Put(me.Value!);
             // Режим меню из личных настроек: AppState получит его сам, сайдбар перерисуется по State.Changed.
             _ = Preferences.EnsureLoadedAsync();
+            _ = Filters.EnsureLoadedAsync();
         }
         else if (me.Unauthorized)
         {
@@ -163,5 +181,6 @@
         Nav.LocationChanged -= OnLocationChanged;
         State.Changed -= OnStateChanged;
         Users.Changed -= OnStateChanged;
+        Filters.Changed -= OnStateChanged;
     }
 }

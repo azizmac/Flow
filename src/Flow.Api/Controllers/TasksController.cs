@@ -17,6 +17,8 @@ using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskListQuery;
 using Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 using Flow.Application.Features.Tasks.Queries.TaskTreeQuery;
+using Flow.Application.Features.Tasks.Fql;
+using Flow.Shared.Contracts.Filters;
 using Flow.Shared.Contracts.Boards;
 using Flow.Application.Abstractions;
 using Flow.Application.Features.Boards;
@@ -85,6 +87,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         [FromQuery] TaskTypeKind? typeKind,
         [FromQuery] TaskPriority? priority,
         [FromQuery] Guid? parentId,
+        [FromQuery] string? fql,
         CancellationToken cancellationToken)
     {
         // Неизвестное число в query-string («?priority=42») привязка enum'а пропускает — отсекаем до маппинга.
@@ -99,12 +102,20 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
             ? sortField == TaskSortField.Created
             : string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
 
-        var response = await mediator.Send(
-            new TaskSearchQuery(actor.Require(), boardId, assigneeId, unassigned == true, statusId, statusType, q, limit, cursor,
-                offset, sortField, descending, typeKind, priority, parentId),
-            cancellationToken);
+        try
+        {
+            var response = await mediator.Send(
+                new TaskSearchQuery(actor.Require(), boardId, assigneeId, unassigned == true, statusId, statusType, q, limit, cursor,
+                    offset, sortField, descending, typeKind, priority, parentId, fql),
+                cancellationToken);
 
-        return Ok(response);
+            return Ok(response);
+        }
+        catch (FqlException ex)
+        {
+            // Место ошибки — чтобы клиент подчеркнул его в строке запроса.
+            return BadRequest(new FqlErrorResponse(ex.Message, ex.Position, ex.Length));
+        }
     }
 
     [HttpGet("tasks/{id:guid}")]
@@ -178,6 +189,14 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     [HttpPost("tasks/{id:guid}/rank")]
     public Task<IActionResult> RankTask(Guid id, RankTaskRequest request, CancellationToken cancellationToken) =>
         SendUpdate(new TaskRankCommand(actor.Require(), id, request.AfterId, request.BeforeId), cancellationToken);
+
+    /// <summary>Подсказки FQL у курсора: q — строка, pos — позиция курсора (по умолчанию конец).</summary>
+    [HttpGet("tasks/query/suggest")]
+    public async Task<IActionResult> SuggestQuery([FromQuery] string? q, [FromQuery] int? pos, CancellationToken cancellationToken)
+    {
+        var query = q ?? "";
+        return Ok(await mediator.Send(new FqlSuggestQuery(actor.Require(), query, pos ?? query.Length), cancellationToken));
+    }
 
     // ---- Связи (docs/TZ_task_model.md §5) ----
 

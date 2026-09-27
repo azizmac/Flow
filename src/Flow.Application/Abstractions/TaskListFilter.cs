@@ -15,6 +15,8 @@ namespace Flow.Application.Abstractions;
 /// VisibleBoardIds — проекты, которые видит actor (docs/TZ_project_access.md, 4B); null — все: и счётчики, и страница
 /// считаются только по ним, иначе «Все проекты» выдали бы число задач приватного проекта.
 /// ParentId — только прямые подзадачи этой задачи (блок «Подзадачи», docs/TZ_task_model.md §3).
+/// Condition — условие FQL после биндинга (docs/TZ_task_views.md §7), складывается с остальными полями через AND;
+/// Orders — ORDER BY из FQL, в offset-режиме заменяет Sort/Descending.
 /// Sort/Descending задают порядок; при keyset-пагинации применим только порядок по умолчанию (Created desc).
 /// </summary>
 public sealed record TaskListFilter(
@@ -33,7 +35,9 @@ public sealed record TaskListFilter(
     TaskTypeKind? TypeKind = null,
     TaskPriority? Priority = null,
     IReadOnlyCollection<Guid>? VisibleBoardIds = null,
-    Guid? ParentId = null);
+    Guid? ParentId = null,
+    TaskFilterNode? Condition = null,
+    IReadOnlyList<TaskOrder>? Orders = null);
 
 /// <summary>
 /// Счётчики по отбору: всего (без фильтра статуса), сколько попало под все фильтры (Matched),

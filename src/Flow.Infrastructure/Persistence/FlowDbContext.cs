@@ -24,6 +24,10 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
 
     public DbSet<TaskLink> TaskLinks => Set<TaskLink>();
 
+    public DbSet<SavedFilter> SavedFilters => Set<SavedFilter>();
+
+    public DbSet<SavedFilterStar> SavedFilterStars => Set<SavedFilterStar>();
+
     public DbSet<Attachment> Attachments => Set<Attachment>();
 
     /// <summary>

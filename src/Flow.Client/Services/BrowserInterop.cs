@@ -33,6 +33,31 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
+    /// <summary>Позиция курсора в поле; -1 — поля нет или JS недоступен.</summary>
+    public async Task<int> CaretAsync(string elementId)
+    {
+        try
+        {
+            return await js.InvokeAsync<int>("flow.caret", elementId);
+        }
+        catch (JSException)
+        {
+            return -1;
+        }
+    }
+
+    public async Task SetCaretAsync(string elementId, int position)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flow.setCaret", elementId, position);
+        }
+        catch (JSException)
+        {
+            // поле могло исчезнуть между рендерами
+        }
+    }
+
     public async Task FocusAsync(string elementId, bool select = false)
     {
         try

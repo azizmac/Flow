@@ -143,6 +143,13 @@ internal sealed class PermissionService : IPermissionService
     public void EnsureCanReindex(User actor) =>
         Require(actor.Role == UserRole.Owner, "Запускать переиндексацию поиска может только Owner.");
 
+    public void EnsureCanEditSavedFilter(User actor, SavedFilter filter) =>
+        Require(filter.OwnerId == actor.Id, "Менять фильтр может только его автор.");
+
+    public void EnsureCanDeleteSavedFilter(User actor, SavedFilter filter) =>
+        Require(filter.OwnerId == actor.Id || (filter.Visibility == SavedFilterVisibility.Shared && actor.Role >= UserRole.Admin),
+            "Удалить фильтр может его автор, а общий — ещё Admin и Owner.");
+
     /// <summary>«Своя задача» для Member: создал или назначен исполнителем.</summary>
     private static bool IsOwn(User actor, TaskItem task) =>
         task.CreatedById == actor.Id || task.AssigneeId == actor.Id;

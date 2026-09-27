@@ -2280,6 +2280,48 @@ a.task-row { color: inherit; text-decoration: none; }
 }
 @media (hover: none) { .check-actions { opacity: 1; } }
 
+/* Строка FQL и сохранённые фильтры (docs/TZ_task_views.md §7) */
+.fql-bar { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
+.fql-line {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-radius: 12px;
+    background: rgba(0, 0, 0, 0.16); border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fql-line:focus-within { border-color: var(--accent); }
+.fql-line.error { border-color: var(--danger); }
+.fql-tag { font: var(--fw-bold) 10.5px var(--font-display); color: var(--accent); letter-spacing: 0.06em; flex: none; }
+.fql-input-wrap { position: relative; flex: 1 1 auto; min-width: 0; }
+.fql-input {
+    width: 100%; background: none; border: 0; outline: 0; color: #fff; padding: 6px 0;
+    font: var(--fw-medium) 13px var(--font-mono);
+}
+.fql-input::placeholder { color: var(--text-tertiary); }
+.fql-suggest {
+    position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; min-width: 320px; max-width: 520px; max-height: 320px; overflow-y: auto;
+    padding: 4px; border-radius: 12px; background: var(--surface-raised); border: 1px solid var(--border); box-shadow: var(--shadow-modal);
+    transform-origin: top left; animation: fql-pop 140ms var(--ease-out);
+}
+@keyframes fql-pop { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+.fql-suggest .pop-item { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; text-align: left; color: #fff; }
+.fql-suggest .pop-item.on { background: rgba(255, 255, 255, 0.08); }
+.fql-kind { width: 16px; flex: none; text-align: center; color: var(--text-tertiary); font: var(--fw-bold) 12px var(--font-mono); }
+.fql-kind.field { color: var(--accent); }
+.fql-kind.value { color: var(--sage); }
+.fql-label { font: var(--fw-medium) 13px var(--font-mono); white-space: nowrap; }
+.fql-hint { margin-left: auto; color: var(--text-tertiary); font: var(--fw-medium) 11.5px var(--font-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fql-error { display: flex; flex-direction: column; gap: 3px; padding: 0 12px; color: var(--danger); font: var(--fw-medium) 12px var(--font-text); }
+.fql-echo { color: var(--text-tertiary); font: 12px var(--font-mono); white-space: pre-wrap; }
+.fql-echo mark { background: none; color: var(--danger); text-decoration: underline wavy var(--danger); text-underline-offset: 3px; }
+.filter-item { display: flex; align-items: center; gap: 8px; }
+.filter-name { flex: 1 1 auto; min-width: 0; color: #fff; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filter-star { background: none; border: 0; padding: 0 2px; cursor: pointer; color: rgba(255, 255, 255, 0.3); font-size: 14px; line-height: 1; }
+.filter-star.on { color: var(--accent); }
+.sf-shared { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; color: var(--text-secondary, #cfd8d3); font: var(--fw-medium) 13px var(--font-text); }
+@media (prefers-reduced-motion: reduce) { .fql-suggest { animation: none; } }
+@media (hover: hover) and (pointer: fine) {
+    .fql-suggest .pop-item:hover { background: rgba(255, 255, 255, 0.06); }
+    .filter-star:hover { color: var(--accent); }
+}
+
 /* Модалка «Статусы» проекта (docs/TZ_workflow_config.md §1) */
 .st-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
 .st-row { border-radius: 8px; padding: 4px; }
