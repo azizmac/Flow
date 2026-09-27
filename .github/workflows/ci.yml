@@ -347,14 +347,12 @@ jobs:
         run: docker pull pgvector/pgvector:pg16
 
       # Category!=Model — тесты, которым нужен живой llama-server; Category!=Golden — замер качества выдачи
-      # на базе разработчика. И то, и другое в CI ничего не проверяет. Category!=S3 — временно: образ MinIO
-      # сняли и с quay.io (pull отвечает «unauthorized»), и S3FileStorageTests не могут поднять контейнер.
-      # Убрать вместе с заменой образа.
+      # на базе разработчика. И то, и другое в CI ничего не проверяет.
       - name: Flow.Infrastructure.Tests
         uses: ./.github/actions/dotnet-test
         with:
           project: tests/Flow.Infrastructure.Tests
-          filter: Category!=Model&Category!=Golden&Category!=S3
+          filter: Category!=Model&Category!=Golden
           title: Infrastructure
 
   test-auth:

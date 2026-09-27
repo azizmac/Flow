@@ -15,12 +15,12 @@ resources:
   - ../../../base/s3
 
 # Теги здесь повторяют базу, и это не дублирование ради дублирования: секция перечисляет образы, которые
-# джоба релиза заменит на digest (kustomize edit set image quay.io/minio/minio=...@sha256:...). Пока она
+# джоба релиза заменит на digest (kustomize edit set image pgsty/minio=...@sha256:...). Пока она
 # этого не сделала, оверлей собирается сам по себе и даёт рабочий манифест — например при локальной
 # проверке kubectl kustomize. В кластер же уезжает только digest: подвижный тег не даёт kubectl apply
 # заметить изменение, и rollout просто не произойдёт.
 images:
-  - name: quay.io/minio/minio
-    newTag: RELEASE.2025-04-22T22-12-26Z
-  - name: quay.io/minio/mc
-    newTag: RELEASE.2025-04-16T18-13-26Z
+  - name: pgsty/minio
+    newTag: RELEASE.2026-08-04T00-00-00Z
+  - name: pgsty/mc
+    newTag: RELEASE.2026-09-16T00-00-00Z

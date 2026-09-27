@@ -35,11 +35,12 @@ services:
       - flow-network
 
   s3:
-    # Тег зафиксирован: публикация образов MinIO CE прекращена в октябре 2025, репозиторий заархивирован
-    # в феврале 2026 — latest давно не обновляется. Этот релиз последний с полной веб-консолью.
-    # Замена хранилища (кандидат — Garage) решается в ТЗ вложений.
-    # Источник — quay.io: из Docker Hub образы minio/minio уже сняты (pull access denied).
-    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    # Форк MinIO от Pigsty (github.com/pgsty/minio, AGPL): апстрим прекратил публикацию образов CE в
+    # октябре 2025 и заархивировал репозиторий, а в сентябре 2026 образы исчезли и с Docker Hub, и с
+    # quay.io. Форк — тот же бинарь: тот же протокол, те же MINIO_ROOT_*, mc внутри для healthcheck и
+    # веб-консоль, а том, записанный прежним quay.io/minio/minio:RELEASE.2025-04-22, читает без миграции
+    # (проверено). Тег зафиксирован; в кластер образ едет по digest (scripts/resolve-images.py).
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -59,8 +60,8 @@ services:
       - flow-network
 
   s3-init:
-    # Тот же quay.io: в Docker Hub образа больше нет.
-    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    # mc из того же форка: апстримного образа тоже нет ни на Docker Hub, ни на quay.io.
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     depends_on:
       s3:
         condition: service_healthy

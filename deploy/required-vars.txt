@@ -64,8 +64,8 @@ S3_BUCKET|var|3|Бакет вложений, создаётся Job внутри
 S3_USE_SSL|var|3|false: внутри кластера MinIO ходит по http
 EMBEDDINGS_ENABLED|var|4|Главный выключатель нейросетевого слоя: false гасит разом векторы, реранкер и визуальную половину, AI-джобы пропускаются целиком
 POSTGRES_IMAGE|var|3|pgvector/pgvector:pg16, а не postgres:16 — миграция делает CREATE EXTENSION vector, в модели есть halfvec(512). В переменной, чтобы смена мажорной версии была осознанной
-MINIO_IMAGE|var|3|Образ MinIO с quay.io: из Docker Hub образы MinIO CE сняты
-MC_IMAGE|var|3|Образ mc с quay.io для Job создания бакета
+MINIO_IMAGE|var|3|Образ MinIO — форк pgsty/minio: апстримных образов CE нет ни на Docker Hub, ни на quay.io
+MC_IMAGE|var|3|Образ mc (форк pgsty/mc) для Job создания бакета
 BOOTSTRAP_ENABLED|var|4|Сидер первичной учётной записи. После первого входа — false
 BOOTSTRAP_ID|var|4|Один и тот же Guid у api и auth: Auth создаёт учётку, Api — профиль с тем же Id, поэтому лежит в общем ConfigMap
 BOOTSTRAP_EMAIL|var|4|Почта первичной учётной записи

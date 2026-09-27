@@ -44,16 +44,17 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: ${WORKER_NODE}
       # Secret regcred создаёт джоба deploy-platform, не kustomize: в репозитории нет ни одного секрета.
-      # Для quay.io эта пара бесполезна (секрет привязан к docker.io) и kubelet тянет образ анонимно — но
-      # imagePullSecrets ставим единообразно всем модулям, чтобы не держать в голове, у кого он есть.
+      # Образ MinIO теперь с docker.io, так что секрет работает и здесь: лимиты анонимного pull не наши. А
+      # imagePullSecrets в любом случае ставим единообразно всем модулям, чтобы не держать в голове, у кого он есть.
       imagePullSecrets:
         - name: regcred
       containers:
         - name: minio
-          # Именно quay.io: из Docker Hub образы MinIO CE сняты, оттуда pull даёт access denied. Тег
-          # зафиксирован — публикация MinIO CE прекращена, latest давно не двигается. Здесь стоит осмысленная
-          # заглушка: в релизе тот же образ приезжает по digest через kustomize edit set image.
-          image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+          # Форк MinIO от Pigsty: апстримных образов CE больше нет ни на Docker Hub, ни на quay.io. Тот же
+          # бинарь и тот же формат тома, что у прежнего quay.io/minio/minio, — переезд без миграции данных.
+          # Здесь стоит осмысленная заглушка: в релизе тот же образ приезжает по digest через
+          # kustomize edit set image.
+          image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
           # С digest в манифесте перекачивать уже скачанный слой незачем, а лимиты Docker Hub на домашнем
           # кластере выбираются быстрее, чем кажется.
           imagePullPolicy: IfNotPresent

@@ -38,8 +38,8 @@ spec:
         - name: regcred
       containers:
         - name: mc
-          # Тот же quay.io: в Docker Hub образа mc больше нет.
-          image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+          # mc из того же форка pgsty: апстримного образа нет ни на Docker Hub, ни на quay.io.
+          image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
           imagePullPolicy: IfNotPresent
           # Здесь именно command, а не args, — в отличие от самого MinIO. ENTRYPOINT образа mc это сам
           # бинарь mc, и подменить надо именно его; в compose ровно по той же причине переопределялся
