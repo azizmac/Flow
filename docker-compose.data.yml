@@ -137,7 +137,11 @@ services:
   # Разовый бэкап тем же контейнером и тем же скриптом:
   #   docker compose -f docker-compose.data.yml --profile backup run --rm backup /scripts/backup.sh
   backup:
-    image: pgvector/pgvector:pg16
+    # Alpine, а не образ базы: расписание держит busybox crond (scheduler.sh), а в Debian-образе
+    # pgvector его нет — контейнер падал с «crond: not found» и перезапускался по кругу, бэкапов не было.
+    # pgvector клиенту не нужен: pg_dump расширение не использует, а CREATE EXTENSION из дампа выполняет
+    # сервер. Мажорная версия обязана совпадать с postgres выше — pg_dump старше сервера не снимет дамп.
+    image: postgres:16-alpine
     profiles: ["backup"]
     restart: unless-stopped
     depends_on:
