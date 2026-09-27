@@ -23,6 +23,10 @@
         {
             <MudMenuItem Class="pop-item" OnClick="OnRename"><Icon Name="edit" Size="15" />Переименовать</MudMenuItem>
         }
+        @if (ShowAccess)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnAccess"><Icon Name="users" Size="15" />Доступ</MudMenuItem>
+        }
         @if (ShowTaskTypes)
         {
             <MudMenuItem Class="pop-item" OnClick="OnTaskTypes"><Icon Name="settings" Size="15" />Типы задач</MudMenuItem>
@@ -44,6 +48,9 @@
     /// <summary>Пункт «Типы задач» — только у проекта и только для тех, кто может им управлять.</summary>
     [Parameter] public bool ShowTaskTypes { get; set; }
     [Parameter] public EventCallback OnTaskTypes { get; set; }
+    /// <summary>Пункт «Доступ» (участники и роль по умолчанию) — для администратора проекта.</summary>
+    [Parameter] public bool ShowAccess { get; set; }
+    [Parameter] public EventCallback OnAccess { get; set; }
     [Parameter] public int Size { get; set; } = 26;
     [Parameter] public string? Style { get; set; }
     [Parameter] public EventCallback OnOpen { get; set; }

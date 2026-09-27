@@ -12,6 +12,8 @@ internal sealed class TaskCommentDeleteCommandHandler(
     ISearchIndexQueue searchIndex,
     ActorResolver actors,
     IPermissionService permissions,
+    IProjectAccess projectAccess,
+    ITaskItemRepository tasks,
     IUnitOfWork unitOfWork)
     : IRequestHandler<TaskCommentDeleteCommand, bool>
 {
@@ -23,7 +25,12 @@ internal sealed class TaskCommentDeleteCommandHandler(
         if (comment is null)
             return false;
 
-        permissions.EnsureCanDeleteComment(actor, comment);
+        // Права — в проекте задачи комментария; задачи нет (удалили вместе с комментариями) — как будто нет и его.
+        var task = await tasks.GetByIdAsync(comment.TaskId, cancellationToken);
+        if (task is null)
+            return false;
+
+        permissions.EnsureCanDeleteComment(actor, await projectAccess.GetAsync(actor, task.BoardId, cancellationToken), comment);
 
         comments.Remove(comment);
         activities.Add(TaskActivity.CommentDeleted(comment.TaskId, actor.Id, comment.Id));

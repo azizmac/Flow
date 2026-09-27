@@ -5,9 +5,10 @@
 <div class="board-card" @onclick="Open" role="link" tabindex="0" @onkeydown="OnCardKey">
     <div class="board-card-head">
         <KeyChip Value="@Board.Key" />
-        <RowMenu ShowOpen="true" ShowRename="CanManage" ShowDelete="CanManage" ShowTaskTypes="CanManage" Size="26" Style="color:rgba(255,255,255,0.5)"
+        <RowMenu ShowOpen="true" ShowRename="CanRename" ShowDelete="CanDelete" ShowTaskTypes="CanConfigure" ShowAccess="CanManageMembers"
+                 Size="26" Style="color:rgba(255,255,255,0.5)"
                  OnOpen="Open" OnRename="StartRename" OnCopy="CopyKey" OnDelete="() => OnDelete.InvokeAsync(Board)"
-                 OnTaskTypes="() => OnTaskTypes.InvokeAsync(Board)" />
+                 OnTaskTypes="() => OnTaskTypes.InvokeAsync(Board)" OnAccess="() => OnAccess.InvokeAsync(Board)" />
     </div>
     <div>
         <div class="board-card-name">
@@ -43,8 +44,12 @@
     [Parameter] public EventCallback<(BoardResponse Board, string Name)> OnRename { get; set; }
     [Parameter] public EventCallback<BoardResponse> OnDelete { get; set; }
     [Parameter] public EventCallback<BoardResponse> OnTaskTypes { get; set; }
-    /// <summary>Permissions.CanManageBoards(me): переименование и удаление — Admin+.</summary>
-    [Parameter] public bool CanManage { get; set; } = true;
+    /// <summary>Права в этом проекте (Permissions.CanRenameBoard / CanDeleteBoard / CanManageConfig / CanManageMembers).</summary>
+    [Parameter] public bool CanRename { get; set; }
+    [Parameter] public bool CanDelete { get; set; }
+    [Parameter] public bool CanConfigure { get; set; }
+    [Parameter] public bool CanManageMembers { get; set; }
+    [Parameter] public EventCallback<BoardResponse> OnAccess { get; set; }
     [Parameter] public EventCallback<string> OnCopy { get; set; }
 
     private readonly string _inputId = "bc-" + Guid.NewGuid().ToString("N")[..8];
@@ -58,7 +63,7 @@
 
     private async Task StartRename()
     {
-        if (!CanManage) return;
+        if (!CanRename) return;
         _name = Board.Name;
         _renaming = true;
         _cancelled = false;

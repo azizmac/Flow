@@ -9,6 +9,7 @@
 @inject AppState State
 @inject UserDirectory Users
 @inject AttachmentSizes Sizes
+@inject ProjectAccessState Access
 
 <PageTitle>@(_task?.Code ?? "Задача") — Flow</PageTitle>
 
@@ -103,7 +104,7 @@ else if (_task is not null && _board is not null)
                     <MarkdownView Text="@_task.Description" Class="big" OnClick="OnDescClick" />
                 }
             </div>
-            <AttachmentList TaskId="_task.Id" DropZoneId="tp-drop" />
+            <AttachmentList TaskId="_task.Id" BoardId="_task.BoardId" DropZoneId="tp-drop" />
             <TaskTimeline @ref="_timeline" TaskItem="_task" Board="_board" OnCommentCountChanged="OnCommentCountChanged" />
         </div>
 
@@ -219,11 +220,12 @@ else if (_task is not null && _board is not null)
     private CancellationTokenSource? _savedCts;
     private bool _deleting;
 
-    // Права по матрице docs/TZ_user_roles.md — только показ; Flow.Api ответит 403, если что.
+    // Права в проекте задачи (docs/TZ_project_access.md) — только показ; Flow.Api ответит 403, если что.
     private UserResponse? Me => Users.Find(State.CurrentUserId);
-    private bool CanEdit => _task is not null && Permissions.CanEditTask(Me, _task);
-    private bool CanAssign => _task is not null && Permissions.CanAssign(Me, _task);
-    private Guid? OnlyAssigneeId => Permissions.CanAssignAnyone(Me) ? null : Me?.Id;
+    private ProjectAccessResponse? ProjectAccess => Access.For(_task?.BoardId);
+    private bool CanEdit => _task is not null && Permissions.CanEditTask(Me, ProjectAccess, _task);
+    private bool CanAssign => _task is not null && Permissions.CanAssign(Me, ProjectAccess, _task);
+    private Guid? OnlyAssigneeId => Permissions.CanAssignAnyone(ProjectAccess) ? null : Me?.Id;
     private bool _editingTitle;
     private bool _titleCancelled;
     private string _title = "";
@@ -309,6 +311,7 @@ else if (_task is not null && _board is not null)
         }
 
         _task = task.Value!;
+        await Access.EnsureCoversAsync([_task.BoardId]);
 
         // Вложения тянем ДО снятия _loading, хотя рисует их отдельный компонент: из них берутся
         // размеры картинок, а разметка описания и ленты обязана получить их на ПЕРВОМ рендере.

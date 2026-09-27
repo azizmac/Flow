@@ -11,6 +11,7 @@ internal sealed class TaskSetScheduleCommandHandler(
     ITaskActivityRepository activities,
     ActorResolver actors,
     IPermissionService permissions,
+    IProjectAccess projectAccess,
     IUnitOfWork unitOfWork)
     : IRequestHandler<TaskSetScheduleCommand, TaskUpdateResult>
 {
@@ -22,7 +23,7 @@ internal sealed class TaskSetScheduleCommandHandler(
         if (task is null)
             return TaskUpdateResult.NotFound();
 
-        permissions.EnsureCanEditTask(actor, task);
+        permissions.EnsureCanEditTask(actor, await projectAccess.GetAsync(actor, task.BoardId, cancellationToken), task);
 
         var (oldStart, oldDue) = (task.StartDate, task.DueDate);
         if (oldStart == request.StartDate && oldDue == request.DueDate)

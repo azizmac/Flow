@@ -11,6 +11,7 @@ internal sealed class TaskSetDueDateCommandHandler(
     ITaskActivityRepository activities,
     ActorResolver actors,
     IPermissionService permissions,
+    IProjectAccess projectAccess,
     IUnitOfWork unitOfWork)
     : IRequestHandler<TaskSetDueDateCommand, TaskUpdateResult>
 {
@@ -22,7 +23,7 @@ internal sealed class TaskSetDueDateCommandHandler(
         if (task is null)
             return TaskUpdateResult.NotFound();
 
-        permissions.EnsureCanEditTask(actor, task);
+        permissions.EnsureCanEditTask(actor, await projectAccess.GetAsync(actor, task.BoardId, cancellationToken), task);
 
         if (task.DueDate != request.DueDate)
         {

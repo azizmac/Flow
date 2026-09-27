@@ -46,6 +46,13 @@ public interface IFlowApi
     Task<ApiResult<BoardResponse>> CreateTaskType(Guid boardId, CreateTaskTypeRequest request, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> UpdateTaskType(Guid boardId, Guid typeId, UpdateTaskTypeRequest request, CancellationToken ct = default);
 
+    // ---- Доступ к проектам ----
+    Task<ApiResult<IReadOnlyList<ProjectAccessResponse>>> GetMyAccess(CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> GetBoardMembers(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> SetBoardMember(Guid boardId, Guid userId, SetBoardMemberRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> RemoveBoardMember(Guid boardId, Guid userId, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> SetBoardDefaultRole(Guid boardId, SetDefaultRoleRequest request, CancellationToken ct = default);
+
     // ---- Задачи ----
     Task<ApiResult<IReadOnlyList<TaskResponse>>> GetTasks(Guid boardId, Guid? assigneeId = null, CancellationToken ct = default);
 

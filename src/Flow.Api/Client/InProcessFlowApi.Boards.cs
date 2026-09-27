@@ -1,7 +1,12 @@
 ﻿using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
 using Flow.Application.Features.Boards;
+using Flow.Application.Features.Boards.Commands.BoardDefaultRoleSetCommand;
+using Flow.Application.Features.Boards.Commands.BoardMemberRemoveCommand;
+using Flow.Application.Features.Boards.Commands.BoardMemberSetCommand;
 using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
+using Flow.Application.Features.Boards.Queries.BoardMembersQuery;
+using Flow.Application.Features.Boards.Queries.BoardMyAccessQuery;
 using Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
 using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
@@ -69,6 +74,40 @@ internal sealed partial class InProcessFlowApi
                 new TaskTypeUpdateCommand(actor, boardId, typeId, request.Name, request.IsDefault, request.IsArchived), ct);
             return response is null ? NotFound<BoardResponse>() : Ok(response);
         });
+
+    public Task<ApiResult<IReadOnlyList<ProjectAccessResponse>>> GetMyAccess(CancellationToken ct = default) =>
+        Scoped(async mediator => Ok(await mediator.Send(new BoardMyAccessQuery(await ActorAsync()), ct)));
+
+    public Task<ApiResult<BoardMembersResponse>> GetBoardMembers(Guid boardId, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var members = await mediator.Send(new BoardMembersQuery(await ActorAsync(), boardId), ct);
+            return members is null ? NotFound<BoardMembersResponse>() : Ok(members);
+        });
+
+    public Task<ApiResult<BoardMembersResponse>> SetBoardMember(Guid boardId, Guid userId, SetBoardMemberRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator => MemberResult(await mediator.Send(
+            new BoardMemberSetCommand(await ActorAsync(), boardId, userId, request.Role.ToDomainRole()), ct)));
+
+    public Task<ApiResult<BoardMembersResponse>> RemoveBoardMember(Guid boardId, Guid userId, CancellationToken ct = default) =>
+        Scoped(async mediator => MemberResult(await mediator.Send(new BoardMemberRemoveCommand(await ActorAsync(), boardId, userId), ct)));
+
+    /// <summary>Admin в роли по умолчанию — ArgumentException, Guard отдаёт 400.</summary>
+    public Task<ApiResult<BoardMembersResponse>> SetBoardDefaultRole(Guid boardId, SetDefaultRoleRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var response = await mediator.Send(
+                new BoardDefaultRoleSetCommand(await ActorAsync(), boardId, request.Role?.ToDomainRole()), ct);
+            return response is null ? NotFound<BoardMembersResponse>() : Ok(response);
+        });
+
+    private static ApiResult<BoardMembersResponse> MemberResult(BoardMemberResult result)
+    {
+        if (result.IsNotFound)
+            return NotFound<BoardMembersResponse>();
+
+        return result.ValidationError is { } error ? Invalid<BoardMembersResponse>(error) : Ok(result.Response!);
+    }
 
     public Task<ApiResult<bool>> DeleteBoard(Guid id, CancellationToken ct = default) =>
         Scoped(async mediator =>

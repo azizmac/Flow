@@ -1,7 +1,12 @@
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
 using Flow.Application.Features.Boards;
+using Flow.Application.Features.Boards.Commands.BoardDefaultRoleSetCommand;
+using Flow.Application.Features.Boards.Commands.BoardMemberRemoveCommand;
+using Flow.Application.Features.Boards.Commands.BoardMemberSetCommand;
 using Flow.Application.Features.Boards.Commands.BoardRenameCommand;
+using Flow.Application.Features.Boards.Queries.BoardMembersQuery;
+using Flow.Application.Features.Boards.Queries.BoardMyAccessQuery;
 using Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
 using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
@@ -106,6 +111,71 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
         {
             return BadRequest(new { ex.Message });
         }
+    }
+
+    // ---- Доступ к проекту (docs/TZ_project_access.md, этап 4A) ----
+
+    /// <summary>Роль и права текущего пользователя во всех проектах — клиент прячет по ним кнопки.</summary>
+    [HttpGet("my-access")]
+    public async Task<IActionResult> GetMyAccess(CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new BoardMyAccessQuery(actor.Require()), cancellationToken));
+
+    [HttpGet("{id:guid}/my-access")]
+    public async Task<IActionResult> GetMyAccess(Guid id, CancellationToken cancellationToken)
+    {
+        var access = await mediator.Send(new BoardMyAccessQuery(actor.Require(), id), cancellationToken);
+        return access.Count == 0 ? NotFound() : Ok(access[0]);
+    }
+
+    /// <summary>Роль по умолчанию и прямые участники проекта.</summary>
+    [HttpGet("{id:guid}/members")]
+    public async Task<IActionResult> GetMembers(Guid id, CancellationToken cancellationToken)
+    {
+        var members = await mediator.Send(new BoardMembersQuery(actor.Require(), id), cancellationToken);
+        return members is null ? NotFound() : Ok(members);
+    }
+
+    /// <summary>Добавить участника или сменить роль. 400 — человек не найден, деактивирован или роль неизвестна.</summary>
+    [HttpPut("{id:guid}/members/{userId:guid}")]
+    public async Task<IActionResult> SetMember(Guid id, Guid userId, SetBoardMemberRequest request, CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(request.Role))
+            return BadRequest(new { Message = $"Unknown project role {request.Role}." });
+
+        return MemberResult(await mediator.Send(
+            new BoardMemberSetCommand(actor.Require(), id, userId, request.Role.ToDomainRole()), cancellationToken));
+    }
+
+    /// <summary>Убрать участие: роль вернётся к роли по умолчанию. 404 — человек не участник.</summary>
+    [HttpDelete("{id:guid}/members/{userId:guid}")]
+    public async Task<IActionResult> RemoveMember(Guid id, Guid userId, CancellationToken cancellationToken) =>
+        MemberResult(await mediator.Send(new BoardMemberRemoveCommand(actor.Require(), id, userId), cancellationToken));
+
+    /// <summary>Потолок роли без участия: Viewer, Member, Developer или null. Admin и неизвестное — 400.</summary>
+    [HttpPut("{id:guid}/default-role")]
+    public async Task<IActionResult> SetDefaultRole(Guid id, SetDefaultRoleRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Role is { } role && !Enum.IsDefined(role))
+            return BadRequest(new { Message = $"Unknown project role {role}." });
+
+        try
+        {
+            var response = await mediator.Send(
+                new BoardDefaultRoleSetCommand(actor.Require(), id, request.Role?.ToDomainRole()), cancellationToken);
+            return response is null ? NotFound() : Ok(response);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
+    private IActionResult MemberResult(BoardMemberResult result)
+    {
+        if (result.IsNotFound)
+            return NotFound();
+
+        return result.ValidationError is { } error ? BadRequest(new { Message = error }) : Ok(result.Response);
     }
 
     [HttpDelete("{id:guid}")]

@@ -40,6 +40,7 @@ public static class FlowInfrastructureServiceCollectionExtensions
             .UseNpgsql(dataSource, o => o.UseVector()));
 
         services.AddScoped<IBoardRepository, BoardRepository>();
+        services.AddScoped<IBoardMemberRepository, BoardMemberRepository>();
         services.AddScoped<ITaskItemRepository, TaskItemRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();

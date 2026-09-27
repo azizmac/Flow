@@ -9,13 +9,13 @@ using MediatR;
 namespace Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 
 /// <summary>Бросает ArgumentException/InvalidOperationException при невалидных данных (см. Board.CreateTask).</summary>
-internal sealed class TaskCreateCommandHandler(IBoardRepository boards, ITaskItemRepository tasks, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class TaskCreateCommandHandler(IBoardRepository boards, ITaskItemRepository tasks, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskCreateCommand, TaskResponse?>
 {
     public async Task<TaskResponse?> Handle(TaskCreateCommand request, CancellationToken cancellationToken)
     {
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
-        permissions.EnsureCanCreateTask(actor);
+        permissions.EnsureCanCreateTask(await projectAccess.GetAsync(actor, request.BoardId, cancellationToken));
 
         var board = await boards.GetByIdAsync(request.BoardId, cancellationToken);
         if (board is null)

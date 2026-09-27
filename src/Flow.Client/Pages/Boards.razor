@@ -9,6 +9,7 @@
 @inject HotkeyService Hotkeys
 @inject AppState State
 @inject UserDirectory Users
+@inject ProjectAccessState Access
 @inject PreferencesState Preferences
 
 <PageTitle>Проекты — Flow</PageTitle>
@@ -45,8 +46,11 @@
         <div class="board-grid stagger">
             @foreach (var b in Filtered)
             {
-                <BoardCard @key="b.Id" Board="b" CanManage="CanManage" OnOpen="Open" OnRename="Rename" OnDelete="AskDelete" OnCopy="CopyKey"
-                           OnTaskTypes="bb => _typesBoard = bb" />
+                var access = Access.For(b.Id);
+                <BoardCard @key="b.Id" Board="b" OnOpen="Open" OnRename="Rename" OnDelete="AskDelete" OnCopy="CopyKey"
+                           CanRename="Permissions.CanRenameBoard(access)" CanDelete="Permissions.CanDeleteBoard(Me, access)"
+                           CanConfigure="Permissions.CanManageConfig(access)" CanManageMembers="Permissions.CanManageMembers(access)"
+                           OnTaskTypes="bb => _typesBoard = bb" OnAccess="bb => _accessBoard = bb" />
             }
             @if (!HasSearch && CanManage)
             {
@@ -75,6 +79,11 @@
 @if (_typesBoard is not null)
 {
     <TaskTypesDialog Board="_typesBoard" OnChanged="Replace" OnClose="() => _typesBoard = null" />
+}
+
+@if (_accessBoard is not null)
+{
+    <ProjectAccessDialog Board="_accessBoard" OnClose="() => _accessBoard = null" />
 }
 
 @if (_deleting is not null)
@@ -111,8 +120,13 @@
         }
     }
 
-    /// <summary>Проекты создают, переименовывают и удаляют Admin и Owner (docs/TZ_user_roles.md).</summary>
-    private bool CanManage => Permissions.CanManageBoards(Users.Find(State.CurrentUserId));
+    private UserResponse? Me => Users.Find(State.CurrentUserId);
+
+    /// <summary>Создают проекты глобальные Admin и Owner; остальное в карточке — по правам в самом проекте.</summary>
+    private bool CanManage => Permissions.CanCreateBoard(Me);
+
+    /// <summary>Проект, чьих участников сейчас правят в модалке «Доступ»; null — модалка закрыта.</summary>
+    private BoardResponse? _accessBoard;
 
     protected override async Task OnInitializedAsync()
     {
@@ -147,7 +161,10 @@
         var result = await Api.GetBoards();
         _loading = false;
         if (result.Ok)
+        {
             _boards = result.Value!.ToList();
+            await Access.EnsureCoversAsync(_boards.Select(b => b.Id));
+        }
         else
             _loadError = result.Error;
     }

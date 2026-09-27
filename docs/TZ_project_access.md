@@ -1,6 +1,7 @@
 # ТЗ: права на уровне проекта — участники, приватные проекты, группы, наборы прав
 
-Статус: **черновик, не начато**. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 4). Развивает
+Статус: **этап 4A сделан** (роли в проекте, участники, роль по умолчанию, права проекта в проверках и в интерфейсе),
+4B–4E — не начаты. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 4). Развивает
 `docs/TZ_user_roles.md`: там глобальные роли прямо названы временной мерой «до закрытых проектов».
 
 ## Исходное требование
@@ -142,6 +143,12 @@ public interface IProjectAccess
 | PUT/DELETE | `/boards/{id}/members/{userId}` `{ role }` | `ManageMembers` |
 | PUT/DELETE | `/boards/{id}/groups/{groupId}` `{ role }` | `ManageMembers` |
 | PATCH | `/boards/{id}/access` `{ visibility, defaultRole }` | `ManageMembers` |
+
+> **Сделано в 4A иначе:** роль по умолчанию — `PUT /boards/{id}/default-role { role }` (одно поле, null снимает:
+> в PATCH-семантике null означал бы «не трогать»). Видимость добавит свой эндпоинт в 4B. Список участников для
+> экрана «Доступ» — `GET /boards/{id}/members`; `DeleteTask` отдельным правом не стал: удаление задачи, как и раньше,
+> — это правка (Member удаляет свою). Права `ManageSprints`/`ManageMilestones`/`ManageScm` появятся вместе с
+> сущностями, которые защищают. Роль в проекте не кэшируется на запрос: время жизни scope не всегда равно запросу.
 | GET | `/boards/{id}/my-access` — роль и список `ProjectPermission` для клиента | `ViewProject` |
 | GET/POST | `/groups`; GET/PATCH/DELETE `/groups/{id}`; PUT/DELETE `/groups/{id}/members/{userId}` | чтение — все, изменение — глобальный Admin+ |
 

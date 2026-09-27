@@ -1,0 +1,219 @@
+@* Модалка «Доступ» проекта (docs/TZ_project_access.md, этап 4A): роль по умолчанию и прямые участники.
+   Роль в проекте = максимум из «по умолчанию» (роль во Flow, срезанная потолком) и участия; глобальные Admin
+   и Owner — администраторы любого проекта. Каждое действие — отдельный запрос, ответ — список целиком.
+   Если actor поменял что-то про себя, права перечитываются (ProjectAccessState). Жизненный цикл MudDialog —
+   как у TaskTypesDialog: закрываем ссылку явно, проект из параметра берём только при открытии. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject UserDirectory Users
+@inject AppState State
+@inject ProjectAccessState Access
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Доступ · @Board.Key</h3>
+        <div class="hint">Роль в проекте — большая из двух: роли во Flow (не выше роли по умолчанию) и роли участника.
+            Admin и Owner Flow управляют любым проектом и без участия.</div>
+    </TitleContent>
+    <DialogContent>
+        @if (_members is null)
+        {
+            <Skeleton Kind="rows" Count="3" />
+        }
+        else
+        {
+            <div class="pa-section">
+                <div class="meta-k">Роль по умолчанию</div>
+                <div class="seg pa-seg" role="radiogroup" aria-label="Роль по умолчанию">
+                    @foreach (var option in DefaultOptions)
+                    {
+                        var on = option == _members.DefaultRole;
+                        <button type="button" class="seg-btn @(on ? "on" : "")" role="radio" aria-checked="@(on ? "true" : "false")"
+                                disabled="@_busy" @onclick="() => SetDefault(option)">@DefaultLabel(option)</button>
+                    }
+                </div>
+                <div class="hint">@DefaultHint(_members.DefaultRole)</div>
+            </div>
+
+            <div class="pa-section">
+                <div class="meta-k">Участники · @_members.Members.Count</div>
+                @if (_members.Members.Count == 0)
+                {
+                    <div class="hint">Пока никого: у всех роль по умолчанию.</div>
+                }
+                <div class="pa-list">
+                    @foreach (var m in _members.Members)
+                    {
+                        var user = Users.Find(m.UserId);
+                        <div class="pa-row" @key="m.UserId">
+                            <Avatar User="user" Size="26" />
+                            <span class="pa-user">
+                                <span class="pa-name">@(user?.FullName ?? "—")</span>
+                                <span class="pa-un">@(user is null ? "" : "@" + user.Username)@(user is { IsActive: false } ? " · деактивирован" : "")</span>
+                            </span>
+                            <ProjectRoleSelect Value="m.Role" Allowed="Grantable" Disabled="_busy" OnChange="role => SetRole(m.UserId, role)" />
+                            <DsIconButton Icon="trash" Size="28" Title="Убрать из участников" Style="color:rgba(255,255,255,0.45)"
+                                          Disabled="_busy" OnClick="() => Remove(m.UserId)" />
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="pa-section">
+                <div class="meta-k">Добавить участника</div>
+                <div class="pa-add">
+                    <DsInput Id="pa-search" Placeholder="@SearchPlaceholder" MaxLength="100" Value="@_query"
+                             ValueChanged="v => { _query = v; _error = null; }" />
+                    <ProjectRoleSelect Value="_newRole" Allowed="Grantable" OnChange="r => _newRole = r" />
+                </div>
+                @if (_query.Trim().Length > 0)
+                {
+                    <div class="pa-results">
+                        @foreach (var u in Candidates)
+                        {
+                            <button type="button" class="pop-item user" disabled="@_busy" @onclick="() => SetRole(u.Id, _newRole, clearQuery: true)">
+                                <Avatar User="u" Size="22" />
+                                <span class="pop-user"><span class="pop-user-name">@u.FullName</span><span class="pop-user-un">@@@u.Username</span></span>
+                            </button>
+                        }
+                        @if (Candidates.Count == 0)
+                        {
+                            <div class="pop-empty">Никого не нашлось среди активных людей не из списка</div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Готово</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>null — «по роли во Flow»; Admin потолком быть не может (сервер ответит 400).</summary>
+    private const string SearchPlaceholder = "Имя или @username";
+
+    private static readonly IReadOnlyList<ProjectRole?> DefaultOptions = [null, ProjectRole.Developer, ProjectRole.Member, ProjectRole.Viewer];
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private Guid _boardId;
+    private BoardMembersResponse? _members;
+    private string _query = "";
+    private ProjectRole _newRole = ProjectRole.Member;
+    private string? _error;
+
+    private readonly DialogOptions _options = new()
+    {
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true,
+        CloseButton = false,
+        CloseOnEscapeKey = true,
+        BackdropClick = true
+    };
+
+    /// <summary>Роли, которые можно выдать: не выше своей роли в проекте (сервер проверит то же).</summary>
+    private IReadOnlyList<ProjectRole> Grantable =>
+        Enum.GetValues<ProjectRole>().Where(r => Access.For(Board.Id) is { } mine && r <= mine.Role).ToList();
+
+    private IReadOnlyList<UserResponse> Candidates =>
+        Users.Filter(_query, limit: 12).Where(u => _members!.Members.All(m => m.UserId != u.Id)).Take(6).ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_boardId == Board.Id)
+            return;
+
+        _boardId = Board.Id;
+        _members = null;
+        if (!Users.IsLoaded)
+            await Users.EnsureLoadedAsync();
+
+        var result = await Api.GetBoardMembers(Board.Id);
+        if (result.Ok)
+            _members = result.Value!;
+        else
+            _error = result.Error ?? "Не удалось загрузить участников";
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing)
+            return;
+
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy)
+            return;
+
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+
+    private Task SetDefault(ProjectRole? role) =>
+        role == _members?.DefaultRole ? Task.CompletedTask : Send(() => Api.SetBoardDefaultRole(Board.Id, new SetDefaultRoleRequest(role)), affectsMe: true);
+
+    private async Task SetRole(Guid userId, ProjectRole role, bool clearQuery = false)
+    {
+        if (await Send(() => Api.SetBoardMember(Board.Id, userId, new SetBoardMemberRequest(role)), affectsMe: userId == State.CurrentUserId) && clearQuery)
+            _query = "";
+    }
+
+    private Task Remove(Guid userId) =>
+        Send(() => Api.RemoveBoardMember(Board.Id, userId), affectsMe: userId == State.CurrentUserId);
+
+    /// <summary>
+    /// Ответ — список целиком. Правка, задевшая самого actor'а (его участие или потолок), меняет его права:
+    /// их перечитываем, чтобы кнопки на экране за модалкой не врали.
+    /// </summary>
+    private async Task<bool> Send(Func<Task<ApiResult<BoardMembersResponse>>> call, bool affectsMe)
+    {
+        _busy = true;
+        _error = null;
+        var result = await call();
+        _busy = false;
+
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить доступ";
+            return false;
+        }
+
+        _members = result.Value!;
+        if (affectsMe)
+            await Access.EnsureLoadedAsync(force: true);
+
+        return true;
+    }
+
+    private static string DefaultLabel(ProjectRole? role) => role is { } r ? Permissions.ProjectRoleLabel(r) : "По роли во Flow";
+
+    private static string DefaultHint(ProjectRole? role) => role switch
+    {
+        null => "Роль в проекте равна роли во Flow: разработчик Flow — разработчик и здесь.",
+        ProjectRole.Viewer => "Проект только для чтения всем, кроме участников и Admin/Owner Flow.",
+        { } r => $"Без участия — не выше роли «{Permissions.ProjectRoleLabel(r)}», даже у тех, у кого во Flow роль выше."
+    };
+}

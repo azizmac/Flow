@@ -24,6 +24,9 @@ public sealed class BoardConfiguration : IEntityTypeConfiguration<Board>
 
         builder.Property(b => b.NextTaskNumber).IsRequired();
 
+        // null — роль в проекте равна глобальной (docs/TZ_project_access.md): у существующих проектов так и есть.
+        builder.Property(b => b.DefaultRole);
+
         builder.Navigation(b => b.Statuses).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(b => b.Tasks).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(b => b.TaskTypes).UsePropertyAccessMode(PropertyAccessMode.Field);

@@ -8,6 +8,7 @@
 @inject ToastService Toasts
 @inject AppState State
 @inject UserDirectory Users
+@inject ProjectAccessState Access
 
 <div class="timeline" id="timeline">
     <div class="timeline-head">
@@ -55,11 +56,11 @@
                                 @if (_editingId != c.Id)
                                 {
                                     <span class="tl-card-actions">
-                                        @if (Permissions.CanEditComment(Me, c))
+                                        @if (Permissions.CanEditComment(Me, ProjectAccess, c))
                                         {
                                             <button type="button" class="md-tool" title="Редактировать" @onclick="() => StartEdit(c)"><Icon Name="edit" Size="14" /></button>
                                         }
-                                        @if (Permissions.CanDeleteComment(Me, c))
+                                        @if (Permissions.CanDeleteComment(Me, ProjectAccess, c))
                                         {
                                             <button type="button" class="md-tool danger" title="Удалить" @onclick="() => _deleting = c"><Icon Name="trash" Size="14" /></button>
                                         }
@@ -109,7 +110,7 @@
         </div>
     }
 
-    @if (Permissions.CanComment(Me))
+    @if (Permissions.CanComment(ProjectAccess))
     {
         <div class="tl-composer">
             <Avatar User="Me" Size="30" />
@@ -155,6 +156,9 @@
     private const string DraftPlaceholder = "Написать комментарий… @username — упомянуть, файл можно перетащить";
 
     private UserResponse? Me => Users.Find(State.CurrentUserId);
+
+    /// <summary>Права в проекте задачи: комментировать может не каждый, кто её видит.</summary>
+    private ProjectAccessResponse? ProjectAccess => Access.For(Board.Id);
 
     private static readonly TimeSpan GroupWindow = TimeSpan.FromSeconds(60);
 

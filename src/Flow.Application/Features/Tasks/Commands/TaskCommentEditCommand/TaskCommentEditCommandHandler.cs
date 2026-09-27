@@ -13,6 +13,8 @@ internal sealed class TaskCommentEditCommandHandler(
     ISearchIndexQueue searchIndex,
     ActorResolver actors,
     IPermissionService permissions,
+    IProjectAccess projectAccess,
+    ITaskItemRepository tasks,
     IUnitOfWork unitOfWork)
     : IRequestHandler<TaskCommentEditCommand, TaskCommentResult>
 {
@@ -24,7 +26,12 @@ internal sealed class TaskCommentEditCommandHandler(
         if (comment is null)
             return TaskCommentResult.NotFound();
 
-        permissions.EnsureCanEditComment(actor, comment);
+        // Права — в проекте задачи комментария; задачи нет (удалили вместе с комментариями) — как будто нет и его.
+        var task = await tasks.GetByIdAsync(comment.TaskId, cancellationToken);
+        if (task is null)
+            return TaskCommentResult.NotFound();
+
+        permissions.EnsureCanEditComment(actor, await projectAccess.GetAsync(actor, task.BoardId, cancellationToken), comment);
 
         var mentioned = await mentions.ResolveAsync(request.Body, cancellationToken);
 

@@ -8,7 +8,7 @@ using MediatR;
 namespace Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 
 /// <summary>Бросает ArgumentException при пустом названии (см. TaskItem.Rename).</summary>
-internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IBoardRepository boards, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IBoardRepository boards, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskUpdateCommand, TaskUpdateResult>
 {
     public async Task<TaskUpdateResult> Handle(TaskUpdateCommand request, CancellationToken cancellationToken)
@@ -19,7 +19,7 @@ internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IBoard
         if (task is null)
             return TaskUpdateResult.NotFound();
 
-        permissions.EnsureCanEditTask(actor, task);
+        permissions.EnsureCanEditTask(actor, await projectAccess.GetAsync(actor, task.BoardId, cancellationToken), task);
 
         if (request.StatusId is not null)
         {

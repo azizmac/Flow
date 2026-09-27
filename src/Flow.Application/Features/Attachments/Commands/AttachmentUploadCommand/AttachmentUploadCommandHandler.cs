@@ -22,17 +22,20 @@ internal sealed class AttachmentUploadCommandHandler(
     AttachmentOptions options,
     ActorResolver actors,
     IPermissionService permissions,
+    IProjectAccess projectAccess,
     IUnitOfWork unitOfWork)
     : IRequestHandler<AttachmentUploadCommand, AttachmentUploadResult>
 {
     public async Task<AttachmentUploadResult> Handle(AttachmentUploadCommand request, CancellationToken cancellationToken)
     {
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
-        permissions.EnsureCanAttach(actor);
 
         var task = await tasks.GetByIdAsync(request.TaskId, cancellationToken);
         if (task is null)
             return AttachmentUploadResult.TaskNotFound();
+
+        // Право приложить файл — в проекте задачи, поэтому задачу грузим до проверки.
+        permissions.EnsureCanAttach(await projectAccess.GetAsync(actor, task.BoardId, cancellationToken));
 
         if (Validate(request) is { } error)
             return AttachmentUploadResult.Invalid(error);

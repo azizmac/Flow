@@ -119,6 +119,7 @@ public static class TestMediatorFactory
 
         var services = new ServiceCollection();
         services.AddSingleton<IBoardRepository>(boards);
+        services.AddSingleton<IBoardMemberRepository>(new FakeBoardMemberRepository(boards));
         services.AddSingleton<ITaskItemRepository>(tasks);
         services.AddSingleton<IUserRepository>(users);
         services.AddSingleton<IAccountService>(accounts);

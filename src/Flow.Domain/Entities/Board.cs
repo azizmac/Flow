@@ -27,6 +27,13 @@ public sealed partial class Board
     /// <summary>Счётчик для генерации следующего номера в коде задачи.</summary>
     public int NextTaskNumber { get; private set; }
 
+    /// <summary>
+    /// Потолок роли, которую глобальная роль даёт в этом проекте без участия (docs/TZ_project_access.md §1):
+    /// null — роль в проекте равна глобальной; Viewer — «только чтение для всех, кроме участников».
+    /// Глобальных Admin и Owner не ограничивает. Участие поднимает роль выше потолка.
+    /// </summary>
+    public ProjectRole? DefaultRole { get; private set; }
+
     public IReadOnlyCollection<Status> Statuses => _statuses;
 
     /// <summary>Типы задач проекта, включая архивные (docs/TZ_task_model.md §1).</summary>
@@ -66,6 +73,15 @@ public sealed partial class Board
     }
 
     public void Rename(string name) => Name = ValidateName(name);
+
+    /// <summary>null — снять ограничение. Admin смысла не имеет (потолок выше любой производной роли) и не принимается.</summary>
+    public void SetDefaultRole(ProjectRole? role)
+    {
+        if (role is { } r && (!Enum.IsDefined(r) || r == ProjectRole.Admin))
+            throw new ArgumentException($"Default project role must be Viewer, Member or Developer, not {r}.", nameof(role));
+
+        DefaultRole = role;
+    }
 
     /// <summary>Добавляет статус задачи на доску. На доске может быть максимум один начальный и один финальный статус.</summary>
     public Status AddStatus(string name, StatusType? type = null, bool isInitial = false, bool isFinal = false)

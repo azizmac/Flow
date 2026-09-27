@@ -4,6 +4,11 @@ using DomainStatusType = Flow.Domain.Entities.StatusType;
 using SharedStatusType = Flow.Shared.Contracts.Boards.StatusType;
 using DomainTypeKind = Flow.Domain.Entities.TaskTypeKind;
 using SharedTypeKind = Flow.Shared.Contracts.Boards.TaskTypeKind;
+using DomainProjectRole = Flow.Domain.Entities.ProjectRole;
+using SharedProjectRole = Flow.Shared.Contracts.Boards.ProjectRole;
+using DomainPermission = Flow.Domain.Entities.ProjectPermission;
+using SharedPermission = Flow.Shared.Contracts.Boards.ProjectPermission;
+using Flow.Application.Security;
 
 namespace Flow.Application.Features.Boards;
 
@@ -27,7 +32,31 @@ public static class BoardMappingExtensions
         board.TaskTypes
             .OrderBy(t => t.SortOrder)
             .Select(t => t.ToResponse())
+            .ToList(),
+        board.DefaultRole?.ToResponseRole());
+
+    public static BoardMembersResponse ToMembersResponse(this Board board, IEnumerable<BoardMember> members) => new(
+        board.Id,
+        board.DefaultRole?.ToResponseRole(),
+        members
+            .OrderByDescending(m => m.Role)
+            .ThenBy(m => m.AddedAt)
+            .Select(m => new BoardMemberResponse(m.UserId, m.Role.ToResponseRole(), m.AddedById, m.AddedAt))
             .ToList());
+
+    public static ProjectAccessResponse ToResponse(this ProjectAccessInfo access) => new(
+        access.BoardId,
+        access.Role.ToResponseRole(),
+        access.Permissions.OrderBy(p => p).Select(p => p.ToResponsePermission()).ToList());
+
+    public static SharedProjectRole ToResponseRole(this DomainProjectRole role) =>
+        Enum.IsDefined(role) ? (SharedProjectRole)(int)role : throw new ArgumentOutOfRangeException(nameof(role), role, "Unknown ProjectRole.");
+
+    public static DomainProjectRole ToDomainRole(this SharedProjectRole role) =>
+        Enum.IsDefined(role) ? (DomainProjectRole)(int)role : throw new ArgumentOutOfRangeException(nameof(role), role, "Unknown ProjectRole.");
+
+    private static SharedPermission ToResponsePermission(this DomainPermission permission) =>
+        Enum.IsDefined(permission) ? (SharedPermission)(int)permission : throw new ArgumentOutOfRangeException(nameof(permission), permission, "Unknown ProjectPermission.");
 
     public static TaskTypeResponse ToResponse(this TaskType type) =>
         new(type.Id, type.Name, type.Kind.ToResponseKind(), type.Level, type.IsDefault, type.IsArchived);

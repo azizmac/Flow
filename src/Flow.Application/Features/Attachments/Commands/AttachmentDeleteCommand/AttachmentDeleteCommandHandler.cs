@@ -17,6 +17,7 @@ internal sealed class AttachmentDeleteCommandHandler(
     ISearchIndexQueue searchIndex,
     ActorResolver actors,
     IPermissionService permissions,
+    IProjectAccess projectAccess,
     IUnitOfWork unitOfWork)
     : IRequestHandler<AttachmentDeleteCommand, bool>
 {
@@ -28,7 +29,7 @@ internal sealed class AttachmentDeleteCommandHandler(
         if (attachment is null)
             return false;
 
-        permissions.EnsureCanDeleteAttachment(actor, attachment);
+        permissions.EnsureCanDeleteAttachment(actor, await projectAccess.GetAsync(actor, attachment.BoardId, cancellationToken), attachment);
 
         attachments.Remove(attachment);
         activities.Add(TaskActivity.AttachmentRemoved(attachment.TaskId, actor.Id, attachment.Id, attachment.FileName));

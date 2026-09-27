@@ -1,3 +1,4 @@
+using Flow.Application.Security;
 using Flow.Domain.Entities;
 
 namespace Flow.Application.Abstractions;
@@ -9,26 +10,38 @@ namespace Flow.Application.Abstractions;
 /// </summary>
 public interface IPermissionService
 {
-    /// <summary>Создать, переименовать, удалить проект — Admin и Owner.</summary>
-    void EnsureCanManageBoards(User actor);
+    /// <summary>Создать проект — глобальные Admin и Owner.</summary>
+    void EnsureCanCreateBoard(User actor);
 
-    /// <summary>Создать задачу — Member и выше.</summary>
-    void EnsureCanCreateTask(User actor);
+    /// <summary>Переименовать проект — RenameProject (администратор проекта).</summary>
+    void EnsureCanRenameBoard(ProjectAccessInfo access);
 
-    /// <summary>Редактировать, удалять, менять статус: Developer+ — любую; Member — свою (создатель или исполнитель).</summary>
-    void EnsureCanEditTask(User actor, TaskItem task);
+    /// <summary>Удалить проект — глобальный Admin+ и DeleteProject в проекте.</summary>
+    void EnsureCanDeleteBoard(User actor, ProjectAccessInfo access);
 
-    /// <summary>Назначить исполнителя: Developer+ — любого; Member — только себя на свою задачу (и снять себя).</summary>
-    void EnsureCanAssign(User actor, TaskItem task, Guid? assigneeId);
+    /// <summary>Типы задач и прочая настройка проекта — ManageConfig (администратор проекта).</summary>
+    void EnsureCanManageConfig(ProjectAccessInfo access);
 
-    /// <summary>Комментировать задачи — Member и выше (Reader только читает).</summary>
-    void EnsureCanComment(User actor);
+    /// <summary>Участники и роль по умолчанию — ManageMembers; выдаваемая роль не выше своей роли в проекте.</summary>
+    void EnsureCanManageMembers(ProjectAccessInfo access, ProjectRole? grantedRole = null);
 
-    /// <summary>Править комментарий — только автор.</summary>
-    void EnsureCanEditComment(User actor, TaskComment comment);
+    /// <summary>Создать задачу — CreateTask (участник и выше).</summary>
+    void EnsureCanCreateTask(ProjectAccessInfo access);
 
-    /// <summary>Удалить комментарий — автор либо Admin и Owner.</summary>
-    void EnsureCanDeleteComment(User actor, TaskComment comment);
+    /// <summary>Редактировать, удалять, менять статус: EditAnyTask — любую; EditOwnTask — свою (создатель или исполнитель).</summary>
+    void EnsureCanEditTask(User actor, ProjectAccessInfo access, TaskItem task);
+
+    /// <summary>Назначить исполнителя: AssignAnyone — любого; иначе только себя на свою задачу (и снять себя).</summary>
+    void EnsureCanAssign(User actor, ProjectAccessInfo access, TaskItem task, Guid? assigneeId);
+
+    /// <summary>Комментировать задачи — Comment (читатель только читает).</summary>
+    void EnsureCanComment(ProjectAccessInfo access);
+
+    /// <summary>Править комментарий — автор, если у него осталось право комментировать.</summary>
+    void EnsureCanEditComment(User actor, ProjectAccessInfo access, TaskComment comment);
+
+    /// <summary>Удалить комментарий — автор либо DeleteAnyComment (администратор проекта).</summary>
+    void EnsureCanDeleteComment(User actor, ProjectAccessInfo access, TaskComment comment);
 
     /// <summary>Добавлять людей — Admin и Owner.</summary>
     void EnsureCanManageUsers(User actor);
@@ -51,11 +64,11 @@ public interface IPermissionService
     /// </summary>
     void EnsureCanChangeRole(User actor, User target, UserRole newRole);
 
-    /// <summary>Приложить файл к задаче — Member и выше (Reader только смотрит и скачивает).</summary>
-    void EnsureCanAttach(User actor);
+    /// <summary>Приложить файл к задаче — Attach (читатель только смотрит и скачивает).</summary>
+    void EnsureCanAttach(ProjectAccessInfo access);
 
-    /// <summary>Удалить вложение — тот, кто приложил, либо Admin и Owner.</summary>
-    void EnsureCanDeleteAttachment(User actor, Attachment attachment);
+    /// <summary>Удалить вложение — тот, кто приложил, либо DeleteAnyAttachment (администратор проекта).</summary>
+    void EnsureCanDeleteAttachment(User actor, ProjectAccessInfo access, Attachment attachment);
 
     /// <summary>Состояние поискового индекса (GET /search/status) — Admin и Owner: это эксплуатация, не поиск.</summary>
     void EnsureCanViewSearchDiagnostics(User actor);

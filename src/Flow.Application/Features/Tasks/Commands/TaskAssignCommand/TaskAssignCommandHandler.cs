@@ -6,7 +6,7 @@ using MediatR;
 namespace Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 
 /// <summary>Инвариант «назначать можно только активного пользователя» живёт здесь: у TaskItem нет доступа к User.</summary>
-internal sealed class TaskAssignCommandHandler(ITaskItemRepository tasks, IUserRepository users, ITaskActivityRepository activities, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class TaskAssignCommandHandler(ITaskItemRepository tasks, IUserRepository users, ITaskActivityRepository activities, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskAssignCommand, TaskAssignResult>
 {
     public async Task<TaskAssignResult> Handle(TaskAssignCommand request, CancellationToken cancellationToken)
@@ -17,7 +17,7 @@ internal sealed class TaskAssignCommandHandler(ITaskItemRepository tasks, IUserR
         if (task is null)
             return TaskAssignResult.NotFound();
 
-        permissions.EnsureCanAssign(actor, task, request.UserId);
+        permissions.EnsureCanAssign(actor, await projectAccess.GetAsync(actor, task.BoardId, cancellationToken), task, request.UserId);
 
         var previous = task.AssigneeId;
 

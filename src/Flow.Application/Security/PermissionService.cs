@@ -4,40 +4,67 @@ using Flow.Domain.Entities;
 
 namespace Flow.Application.Security;
 
-/// <summary>Матрицы прав docs/TZ_user_roles.md. Сравнение ролей — по порядку enum (Reader &lt; … &lt; Owner).</summary>
+/// <summary>
+/// Матрицы прав: глобальные (люди, создание проектов, поиск) — по UserRole (docs/TZ_user_roles.md), всё внутри
+/// проекта — по правам роли в проекте (ProjectAccessInfo, docs/TZ_project_access.md). Роль в проекте считает
+/// IProjectAccess; без участников и потолка она равна глобальной, поэтому поведение прежнее.
+/// </summary>
 internal sealed class PermissionService : IPermissionService
 {
-    public void EnsureCanManageBoards(User actor) =>
-        Require(actor.Role >= UserRole.Admin, "Создавать, переименовывать и удалять проекты могут Admin и Owner.");
+    public void EnsureCanCreateBoard(User actor) =>
+        Require(actor.Role >= UserRole.Admin, "Создавать проекты могут Admin и Owner.");
 
-    public void EnsureCanCreateTask(User actor) =>
-        Require(actor.Role >= UserRole.Member, "Reader не может создавать задачи.");
+    public void EnsureCanRenameBoard(ProjectAccessInfo access) =>
+        RequireProject(access, ProjectPermission.RenameProject, "Переименовать проект может его администратор.");
 
-    public void EnsureCanEditTask(User actor, TaskItem task) =>
-        Require(actor.Role >= UserRole.Developer || (actor.Role == UserRole.Member && IsOwn(actor, task)),
-            "Редактировать чужие задачи могут Developer и выше.");
-
-    public void EnsureCanAssign(User actor, TaskItem task, Guid? assigneeId)
+    // Удаление уносит задачи всех участников — нужны оба уровня: администратор проекта и глобальный Admin+.
+    public void EnsureCanDeleteBoard(User actor, ProjectAccessInfo access)
     {
-        if (actor.Role >= UserRole.Developer)
-            return;
-
-        Require(actor.Role == UserRole.Member && IsOwn(actor, task), "Назначать исполнителя на чужие задачи могут Developer и выше.");
-
-        // Member: назначить себя или снять себя — но не переназначать других.
-        var assignsSelf = assigneeId == actor.Id;
-        var unassignsSelf = assigneeId is null && task.AssigneeId == actor.Id;
-        Require(assignsSelf || unassignsSelf, "Member может назначить исполнителем только себя.");
+        Require(actor.Role >= UserRole.Admin, "Удалять проекты могут Admin и Owner.");
+        RequireProject(access, ProjectPermission.DeleteProject, "Удалить проект может его администратор.");
     }
 
-    public void EnsureCanComment(User actor) =>
-        Require(actor.Role >= UserRole.Member, "Reader не может комментировать задачи.");
+    public void EnsureCanManageConfig(ProjectAccessInfo access) =>
+        RequireProject(access, ProjectPermission.ManageConfig, "Настраивать проект (типы задач) может его администратор.");
 
-    public void EnsureCanEditComment(User actor, TaskComment comment) =>
-        Require(comment.AuthorId == actor.Id, "Править можно только свои комментарии.");
+    public void EnsureCanManageMembers(ProjectAccessInfo access, ProjectRole? grantedRole = null)
+    {
+        RequireProject(access, ProjectPermission.ManageMembers, "Управлять участниками проекта может его администратор.");
+        if (grantedRole is { } role)
+            Require(role <= access.Role, "Нельзя выдать роль в проекте выше своей.");
+    }
 
-    public void EnsureCanDeleteComment(User actor, TaskComment comment) =>
-        Require(comment.AuthorId == actor.Id || actor.Role >= UserRole.Admin, "Удалять чужие комментарии могут Admin и Owner.");
+    public void EnsureCanCreateTask(ProjectAccessInfo access) =>
+        RequireProject(access, ProjectPermission.CreateTask, "Читатель проекта не может создавать задачи.");
+
+    public void EnsureCanEditTask(User actor, ProjectAccessInfo access, TaskItem task) =>
+        Require(access.Has(ProjectPermission.EditAnyTask) || (access.Has(ProjectPermission.EditOwnTask) && IsOwn(actor, task)),
+            "Редактировать чужие задачи проекта могут разработчики и администраторы.");
+
+    public void EnsureCanAssign(User actor, ProjectAccessInfo access, TaskItem task, Guid? assigneeId)
+    {
+        if (access.Has(ProjectPermission.AssignAnyone))
+            return;
+
+        Require(access.Has(ProjectPermission.EditOwnTask) && IsOwn(actor, task),
+            "Назначать исполнителя на чужие задачи могут разработчики и администраторы проекта.");
+
+        // Участник: назначить себя или снять себя — но не переназначать других.
+        var assignsSelf = assigneeId == actor.Id;
+        var unassignsSelf = assigneeId is null && task.AssigneeId == actor.Id;
+        Require(assignsSelf || unassignsSelf, "Участник проекта может назначить исполнителем только себя.");
+    }
+
+    public void EnsureCanComment(ProjectAccessInfo access) =>
+        RequireProject(access, ProjectPermission.Comment, "Читатель проекта не может комментировать задачи.");
+
+    // Автор, которого понизили до читателя, свой комментарий уже не правит: право комментировать нужно и здесь.
+    public void EnsureCanEditComment(User actor, ProjectAccessInfo access, TaskComment comment) =>
+        Require(comment.AuthorId == actor.Id && access.Has(ProjectPermission.Comment), "Править можно только свои комментарии.");
+
+    public void EnsureCanDeleteComment(User actor, ProjectAccessInfo access, TaskComment comment) =>
+        Require((comment.AuthorId == actor.Id && access.Has(ProjectPermission.Comment)) || access.Has(ProjectPermission.DeleteAnyComment),
+            "Удалять чужие комментарии может администратор проекта.");
 
     public void EnsureCanManageUsers(User actor) =>
         Require(actor.Role >= UserRole.Admin, "Добавлять людей могут Admin и Owner.");
@@ -73,12 +100,12 @@ internal sealed class PermissionService : IPermissionService
         }
     }
 
-    public void EnsureCanAttach(User actor) =>
-        Require(actor.Role >= UserRole.Member, "Reader не может прикладывать файлы.");
+    public void EnsureCanAttach(ProjectAccessInfo access) =>
+        RequireProject(access, ProjectPermission.Attach, "Читатель проекта не может прикладывать файлы.");
 
-    public void EnsureCanDeleteAttachment(User actor, Attachment attachment) =>
-        Require(attachment.UploadedById == actor.Id || actor.Role >= UserRole.Admin,
-            "Удалять чужие вложения могут Admin и Owner.");
+    public void EnsureCanDeleteAttachment(User actor, ProjectAccessInfo access, Attachment attachment) =>
+        Require((attachment.UploadedById == actor.Id && access.Has(ProjectPermission.Attach)) || access.Has(ProjectPermission.DeleteAnyAttachment),
+            "Удалять чужие вложения может администратор проекта.");
 
     public void EnsureCanViewSearchDiagnostics(User actor) =>
         Require(actor.Role >= UserRole.Admin, "Состояние поискового индекса доступно Admin и Owner.");
@@ -89,6 +116,9 @@ internal sealed class PermissionService : IPermissionService
     /// <summary>«Своя задача» для Member: создал или назначен исполнителем.</summary>
     private static bool IsOwn(User actor, TaskItem task) =>
         task.CreatedById == actor.Id || task.AssigneeId == actor.Id;
+
+    private static void RequireProject(ProjectAccessInfo access, ProjectPermission permission, string message) =>
+        Require(access.Has(permission), message);
 
     private static void Require(bool allowed, string message)
     {

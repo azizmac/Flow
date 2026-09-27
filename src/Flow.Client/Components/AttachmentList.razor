@@ -10,6 +10,7 @@
 @inject UserDirectory Users
 @inject AppState State
 @inject AttachmentEvents Events
+@inject ProjectAccessState Access
 
 @if (_items.Count > 0 || CanAttach)
 {
@@ -73,6 +74,9 @@
     /// </summary>
     [Parameter] public string? DropZoneId { get; set; }
 
+    /// <summary>Проект задачи: права приложить и удалить файл — в нём (docs/TZ_project_access.md).</summary>
+    [Parameter, EditorRequired] public Guid BoardId { get; set; }
+
     /// <summary>
     /// Порог остался, но смысл у него теперь другой. Трафика он больше не экономит — браузер тянет
     /// файл сам и кэширует его. Экономит он декодирование: ради плитки 40×40 незачем разворачивать
@@ -116,9 +120,9 @@
             InvokeAsync(() => Remove(removedId));
     }
 
-    private bool CanAttach => Permissions.CanAttach(Me);
+    private bool CanAttach => Permissions.CanAttach(Access.For(BoardId));
 
-    private bool CanDelete(AttachmentResponse item) => Permissions.CanDeleteAttachment(Me, item);
+    private bool CanDelete(AttachmentResponse item) => Permissions.CanDeleteAttachment(Me, Access.For(BoardId), item);
 
     protected override async Task OnParametersSetAsync()
     {

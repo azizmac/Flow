@@ -6,7 +6,7 @@ using MediatR;
 
 namespace Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 
-internal sealed class TaskDeleteCommandHandler(ITaskItemRepository tasks, ITaskCommentRepository comments, IAttachmentRepository attachments, IFileStorage storage, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class TaskDeleteCommandHandler(ITaskItemRepository tasks, ITaskCommentRepository comments, IAttachmentRepository attachments, IFileStorage storage, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskDeleteCommand, bool>
 {
     public async Task<bool> Handle(TaskDeleteCommand request, CancellationToken cancellationToken)
@@ -17,7 +17,7 @@ internal sealed class TaskDeleteCommandHandler(ITaskItemRepository tasks, ITaskC
         if (task is null)
             return false;
 
-        permissions.EnsureCanEditTask(actor, task);
+        permissions.EnsureCanEditTask(actor, await projectAccess.GetAsync(actor, task.BoardId, cancellationToken), task);
 
         // Комментарии уйдут каскадом БД, но их чанки привязаны к своим Id — список нужен до удаления.
         foreach (var comment in await comments.GetByTaskIdAsync(task.Id, cancellationToken))

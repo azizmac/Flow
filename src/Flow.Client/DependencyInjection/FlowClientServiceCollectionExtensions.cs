@@ -30,6 +30,7 @@ public static class FlowClientServiceCollectionExtensions
         });
 
         services.AddScoped<UserDirectory>();
+        services.AddScoped<ProjectAccessState>();
         services.AddScoped<BrowserInterop>();
         services.AddScoped<HotkeyService>();
         // Scoped, а не Singleton: внутри лежит ISnackbar, который сам scoped.

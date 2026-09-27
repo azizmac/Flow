@@ -1,29 +1,43 @@
 ﻿using Flow.Shared.Contracts.Attachments;
+using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Tasks;
 using Flow.Shared.Contracts.Users;
 
 namespace Flow.Client.Services;
 
 /// <summary>
-/// Зеркало матриц docs/TZ_user_roles.md для показа кнопок (Flow.Api остаётся источником истины: на 403 клиент показывает тост).
+/// Зеркало матриц для показа кнопок: глобальные — по роли (docs/TZ_user_roles.md), внутри проекта — по правам
+/// из ProjectAccessState (docs/TZ_project_access.md) (Flow.Api остаётся источником истины: на 403 клиент показывает тост).
 /// «Я» — UserResponse текущего пользователя из UserDirectory по AppState.CurrentUserId; null — профиль ещё не загружен,
 /// тогда всё, что требует прав, скрыто.
 /// </summary>
 public static class Permissions
 {
-    public static bool CanManageBoards(UserResponse? me) => me?.Role >= UserRole.Admin;
+    /// <summary>Создать проект — глобальные Admin и Owner.</summary>
+    public static bool CanCreateBoard(UserResponse? me) => me?.Role >= UserRole.Admin;
 
-    public static bool CanCreateTask(UserResponse? me) => me?.Role >= UserRole.Member;
+    public static bool CanRenameBoard(ProjectAccessResponse? access) => Has(access, ProjectPermission.RenameProject);
 
-    /// <summary>Developer+ — любую задачу; Member — свою (создал или исполнитель).</summary>
-    public static bool CanEditTask(UserResponse? me, TaskResponse task) =>
-        me is not null && (me.Role >= UserRole.Developer || (me.Role == UserRole.Member && IsOwn(me, task)));
+    /// <summary>Удаление уносит работу всех — нужны администратор проекта и глобальный Admin+.</summary>
+    public static bool CanDeleteBoard(UserResponse? me, ProjectAccessResponse? access) =>
+        me?.Role >= UserRole.Admin && Has(access, ProjectPermission.DeleteProject);
 
-    public static bool CanAssignAnyone(UserResponse? me) => me?.Role >= UserRole.Developer;
+    /// <summary>Типы задач и прочая настройка проекта.</summary>
+    public static bool CanManageConfig(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageConfig);
 
-    /// <summary>Member на своей задаче может назначить только себя — AssigneeSelect получает OnlyUserId.</summary>
-    public static bool CanAssign(UserResponse? me, TaskResponse task) =>
-        CanAssignAnyone(me) || (me?.Role == UserRole.Member && IsOwn(me, task));
+    public static bool CanManageMembers(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageMembers);
+
+    public static bool CanCreateTask(ProjectAccessResponse? access) => Has(access, ProjectPermission.CreateTask);
+
+    /// <summary>EditAnyTask — любую задачу; EditOwnTask — свою (создал или исполнитель).</summary>
+    public static bool CanEditTask(UserResponse? me, ProjectAccessResponse? access, TaskResponse task) =>
+        me is not null && (Has(access, ProjectPermission.EditAnyTask) || (Has(access, ProjectPermission.EditOwnTask) && IsOwn(me, task)));
+
+    public static bool CanAssignAnyone(ProjectAccessResponse? access) => Has(access, ProjectPermission.AssignAnyone);
+
+    /// <summary>Участник на своей задаче может назначить только себя — AssigneeSelect получает OnlyUserId.</summary>
+    public static bool CanAssign(UserResponse? me, ProjectAccessResponse? access, TaskResponse task) =>
+        CanAssignAnyone(access) || (me is not null && Has(access, ProjectPermission.EditOwnTask) && IsOwn(me, task));
 
     public static bool CanManageUsers(UserResponse? me) => me?.Role >= UserRole.Admin;
 
@@ -33,20 +47,21 @@ public static class Permissions
     /// <summary>Массовая переиндексация (POST /search/reindex) — только Owner.</summary>
     public static bool CanReindex(UserResponse? me) => me?.Role >= UserRole.Owner;
 
-    /// <summary>Комментировать — Member+; Reader только читает (docs/TZ_task_activity_comments.md).</summary>
-    public static bool CanComment(UserResponse? me) => me?.Role >= UserRole.Member;
+    /// <summary>Комментировать — право Comment в проекте; читатель только читает.</summary>
+    public static bool CanComment(ProjectAccessResponse? access) => Has(access, ProjectPermission.Comment);
 
-    public static bool CanEditComment(UserResponse? me, TaskCommentResponse comment) => me is not null && comment.AuthorId == me.Id;
+    public static bool CanEditComment(UserResponse? me, ProjectAccessResponse? access, TaskCommentResponse comment) =>
+        me is not null && comment.AuthorId == me.Id && CanComment(access);
 
-    public static bool CanDeleteComment(UserResponse? me, TaskCommentResponse comment) =>
-        me is not null && (comment.AuthorId == me.Id || me.Role >= UserRole.Admin);
+    public static bool CanDeleteComment(UserResponse? me, ProjectAccessResponse? access, TaskCommentResponse comment) =>
+        CanEditComment(me, access, comment) || Has(access, ProjectPermission.DeleteAnyComment);
 
-    /// <summary>Прикладывать файлы — Member+; скачивать может любая роль (docs/TZ_attachments.md).</summary>
-    public static bool CanAttach(UserResponse? me) => me?.Role >= UserRole.Member;
+    /// <summary>Прикладывать файлы — право Attach; скачивать может любой, кто видит проект.</summary>
+    public static bool CanAttach(ProjectAccessResponse? access) => Has(access, ProjectPermission.Attach);
 
-    /// <summary>Свой файл — автор, чужой — Admin+.</summary>
-    public static bool CanDeleteAttachment(UserResponse? me, AttachmentResponse attachment) =>
-        me is not null && (attachment.UploadedById == me.Id || me.Role >= UserRole.Admin);
+    /// <summary>Свой файл — автор (пока может прикладывать), чужой — администратор проекта.</summary>
+    public static bool CanDeleteAttachment(UserResponse? me, ProjectAccessResponse? access, AttachmentResponse attachment) =>
+        (me is not null && attachment.UploadedById == me.Id && CanAttach(access)) || Has(access, ProjectPermission.DeleteAnyAttachment);
 
     public static bool CanEditProfile(UserResponse? me, UserResponse target) =>
         me is not null && (me.Id == target.Id || me.Role >= UserRole.Admin);
@@ -104,6 +119,24 @@ public static class Permissions
         _ => string.Empty
     };
 
+    public static string ProjectRoleLabel(ProjectRole role) => role switch
+    {
+        ProjectRole.Viewer => "Читатель",
+        ProjectRole.Member => "Участник",
+        ProjectRole.Developer => "Разработчик",
+        ProjectRole.Admin => "Администратор",
+        _ => role.ToString()
+    };
+
+    public static string ProjectRoleHint(ProjectRole role) => role switch
+    {
+        ProjectRole.Viewer => "Читает задачи проекта",
+        ProjectRole.Member => "Создаёт задачи, ведёт свои, комментирует",
+        ProjectRole.Developer => "Любые задачи проекта и любой исполнитель",
+        ProjectRole.Admin => "Настройки, участники, переименование проекта",
+        _ => string.Empty
+    };
+
     public static string StatusLabel(UserStatus status) => status switch
     {
         UserStatus.Invited => "Приглашён",
@@ -122,6 +155,9 @@ public static class Permissions
     private static readonly IReadOnlyList<UserRole> All = [UserRole.Reader, UserRole.Member, UserRole.Developer, UserRole.Admin, UserRole.Owner];
 
     private static readonly IReadOnlyList<UserRole> BelowAdmin = [UserRole.Reader, UserRole.Member, UserRole.Developer];
+
+    private static bool Has(ProjectAccessResponse? access, ProjectPermission permission) =>
+        access?.Permissions.Contains(permission) == true;
 
     private static bool IsOwn(UserResponse me, TaskResponse task) => task.CreatedById == me.Id || task.AssigneeId == me.Id;
 }

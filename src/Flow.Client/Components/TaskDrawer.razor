@@ -186,7 +186,7 @@ else if (Item is not null)
                 <MarkdownView Text="@Item.Description" OnClick="OnDescClick" />
             }
         </div>
-        <AttachmentList TaskId="Item.Id" DropZoneId="td-drop" />
+        <AttachmentList TaskId="Item.Id" BoardId="Item.BoardId" DropZoneId="td-drop" />
         <TaskTimeline @ref="_timeline" TaskItem="Item" Board="Board" OnCommentCountChanged="OnCommentCountChanged" />
         @if (_error is not null)
         {

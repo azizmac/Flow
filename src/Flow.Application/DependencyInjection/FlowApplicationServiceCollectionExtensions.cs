@@ -21,6 +21,7 @@ public static class FlowApplicationServiceCollectionExtensions
 
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<ActorResolver>();
+        services.AddScoped<IProjectAccess, ProjectAccess>();
         services.AddScoped<MentionResolver>();
 
         return services;

@@ -13,6 +13,7 @@
 @inject HotkeyService Hotkeys
 @inject AppState State
 @inject UserDirectory Users
+@inject ProjectAccessState Access
 @inject PreferencesState Preferences
 
 <PageTitle>@(CurrentBoard?.Name ?? "Задачи") — Flow</PageTitle>
@@ -30,10 +31,21 @@
         else
         {
             <BoardSelect Boards="_boards" Value="BoardId" ValueChanged="SelectBoard" Disabled="_boardsLoading" />
-            @if (CurrentBoard is not null && CanManageBoard)
+            @if (CurrentBoard is not null)
             {
-                <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
-                <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _typesOpen = true" />
+                var boardAccess = Access.For(CurrentBoard.Id);
+                @if (Permissions.CanRenameBoard(boardAccess))
+                {
+                    <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
+                }
+                @if (Permissions.CanManageConfig(boardAccess))
+                {
+                    <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _typesOpen = true" />
+                }
+                @if (Permissions.CanManageMembers(boardAccess))
+                {
+                    <DsIconButton Icon="users" Size="30" Title="Доступ к проекту" Style="color:rgba(255,255,255,0.45)" OnClick="() => _accessOpen = true" />
+                }
             }
         }
     </div>
@@ -160,8 +172,8 @@
                         <SortHeader Field="TaskSortField.Assignee" Current="_sortField" Descending="_sortDescending" OnSort="SortBy">Кто</SortHeader>
                     </HeaderTemplate>
                     <CellTemplate>
-                        <AssigneeSelect Compact="true" Value="context.Item.AssigneeId" Disabled="!Permissions.CanAssign(Me, context.Item)"
-                                        OnlyUserId="OnlyAssigneeId" OnChange="id => AssignTask((context.Item, id))" />
+                        <AssigneeSelect Compact="true" Value="context.Item.AssigneeId" Disabled="!Permissions.CanAssign(Me, AccessFor(context.Item), context.Item)"
+                                        OnlyUserId="OnlyAssigneeFor(context.Item.BoardId)" OnChange="id => AssignTask((context.Item, id))" />
                     </CellTemplate>
                 </PropertyColumn>
 
@@ -170,7 +182,7 @@
                         <SortHeader Field="TaskSortField.Status" Current="_sortField" Descending="_sortDescending" OnSort="SortBy">Статус</SortHeader>
                     </HeaderTemplate>
                     <CellTemplate>
-                        @if (Permissions.CanEditTask(Me, context.Item))
+                        @if (Permissions.CanEditTask(Me, AccessFor(context.Item), context.Item))
                         {
                             <StatusSelect Statuses="StatusesFor(context.Item)" Value="context.Item.StatusId"
                                           OnChange="id => ChangeStatus((context.Item, id))" />
@@ -194,8 +206,8 @@
 
                 <TemplateColumn T="TaskResponse" Sortable="false" Filterable="false" CellClass="task-cell-menu">
                     <CellTemplate>
-                        <RowMenu OnOpen="() => OpenTask(context.Item)" ShowRename="Permissions.CanEditTask(Me, context.Item)"
-                                 ShowDelete="Permissions.CanEditTask(Me, context.Item)"
+                        <RowMenu OnOpen="() => OpenTask(context.Item)" ShowRename="Permissions.CanEditTask(Me, AccessFor(context.Item), context.Item)"
+                                 ShowDelete="Permissions.CanEditTask(Me, AccessFor(context.Item), context.Item)"
                                  OnRename="() => StartTaskRename(context.Item)" OnCopy="() => CopyCode(context.Item)"
                                  OnDelete="() => AskDeleteTask(context.Item)" />
                     </CellTemplate>
@@ -240,11 +252,18 @@
 <Drawer Open="DrawerOpen" OnClose="CloseDrawer">
     @if (DrawerBoard is { } drawerBoard && (_createOpen || SelectedTask is not null))
     {
-        <TaskDrawer Board="drawerBoard" Boards="_boards" OnBoardChanged="SetCreateBoard" Item="@(_createOpen ? null : SelectedTask)"
-                    CanEdit="@(SelectedTask is { } sel && Permissions.CanEditTask(Me, sel))" CanAssign="@(SelectedTask is { } sel2 && Permissions.CanAssign(Me, sel2))" OnlyAssigneeId="OnlyAssigneeId"
+        <TaskDrawer Board="drawerBoard" Boards="CreatableBoards" OnBoardChanged="SetCreateBoard" Item="@(_createOpen ? null : SelectedTask)"
+                    CanEdit="@(SelectedTask is { } sel && Permissions.CanEditTask(Me, AccessFor(sel), sel))"
+                    CanAssign="@(SelectedTask is { } sel2 && Permissions.CanAssign(Me, AccessFor(sel2), sel2))"
+                    OnlyAssigneeId="OnlyAssigneeFor(drawerBoard.Id)"
                     OnClose="CloseDrawer" OnCreated="OnTaskCreated" OnUpdated="OnTaskUpdated" OnDelete="AskDeleteTask" />
     }
 </Drawer>
+
+@if (_accessOpen && CurrentBoard is { } accessBoard)
+{
+    <ProjectAccessDialog Board="accessBoard" OnClose="() => _accessOpen = false" />
+}
 
 @if (_typesOpen && CurrentBoard is { } typesBoard)
 {
@@ -335,16 +354,27 @@
 
     /// <summary>Проект для слайдера: у открытой задачи — её собственный, у формы создания — выбранный.</summary>
     private BoardResponse? DrawerBoard => _createOpen
-        ? _boards.FirstOrDefault(b => b.Id == (_createBoardId ?? BoardId)) ?? _boards.FirstOrDefault()
+        ? _boards.FirstOrDefault(b => b.Id == (_createBoardId ?? BoardId)) ?? CreatableBoards.FirstOrDefault() ?? _boards.FirstOrDefault()
         : SelectedTask is { } t ? _boards.FirstOrDefault(b => b.Id == t.BoardId) : null;
 
     private bool HasFilters => StatusId is not null || TypeFilter is not null || Who is not null || _search.Trim().Length > 0;
 
     // Права по матрице docs/TZ_user_roles.md; Flow.Api — источник истины, здесь только показ кнопок.
     private UserResponse? Me => Users.Find(State.CurrentUserId);
-    private bool CanManageBoard => Permissions.CanManageBoards(Me);
-    private bool CanCreateTask => Permissions.CanCreateTask(Me);
-    private Guid? OnlyAssigneeId => Permissions.CanAssignAnyone(Me) ? null : Me?.Id;
+    /// <summary>Права — в проекте каждой строки: в сводном списке соседние задачи из разных проектов (docs/TZ_project_access.md).</summary>
+    private ProjectAccessResponse? AccessFor(TaskResponse task) => Access.For(task.BoardId);
+
+    private Guid? OnlyAssigneeFor(Guid boardId) => Permissions.CanAssignAnyone(Access.For(boardId)) ? null : Me?.Id;
+
+    /// <summary>В проекте — право в нём; в сводном списке — хоть в одном проекте.</summary>
+    private bool CanCreateTask => BoardId is { } id
+        ? Permissions.CanCreateTask(Access.For(id))
+        : _boards.Any(b => Permissions.CanCreateTask(Access.For(b.Id)));
+
+    /// <summary>Куда можно завести задачу: селектор проекта в форме создания предлагает только их.</summary>
+    private IReadOnlyList<BoardResponse> CreatableBoards => _boards.Where(b => Permissions.CanCreateTask(Access.For(b.Id))).ToList();
+
+    private bool _accessOpen;
 
     /// <summary>Статусы проекта этой задачи: в сводном списке соседние строки могут быть из разных проектов.</summary>
     private IReadOnlyList<StatusResponse> StatusesFor(TaskResponse task) =>
@@ -402,6 +432,7 @@
         }
 
         _boards = result.Value!.ToList();
+        await Access.EnsureCoversAsync(_boards.Select(b => b.Id));
 
         // Аватары исполнителей в строках — из справочника; грузим фоном, строки перерисуются по Users.Changed.
         if (!Users.IsLoaded)
@@ -707,7 +738,10 @@
             Nav.NavigateTo(Nav.GetUriWithQueryParameter("task", (string?)null));
 
         // В сводном режиме проект берём из прошлого создания — «в тот же проект, что и в прошлый раз».
-        _createBoardId ??= BoardId ?? State.LastBoardId ?? _boards[0].Id;
+        // Проект без права создавать задачи (только чтение) не предлагаем — берём первый, где можно.
+        var creatable = CreatableBoards;
+        _createBoardId ??= new[] { BoardId, State.LastBoardId }.FirstOrDefault(id => id is { } i && creatable.Any(b => b.Id == i))
+                           ?? creatable.FirstOrDefault()?.Id;
         _createOpen = true;
     }
 

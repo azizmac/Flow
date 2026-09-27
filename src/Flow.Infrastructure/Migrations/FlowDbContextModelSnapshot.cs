@@ -92,6 +92,9 @@ namespace Flow.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("DefaultRole")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -111,6 +114,32 @@ namespace Flow.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Boards");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.BoardMember", b =>
+                {
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AddedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.HasKey("BoardId", "UserId");
+
+                    b.HasIndex("AddedById");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("BoardMembers");
                 });
 
             modelBuilder.Entity("Flow.Domain.Entities.Status", b =>
@@ -520,6 +549,27 @@ namespace Flow.Infrastructure.Migrations
                     b.HasOne("Flow.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UploadedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.BoardMember", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("AddedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

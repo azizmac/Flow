@@ -15,6 +15,7 @@ internal sealed class TaskCommentAddCommandHandler(
     ISearchIndexQueue searchIndex,
     ActorResolver actors,
     IPermissionService permissions,
+    IProjectAccess projectAccess,
     IUnitOfWork unitOfWork)
     : IRequestHandler<TaskCommentAddCommand, TaskCommentResult>
 {
@@ -26,7 +27,7 @@ internal sealed class TaskCommentAddCommandHandler(
         if (task is null)
             return TaskCommentResult.NotFound();
 
-        permissions.EnsureCanComment(actor);
+        permissions.EnsureCanComment(await projectAccess.GetAsync(actor, task.BoardId, cancellationToken));
 
         var mentioned = await mentions.ResolveAsync(request.Body, cancellationToken);
         var comment = TaskComment.Create(task.Id, actor.Id, request.Body, mentioned);

@@ -5,12 +5,14 @@ using MediatR;
 
 namespace Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
 
-internal sealed class TaskTypeCreateCommandHandler(IBoardRepository boards, ITaskItemRepository tasks, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class TaskTypeCreateCommandHandler(IBoardRepository boards, ITaskItemRepository tasks, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskTypeCreateCommand, BoardResponse?>
 {
     public async Task<BoardResponse?> Handle(TaskTypeCreateCommand request, CancellationToken cancellationToken)
     {
-        permissions.EnsureCanManageBoards(await actors.ResolveAsync(request.ActorId, cancellationToken));
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
+        var access = await projectAccess.GetAsync(actor, request.BoardId, cancellationToken);
+        permissions.EnsureCanManageConfig(access);
 
         var board = await boards.GetByIdAsync(request.BoardId, cancellationToken);
         if (board is null)

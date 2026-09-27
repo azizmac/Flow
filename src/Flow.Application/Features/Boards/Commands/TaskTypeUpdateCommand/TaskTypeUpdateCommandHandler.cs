@@ -5,12 +5,14 @@ using MediatR;
 
 namespace Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 
-internal sealed class TaskTypeUpdateCommandHandler(IBoardRepository boards, ITaskItemRepository tasks, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class TaskTypeUpdateCommandHandler(IBoardRepository boards, ITaskItemRepository tasks, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskTypeUpdateCommand, BoardResponse?>
 {
     public async Task<BoardResponse?> Handle(TaskTypeUpdateCommand request, CancellationToken cancellationToken)
     {
-        permissions.EnsureCanManageBoards(await actors.ResolveAsync(request.ActorId, cancellationToken));
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
+        var access = await projectAccess.GetAsync(actor, request.BoardId, cancellationToken);
+        permissions.EnsureCanManageConfig(access);
 
         if (request.IsDefault == false)
             throw new ArgumentException("Default flag can only be moved to another type, not cleared.", nameof(request.IsDefault));

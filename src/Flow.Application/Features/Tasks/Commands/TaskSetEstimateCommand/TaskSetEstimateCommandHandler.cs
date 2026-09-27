@@ -11,6 +11,7 @@ internal sealed class TaskSetEstimateCommandHandler(
     ITaskActivityRepository activities,
     ActorResolver actors,
     IPermissionService permissions,
+    IProjectAccess projectAccess,
     IUnitOfWork unitOfWork)
     : IRequestHandler<TaskSetEstimateCommand, TaskUpdateResult>
 {
@@ -22,7 +23,7 @@ internal sealed class TaskSetEstimateCommandHandler(
         if (task is null)
             return TaskUpdateResult.NotFound();
 
-        permissions.EnsureCanEditTask(actor, task);
+        permissions.EnsureCanEditTask(actor, await projectAccess.GetAsync(actor, task.BoardId, cancellationToken), task);
 
         var (oldPoints, oldMinutes) = (task.StoryPoints, task.EstimateMinutes);
 

@@ -13,7 +13,7 @@ internal sealed class BoardCreateCommandHandler(IBoardRepository boards, ISearch
 {
     public async Task<BoardCreateResult> Handle(BoardCreateCommand request, CancellationToken cancellationToken)
     {
-        permissions.EnsureCanManageBoards(await actors.ResolveAsync(request.ActorId, cancellationToken));
+        permissions.EnsureCanCreateBoard(await actors.ResolveAsync(request.ActorId, cancellationToken));
 
         // Board.Create нормализует ключ (trim + upper), поэтому проверка уникальности идёт по board.Key,
         // а не по сырому request.Key: "flw" и "FLW" — одна и та же доска.

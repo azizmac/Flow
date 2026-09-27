@@ -2210,3 +2210,18 @@ a.task-row { color: inherit; text-decoration: none; }
 .tt-add { display: flex; flex-direction: column; gap: 10px; }
 .tt-add .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .tt-add .seg-btn { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Модалка «Доступ» проекта (docs/TZ_project_access.md) */
+.pa-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.pa-seg { display: flex; flex-wrap: wrap; gap: 6px; align-self: flex-start; }
+.pa-list { display: flex; flex-direction: column; gap: 2px; }
+.pa-row { display: flex; align-items: center; gap: 10px; padding: 5px 4px; border-radius: 8px; }
+.pa-user { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.pa-name { font: var(--fw-semibold) 13px var(--font-display); color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pa-un { font: var(--fw-medium) 11px var(--font-text); color: var(--text-tertiary); }
+.pa-add { display: flex; align-items: flex-end; gap: 10px; }
+.pa-add > :first-child { flex: 1; }
+.pa-results { display: flex; flex-direction: column; gap: 2px; }
+.pa-results .pop-item { width: 100%; background: none; border: 0; cursor: pointer; color: var(--text-secondary); font: var(--fw-semibold) 12.5px var(--font-display); }
+.pa-results .pop-item:disabled { opacity: 0.55; cursor: progress; }
+.role-item .pop-user-un { white-space: normal; }
