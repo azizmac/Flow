@@ -99,6 +99,24 @@ public sealed class TaskActivity
     public static TaskActivity ChildRemoved(Guid taskId, Guid actorId, Guid childId) =>
         new(taskId, actorId, TaskActivityType.ChildRemoved, childId.ToString(), null);
 
+    /// <summary>
+    /// Связь добавлена или убрана — запись пишется у обеих задач. OldValue — вид связи с этой стороны:
+    /// имя <see cref="TaskLinkType"/>, для входящей связи с суффиксом <c>:in</c> («Blocks:in» — «заблокирована»);
+    /// NewValue — Guid второй задачи (код читается при показе: он меняется при переносе задачи).
+    /// </summary>
+    public static TaskActivity LinkAdded(Guid taskId, Guid actorId, TaskLinkType type, bool outward, Guid otherTaskId) =>
+        new(taskId, actorId, TaskActivityType.LinkAdded, LinkSide(type, outward), otherTaskId.ToString());
+
+    public static TaskActivity LinkRemoved(Guid taskId, Guid actorId, TaskLinkType type, bool outward, Guid otherTaskId) =>
+        new(taskId, actorId, TaskActivityType.LinkRemoved, LinkSide(type, outward), otherTaskId.ToString());
+
+    /// <summary>Прогресс чек-листа «выполнено/всего» до и после («3/5» → «4/5»); правка текста и порядок не пишутся.</summary>
+    public static TaskActivity ChecklistChanged(Guid taskId, Guid actorId, int oldDone, int oldTotal, int newDone, int newTotal) =>
+        new(taskId, actorId, TaskActivityType.ChecklistChanged, $"{oldDone}/{oldTotal}", $"{newDone}/{newTotal}");
+
+    private static string LinkSide(TaskLinkType type, bool outward) =>
+        outward || type == TaskLinkType.RelatesTo ? type.ToString() : $"{type}:in";
+
     public static TaskActivity CommentAdded(Guid taskId, Guid actorId, Guid commentId) =>
         new(taskId, actorId, TaskActivityType.CommentAdded, null, commentId.ToString());
 

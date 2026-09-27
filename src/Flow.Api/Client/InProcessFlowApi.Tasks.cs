@@ -1,6 +1,11 @@
 ﻿using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskChecklistCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Application.Features.Tasks.Commands.TaskLinkCreateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskLinkDeleteCommand;
+using Flow.Application.Features.Tasks.Queries.TaskChecklistQuery;
+using Flow.Application.Features.Tasks.Queries.TaskLinkListQuery;
 using Flow.Application.Features.Tasks.Commands.TaskRankCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetParentCommand;
 using Flow.Application.Features.Tasks;
@@ -160,6 +165,54 @@ internal sealed partial class InProcessFlowApi
         {
             var tree = await mediator.Send(new TaskTreeQuery(await ActorAsync(), boardId, rootId), ct);
             return tree is null ? NotFound<IReadOnlyList<TaskTreeNode>>() : Ok(tree);
+        });
+
+    public Task<ApiResult<IReadOnlyList<TaskLinkResponse>>> GetLinks(Guid taskId, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var links = await mediator.Send(new TaskLinkListQuery(await ActorAsync(), taskId), ct);
+            return links is null ? NotFound<IReadOnlyList<TaskLinkResponse>>() : Ok(links);
+        });
+
+    /// <summary>409 — такая связь уже есть; 400 (Guard) — вторая задача не найдена или скрыта.</summary>
+    public Task<ApiResult<TaskLinkCreatedResponse>> CreateLink(Guid taskId, CreateTaskLinkRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var result = await mediator.Send(
+                new TaskLinkCreateCommand(await ActorAsync(), taskId, request.Type.ToDomainLinkType(), request.TargetId, request.TargetCode, request.Inward), ct);
+
+            if (result.IsNotFound)
+                return NotFound<TaskLinkCreatedResponse>();
+            return result.IsDuplicate
+                ? Conflict<TaskLinkCreatedResponse>("Такая связь уже есть")
+                : Ok(result.Response!);
+        });
+
+    public Task<ApiResult<bool>> DeleteLink(Guid linkId, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+            await mediator.Send(new TaskLinkDeleteCommand(await ActorAsync(), linkId), ct) ? Ok(true) : Missing());
+
+    public Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> GetChecklist(Guid taskId, CancellationToken ct = default) =>
+        SendChecklist(actor => new TaskChecklistQuery(actor, taskId), ct);
+
+    public Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> AddChecklistItem(Guid taskId, AddChecklistItemRequest request, CancellationToken ct = default) =>
+        SendChecklist(actor => new TaskChecklistAddCommand(actor, taskId, request.Text), ct);
+
+    public Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> UpdateChecklistItem(Guid taskId, Guid itemId, UpdateChecklistItemRequest request, CancellationToken ct = default) =>
+        SendChecklist(actor => new TaskChecklistUpdateCommand(actor, taskId, itemId, request.Text, request.IsDone), ct);
+
+    public Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> DeleteChecklistItem(Guid taskId, Guid itemId, CancellationToken ct = default) =>
+        SendChecklist(actor => new TaskChecklistDeleteCommand(actor, taskId, itemId), ct);
+
+    public Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> ReorderChecklist(Guid taskId, ReorderChecklistRequest request, CancellationToken ct = default) =>
+        SendChecklist(actor => new TaskChecklistReorderCommand(actor, taskId, request.ItemIds), ct);
+
+    private Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> SendChecklist(
+        Func<Guid, MediatR.IRequest<IReadOnlyList<TaskChecklistItemResponse>?>> request, CancellationToken ct) =>
+        Scoped(async mediator =>
+        {
+            var items = await mediator.Send(request(await ActorAsync()), ct);
+            return items is null ? NotFound<IReadOnlyList<TaskChecklistItemResponse>>() : Ok(items);
         });
 
     /// <summary>Команды, различающие только «задачи нет» и успех; ошибки ввода домена ловит Guard (400).</summary>

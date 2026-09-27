@@ -6,7 +6,7 @@ using MediatR;
 
 namespace Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 
-internal sealed class TaskGetQueryHandler(ITaskItemRepository tasks, ITaskCommentRepository comments, ActorResolver actors, IProjectAccess projectAccess) : IRequestHandler<TaskGetQuery, TaskResponse?>
+internal sealed class TaskGetQueryHandler(ITaskItemRepository tasks, TaskResponses responses, ActorResolver actors, IProjectAccess projectAccess) : IRequestHandler<TaskGetQuery, TaskResponse?>
 {
     public async Task<TaskResponse?> Handle(TaskGetQuery request, CancellationToken cancellationToken)
     {
@@ -16,8 +16,6 @@ internal sealed class TaskGetQueryHandler(ITaskItemRepository tasks, ITaskCommen
         if (task is null || !(await projectAccess.GetAsync(actor, task.BoardId, cancellationToken)).CanView)
             return null;
 
-        var counts = await comments.CountByTaskIdsAsync([task.Id], cancellationToken);
-        var children = await tasks.CountChildrenAsync([task.Id], cancellationToken);
-        return task.ToResponse(counts.GetValueOrDefault(task.Id), children.GetValueOrDefault(task.Id));
+        return await responses.BuildAsync(task, cancellationToken);
     }
 }

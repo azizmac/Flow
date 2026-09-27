@@ -9,7 +9,7 @@ using DomainStatusType = Flow.Domain.Entities.StatusType;
 
 namespace Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 
-internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCommentRepository comments, ActorResolver actors, IProjectAccess projectAccess)
+internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, TaskResponses responses, ActorResolver actors, IProjectAccess projectAccess)
     : IRequestHandler<TaskSearchQuery, TaskListResponse>
 {
     private const int DefaultLimit = 100;
@@ -41,17 +41,15 @@ internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCom
         var items = await tasks.SearchAsync(filter, cancellationToken);
         var counted = await tasks.CountAsync(filter, cancellationToken);
 
-        // Один GROUP BY на всю страницу, не N+1 (как в TaskListQueryHandler).
-        var ids = items.Select(t => t.Id).ToList();
-        var counts = await comments.CountByTaskIdsAsync(ids, cancellationToken);
-        var children = await tasks.CountChildrenAsync(ids, cancellationToken);
+        // Счётчики — по GROUP BY на всю страницу, не N+1.
+        var page = await responses.BuildAsync(items, cancellationToken);
 
         // Страница заполнилась целиком — возможно, есть ещё; неполная страница всегда последняя.
         // В offset-режиме курсор не отдаём: листает таблица номерами страниц, и смешивать два способа нельзя.
         var last = request.Offset is null && items.Count == limit ? items[^1] : null;
 
         return new TaskListResponse(
-            items.Select(t => t.ToResponse(counts.GetValueOrDefault(t.Id), children.GetValueOrDefault(t.Id))).ToList(),
+            page,
             last is null ? null : EncodeCursor(last.CreatedAt, last.Id),
             counted.Total,
             counted.Matched,

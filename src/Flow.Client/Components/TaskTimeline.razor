@@ -251,7 +251,8 @@
     }
 
     private static readonly TaskActivityType[] HierarchyTypes =
-        [TaskActivityType.ParentChanged, TaskActivityType.ChildAdded, TaskActivityType.ChildRemoved];
+        [TaskActivityType.ParentChanged, TaskActivityType.ChildAdded, TaskActivityType.ChildRemoved,
+         TaskActivityType.LinkAdded, TaskActivityType.LinkRemoved];
 
     /// <summary>Коды задач из записей об иерархии — по запросу на задачу; таких записей обычно единицы.</summary>
     private async Task LoadTaskRefsAsync(CancellationToken ct)
@@ -364,10 +365,30 @@
         TaskActivityType.ParentChanged => Parents(a),
         TaskActivityType.ChildAdded => @<span>подзадача: @TaskRef(a.NewValue)</span>,
         TaskActivityType.ChildRemoved => @<span>подзадача убрана: @TaskRef(a.OldValue)</span>,
+        TaskActivityType.LinkAdded => @<span>связь «@LinkSide(a.OldValue)»: @TaskRef(a.NewValue)</span>,
+        TaskActivityType.LinkRemoved => @<span>связь «@LinkSide(a.OldValue)» убрана: @TaskRef(a.NewValue)</span>,
+        TaskActivityType.ChecklistChanged => @<span>чек-лист: <s class="tl-old">@a.OldValue</s> <span class="tl-arrow">→</span> <b>@a.NewValue</b></span>,
         _ => Text(a.Type.ToString())
     };
 
     private static RenderFragment Text(string text) => @<span>@text</span>;
+
+    /// <summary>OldValue связи — имя вида, у входящей стороны с «:in» (см. TaskActivity.LinkAdded в домене).</summary>
+    private static string LinkSide(string? value)
+    {
+        var parts = (value ?? "").Split(':');
+        return Enum.TryParse<TaskLinkType>(parts[0], out var type) ? TaskMeta.LinkLabel(type, parts.Length == 1) : value ?? "";
+    }
+
+    /// <summary>Правка на этой же странице (чек-лист) — запись без перезагрузки ленты; при следующей загрузке её заменит серверная.</summary>
+    public void NoteActivity(TaskActivityType type, string? oldValue, string? newValue)
+    {
+        if (State.CurrentUserId is not { } me) return;
+        _activity.Add(new TaskActivityResponse(Guid.NewGuid(), TaskItem.Id, me, type, oldValue, newValue, DateTime.UtcNow));
+        if (HierarchyTypes.Contains(type))
+            _ = LoadTaskRefsThenRedrawAsync();
+        StateHasChanged();
+    }
 
     private RenderFragment Parents(TaskActivityResponse a)
     {

@@ -105,7 +105,32 @@ public static class TaskMeta
     /// подменить строку или карточку свежим ответом, счётчики берутся из того, что уже на экране.
     /// </summary>
     public static TaskResponse WithCountsOf(this TaskResponse fresh, TaskResponse known) =>
-        fresh with { CommentCount = known.CommentCount, ChildCount = known.ChildCount, ChildDoneCount = known.ChildDoneCount };
+        fresh with { CommentCount = known.CommentCount, ChildCount = known.ChildCount, ChildDoneCount = known.ChildDoneCount, BlockedByCount = known.BlockedByCount };
+
+    /// <summary>Подпись связи с точки зрения задачи (docs/TZ_task_model.md §5): «блокирует» / «заблокирована» и т.д.</summary>
+    public static string LinkLabel(TaskLinkType type, bool outward) => (type, outward) switch
+    {
+        (TaskLinkType.Blocks, true) => "блокирует",
+        (TaskLinkType.Blocks, false) => "заблокирована",
+        (TaskLinkType.Duplicates, true) => "дублирует",
+        (TaskLinkType.Duplicates, false) => "дублируется",
+        (TaskLinkType.RelatesTo, _) => "связана с",
+        (TaskLinkType.Clones, true) => "клон",
+        (TaskLinkType.Clones, false) => "клонирована в",
+        (TaskLinkType.SplitFrom, true) => "выделена из",
+        (TaskLinkType.SplitFrom, false) => "разделена на",
+        _ => type.ToString()
+    };
+
+    /// <summary>
+    /// Связи, которые человек заводит руками. Clones и SplitFrom ставит сам сервер — при повторении и разделении
+    /// задачи (этапы 1E/1F), руками их не предлагаем.
+    /// </summary>
+    public static readonly IReadOnlyList<(TaskLinkType Type, bool Outward)> ManualLinkKinds =
+    [
+        (TaskLinkType.Blocks, true), (TaskLinkType.Blocks, false), (TaskLinkType.RelatesTo, true),
+        (TaskLinkType.Duplicates, true), (TaskLinkType.Duplicates, false)
+    ];
 
     /// <summary>Тип задачи по Id в проекте; null — типа нет в загруженном проекте (удалён вместе с проектом и т.п.).</summary>
     public static TaskTypeResponse? TypeOf(BoardResponse? board, Guid typeId) =>

@@ -71,5 +71,20 @@ internal sealed class UnitOfWork(FlowDbContext db, SearchIndexQueue searchQueue)
                 entry.Entity.Touch(now);
             }
         }
+
+        // Чек-лист — owned-коллекция: его пункты — отдельные записи трекера, а сама задача остаётся Unchanged.
+        // Правка пункта — правка задачи, поэтому её «трогаем» по внешнему ключу владельца.
+        // Сначала собрать владельцев, потом трогать: Entries() зовёт DetectChanges и меняет трекер под перечислением.
+        var owners = db.ChangeTracker.Entries<TaskChecklistItem>()
+            .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .Select(e => e.Property("TaskId"))
+            .Select(p => (Guid)(p.EntityEntry.State == EntityState.Deleted ? p.OriginalValue : p.CurrentValue)!)
+            .ToHashSet();
+
+        if (owners.Count == 0)
+            return;
+
+        foreach (var task in db.ChangeTracker.Entries<TaskItem>().Where(t => owners.Contains(t.Entity.Id)).Select(t => t.Entity).ToList())
+            task.Touch(now);
     }
 }

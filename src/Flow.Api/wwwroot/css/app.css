@@ -2245,6 +2245,41 @@ a.task-row { color: inherit; text-decoration: none; }
     .parent-link:hover .val, .tl-task:hover { text-decoration: underline; }
 }
 
+/* Чек-лист и связи задачи (docs/TZ_task_model.md §5, §8) */
+.count-chip.blocked { color: var(--danger); }
+.checklist, .links { display: flex; flex-direction: column; gap: 2px; }
+.check-row { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border-radius: 8px; min-height: 32px; }
+.check-box {
+    flex: none; width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid rgba(255, 255, 255, 0.35);
+    background: none; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--surface);
+    cursor: pointer; transition: background-color 150ms var(--ease-out), transform 150ms var(--ease-out);
+}
+.check-box.on { background: var(--sage); border-color: var(--sage); }
+.check-box:disabled { cursor: default; }
+.check-box:active:not(:disabled) { transform: scale(0.92); }
+.check-text { flex: 1 1 auto; min-width: 0; color: #fff; font: var(--fw-medium) 13px var(--font-text); overflow-wrap: anywhere; }
+.check-row.done .check-text { color: var(--text-tertiary); text-decoration: line-through; }
+.check-edit {
+    flex: 1 1 auto; min-width: 0; background: rgba(0, 0, 0, 0.18); border: 1px solid var(--accent); border-radius: 6px;
+    padding: 3px 8px; color: #fff; font: var(--fw-medium) 13px var(--font-text); outline: 0;
+}
+.check-actions { display: inline-flex; gap: 2px; flex: none; opacity: 0; transition: opacity 150ms var(--ease-out); }
+.check-row:focus-within .check-actions { opacity: 1; }
+.link-group { display: flex; flex-direction: column; }
+.link-label { font: var(--fw-semibold) 11px var(--font-display); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 8px 2px; }
+.link-target { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; color: #fff; text-decoration: none; }
+.link-row .subtask-title.muted { color: var(--text-tertiary); display: inline-flex; align-items: center; gap: 6px; }
+.link-add { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.14); }
+.link-add .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.link-search { border-radius: 8px; }
+.link-add-actions { display: flex; justify-content: flex-end; }
+@media (hover: hover) and (pointer: fine) {
+    .check-row:hover { background: rgba(255, 255, 255, 0.04); }
+    .check-row:hover .check-actions { opacity: 1; }
+    .link-target:hover .subtask-title { text-decoration: underline; }
+}
+@media (hover: none) { .check-actions { opacity: 1; } }
+
 /* Модалка «Статусы» проекта (docs/TZ_workflow_config.md §1) */
 .st-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
 .st-row { border-radius: 8px; padding: 4px; }

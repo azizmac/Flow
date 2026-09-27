@@ -89,7 +89,29 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.HasIndex(t => new { t.BoardId, t.Rank })
             .IsUnique()
             .HasDatabaseName(RankIndexName);
+
+        ConfigureChecklist(builder);
     }
 
     public const string RankIndexName = "IX_TaskItems_BoardId_Rank";
+
+    /// <summary>
+    /// Чек-лист (docs/TZ_task_model.md §8) — owned-коллекция, как UserLinks: своя таблица, каскад от задачи,
+    /// грузится вместе с задачей (списку нужен прогресс «4/5»). Id задаёт домен — без ValueGeneratedNever
+    /// EF принял бы новый пункт уже сохранённой задачи за существующий и отправил UPDATE.
+    /// </summary>
+    private static void ConfigureChecklist(EntityTypeBuilder<TaskItem> builder)
+    {
+        builder.OwnsMany(t => t.Checklist, items =>
+        {
+            items.ToTable("TaskChecklistItems");
+            items.WithOwner().HasForeignKey("TaskId");
+            items.HasKey(i => i.Id);
+            items.Property(i => i.Id).ValueGeneratedNever();
+            items.Property(i => i.Text).IsRequired().HasMaxLength(TaskChecklistItem.TextMaxLength);
+            items.HasIndex("TaskId", nameof(TaskChecklistItem.SortOrder));
+        });
+
+        builder.Navigation(t => t.Checklist).HasField("_checklist").UsePropertyAccessMode(PropertyAccessMode.Field);
+    }
 }

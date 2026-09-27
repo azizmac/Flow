@@ -20,5 +20,8 @@ public enum TaskActivityType
     TypeChanged = 14,
     ParentChanged = 15,
     ChildAdded = 16,
-    ChildRemoved = 17
+    ChildRemoved = 17,
+    LinkAdded = 18,
+    LinkRemoved = 19,
+    ChecklistChanged = 20
 }

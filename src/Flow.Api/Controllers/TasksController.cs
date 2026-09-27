@@ -1,6 +1,11 @@
 ﻿using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskChecklistCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Application.Features.Tasks.Commands.TaskLinkCreateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskLinkDeleteCommand;
+using Flow.Application.Features.Tasks.Queries.TaskChecklistQuery;
+using Flow.Application.Features.Tasks.Queries.TaskLinkListQuery;
 using Flow.Application.Features.Tasks.Commands.TaskRankCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetParentCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
@@ -173,6 +178,77 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     [HttpPost("tasks/{id:guid}/rank")]
     public Task<IActionResult> RankTask(Guid id, RankTaskRequest request, CancellationToken cancellationToken) =>
         SendUpdate(new TaskRankCommand(actor.Require(), id, request.AfterId, request.BeforeId), cancellationToken);
+
+    // ---- Связи (docs/TZ_task_model.md §5) ----
+
+    [HttpGet("tasks/{id:guid}/links")]
+    public async Task<IActionResult> GetLinks(Guid id, CancellationToken cancellationToken)
+    {
+        var links = await mediator.Send(new TaskLinkListQuery(actor.Require(), id), cancellationToken);
+        return links is null ? NotFound() : Ok(links);
+    }
+
+    /// <summary>201 — связь создана (cycleWarning — цикл блокировок); 400 — вторая задача не найдена или скрыта, на себя; 409 — такая уже есть.</summary>
+    [HttpPost("tasks/{id:guid}/links")]
+    public async Task<IActionResult> CreateLink(Guid id, CreateTaskLinkRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await mediator.Send(
+                new TaskLinkCreateCommand(actor.Require(), id, request.Type.ToDomainLinkType(), request.TargetId, request.TargetCode, request.Inward),
+                cancellationToken);
+
+            if (result.IsNotFound)
+                return NotFound();
+            if (result.IsDuplicate)
+                return Conflict(new { Message = "Such a link already exists." });
+
+            return CreatedAtAction(nameof(GetLinks), new { id }, result.Response);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
+    [HttpDelete("links/{id:guid}")]
+    public async Task<IActionResult> DeleteLink(Guid id, CancellationToken cancellationToken) =>
+        await mediator.Send(new TaskLinkDeleteCommand(actor.Require(), id), cancellationToken) ? NoContent() : NotFound();
+
+    // ---- Чек-лист (§8): ответ — чек-лист целиком ----
+
+    [HttpGet("tasks/{id:guid}/checklist")]
+    public Task<IActionResult> GetChecklist(Guid id, CancellationToken cancellationToken) =>
+        SendChecklist(new TaskChecklistQuery(actor.Require(), id), cancellationToken);
+
+    [HttpPost("tasks/{id:guid}/checklist")]
+    public Task<IActionResult> AddChecklistItem(Guid id, AddChecklistItemRequest request, CancellationToken cancellationToken) =>
+        SendChecklist(new TaskChecklistAddCommand(actor.Require(), id, request.Text), cancellationToken);
+
+    [HttpPatch("tasks/{id:guid}/checklist/{itemId:guid}")]
+    public Task<IActionResult> UpdateChecklistItem(Guid id, Guid itemId, UpdateChecklistItemRequest request, CancellationToken cancellationToken) =>
+        SendChecklist(new TaskChecklistUpdateCommand(actor.Require(), id, itemId, request.Text, request.IsDone), cancellationToken);
+
+    [HttpDelete("tasks/{id:guid}/checklist/{itemId:guid}")]
+    public Task<IActionResult> DeleteChecklistItem(Guid id, Guid itemId, CancellationToken cancellationToken) =>
+        SendChecklist(new TaskChecklistDeleteCommand(actor.Require(), id, itemId), cancellationToken);
+
+    [HttpPut("tasks/{id:guid}/checklist/order")]
+    public Task<IActionResult> ReorderChecklist(Guid id, ReorderChecklistRequest request, CancellationToken cancellationToken) =>
+        SendChecklist(new TaskChecklistReorderCommand(actor.Require(), id, request.ItemIds), cancellationToken);
+
+    private async Task<IActionResult> SendChecklist(MediatR.IRequest<IReadOnlyList<TaskChecklistItemResponse>?> request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var items = await mediator.Send(request, cancellationToken);
+            return items is null ? NotFound() : Ok(items);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
 
     /// <summary>Дерево задач проекта или поддерево rootId: плоский список в порядке обхода с глубиной.</summary>
     [HttpGet("boards/{boardId:guid}/tree")]

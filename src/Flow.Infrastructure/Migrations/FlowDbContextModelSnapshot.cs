@@ -334,6 +334,38 @@ namespace Flow.Infrastructure.Migrations
                     b.ToTable("TaskItems");
                 });
 
+            modelBuilder.Entity("Flow.Domain.Entities.TaskLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceTaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TargetTaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("TargetTaskId", "Type");
+
+                    b.HasIndex("SourceTaskId", "TargetTaskId", "Type")
+                        .IsUnique();
+
+                    b.ToTable("TaskLinks");
+                });
+
             modelBuilder.Entity("Flow.Domain.Entities.TaskType", b =>
                 {
                     b.Property<Guid>("Id")
@@ -687,6 +719,64 @@ namespace Flow.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("TypeId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.OwnsMany("Flow.Domain.Entities.TaskChecklistItem", "Checklist", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateTime?>("DoneAt")
+                                .HasColumnType("timestamp with time zone");
+
+                            b1.Property<Guid?>("DoneById")
+                                .HasColumnType("uuid");
+
+                            b1.Property<bool>("IsDone")
+                                .HasColumnType("boolean");
+
+                            b1.Property<int>("SortOrder")
+                                .HasColumnType("integer");
+
+                            b1.Property<Guid>("TaskId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Text")
+                                .IsRequired()
+                                .HasMaxLength(500)
+                                .HasColumnType("character varying(500)");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("TaskId", "SortOrder");
+
+                            b1.ToTable("TaskChecklistItems", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("TaskId");
+                        });
+
+                    b.Navigation("Checklist");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskLink", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("SourceTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("TargetTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

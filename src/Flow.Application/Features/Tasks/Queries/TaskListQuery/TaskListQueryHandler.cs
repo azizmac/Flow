@@ -6,7 +6,7 @@ using MediatR;
 
 namespace Flow.Application.Features.Tasks.Queries.TaskListQuery;
 
-internal sealed class TaskListQueryHandler(ITaskItemRepository tasks, ITaskCommentRepository comments, ActorResolver actors, IProjectAccess projectAccess)
+internal sealed class TaskListQueryHandler(ITaskItemRepository tasks, TaskResponses responses, ActorResolver actors, IProjectAccess projectAccess)
     : IRequestHandler<TaskListQuery, IReadOnlyList<TaskResponse>>
 {
     public async Task<IReadOnlyList<TaskResponse>> Handle(TaskListQuery request, CancellationToken cancellationToken)
@@ -18,10 +18,6 @@ internal sealed class TaskListQueryHandler(ITaskItemRepository tasks, ITaskComme
 
         var items = await tasks.GetByBoardIdAsync(request.BoardId, request.AssigneeId, cancellationToken);
 
-        // Один GROUP BY на весь список, не N+1 (как TaskCount у досок).
-        var ids = items.Select(t => t.Id).ToList();
-        var counts = await comments.CountByTaskIdsAsync(ids, cancellationToken);
-        var children = await tasks.CountChildrenAsync(ids, cancellationToken);
-        return items.Select(t => t.ToResponse(counts.GetValueOrDefault(t.Id), children.GetValueOrDefault(t.Id))).ToList();
+        return await responses.BuildAsync(items, cancellationToken);
     }
 }

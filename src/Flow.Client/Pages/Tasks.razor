@@ -148,7 +148,7 @@
                         {
                             <div class="task-desc">@Ru.PlainFirstLine(context.Item.Description)</div>
                         }
-                        @if (context.Item.DueDate is not null || context.Item.CommentCount > 0 || context.Item.StoryPoints is not null || context.Item.ChildCount > 0)
+                        @if (context.Item.DueDate is not null || context.Item.CommentCount > 0 || context.Item.StoryPoints is not null || context.Item.ChildCount > 0 || context.Item.ChecklistTotal > 0 || context.Item.BlockedByCount > 0)
                         {
                             <div class="task-meta-chips">
                                 @if (context.Item.StoryPoints is { } sp)
@@ -159,11 +159,21 @@
                                 {
                                     <DueChip Value="d" IsDone="IsDone(context.Item)" />
                                 }
+                                @if (context.Item.BlockedByCount > 0)
+                                {
+                                    <span class="count-chip blocked" title="@($"Заблокирована незакрытыми задачами: {context.Item.BlockedByCount}")"><Icon Name="lock" Size="12" />заблокирована</span>
+                                }
                                 @if (context.Item.ChildCount > 0)
                                 {
                                     var ci = context.Item;
                                     <span class="count-chip @(ci.ChildDoneCount == ci.ChildCount ? "done" : "")"
-                                          title="@($"Подзадачи: выполнено {ci.ChildDoneCount} из {ci.ChildCount}")"><Icon Name="check-square" Size="12" />@ci.ChildDoneCount/@ci.ChildCount</span>
+                                          title="@($"Подзадачи: выполнено {ci.ChildDoneCount} из {ci.ChildCount}")"><Icon Name="list" Size="12" />@ci.ChildDoneCount/@ci.ChildCount</span>
+                                }
+                                @if (context.Item.ChecklistTotal > 0)
+                                {
+                                    var cl = context.Item;
+                                    <span class="count-chip @(cl.ChecklistDone == cl.ChecklistTotal ? "done" : "")"
+                                          title="@($"Чек-лист: {cl.ChecklistDone} из {cl.ChecklistTotal}")"><Icon Name="check-square" Size="12" />@cl.ChecklistDone/@cl.ChecklistTotal</span>
                                 }
                                 @if (context.Item.CommentCount > 0)
                                 {

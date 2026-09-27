@@ -14,6 +14,11 @@ public sealed class TaskItem
     /// <summary>Потолок оценки — 999 рабочих дней по 8 часов, в минутах.</summary>
     public const int MaxEstimateMinutes = 999 * 8 * 60;
 
+    /// <summary>Потолок пунктов чек-листа: длиннее — это уже подзадачи (docs/TZ_task_model.md §8).</summary>
+    public const int MaxChecklistItems = 100;
+
+    private readonly List<TaskChecklistItem> _checklist = [];
+
     public Guid Id { get; private set; }
 
     public Guid BoardId { get; private set; }
@@ -68,6 +73,13 @@ public sealed class TaskItem
     /// Порядок в колонке канбана и в бэклоге — этот же ранг, отфильтрованный по статусу или спринту.
     /// </summary>
     public string Rank { get; private set; } = FractionalIndex.First;
+
+    /// <summary>Чек-лист (§8) — по SortOrder. Owned-коллекция: грузится вместе с задачей.</summary>
+    public IReadOnlyList<TaskChecklistItem> Checklist => _checklist.OrderBy(i => i.SortOrder).ToList();
+
+    public int ChecklistDone => _checklist.Count(i => i.IsDone);
+
+    public int ChecklistTotal => _checklist.Count;
 
     private TaskItem()
     {
@@ -219,6 +231,57 @@ public sealed class TaskItem
 
         EstimateMinutes = estimateMinutes;
     }
+
+    public TaskChecklistItem AddChecklistItem(string text)
+    {
+        if (_checklist.Count >= MaxChecklistItems)
+            throw new InvalidOperationException($"A checklist holds at most {MaxChecklistItems} items; split the task instead.");
+
+        var item = new TaskChecklistItem(text, _checklist.Count == 0 ? 0 : _checklist.Max(i => i.SortOrder) + 1);
+        _checklist.Add(item);
+        return item;
+    }
+
+    /// <summary>Возвращает, изменился ли текст: тот же текст — no-op.</summary>
+    public bool EditChecklistItem(Guid itemId, string text)
+    {
+        var item = GetChecklistItem(itemId);
+        var normalized = TaskChecklistItem.ValidateText(text);
+        if (normalized == item.Text)
+            return false;
+
+        item.Edit(normalized);
+        return true;
+    }
+
+    /// <summary>Отметить или снять отметку; кто и когда отметил — для подсказки у пункта. То же состояние — no-op.</summary>
+    public bool SetChecklistItemDone(Guid itemId, bool isDone, Guid actorId)
+    {
+        var item = GetChecklistItem(itemId);
+        if (item.IsDone == isDone)
+            return false;
+
+        item.SetDone(isDone, actorId);
+        return true;
+    }
+
+    public void RemoveChecklistItem(Guid itemId) => _checklist.Remove(GetChecklistItem(itemId));
+
+    /// <summary>Новый порядок — полная перестановка Id пунктов, иначе ArgumentException.</summary>
+    public void ReorderChecklist(IReadOnlyList<Guid> itemIds)
+    {
+        ArgumentNullException.ThrowIfNull(itemIds);
+        if (itemIds.Count != _checklist.Count || itemIds.Distinct().Count() != itemIds.Count
+            || itemIds.Any(id => _checklist.All(i => i.Id != id)))
+            throw new ArgumentException("Checklist order must list every item exactly once.", nameof(itemIds));
+
+        for (var i = 0; i < itemIds.Count; i++)
+            _checklist.Single(x => x.Id == itemIds[i]).SetSortOrder(i);
+    }
+
+    private TaskChecklistItem GetChecklistItem(Guid itemId) =>
+        _checklist.SingleOrDefault(i => i.Id == itemId)
+        ?? throw new InvalidOperationException($"Checklist item {itemId} does not belong to task {Id}.");
 
     /// <summary>Ставит IUnitOfWork при сохранении изменённой задачи; вызывать из хендлеров не нужно.</summary>
     public void Touch(DateTime utcNow) => UpdatedAt = utcNow;

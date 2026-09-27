@@ -92,6 +92,15 @@ public interface IFlowApi
     Task<ApiResult<TaskResponse>> SetParent(Guid id, SetTaskParentRequest request, CancellationToken ct = default);
     /// <summary>Место в ручном порядке проекта (§7): ключ ранга вычисляет сервер по соседям.</summary>
     Task<ApiResult<TaskResponse>> RankTask(Guid id, RankTaskRequest request, CancellationToken ct = default);
+    // Связи (docs/TZ_task_model.md §5) и чек-лист (§8)
+    Task<ApiResult<IReadOnlyList<TaskLinkResponse>>> GetLinks(Guid taskId, CancellationToken ct = default);
+    Task<ApiResult<TaskLinkCreatedResponse>> CreateLink(Guid taskId, CreateTaskLinkRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteLink(Guid linkId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> GetChecklist(Guid taskId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> AddChecklistItem(Guid taskId, AddChecklistItemRequest request, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> UpdateChecklistItem(Guid taskId, Guid itemId, UpdateChecklistItemRequest request, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> DeleteChecklistItem(Guid taskId, Guid itemId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> ReorderChecklist(Guid taskId, ReorderChecklistRequest request, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<TaskTreeNode>>> GetTree(Guid boardId, Guid? rootId = null, CancellationToken ct = default);
 
     // ---- Комментарии и журнал ----

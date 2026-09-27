@@ -107,6 +107,9 @@ else if (_task is not null && _board is not null)
             <SubtaskList Board="_board" Parent="_task" CanCreate="Permissions.CanCreateTask(Access.For(_board.Id))"
                          OnCountsChanged="c => _task = _task with { ChildCount = c.Total, ChildDoneCount = c.Done }"
                          OnCreated="child => _timeline?.NoteChildAdded(child)" />
+            <TaskChecklist TaskId="_task.Id" CanEdit="CanEdit" OnCountsChanged="OnChecklistChanged" />
+            <TaskLinks TaskId="_task.Id" CanEdit="CanEdit" OnBlockedChanged="n => _task = _task with { BlockedByCount = n }"
+                       OnJournal="e => _timeline?.NoteActivity(e.Type, e.Old, e.New)" />
             <AttachmentList TaskId="_task.Id" BoardId="_task.BoardId" DropZoneId="tp-drop" />
             <TaskTimeline @ref="_timeline" TaskItem="_task" Board="_board" OnCommentCountChanged="OnCommentCountChanged" />
         </div>
@@ -419,6 +422,13 @@ else if (_task is not null && _board is not null)
         _task = result.Value!.WithCountsOf(before);
         _timeline?.NoteLocalChange(before, _task);
         _ = FlashSaved();
+    }
+
+    private void OnChecklistChanged((int OldDone, int OldTotal, int Done, int Total) c)
+    {
+        _timeline?.NoteActivity(TaskActivityType.ChecklistChanged, $"{c.OldDone}/{c.OldTotal}", $"{c.Done}/{c.Total}");
+        if (_task is not null)
+            _task = _task with { ChecklistDone = c.Done, ChecklistTotal = c.Total };
     }
 
     private void OnCommentCountChanged(int count)

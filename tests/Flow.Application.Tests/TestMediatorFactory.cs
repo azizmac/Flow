@@ -105,6 +105,7 @@ public static class TestMediatorFactory
         var boards = new FakeBoardRepository();
         var tasks = new FakeTaskItemRepository(boards);
         var users = new FakeUserRepository();
+        var links = new FakeTaskLinkRepository(boards, tasks);
         var accounts = new FakeAccountService();
         var comments = new FakeTaskCommentRepository();
         var activities = new FakeTaskActivityRepository();
@@ -128,6 +129,7 @@ public static class TestMediatorFactory
         services.AddSingleton<IBoardRepository>(boards);
         services.AddSingleton<IBoardMemberRepository>(new FakeBoardMemberRepository(boards));
         services.AddSingleton<ITaskItemRepository>(tasks);
+        services.AddSingleton<ITaskLinkRepository>(links);
         services.AddSingleton<IUserRepository>(users);
         services.AddSingleton<IAccountService>(accounts);
         services.AddSingleton<ITaskCommentRepository>(comments);

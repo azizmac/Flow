@@ -23,6 +23,8 @@ public static class FlowApplicationServiceCollectionExtensions
         services.AddScoped<ActorResolver>();
         services.AddScoped<IProjectAccess, ProjectAccess>();
         services.AddScoped<MentionResolver>();
+        services.AddScoped<Features.Tasks.TaskResponses>();
+        services.AddScoped<Features.Tasks.TaskLinkResponses>();
 
         return services;
     }

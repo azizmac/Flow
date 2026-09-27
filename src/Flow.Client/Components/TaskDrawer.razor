@@ -191,6 +191,9 @@ else if (Item is not null)
         </div>
         <SubtaskList Board="Board" Parent="Item" CanCreate="Permissions.CanCreateTask(Access.For(Board.Id))"
                      OnCountsChanged="OnChildCountsChanged" OnCreated="HandleSubtaskCreated" />
+        <TaskChecklist TaskId="Item.Id" CanEdit="CanEdit" OnCountsChanged="OnChecklistChanged" />
+        <TaskLinks TaskId="Item.Id" CanEdit="CanEdit" OnBlockedChanged="n => OnUpdated.InvokeAsync(Current with { BlockedByCount = n })"
+                   OnJournal="e => _timeline?.NoteActivity(e.Type, e.Old, e.New)" />
         <AttachmentList TaskId="Item.Id" BoardId="Item.BoardId" DropZoneId="td-drop" />
         <TaskTimeline @ref="_timeline" TaskItem="Item" Board="Board" OnCommentCountChanged="OnCommentCountChanged" />
         @if (_error is not null)
@@ -443,6 +446,12 @@ else if (Item is not null)
     {
         await Apply(id => Api.SetParent(id, new SetTaskParentRequest(parentId)), "Не удалось сменить родителя");
         await OnHierarchyChanged.InvokeAsync();
+    }
+
+    private async Task OnChecklistChanged((int OldDone, int OldTotal, int Done, int Total) c)
+    {
+        _timeline?.NoteActivity(TaskActivityType.ChecklistChanged, $"{c.OldDone}/{c.OldTotal}", $"{c.Done}/{c.Total}");
+        await OnUpdated.InvokeAsync(Current with { ChecklistDone = c.Done, ChecklistTotal = c.Total });
     }
 
     private Task OnChildCountsChanged((int Total, int Done) counts) =>
