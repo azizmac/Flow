@@ -12,7 +12,13 @@ namespace Flow.Infrastructure.Tests;
 /// <summary>
 /// Хранилище против настоящего MinIO: подпись запросов, контрольные суммы и path-style адресация
 /// у S3-совместимых сервисов расходятся с AWS, и на заглушке этого не увидеть. Требует Docker.
+///
+/// Из CI временно исключены фильтром Category!=S3: образ MinIO сняли и с quay.io (реестр отвечает
+/// «unauthorized»), и контейнер в CI не поднимается. Локально идут, пока образ лежит в кэше Docker:
+/// dotnet test tests/Flow.Infrastructure.Tests --filter "Category=S3"
+/// Вернуть в CI — вместе с заменой образа (своё зеркало или другой S3-совместимый сервер).
 /// </summary>
+[Trait("Category", "S3")]
 public sealed class S3FileStorageTests : IAsyncLifetime
 {
     private const string Bucket = "flow-test";
