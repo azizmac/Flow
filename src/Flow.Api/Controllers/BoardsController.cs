@@ -15,6 +15,10 @@ namespace Flow.Api.Controllers;
 public class BoardsController(IMediator mediator, IActorAccessor actor) : ControllerBase
 {
     [HttpPost]
+    [ProducesResponseType<BoardResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateBoard(CreateBoardRequest request, CancellationToken cancellationToken)
     {
         try
@@ -24,18 +28,19 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
                 cancellationToken);
 
             if (result.IsKeyTaken)
-                return Conflict(new { Message = result.ValidationError });
+                return Conflict(new ApiError(result.ValidationError!));
 
             var response = result.Response!;
             return CreatedAtAction(nameof(GetBoard), new { id = response.Id }, response);
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     [HttpGet]
+    [ProducesResponseType<IReadOnlyList<BoardResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetBoards(CancellationToken cancellationToken)
     {
         var boards = await mediator.Send(new BoardListQuery(), cancellationToken);
@@ -43,6 +48,8 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType<BoardResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetBoard(Guid id, CancellationToken cancellationToken)
     {
         var board = await mediator.Send(new BoardGetQuery(id), cancellationToken);
@@ -50,6 +57,10 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
     }
 
     [HttpPatch("{id:guid}/name")]
+    [ProducesResponseType<BoardResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RenameBoard(Guid id, RenameBoardRequest request, CancellationToken cancellationToken)
     {
         try
@@ -62,11 +73,14 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteBoard(Guid id, CancellationToken cancellationToken)
     {
         var deleted = await mediator.Send(new BoardDeleteCommand(actor.Require(), id), cancellationToken);

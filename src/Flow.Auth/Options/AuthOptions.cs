@@ -30,7 +30,8 @@ public sealed class AuthOptions
 
     /// <summary>
     /// Публичный OIDC-клиент (code + PKCE). Интерфейс им больше не пользуется — при серверном рендере
-    /// вход идёт через /account/login и cookie. Оставлен ради отката на старый образ WASM-клиента.
+    /// вход идёт через /account/login и cookie. Им получает токен Swagger UI (/swagger/oauth2-redirect.html
+    /// в RedirectUris); WASM-адреса возврата оставлены ради отката на старый образ клиента.
     /// </summary>
     public sealed class ClientOptions
     {

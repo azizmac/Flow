@@ -33,10 +33,14 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
 {
     /// <summary>Создаёт через Auth-модуль учётную запись с начальным паролем и профиль с тем же Id.</summary>
     [HttpPost]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateUser(CreateUserRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Password))
-            return BadRequest(new { Message = "Password is required." });
+            return BadRequest(new ApiError("Password is required."));
 
         try
         {
@@ -45,18 +49,19 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
                 cancellationToken);
 
             if (result.IsConflict)
-                return Conflict(new { Message = result.ConflictError });
+                return Conflict(new ApiError(result.ConflictError!));
 
             var response = result.Response!;
             return CreatedAtAction(nameof(GetUser), new { id = response.Id }, response);
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     [HttpGet]
+    [ProducesResponseType<IReadOnlyList<UserResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetUsers([FromQuery] bool includeInactive = false, CancellationToken cancellationToken = default)
     {
         var users = await mediator.Send(new UserListQuery(includeInactive), cancellationToken);
@@ -65,6 +70,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
 
     /// <summary>Автодополнение для @упоминаний и выбора исполнителя. Только активные пользователи.</summary>
     [HttpGet("search")]
+    [ProducesResponseType<IReadOnlyList<UserResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> SearchUsers(
         [FromQuery] string q,
         [FromQuery] int limit = UserSearchQuery.DefaultLimit,
@@ -76,17 +82,19 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
 
     /// <summary>Профиль текущего пользователя (claim sub). 401 — токен валиден, а профиля нет (удалён руками).</summary>
     [HttpGet("me")]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMe(CancellationToken cancellationToken)
     {
         if (actor.ActorId is not { } actorId)
             return Unauthorized();
 
         var me = await mediator.Send(new UserGetMeQuery(actorId), cancellationToken);
-        return me is null ? Unauthorized(new { Message = "Профиль для этой учётной записи не найден." }) : Ok(me);
+        return me is null ? Unauthorized(new ApiError("Профиль для этой учётной записи не найден.")) : Ok(me);
     }
 
     /// <summary>Личные настройки интерфейса текущего пользователя. Чужие не читаются никем — маршрута с {id} нет.</summary>
     [HttpGet("me/preferences")]
+    [ProducesResponseType<UserPreferencesResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPreferences(CancellationToken cancellationToken)
     {
         var preferences = await mediator.Send(new UserGetPreferencesQuery(actor.Require()), cancellationToken);
@@ -95,6 +103,8 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
 
     /// <summary>PATCH-семантика: null — не трогать. 400 — недопустимое значение (например, размер страницы вне списка).</summary>
     [HttpPatch("me/preferences")]
+    [ProducesResponseType<UserPreferencesResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdatePreferences(UpdateUserPreferencesRequest request, CancellationToken cancellationToken)
     {
         try
@@ -107,11 +117,13 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetUser(Guid id, CancellationToken cancellationToken)
     {
         var user = await mediator.Send(new UserGetQuery(id), cancellationToken);
@@ -119,6 +131,8 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
     }
 
     [HttpGet("by-username/{username}")]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetUserByUsername(string username, CancellationToken cancellationToken)
     {
         var user = await mediator.Send(new UserGetByUsernameQuery(username), cancellationToken);
@@ -126,6 +140,10 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
     }
 
     [HttpPatch("{id:guid}")]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateProfile(Guid id, UpdateUserProfileRequest request, CancellationToken cancellationToken)
     {
         try
@@ -146,11 +164,16 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     [HttpPatch("{id:guid}/username")]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> ChangeUsername(Guid id, ChangeUsernameRequest request, CancellationToken cancellationToken)
     {
         try
@@ -160,11 +183,16 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     [HttpPatch("{id:guid}/email")]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> ChangeEmail(Guid id, ChangeEmailRequest request, CancellationToken cancellationToken)
     {
         try
@@ -174,12 +202,16 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     /// <summary>Роль workspace. 403 — не позволяет роль actor'а (IPermissionService); 400 — последний Owner.</summary>
     [HttpPatch("{id:guid}/role")]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ChangeRole(Guid id, ChangeUserRoleRequest request, CancellationToken cancellationToken)
     {
         try
@@ -189,7 +221,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
@@ -198,6 +230,10 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
     /// Свой без текущего, неверный текущий или слабый новый пароль → 400.
     /// </summary>
     [HttpPost("{id:guid}/password")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ChangePassword(Guid id, ChangePasswordRequest request, CancellationToken cancellationToken)
     {
         try
@@ -210,12 +246,16 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     /// <summary>Добавляет ссылку или заменяет URL ссылки того же типа — поэтому PUT, а не POST.</summary>
     [HttpPut("{id:guid}/links/{type}")]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SetLink(Guid id, UserLinkType type, SetUserLinkRequest request, CancellationToken cancellationToken)
     {
         try
@@ -225,11 +265,14 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     [HttpDelete("{id:guid}/links/{type}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RemoveLink(Guid id, UserLinkType type, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new UserRemoveLinkCommand(actor.Require(), id, type), cancellationToken);
@@ -237,6 +280,10 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
     }
 
     [HttpPost("{id:guid}/deactivate")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Deactivate(Guid id, CancellationToken cancellationToken)
     {
         try
@@ -246,11 +293,15 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     [HttpPost("{id:guid}/activate")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Activate(Guid id, CancellationToken cancellationToken)
     {
         try
@@ -260,7 +311,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
@@ -271,7 +322,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
             return NotFound();
 
         if (result.ConflictError is not null)
-            return Conflict(new { Message = result.ConflictError });
+            return Conflict(new ApiError(result.ConflictError));
 
         return Ok(result.Response);
     }
