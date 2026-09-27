@@ -97,6 +97,11 @@
                     <button type="button" class="seg-btn @(IsBacklogView ? "on" : "")" role="radio" aria-checked="@IsBacklogView" disabled="@(BoardId is null)"
                             title="@(BoardId is null ? "Бэклог — внутри одного проекта: выберите проект" : "Бэклог и спринты")"
                             @onclick="() => SetView(TaskView.Backlog)"><Icon Name="history" Size="14" />Бэклог</button>
+                    <button type="button" class="seg-btn @(IsCalendarView ? "on" : "")" role="radio" aria-checked="@IsCalendarView"
+                            title="Календарь: задачи по датам" @onclick="() => SetView(TaskView.Calendar)"><Icon Name="calendar" Size="14" />Календарь</button>
+                    <button type="button" class="seg-btn @(IsRoadmapView ? "on" : "")" role="radio" aria-checked="@IsRoadmapView" disabled="@(BoardId is null)"
+                            title="@(BoardId is null ? "Роадмап — внутри одного проекта: выберите проект" : "Роадмап: полосы от начала до срока")"
+                            @onclick="() => SetView(TaskView.Roadmap)"><Icon Name="chart" Size="14" />Роадмап</button>
                 </div>
                 @* В доске фильтр статуса не нужен: колонки и есть статусы. *@
                 @if (CurrentView == TaskView.List && CurrentBoard is { } board)
@@ -130,7 +135,19 @@
             <FqlBar Value="@EffectiveFql" Error="_fqlError" OnApply="ApplyFql" OnSave="OpenSave" OnClose="CloseFql" />
         }
 
-        @if (IsBacklogView && BoardId is { } backlogBoardId)
+        @if (IsCalendarView)
+        {
+            <TaskCalendar @ref="_calendar" Boards="_boards" BoardId="BoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
+                          Query="@_search" Fql="@EffectiveFql" Me="Me" SelectedId="TaskId"
+                          OnOpen="OpenTask" OnLoaded="OnKanbanLoaded" OnFqlError="e => _fqlError = e" />
+        }
+        else if (IsRoadmapView && BoardId is { } roadmapBoardId)
+        {
+            <TaskRoadmap @ref="_roadmap" Boards="_boards" BoardId="roadmapBoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
+                         Query="@_search" Fql="@EffectiveFql" SelectedId="TaskId"
+                         OnOpen="OpenTask" OnLoaded="OnKanbanLoaded" OnFqlError="e => _fqlError = e" />
+        }
+        else if (IsBacklogView && BoardId is { } backlogBoardId)
         {
             <BacklogView @ref="_backlog" Boards="_boards" BoardId="backlogBoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
                          Query="@_search" Fql="@EffectiveFql" Me="Me" SelectedId="TaskId"
@@ -415,10 +432,12 @@
                 "board" => TaskView.Board,
                 "tree" => TaskView.Tree,
                 "backlog" => TaskView.Backlog,
+                "calendar" => TaskView.Calendar,
+                "roadmap" => TaskView.Roadmap,
                 "list" => TaskView.List,
                 _ => Preferences.TasksView
             };
-            return view is TaskView.Tree or TaskView.Backlog && BoardId is null ? TaskView.List : view;
+            return view is TaskView.Tree or TaskView.Backlog or TaskView.Roadmap && BoardId is null ? TaskView.List : view;
         }
     }
 
@@ -427,6 +446,14 @@
     private bool IsTreeView => CurrentView == TaskView.Tree;
 
     private bool IsBacklogView => CurrentView == TaskView.Backlog;
+
+    private bool IsCalendarView => CurrentView == TaskView.Calendar;
+
+    private bool IsRoadmapView => CurrentView == TaskView.Roadmap;
+
+    private TaskCalendar? _calendar;
+
+    private TaskRoadmap? _roadmap;
 
     private BacklogView? _backlog;
 
@@ -770,6 +797,15 @@
         {
             if (_backlog is not null)
                 await _backlog.ReloadAsync();
+            return;
+        }
+
+        if (IsCalendarView || IsRoadmapView)
+        {
+            if (_calendar is not null)
+                await _calendar.ReloadAsync();
+            if (_roadmap is not null)
+                await _roadmap.ReloadAsync();
             return;
         }
 
@@ -1252,6 +1288,8 @@
         _tasks[i] = t;
         _kanban?.Replace(t);
         _tree?.Replace(t);
+        _calendar?.Replace(t);
+        _roadmap?.Replace(t);
         if (_backlog is not null)
             await _backlog.ReplaceAsync(t);
         await Redraw();

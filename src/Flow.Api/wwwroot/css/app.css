@@ -2575,3 +2575,82 @@ a.task-row { color: inherit; text-decoration: none; }
 }
 .sc-section:focus { border-color: var(--accent); }
 .sc-row .tt-actions { margin-left: 0; }
+
+/* ---- Календарь (docs/TZ_task_views.md §5, этап 2F) ---- */
+.cal { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
+.cal-title { color: #fff; font: var(--fw-bold) 15px var(--font-display); }
+.cal-next svg { transform: rotate(180deg); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.cal-wd { color: var(--text-tertiary); font: var(--fw-bold) 11px var(--font-display); text-transform: uppercase; padding: 0 6px; }
+.cal-days { flex: 1; min-height: 0; overflow: auto; align-content: start; }
+.cal-day {
+    min-height: 118px; display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: var(--r-md);
+    background: var(--surface); border: 1px solid var(--border-subtle);
+}
+.cal-days.week .cal-day { min-height: 360px; }
+.cal-day.other { opacity: 0.55; }
+.cal-day.today { border-color: var(--accent); }
+.cal-date { color: var(--text-secondary); font: var(--fw-bold) 12px var(--font-display); }
+.cal-day.today .cal-date { color: var(--accent); }
+.cal-zone { display: flex; flex-direction: column; gap: 3px; min-height: 20px; flex: 1; }
+.cal-chip {
+    display: flex; align-items: center; gap: 5px; padding: 2px 6px; border-radius: 5px; min-width: 0; cursor: grab;
+    background: rgba(255, 255, 255, 0.07); border-left: 3px solid var(--sage); font: var(--fw-medium) 12px var(--font-text); color: #fff;
+}
+.cal-chip .code { font: var(--fw-semibold) 10.5px var(--font-mono); color: var(--text-tertiary); flex: none; }
+.cal-chip-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cal-chip-title.muted { color: var(--text-tertiary); }
+.cal-chip.cont { border-left-color: transparent; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.cal-chip.open-end { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.cal-chip.overdue { border-left-color: var(--danger); }
+.cal-chip.soon { border-left-color: var(--accent); }
+.cal-chip.done { opacity: 0.55; border-left-color: var(--text-tertiary); }
+.cal-chip.sel { outline: 1px solid var(--accent); }
+.cal-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cal-more { align-self: flex-start; font-size: 11.5px; }
+
+/* ---- Роадмап (docs/TZ_task_views.md §4, этап 2F) ---- */
+.rm { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
+.rm-body { display: flex; gap: 12px; flex: 1; min-height: 0; }
+.rm-main { flex: 1; min-width: 0; }
+.rm-scroll { display: flex; overflow: auto; flex: 1; min-height: 0; }
+.rm-left { flex: none; width: 300px; position: sticky; left: 0; z-index: 3; background: var(--surface); border-right: 1px solid var(--border); }
+.rm-head-cell, .rm-scale { height: 34px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.rm-head-cell { display: flex; align-items: center; padding: 0 12px; color: var(--text-tertiary); font: var(--fw-bold) 11.5px var(--font-display); }
+.rm-name, .rm-lane { height: 32px; border-bottom: 1px solid var(--border-subtle); }
+.rm-name { display: flex; align-items: center; gap: 6px; padding-right: 8px; min-width: 0; }
+.rm-name.sel, .rm-lane.sel { background: rgba(255, 186, 0, 0.07); }
+.rm-toggle { border: 0; background: transparent; color: var(--text-tertiary); padding: 0; width: 16px; flex: none; cursor: pointer; transform: rotate(-90deg); transition: transform 160ms var(--ease-out); }
+.rm-toggle.open { transform: rotate(0); }
+.rm-toggle-space { width: 16px; flex: none; }
+.rm-title { border: 0; background: transparent; color: #fff; font: var(--fw-medium) 13px var(--font-text); text-align: left; cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; padding: 0; }
+.rm-title .code { font: var(--fw-semibold) 11.5px var(--font-mono); color: var(--accent); margin-right: 6px; }
+.rm-right { flex: none; position: relative; }
+.rm-scale { position: sticky; }
+.rm-tick { position: absolute; top: 0; height: 34px; display: flex; align-items: center; padding-left: 6px; border-left: 1px solid var(--border);
+    color: var(--text-tertiary); font: var(--fw-semibold) 11px var(--font-display); white-space: nowrap; }
+.rm-ms-label { position: absolute; top: 18px; transform: translateX(-4px); color: var(--tan); font: var(--fw-bold) 10.5px var(--font-display); white-space: nowrap; }
+.rm-lanes { position: relative; }
+.rm-grid { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border-subtle); }
+.rm-today { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--accent); z-index: 1; }
+.rm-ms { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--tan); z-index: 1; }
+.rm-lane { position: relative; }
+.rm-bar {
+    position: absolute; top: 7px; height: 18px; border-radius: 5px; border: 1px solid transparent; padding: 0 6px; cursor: pointer; z-index: 2;
+    background: var(--sage); color: #0f2a22; font: var(--fw-semibold) 11px var(--font-display); text-align: left;
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.rm-bar.derived { background: transparent; border: 1px dashed var(--sage); color: var(--text-secondary); }
+.rm-bar.overdue { background: var(--danger); color: #fff; }
+.rm-bar.done { opacity: 0.5; }
+.rm-diamond { position: absolute; top: 9px; width: 14px; height: 14px; transform: rotate(45deg); background: var(--sage); border: 0; cursor: pointer; z-index: 2; }
+.rm-diamond.overdue { background: var(--danger); }
+.rm-diamond.done { opacity: 0.5; }
+.rm-bar:focus-visible, .rm-diamond:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rm-undated { flex: 0 0 240px; padding: 12px; gap: 6px; overflow: auto; }
+.rm-undated-item { display: flex; gap: 6px; border: 0; background: transparent; color: #fff; text-align: left; padding: 4px 2px; cursor: pointer;
+    font: var(--fw-medium) 12.5px var(--font-text); border-radius: 4px; }
+.rm-undated-item .code { font: var(--fw-semibold) 11px var(--font-mono); color: var(--accent); flex: none; }
+@media (hover: hover) and (pointer: fine) { .rm-undated-item:hover, .rm-title:hover { color: var(--accent); } }
+@media (prefers-reduced-motion: reduce) { .rm-toggle { transition: none; } }

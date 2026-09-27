@@ -602,3 +602,8 @@ a.mud-link:hover {
 /* Модалки настройки проекта со списком полей («Экраны задач», «Поля проекта») — шире стандартных 440px. */
 .mud-dialog.flow-modal.wide { width: 680px; max-width: calc(100vw - 32px); }
 .sc-req .mud-typography { color: var(--text-secondary); font: var(--fw-medium) 12px var(--font-text); }
+
+/* Календарь: MudDropZone — наша ячейка дня без фона Material; цель «вставить первым» ужата до полосы на границе. */
+.cal-days .mud-drop-zone { background: transparent; }
+.cal-days .mud-drop-item { display: block; }
+.cal-days .mud-drop-zone > .mud-drop-item-preview-start:not(.mud-drop-item-draggable) { height: 6px; top: -3px; }

@@ -37,3 +37,6 @@ public sealed record TaskResponse(
     Guid? SprintId = null,
     Guid? MilestoneId = null,
     IReadOnlyDictionary<Guid, System.Text.Json.JsonElement>? CustomFields = null);
+
+/// <summary>Календарь (docs/TZ_task_views.md §5): задачи окна [From, To]; Truncated — лимит сработал, показано не всё.</summary>
+public sealed record TaskCalendarResponse(DateOnly From, DateOnly To, IReadOnlyList<TaskResponse> Items, bool Truncated);

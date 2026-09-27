@@ -13,5 +13,11 @@ public enum TaskView
     Tree = 2,
 
     /// <summary>Бэклог и спринты — тоже только внутри проекта.</summary>
-    Backlog = 3
+    Backlog = 3,
+
+    /// <summary>Календарь месяца или недели (docs/TZ_task_views.md §5).</summary>
+    Calendar = 4,
+
+    /// <summary>Роадмап проекта — полосы от начала до срока (docs/TZ_task_views.md §4).</summary>
+    Roadmap = 5
 }

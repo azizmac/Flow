@@ -105,6 +105,20 @@ public static partial class Ru
         return d.Year == DateTime.Now.Year ? s : $"{s} {d.Year}";
     }
 
+    private static readonly string[] MonthsNominative =
+        ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+
+    /// <summary>«Сентябрь 2026» — заголовок месяца календаря.</summary>
+    public static string MonthTitle(DateOnly d) => $"{char.ToUpperInvariant(MonthsNominative[d.Month - 1][0])}{MonthsNominative[d.Month - 1][1..]} {d.Year}";
+
+    /// <summary>«сен» / «сен 2027» — подпись месяца на шкале.</summary>
+    public static string MonthShort(DateOnly d) => d.Year == DateTime.Now.Year ? MonthsShort[d.Month - 1] : $"{MonthsShort[d.Month - 1]} {d.Year}";
+
+    public static readonly IReadOnlyList<string> WeekdaysShort = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+
+    /// <summary>Понедельник недели, в которую попадает дата.</summary>
+    public static DateOnly WeekStart(DateOnly d) => d.AddDays(-(((int)d.DayOfWeek + 6) % 7));
+
     /// <summary>Разбор yyyy-MM-dd из журнала активности; null — «без срока» или мусор.</summary>
     public static DateOnly? ParseDateOnly(string? iso) =>
         iso is not null && DateOnly.TryParseExact(iso, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,

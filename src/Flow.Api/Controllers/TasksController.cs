@@ -16,6 +16,7 @@ using Flow.Application.Features.Search.Queries.SimilarTasksQuery;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskListQuery;
 using Flow.Application.Features.Tasks.Queries.TaskBoardQuery;
+using Flow.Application.Features.Tasks.Queries.TaskCalendarQuery;
 using Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 using Flow.Application.Features.Tasks.Queries.TaskTreeQuery;
 using Flow.Application.Features.Tasks.Fql;
@@ -200,6 +201,45 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     /// Канбан (docs/TZ_task_views.md §1): boardId — колонки-статусы проекта, без него — виды статусов по всем проектам.
     /// statusId / statusType / other с offset — одна колонка со следующей страницы (догрузка при прокрутке).
     /// </summary>
+    /// <summary>
+    /// Календарь (docs/TZ_task_views.md §5): задачи, чей отрезок дат пересекает окно [from, to] (не больше 100 дней);
+    /// лимит 1000 и truncated. Фильтры — как у списка. 404 — скрытый проект, 400 — окно или FQL.
+    /// </summary>
+    [HttpGet("tasks/calendar")]
+    public async Task<IActionResult> GetCalendar(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] Guid? boardId,
+        [FromQuery] Guid? assigneeId,
+        [FromQuery] bool? unassigned,
+        [FromQuery] string? q,
+        [FromQuery] TaskTypeKind? typeKind,
+        [FromQuery] TaskPriority? priority,
+        [FromQuery] string? fql,
+        CancellationToken cancellationToken)
+    {
+        if (typeKind is { } kind && !Enum.IsDefined(kind))
+            return BadRequest(new { Message = $"Unknown task type kind {kind}." });
+        if (priority is { } p && !Enum.IsDefined(p))
+            return BadRequest(new { Message = $"Unknown priority {p}." });
+
+        try
+        {
+            var response = await mediator.Send(
+                new TaskCalendarQuery(actor.Require(), from, to, boardId, assigneeId, unassigned == true, q, typeKind, priority, fql),
+                cancellationToken);
+            return response is null ? NotFound() : Ok(response);
+        }
+        catch (FqlException ex)
+        {
+            return BadRequest(new FqlErrorResponse(ex.Message, ex.Position, ex.Length));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
     [HttpGet("tasks/board")]
     public async Task<IActionResult> GetTaskBoard(
         [FromQuery] Guid? boardId,

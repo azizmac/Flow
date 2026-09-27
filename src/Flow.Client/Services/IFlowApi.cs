@@ -79,6 +79,19 @@ public interface IFlowApi
 
     Task<ApiResult<BoardResponse>> SetDoneColumnDays(Guid boardId, int days, CancellationToken ct = default);
 
+    // Календарь (docs/TZ_task_views.md §5): задачи, пересекающие окно дат; фильтры — как у списка.
+    Task<ApiResult<TaskCalendarResponse>> GetCalendar(
+        DateOnly from,
+        DateOnly to,
+        Guid? boardId = null,
+        Guid? assigneeId = null,
+        bool unassigned = false,
+        string? query = null,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
+        string? fql = null,
+        CancellationToken ct = default);
+
     // Спринты и бэклог (docs/TZ_task_views.md §2).
     Task<ApiResult<IReadOnlyList<SprintResponse>>> GetSprints(Guid boardId, CancellationToken ct = default);
     Task<ApiResult<SprintResponse>> CreateSprint(Guid boardId, CreateSprintRequest request, CancellationToken ct = default);
