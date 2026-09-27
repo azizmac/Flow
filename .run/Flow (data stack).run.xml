@@ -1,4 +1,6 @@
 <component name="ProjectRunConfigurationManager">
+  <!-- Стек данных: postgres (pgvector), MinIO и s3-init, создающий бакет. Профили ai и backup не
+       поднимаются: модели нужны только умному поиску, а бэкапы — серверу. Перед запуском — «Flow (init)». -->
   <configuration default="false" name="Flow (data stack)" type="docker-deploy" factoryName="docker-compose.yml" server-name="Docker">
     <deployment type="docker-compose.yml">
       <settings>
@@ -6,6 +8,9 @@
         <option name="sourceFilePath" value="docker-compose.data.yml" />
       </settings>
     </deployment>
-    <method v="2" />
+    <EXTENSION ID="com.jetbrains.rider.docker.debug" isFastModeEnabled="false" isSslEnabled="false" />
+    <method v="2">
+      <option name="RunConfigurationTask" enabled="true" run_configuration_name="Flow (init)" run_configuration_type="ShConfigurationType" />
+    </method>
   </configuration>
 </component>

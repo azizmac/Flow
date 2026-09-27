@@ -1,4 +1,4 @@
-# Поднимает оба стека одной командой (Windows). Аналог docker/up.sh: сеть и тома → данные →
+﻿# Поднимает оба стека одной командой (Windows). Аналог docker/up.sh: сеть и тома → данные →
 # приложение. Compose не умеет depends_on между проектами, поэтому порядок задаёт скрипт;
 # сервис, стартовавший раньше базы, дожидается её сам (Startup:DatabaseWaitTimeoutSeconds).
 # Все шаги идемпотентны.
@@ -33,10 +33,12 @@ Write-Host "== приложение =="
 if ($NoBuild) { docker compose up -d } else { docker compose up -d --build }
 if ($LASTEXITCODE -ne 0) { throw "стек приложения не поднялся" }
 
-# .env читает Compose, а не этот скрипт — порт клиента достаём оттуда только ради сообщения.
-$clientPort = (Select-String -Path ".env" -Pattern "^CLIENT_PORT=(.+)$" | Select-Object -Last 1).Matches.Groups[1].Value
-if (-not $clientPort) { $clientPort = "5016" }
+# .env читает Compose, а не этот скрипт — порт достаём оттуда только ради сообщения.
+# Порт один: интерфейс, JSON-API и страницы входа отдаёт один и тот же сервис api. Прежний CLIENT_PORT
+# (5016) принадлежал отдельному контейнеру клиента, которого больше нет, — скрипт вёл на мёртвый адрес.
+$apiPort = (Select-String -Path ".env" -Pattern "^API_PORT=(.+)$" | Select-Object -Last 1).Matches.Groups[1].Value
+if (-not $apiPort) { $apiPort = "8080" }
 
 Write-Host ""
-Write-Host "Готово. Клиент: http://localhost:$clientPort"
+Write-Host "Готово. Flow: http://localhost:$apiPort"
 Write-Host "Состояние:  docker compose ps; docker compose -f docker-compose.data.yml ps"
