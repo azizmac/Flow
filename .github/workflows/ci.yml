@@ -191,8 +191,9 @@ jobs:
         uses: actions/checkout@v4
 
       # Оба стека проверяем отдельно: ошибка в любом ломает обещание «проект поднимается одной командой».
+      # С профилем proxy: без него compose не разбирает сервис caddy вовсе, и ошибка в нём дожила бы до сервера.
       - name: Стек приложения
-        run: docker compose -f docker-compose.yml config -q
+        run: docker compose -f docker-compose.yml --profile proxy config -q
 
       - name: Стек данных
         run: docker compose -f docker-compose.data.yml config -q
@@ -491,6 +492,7 @@ jobs:
     env:
       DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/opt/flow' }}
       AI_BACKEND: ${{ vars.AI_BACKEND || 'cpu' }}
+      PROXY_ENABLED: ${{ vars.PROXY_ENABLED || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -508,7 +510,12 @@ jobs:
           FLOW_ENV_API_PORT: ${{ vars.API_PORT }}
           FLOW_ENV_TZ: ${{ vars.TZ }}
           FLOW_ENV_AUTH_ISSUER: ${{ vars.AUTH_ISSUER }}
-          FLOW_ENV_AUTH_ALLOW_INSECURE_HTTP: ${{ vars.AUTH_ALLOW_INSECURE_HTTP }}
+          # За Caddy дефолты другие: api виден снаружи только через прокси (он верит X-Forwarded-* от кого угодно),
+          # а OpenIddict больше не принимает http. Явно заданная переменная всё равно главнее.
+          FLOW_ENV_PROXY_ENABLED: ${{ vars.PROXY_ENABLED }}
+          FLOW_ENV_API_BIND: ${{ vars.API_BIND || (vars.PROXY_ENABLED == 'true' && '127.0.0.1' || '') }}
+          FLOW_ENV_AUTH_ALLOW_INSECURE_HTTP: ${{ vars.AUTH_ALLOW_INSECURE_HTTP || (vars.PROXY_ENABLED == 'true' && 'false' || '') }}
+          FLOW_ENV_CADDY_IMAGE: ${{ vars.CADDY_IMAGE }}
           FLOW_ENV_POSTGRES_DB: ${{ vars.POSTGRES_DB }}
           FLOW_ENV_POSTGRES_USER: ${{ vars.POSTGRES_USER }}
           FLOW_ENV_S3_BUCKET: ${{ vars.S3_BUCKET }}
@@ -545,6 +552,18 @@ jobs:
           FLOW_ENV_BOOTSTRAP_PASSWORD: ${{ secrets.BOOTSTRAP_PASSWORD }}
         run: |
           set -euo pipefail
+
+          # Caddy берёт домен прямо из AUTH_ISSUER. Порт или путь в нём, http или голый IP вместо имени —
+          # и Caddy либо слушает не тот порт, либо выпускает самоподписанный сертификат; оба случая ловим
+          # здесь, пока старый стек ещё работает.
+          if [ "$PROXY_ENABLED" = true ]; then
+            if ! [[ "${FLOW_ENV_AUTH_ISSUER:-}" =~ ^https://[A-Za-z0-9.-]+$ ]] \
+              || [[ "$FLOW_ENV_AUTH_ISSUER" =~ ^https://[0-9.]+$ ]]; then
+              echo "::error title=AUTH_ISSUER::при PROXY_ENABLED=true нужен https://домен без порта и пути, получено «${FLOW_ENV_AUTH_ISSUER:-}»"
+              exit 1
+            fi
+          fi
+
           mkdir -p "$DEPLOY_DIR/docker"
 
           # Образ: новый digest этого прогона; если api не пересобирался — тот, что уже стоит на хосте;
@@ -557,11 +576,14 @@ jobs:
 
           # Файлы копируются поверх, а не каталог целиком заменяется: cp перезаписывает файл в том же
           # inode, и bind-монтирование живого контейнера (models.ini у ai, скрипты у backup) видит новое
-          # содержимое, а не удалённый файл. Хеш пресета нужен, чтобы перезапустить ai при его правке.
+          # содержимое, а не удалённый файл. Хеши пресета и Caddyfile нужны, чтобы перезапустить ai и caddy
+          # при их правке: оба читают конфиг только на старте.
           models_before="$(sha256sum "$DEPLOY_DIR/docker/ai/models.ini" 2>/dev/null | cut -d' ' -f1 || true)"
+          caddy_before="$(sha256sum "$DEPLOY_DIR/docker/caddy/Caddyfile" 2>/dev/null | cut -d' ' -f1 || true)"
           cp docker-compose.yml docker-compose.data.yml "$DEPLOY_DIR/"
-          cp -R docker/ai docker/data "$DEPLOY_DIR/docker/"
+          cp -R docker/ai docker/data docker/caddy "$DEPLOY_DIR/docker/"
           models_after="$(sha256sum "$DEPLOY_DIR/docker/ai/models.ini" | cut -d' ' -f1)"
+          caddy_after="$(sha256sum "$DEPLOY_DIR/docker/caddy/Caddyfile" | cut -d' ' -f1)"
 
           lines=
           for key in $(compgen -e | grep '^FLOW_ENV_' | sort); do
@@ -589,6 +611,7 @@ jobs:
             echo "image=$image"
             echo "previous=$previous"
             echo "models_changed=$([ "$models_before" = "$models_after" ] && echo false || echo true)"
+            echo "caddy_changed=$([ "$caddy_before" = "$caddy_after" ] && echo false || echo true)"
           } >> "$GITHUB_OUTPUT"
           echo ".env записан в $DEPLOY_DIR, образ api: $image"
 
@@ -687,7 +710,11 @@ jobs:
       - name: Приложение
         shell: bash
         working-directory: ${{ env.DEPLOY_DIR }}
-        run: docker compose -p flow -f docker-compose.yml up -d --no-build --remove-orphans api
+        # Профиль proxy передаётся и здесь: иначе --remove-orphans вправе счесть контейнер caddy сиротой.
+        run: |
+          profile=()
+          [ "$PROXY_ENABLED" = true ] && profile=(--profile proxy)
+          docker compose -p flow -f docker-compose.yml "${profile[@]}" up -d --no-build --remove-orphans api
 
       # Раннер на том же сервере, поэтому проба идёт прямо на опубликованный порт. Заодно сверяется,
       # что контейнер действительно пересоздан на ожидаемом образе, а не остался на старом.
@@ -719,6 +746,39 @@ jobs:
           done
           echo "api готов: http://127.0.0.1:$PORT/health/ready"
 
+      # Caddy — после готовности api, чтобы не отдавать 502 на время миграций и старта. Проверка https идёт
+      # через сам Caddy (--resolve на 127.0.0.1), но её провал — предупреждение, а не красная выкатка:
+      # первый сертификат зависит от DNS и проброса портов на роутере, которых CI не видит и не чинит,
+      # а сам Flow к этому моменту уже исправен.
+      - name: Прокси (Caddy)
+        shell: bash
+        working-directory: ${{ env.DEPLOY_DIR }}
+        env:
+          AUTH_ISSUER: ${{ vars.AUTH_ISSUER }}
+          CADDY_CHANGED: ${{ steps.env.outputs.caddy_changed }}
+        run: |
+          set -euo pipefail
+          dc() { docker compose -p flow -f docker-compose.yml --profile proxy "$@"; }
+          if [ "$PROXY_ENABLED" != true ]; then
+            dc rm -sf caddy
+            exit 0
+          fi
+          recreate=
+          [ "$CADDY_CHANGED" = true ] && recreate=--force-recreate
+          dc up -d --no-deps $recreate caddy
+
+          host="${AUTH_ISSUER#https://}"
+          deadline=$(( $(date +%s) + 120 ))
+          until curl -fsS -o /dev/null --max-time 5 --resolve "$host:443:127.0.0.1" "https://$host/health/ready"; do
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              dc logs --tail=100 caddy || true
+              echo "::warning title=Caddy::$AUTH_ISSUER не ответил по https за 120 с. Чаще всего это DNS домена не на этот сервер или роутер не пробрасывает 80/443 — логи caddy выше"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "https готов: $AUTH_ISSUER"
+
       # Образы по digest'у остаются без тега; удаляем только свои (метка source ставится metadata-action)
       # и только не используемые контейнером — чужие образы на сервере не трогаем.
       - name: Уборка старых образов
@@ -742,6 +802,7 @@ jobs:
             echo "| Образ api | \`${IMAGE:-—}\` |"
             echo "| Предыдущий | \`${PREVIOUS:-—}\` |"
             echo "| ИИ | \`$AI_BACKEND\` |"
+            echo "| Прокси | \`$PROXY_ENABLED\` |"
             if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$IMAGE" ]; then
               echo
               echo "Откат вручную на сервере: в \`$DEPLOY_DIR/.env\` вернуть \`FLOW_API_IMAGE='$PREVIOUS'\`, затем"

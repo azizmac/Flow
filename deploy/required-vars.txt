@@ -33,7 +33,10 @@ DEPLOY_TIMEOUT|var|-|Сколько секунд ждать 200 от /health/rea
 AUTH_ISSUER|var|2|Внешний адрес Flow, который видит браузер (http://server:8080 или https://flow.example.com за прокси). Попадает в claim iss — обязан совпадать с адресом, по которому открывают вход
 API_PORT|var|-|Порт api на сервере. По умолчанию 8080
 TZ|var|-|Пояс дат интерфейса. По умолчанию Europe/Moscow
-AUTH_ALLOW_INSECURE_HTTP|var|-|true, пока Flow открывают по http (по умолчанию). За TLS-прокси — false
+AUTH_ALLOW_INSECURE_HTTP|var|-|true, пока Flow открывают по http (по умолчанию). За TLS-прокси — false; при PROXY_ENABLED=true CI сам подставляет false
+PROXY_ENABLED|var|-|Поднять Caddy перед api (docker/caddy/Caddyfile): сертификат Let's Encrypt на домен из AUTH_ISSUER, который тогда обязан быть https://домен без порта. Роутер пробрасывает 80 и 443. Вместе с ним api начинает верить X-Forwarded-*, публикуется только на 127.0.0.1 и перестаёт принимать http на OpenIddict
+API_BIND|var|-|На каком адресе сервера публиковать API_PORT. По умолчанию 0.0.0.0, при PROXY_ENABLED=true — 127.0.0.1: снаружи Flow тогда виден только через Caddy
+CADDY_IMAGE|var|-|Образ Caddy, по умолчанию caddy:2.10-alpine
 DATA_ROOT|var|-|Каталог для томов данных (postgres, minio, models). Действует только при создании томов
 MODELS_ROOT|var|-|Отдельный каталог для весов моделей, перебивает DATA_ROOT/models
 

@@ -1,0 +1,14 @@
+# TLS-терминатор перед api: сертификат Let's Encrypt, его продление, редирект http → https, HTTP/2 и HTTP/3.
+# Поднимается профилем proxy (PROXY_ENABLED=true в CI), см. docs/TZ_cicd_host.md.
+#
+# Адрес сайта — сам AUTH_ISSUER (https://flow.example.com), а не отдельная переменная с доменом: issuer
+# токенов обязан совпадать с адресом, который видит браузер, и две переменные рано или поздно разъехались бы.
+# Нужен домен: на голый IP Let's Encrypt обычный сертификат не выдаёт, и Caddy молча выпустил бы
+# самоподписанный от своего внутреннего CA. Порт в AUTH_ISSUER не пишется — Caddy слушает ровно его,
+# а наружу опубликованы только 80 и 443.
+{$AUTH_ISSUER} {
+	# Сжатие делает сам api (Brotli/gzip), повторять его здесь незачем.
+	# X-Forwarded-For/-Proto/-Host Caddy ставит сам; api им верит по ASPNETCORE_FORWARDEDHEADERS_ENABLED.
+	# WebSocket для SignalR (серверный рендер интерфейса) проксируется без настроек.
+	reverse_proxy api:8080
+}
