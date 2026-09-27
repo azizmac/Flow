@@ -75,7 +75,7 @@ jobs:
       - name: Затронутые модули
         id: filter
         if: github.event_name != 'workflow_dispatch'
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             common: &common
@@ -224,7 +224,7 @@ jobs:
       # собирается из editor/flow-editor.src.js. Правка исходника без пересборки бандла не ломает ни сборку,
       # ни тесты — редактор просто продолжает работать по старому коду, и обнаруживается это в браузере.
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm

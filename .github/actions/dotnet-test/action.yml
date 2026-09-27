@@ -57,7 +57,7 @@ runs:
 
   steps:
     - name: Setup .NET (версия из global.json)
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v6
       with:
         global-json-file: global.json
 
@@ -65,7 +65,7 @@ runs:
     # за собой другие ref-паки. restore-keys оставляют частичное попадание — при добавлении одного пакета
     # докачивается он, а не весь граф заново.
     - name: Кэш пакетов NuGet
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.nuget/packages
         key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'global.json') }}
@@ -119,7 +119,7 @@ runs:
         slug="$(basename "$dir" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | sed 's/-\{1,\}/-/g; s/^-//; s/-$//')"
 
         # Один проект может гоняться двумя джобами с разными --filter — так разнесены Model и Golden
-        # в Infrastructure. Имена артефактов у upload-artifact@v4 обязаны различаться, иначе вторая джоба
+        # в Infrastructure. Имена артефактов у upload-artifact (с v4) обязаны различаться, иначе вторая джоба
         # падает на дубликате уже после зелёных тестов. Хвост от фильтра это разводит.
         if [ -n "$FILTER" ]; then
           slug="$slug-$(printf '%s' "$FILTER" | sha1sum | cut -c1-6)"
@@ -258,7 +258,7 @@ runs:
     # пока чинят конкретный прогон, дефолтные 90 дней просто занимают квоту репозитория.
     - name: Артефакт с trx
       if: always() && inputs.project != ''
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ steps.prep.outputs.artifact }}
         path: TestResults/*.trx
