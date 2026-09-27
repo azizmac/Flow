@@ -1,5 +1,8 @@
 # ТЗ: CI/CD для своего Kubernetes (1 master + 1 worker)
 
+> **Историческое.** От Kubernetes отказались: выкатка идёт docker compose на хост self-hosted раннера,
+> манифестов `k8s/**` в репозитории больше нет. Актуальная схема — `docs/TZ_cicd_host.md`.
+
 Документ отвечает на три вопроса: **что нужно передать**, чтобы CI/CD можно было написать; **как он устроен** —
 каждый модуль отдельной джобой, видимой в списке запуска; **что положить в GitHub Variables и Secrets**.
 
@@ -122,8 +125,8 @@ Docker Hub (`REGISTRY=docker.io`, `IMAGE_NAME=not2ilya2work/flow-api` и два 
 | Модуль | Образ | Особенность |
 |--------|-------|-------------|
 | `postgres` | `pgvector/pgvector:pg16` | не `postgres:16`: миграция делает `CREATE EXTENSION vector`, в модели есть `halfvec(512)` |
-| `s3` | `pgsty/minio:RELEASE.2026-08-04...` | форк MinIO от Pigsty: апстримных образов CE нет ни на Docker Hub, ни на quay.io; формат тома прежний |
-| `s3-init` | `pgsty/mc:RELEASE.2026-09-16...` | не отдельный модуль, а **Job внутри `deploy-s3`**: создание бакета — часть выкатки хранилища |
+| `s3` | `quay.io/minio/minio:RELEASE.2025-04-22...` | именно quay.io — из Docker Hub образы MinIO CE сняты |
+| `s3-init` | `quay.io/minio/mc:RELEASE.2025-04-16...` | не отдельный модуль, а **Job внутри `deploy-s3`**: создание бакета — часть выкатки хранилища |
 | `backup` | `pgvector/pgvector:pg16` | становится `CronJob`; `scheduler.sh` и busybox crond выбрасываются (расписание — поле `schedule`), а сам `backup.sh` остаётся и кладётся ConfigMap'ом |
 | `ai` | `ghcr.io/ggml-org/llama.cpp:server` (профиль `cpu`) или `:server-cuda` (профиль `cuda`) | ОДИН под на обе текстовые модели: llama-server в router-режиме читает `models.ini` и маршрутизирует по полю `model`. Веса с PVC |
 
@@ -245,7 +248,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 |-------|----------|----------|
 | `build` | Сборка .NET (Release) | всех трёх образов. Для `flow-client` это **единственная** проверка: тестового проекта у Blazor-клиента нет |
 | `test-unit` | Тесты · unit (Domain + Application) | всех трёх образов. Docker не нужен, секунды |
-| `test-infra` | Тесты · Infrastructure (pgvector + MinIO) | `flow-api`. Testcontainers, `--filter "Category!=Model&Category!=Golden"` |
+| `test-infra` | Тесты · Infrastructure (pgvector + MinIO) | `flow-api`. Testcontainers, `--filter "Category!=Model&Category!=Golden&Category!=S3"` (S3 — временно, пока нет доступного образа MinIO) |
 | `test-auth` | Тесты · Auth | `flow-api` (Auth-модуль компилируется внутрь этого образа, поэтому его тесты — гейт образа api) |
 | `test-api` | Тесты · Api | `flow-api` |
 
@@ -513,7 +516,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 | `S3_BUCKET`, `S3_USE_SSL` | `flow`, `false` | внутри кластера MinIO ходит по http |
 | `EMBEDDINGS_ENABLED` | `false` | главный выключатель нейросетевого слоя: `false` гасит разом векторы, реранкер и визуальную половину, AI-джобы пропускаются целиком |
 | `POSTGRES_IMAGE` | `pgvector/pgvector:pg16` | чужой образ; в переменной, чтобы смена мажорной версии была осознанной |
-| `MINIO_IMAGE`, `MC_IMAGE` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z`, `pgsty/mc:RELEASE.2026-09-16T00-00-00Z` | форк pgsty: апстримных образов MinIO нет ни на Docker Hub, ни на quay.io |
+| `MINIO_IMAGE`, `MC_IMAGE` | `quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z`, `quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z` | именно quay.io: из Docker Hub образы сняты |
 | `BOOTSTRAP_ENABLED`, `BOOTSTRAP_ID`, `BOOTSTRAP_EMAIL`, `BOOTSTRAP_USERNAME` | `true`, `1111…`, `admin@flow.com`, `admin` | `BOOTSTRAP_ID` обязан быть одинаковым у api и auth (Auth создаёт учётку, Api — профиль с тем же Id), поэтому лежит в общем ConfigMap. После первого входа — `BOOTSTRAP_ENABLED=false` |
 
 ### 7.2. Variables — необязательные (есть разумный дефолт)

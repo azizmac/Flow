@@ -24,6 +24,9 @@ x-bootstrap: &bootstrap
 
 services:
   api:
+    # Локально образ собирается (`up -d --build`) под именем flow-api:local. На сервере выкатка из CI
+    # задаёт FLOW_API_IMAGE — образ из реестра по digest'у — и поднимает сервис с --no-build.
+    image: ${FLOW_API_IMAGE:-flow-api:local}
     build:
       context: .
       dockerfile: src/Flow.Api/Dockerfile

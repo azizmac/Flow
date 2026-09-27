@@ -39,7 +39,7 @@ services:
     # октябре 2025 и заархивировал репозиторий, а в сентябре 2026 образы исчезли и с Docker Hub, и с
     # quay.io. Форк — тот же бинарь: тот же протокол, те же MINIO_ROOT_*, mc внутри для healthcheck и
     # веб-консоль, а том, записанный прежним quay.io/minio/minio:RELEASE.2025-04-22, читает без миграции
-    # (проверено). Тег зафиксирован; в кластер образ едет по digest (scripts/resolve-images.py).
+    # (проверено). Тег зафиксирован.
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
