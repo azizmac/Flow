@@ -42,6 +42,7 @@
                 @if (Permissions.CanManageConfig(boardAccess))
                 {
                     <DsIconButton Icon="list" Size="30" Title="Статусы проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _statusesOpen = true" />
+                    <DsIconButton Icon="link" Size="30" Title="Workflow проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/workflow"))" />
                     <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _typesOpen = true" />
                 }
                 @if (Permissions.CanManageMembers(boardAccess))
@@ -211,6 +212,7 @@
                         @if (Permissions.CanEditTask(Me, AccessFor(context.Item), context.Item))
                         {
                             <StatusSelect Statuses="StatusesFor(context.Item)" Value="context.Item.StatusId"
+                                          TaskId="context.Item.Id" Restricted="IsRestricted(context.Item.BoardId)"
                                           OnChange="id => ChangeStatus((context.Item, id))" />
                         }
                         else
@@ -444,6 +446,9 @@
     private IReadOnlyList<BoardResponse> CreatableBoards => _boards.Where(b => Permissions.CanCreateTask(Access.For(b.Id))).ToList();
 
     private bool _accessOpen;
+
+    /// <summary>Workflow проекта ограничен — селект статуса спросит, куда можно (docs/TZ_workflow_config.md §2).</summary>
+    private bool IsRestricted(Guid boardId) => _boards.FirstOrDefault(b => b.Id == boardId)?.WorkflowMode == WorkflowMode.Restricted;
 
     /// <summary>Статусы проекта этой задачи: в сводном списке соседние строки могут быть из разных проектов.</summary>
     private IReadOnlyList<StatusResponse> StatusesFor(TaskResponse task) =>

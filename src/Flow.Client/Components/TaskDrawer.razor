@@ -118,7 +118,8 @@ else if (Item is not null)
             <div>
                 @if (CanEdit)
                 {
-                    <StatusSelect Statuses="Board.Statuses" Value="Item.StatusId" OnChange="ChangeStatus" Disabled="_busy" />
+                    <StatusSelect Statuses="Board.Statuses" Value="Item.StatusId" OnChange="ChangeStatus" Disabled="_busy"
+                                  TaskId="Item.Id" Restricted="Board.WorkflowMode == WorkflowMode.Restricted" />
                 }
                 else
                 {

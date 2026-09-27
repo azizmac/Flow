@@ -54,6 +54,11 @@ public interface IFlowApi
     Task<ApiResult<BoardResponse>> DeleteStatus(Guid boardId, Guid statusId, Guid moveTo, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> ReorderStatuses(Guid boardId, ReorderStatusesRequest request, CancellationToken ct = default);
 
+    // Workflow (docs/TZ_workflow_config.md §2)
+    Task<ApiResult<WorkflowResponse>> GetWorkflow(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<WorkflowResponse>> SetWorkflow(Guid boardId, SetWorkflowRequest request, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskTransitionResponse>>> GetTransitions(Guid taskId, CancellationToken ct = default);
+
     // ---- Доступ к проектам ----
     Task<ApiResult<IReadOnlyList<ProjectAccessResponse>>> GetMyAccess(CancellationToken ct = default);
     Task<ApiResult<BoardMembersResponse>> GetBoardMembers(Guid boardId, CancellationToken ct = default);

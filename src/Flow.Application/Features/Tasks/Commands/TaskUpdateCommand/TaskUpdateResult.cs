@@ -14,12 +14,18 @@ public sealed class TaskUpdateResult
 
     public TaskResponse? Response { get; }
 
+    /// <summary>Workflow не пускает смену статуса: почему — по-русски, для человека (docs/TZ_workflow_config.md §2).</summary>
+    public IReadOnlyList<string>? Reasons { get; private init; }
+
     private TaskUpdateResult(bool isNotFound, string? validationError, TaskResponse? response)
     {
         IsNotFound = isNotFound;
         ValidationError = validationError;
         Response = response;
     }
+
+    public static TaskUpdateResult TransitionNotAllowed(IReadOnlyList<string> reasons) =>
+        new(false, "Переход запрещён workflow проекта: " + string.Join("; ", reasons), null) { Reasons = reasons };
 
     public static TaskUpdateResult NotFound() => new(true, null, null);
 

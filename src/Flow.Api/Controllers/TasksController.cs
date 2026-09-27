@@ -18,6 +18,7 @@ using Flow.Application.Features.Tasks.Queries.TaskListQuery;
 using Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 using Flow.Application.Features.Tasks.Queries.TaskTreeQuery;
 using Flow.Application.Features.Tasks.Fql;
+using Flow.Application.Features.Boards.Workflow;
 using Flow.Shared.Contracts.Filters;
 using Flow.Shared.Contracts.Boards;
 using Flow.Application.Abstractions;
@@ -138,6 +139,10 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
             if (result.IsNotFound)
                 return NotFound();
 
+            // Workflow не пустил: 400, а не 409 — конфликта версий нет, это правило (docs/TZ_workflow_config.md §2).
+            if (result.Reasons is { } reasons)
+                return BadRequest(new { Message = result.ValidationError, Reasons = reasons });
+
             if (result.ValidationError is not null)
                 return BadRequest(new { Message = result.ValidationError });
 
@@ -189,6 +194,11 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     [HttpPost("tasks/{id:guid}/rank")]
     public Task<IActionResult> RankTask(Guid id, RankTaskRequest request, CancellationToken cancellationToken) =>
         SendUpdate(new TaskRankCommand(actor.Require(), id, request.AfterId, request.BeforeId), cancellationToken);
+
+    /// <summary>Куда можно перевести задачу по workflow проекта: по каждому статусу — можно ли и почему нет.</summary>
+    [HttpGet("tasks/{id:guid}/transitions")]
+    public async Task<IActionResult> GetTransitions(Guid id, CancellationToken cancellationToken) =>
+        await mediator.Send(new TaskTransitionsQuery(actor.Require(), id), cancellationToken) is { } transitions ? Ok(transitions) : NotFound();
 
     /// <summary>Подсказки FQL у курсора: q — строка, pos — позиция курсора (по умолчанию конец).</summary>
     [HttpGet("tasks/query/suggest")]

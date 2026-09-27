@@ -8,7 +8,7 @@ using MediatR;
 namespace Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 
 /// <summary>Бросает ArgumentException при пустом названии (см. TaskItem.Rename).</summary>
-internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IBoardRepository boards, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
+internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IBoardRepository boards, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, TransitionGuard guard, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskUpdateCommand, TaskUpdateResult>
 {
     public async Task<TaskUpdateResult> Handle(TaskUpdateCommand request, CancellationToken cancellationToken)
@@ -19,13 +19,22 @@ internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IBoard
         if (task is null)
             return TaskUpdateResult.NotFound();
 
-        permissions.EnsureCanEditTask(actor, await projectAccess.GetAsync(actor, task.BoardId, cancellationToken), task);
+        var access = await projectAccess.GetAsync(actor, task.BoardId, cancellationToken);
+        permissions.EnsureCanEditTask(actor, access, task);
 
         if (request.StatusId is not null)
         {
             var statusBelongsToBoard = await tasks.StatusBelongsToBoardAsync(request.StatusId.Value, task.BoardId, cancellationToken);
             if (!statusBelongsToBoard)
                 return TaskUpdateResult.InvalidStatus(request.StatusId.Value);
+
+            // Workflow (docs/TZ_workflow_config.md §2) — до любых правок: отказ не должен оставить полдела.
+            if (request.StatusId.Value != task.StatusId && await boards.GetByIdAsync(task.BoardId, cancellationToken) is { } workflowBoard)
+            {
+                var check = await guard.CheckAsync(access, workflowBoard, task, request.StatusId.Value, cancellationToken);
+                if (!check.Allowed)
+                    return TaskUpdateResult.TransitionNotAllowed(check.Reasons);
+            }
         }
 
         // Тип живёт в агрегате Board — доску грузим, только когда тип действительно меняют.

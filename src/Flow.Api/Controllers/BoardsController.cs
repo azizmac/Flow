@@ -13,6 +13,7 @@ using Flow.Application.Features.Boards.Commands.StatusDeleteCommand;
 using Flow.Application.Features.Boards.Commands.StatusReorderCommand;
 using Flow.Application.Features.Boards.Commands.StatusUpdateCommand;
 using Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
+using Flow.Application.Features.Boards.Workflow;
 using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
 using Flow.Application.Features.Boards.Queries.BoardListQuery;
@@ -180,6 +181,27 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
         {
             var response = await mediator.Send(new StatusReorderCommand(actor.Require(), id, request.StatusIds), cancellationToken);
             return response is null ? NotFound() : Ok(response);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
+    // ---- Workflow (docs/TZ_workflow_config.md §2) ----
+
+    [HttpGet("{id:guid}/workflow")]
+    public async Task<IActionResult> GetWorkflow(Guid id, CancellationToken cancellationToken) =>
+        await mediator.Send(new WorkflowGetQuery(actor.Require(), id), cancellationToken) is { } workflow ? Ok(workflow) : NotFound();
+
+    /// <summary>Workflow целиком: режим и переходы. 400 — тупики в Restricted, чужой статус, повтор пары.</summary>
+    [HttpPut("{id:guid}/workflow")]
+    public async Task<IActionResult> SetWorkflow(Guid id, SetWorkflowRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var workflow = await mediator.Send(new WorkflowSetCommand(actor.Require(), id, request.Mode, request.Transitions), cancellationToken);
+            return workflow is null ? NotFound() : Ok(workflow);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {

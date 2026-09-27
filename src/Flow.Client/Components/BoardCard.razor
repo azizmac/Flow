@@ -1,6 +1,7 @@
 @* Карточка проекта: ключ + меню, название (+ инлайн-переименование), дата, пилюли статусов,
    футер «N задач · следующая KEY-n». Клик → OnOpen. *@
 @inject BrowserInterop Browser
+@inject NavigationManager Nav
 
 <div class="board-card" @onclick="Open" role="link" tabindex="0" @onkeydown="OnCardKey">
     <div class="board-card-head">
@@ -14,7 +15,7 @@
         <RowMenu ShowOpen="true" ShowRename="CanRename" ShowDelete="CanDelete" ShowTaskTypes="CanConfigure" ShowStatuses="CanConfigure" ShowAccess="CanManageMembers"
                  Size="26" Style="color:rgba(255,255,255,0.5)"
                  OnOpen="Open" OnRename="StartRename" OnCopy="CopyKey" OnDelete="() => OnDelete.InvokeAsync(Board)"
-                 OnTaskTypes="() => OnTaskTypes.InvokeAsync(Board)" OnStatuses="() => OnStatuses.InvokeAsync(Board)" OnAccess="() => OnAccess.InvokeAsync(Board)" />
+                 OnTaskTypes="() => OnTaskTypes.InvokeAsync(Board)" OnStatuses="() => OnStatuses.InvokeAsync(Board)" OnWorkflow="@(() => Nav.NavigateTo($"boards/{Board.Id}/workflow"))" OnAccess="() => OnAccess.InvokeAsync(Board)" />
     </div>
     <div>
         <div class="board-card-name">

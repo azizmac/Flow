@@ -34,7 +34,27 @@ public static class BoardMappingExtensions
             .Select(t => t.ToResponse())
             .ToList(),
         board.DefaultRole?.ToResponseRole(),
-        board.Visibility.ToResponseVisibility());
+        board.Visibility.ToResponseVisibility(),
+        (Flow.Shared.Contracts.Boards.WorkflowMode)(int)board.WorkflowMode);
+
+    public static WorkflowResponse ToWorkflowResponse(this Board board) => new(
+        board.Id,
+        (Flow.Shared.Contracts.Boards.WorkflowMode)(int)board.WorkflowMode,
+        board.Transitions
+            .OrderBy(t => t.FromStatusId is null ? int.MaxValue : board.Statuses.FirstOrDefault(s => s.Id == t.FromStatusId)?.SortOrder ?? 0)
+            .ThenBy(t => board.Statuses.FirstOrDefault(s => s.Id == t.ToStatusId)?.SortOrder ?? 0)
+            .Select(t => new TransitionResponse(t.Id, t.FromStatusId, t.ToStatusId, t.Name,
+                new TransitionConditionsDto(t.MinRole?.ToResponseRole(), t.RequireAssignee, t.RequireChildrenDone, t.RequireChecklistDone)))
+            .ToList(),
+        board.DeadEnds().Select(s => s.Id).ToList());
+
+    public static TransitionSpec ToSpec(this TransitionRequest request) => new(
+        request.FromStatusId,
+        request.ToStatusId,
+        request.Name,
+        request.Conditions is { } c
+            ? new TransitionConditions(c.MinRole?.ToDomainRole(), c.RequireAssignee, c.RequireChildrenDone, c.RequireChecklistDone)
+            : null);
 
     public static BoardMembersResponse ToMembersResponse(this Board board, IEnumerable<BoardMember> members) => new(
         board.Id,

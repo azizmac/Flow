@@ -134,7 +134,8 @@ else if (_task is not null && _board is not null)
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         @if (CanEdit)
                         {
-                            <StatusSelect Statuses="_board.Statuses" Value="_task.StatusId" OnChange="ChangeStatus" Disabled="_busy" />
+                            <StatusSelect Statuses="_board.Statuses" Value="_task.StatusId" OnChange="ChangeStatus" Disabled="_busy"
+                                          TaskId="_task.Id" Restricted="_board.WorkflowMode == WorkflowMode.Restricted" />
                         }
                         else
                         {

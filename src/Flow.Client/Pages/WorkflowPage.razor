@@ -1,0 +1,349 @@
+@* Workflow проекта (docs/TZ_workflow_config.md §2, этап 3B): матрица переходов «из → в» со строкой «Из любого»,
+   условия выбранного перехода, режим «Свободный / По переходам» и граф для просмотра. Правит администратор проекта
+   (ManageConfig), остальные видят только чтение. Всё правится локально и уходит одним PUT: workflow заменяется
+   целиком. Тупики (нефинальные статусы без исходящих переходов) подсвечиваются сразу; в режиме «По переходам»
+   сохранить с тупиками нельзя — сервер ответит тем же.
+   Граф — SVG без JS: статусы в ряд по порядку, переходы вперёд дугой сверху, назад — снизу, «из любого» — значком
+   у статуса. Отклонение от ТЗ: раскладку считает клиент, а не сервер — она зависит только от порядка статусов. *@
+@page "/boards/{Id:guid}/workflow"
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject ProjectAccessState Access
+@inject NavigationManager Nav
+
+<PageTitle>Workflow @(_board?.Key) — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        <a class="topbar-back" href="@($"tasks?board={Id}")" title="К задачам проекта"><Icon Name="arrow-left" Size="18" /></a>
+        @if (_board is not null)
+        {
+            <KeyChip Value="@_board.Key" />
+            <h1 class="topbar-title">Workflow</h1>
+        }
+    </div>
+    <div class="topbar-right">
+        @if (CanEdit && _board is not null)
+        {
+            <span class="hint">@(_dirty ? "Есть несохранённые изменения" : "")</span>
+            <DsButton Variant="primary" Size="sm" OnClick="Save" Disabled="@(!_dirty || _busy || SaveBlocked)" Busy="_busy">Сохранить</DsButton>
+        }
+    </div>
+</div>
+
+<div class="content">
+    @if (_error is not null)
+    {
+        <div class="empty"><div class="empty-title">@_error</div><a href="boards">К проектам</a></div>
+    }
+    else if (_board is null || _workflow is null)
+    {
+        <Skeleton Kind="rows" Count="6" />
+    }
+    else
+    {
+        <div class="wf-head">
+            <div class="seg" role="radiogroup" aria-label="Режим workflow">
+                @foreach (var mode in new[] { WorkflowMode.Free, WorkflowMode.Restricted })
+                {
+                    var on = mode == _mode;
+                    <button type="button" class="seg-btn @(on ? "on" : "")" role="radio" aria-checked="@(on ? "true" : "false")"
+                            disabled="@(!CanEdit)" @onclick="() => SetMode(mode)">@(mode == WorkflowMode.Free ? "Свободный" : "По переходам")</button>
+                }
+            </div>
+            <div class="hint">@(_mode == WorkflowMode.Free
+                ? "Статус меняется на любой; переходы ниже можно готовить заранее — они начнут действовать в режиме «По переходам»."
+                : "Статус меняется только по отмеченным переходам и при выполненных условиях. Admin и Owner граф не обходят.")</div>
+            @if (CanEdit)
+            {
+                <span class="wf-actions">
+                    <button type="button" class="icon-lnk" @onclick="AllowAll">Разрешить всё</button>
+                    <button type="button" class="icon-lnk" @onclick="Clear">Очистить</button>
+                </span>
+            }
+        </div>
+
+        @if (DeadEnds.Count > 0)
+        {
+            <div class="wf-warn @(_mode == WorkflowMode.Restricted ? "error" : "")">
+                Из @(DeadEnds.Count == 1 ? "статуса" : "статусов") @string.Join(", ", DeadEnds.Select(s => $"«{s.Name}»")) нет ни одного перехода:
+                @(_mode == WorkflowMode.Restricted ? "задачи в них застрянут, сохранить нельзя." : "перед включением режима «По переходам» добавьте выходы.")
+            </div>
+        }
+
+        <div class="panel wf-matrix-wrap">
+            <table class="wf-matrix">
+                <thead>
+                    <tr>
+                        <th class="wf-corner">из ↓ / в →</th>
+                        @foreach (var to in Statuses)
+                        {
+                            <th><span class="status-pill sm"><span class="sd" style="background:@StatusColors.For(to)"></span>@to.Name</span></th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var from in Rows)
+                    {
+                        <tr class="@(from is { } f && DeadEnds.Any(d => d.Id == f.Id) ? "dead" : "")">
+                            <th>
+                                @if (from is null)
+                                {
+                                    <span class="wf-any">Из любого</span>
+                                }
+                                else
+                                {
+                                    <span class="status-pill sm"><span class="sd" style="background:@StatusColors.For(from)"></span>@from.Name</span>
+                                }
+                            </th>
+                            @foreach (var to in Statuses)
+                            {
+                                var fromId = from?.Id;
+                                if (fromId == to.Id)
+                                {
+                                    <td class="wf-self">—</td>
+                                    continue;
+                                }
+
+                                var t = Find(fromId, to.Id);
+                                var selected = _selected is { } sel && sel.From == fromId && sel.To == to.Id;
+                                <td class="@(selected ? "sel" : "")">
+                                    <span class="wf-cell">
+                                        <button type="button" class="check-box @(t is not null ? "on" : "")" role="checkbox" aria-checked="@(t is not null ? "true" : "false")"
+                                                disabled="@(!CanEdit)" title="@(from?.Name ?? "Из любого") → @to.Name" @onclick="() => Toggle(fromId, to.Id)">
+                                            @if (t is not null)
+                                            {
+                                                <Icon Name="check" Size="11" />
+                                            }
+                                        </button>
+                                        @if (t is not null)
+                                        {
+                                            <button type="button" class="wf-gear @(HasConditions(t) ? "on" : "")" title="Условия перехода"
+                                                    @onclick="() => _selected = (fromId, to.Id)"><Icon Name="settings" Size="12" /></button>
+                                        }
+                                    </span>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (_selected is { } cell && Find(cell.From, cell.To) is { } edit)
+        {
+            <div class="panel wf-conditions">
+                <div class="wf-cond-head">
+                    <b>@(StatusName(cell.From) ?? "Из любого") → @StatusName(cell.To)</b>
+                    <DsIconButton Icon="close-simple" Size="26" Title="Закрыть" Style="color:rgba(255,255,255,0.45)" OnClick="() => _selected = null" />
+                </div>
+                @if (CanEdit)
+                {
+                    <DsInput Id="wf-name" Label="Подпись перехода (необязательно)" Placeholder="Например, «Взять в работу»" MaxLength="60"
+                             Value="@(edit.Name ?? "")" ValueChanged="v => Update(cell, edit with { Name = string.IsNullOrWhiteSpace(v) ? null : v })" />
+                }
+                else if (edit.Name is not null)
+                {
+                    <div class="hint">Подпись: «@edit.Name»</div>
+                }
+                <div class="meta-k">Кто может</div>
+                <div class="seg" role="radiogroup" aria-label="Минимальная роль">
+                    @foreach (var role in RoleOptions)
+                    {
+                        var on = role == edit.Conditions!.MinRole;
+                        <button type="button" class="seg-btn @(on ? "on" : "")" disabled="@(!CanEdit)"
+                                @onclick="() => Update(cell, edit with { Conditions = edit.Conditions! with { MinRole = role } })">
+                            @(role is { } r ? Permissions.ProjectRoleLabel(r) + " и выше" : "Любой, кто правит задачу")
+                        </button>
+                    }
+                </div>
+                <div class="wf-flags">
+                    <label><input type="checkbox" checked="@edit.Conditions!.RequireAssignee" disabled="@(!CanEdit)"
+                                  @onchange="e => Update(cell, edit with { Conditions = edit.Conditions with { RequireAssignee = e.Value is true } })" /> Назначен исполнитель</label>
+                    <label><input type="checkbox" checked="@edit.Conditions.RequireChildrenDone" disabled="@(!CanEdit)"
+                                  @onchange="e => Update(cell, edit with { Conditions = edit.Conditions with { RequireChildrenDone = e.Value is true } })" /> Все подзадачи закрыты</label>
+                    <label><input type="checkbox" checked="@edit.Conditions.RequireChecklistDone" disabled="@(!CanEdit)"
+                                  @onchange="e => Update(cell, edit with { Conditions = edit.Conditions with { RequireChecklistDone = e.Value is true } })" /> Чек-лист выполнен</label>
+                </div>
+            </div>
+        }
+
+        <div class="panel wf-graph">
+            <div class="meta-k">Граф</div>
+            <svg viewBox="0 0 @GraphWidth @GraphHeight" width="@GraphWidth" height="@GraphHeight" style="max-width:100%;height:auto" role="img" aria-label="Граф переходов">
+                <defs>
+                    <marker id="wf-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.55)" />
+                    </marker>
+                </defs>
+                @foreach (var t in _transitions.Where(t => t.FromStatusId is not null))
+                {
+                    var (x1, x2) = (NodeX(t.FromStatusId!.Value), NodeX(t.ToStatusId));
+                    var forward = x2 > x1;
+                    var lift = 26 + Math.Abs(x2 - x1) * 0.22;
+                    var y = forward ? NodeY - NodeH / 2 : NodeY + NodeH / 2;
+                    var cy = forward ? y - lift : y + lift;
+                    <path d="@FormattableString.Invariant($"M {x1} {y} Q {(x1 + x2) / 2} {cy} {x2 + (forward ? -6 : 6)} {y}")"
+                          fill="none" stroke="@(HasConditions(t) ? "var(--accent)" : "rgba(255,255,255,0.45)")" stroke-width="1.5" marker-end="url(#wf-arrow)" />
+                }
+                @foreach (var s in Statuses)
+                {
+                    var x = NodeX(s.Id);
+                    var global = _transitions.Any(t => t.FromStatusId is null && t.ToStatusId == s.Id);
+                    <g>
+                        <rect x="@Fmt(x - NodeW / 2)" y="@Fmt(NodeY - NodeH / 2)" width="@NodeW" height="@NodeH" rx="10"
+                              fill="rgba(0,0,0,0.25)" stroke="@(DeadEnds.Any(d => d.Id == s.Id) ? "var(--danger)" : StatusColors.For(s))" stroke-width="1.5" />
+                        @SvgText(x, NodeY + 4, s.Name, "#fff", "12", bold: true)
+                        @if (global)
+                        {
+                            @SvgText(x, NodeY + NodeH / 2 + 16, "★ из любого", "var(--accent)", "10.5")
+                        }
+                    </g>
+                }
+            </svg>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private const double NodeW = 128, NodeH = 34, Gap = 176, NodeY = 110;
+
+    private static readonly IReadOnlyList<ProjectRole?> RoleOptions = [null, ProjectRole.Member, ProjectRole.Developer, ProjectRole.Admin];
+
+    private BoardResponse? _board;
+    private WorkflowResponse? _workflow;
+    private WorkflowMode _mode;
+    private List<TransitionRequest> _transitions = [];
+    private (Guid? From, Guid To)? _selected;
+    private bool _dirty;
+    private bool _busy;
+    private string? _error;
+
+    private bool CanEdit => Permissions.CanManageConfig(Access.For(Id));
+
+    private IReadOnlyList<StatusResponse> Statuses => _board?.Statuses ?? [];
+
+    /// <summary>Строки матрицы: «Из любого» и все статусы.</summary>
+    private IEnumerable<StatusResponse?> Rows => new StatusResponse?[] { null }.Concat(Statuses);
+
+    /// <summary>Тупики — то же правило, что в домене (Board.DeadEnds): нефинальный статус без исходящих переходов.</summary>
+    private IReadOnlyList<StatusResponse> DeadEnds => Statuses
+        .Where(s => !s.IsFinal && !_transitions.Any(t => (t.FromStatusId == s.Id || t.FromStatusId is null) && t.ToStatusId != s.Id))
+        .ToList();
+
+    private bool SaveBlocked => _mode == WorkflowMode.Restricted && DeadEnds.Count > 0;
+
+    private double GraphWidth => Math.Max(Statuses.Count, 1) * Gap + 40;
+    private double GraphHeight => NodeY * 2 + 20;
+
+    private double NodeX(Guid statusId)
+    {
+        var index = Statuses.ToList().FindIndex(s => s.Id == statusId);
+        return 20 + Gap / 2 + Math.Max(index, 0) * Gap;
+    }
+
+    /// <summary>SVG-элемент text: в разметке Razor тег &lt;text&gt; зарезервирован, поэтому собираем его строкой (имя экранируем).</summary>
+    private static MarkupString SvgText(double x, double y, string content, string fill, string size, bool bold = false) =>
+        new($"<text x=\"{Fmt(x)}\" y=\"{Fmt(y)}\" text-anchor=\"middle\" fill=\"{fill}\" font-size=\"{size}\"{(bold ? " font-weight=\"600\"" : "")}>{System.Net.WebUtility.HtmlEncode(content)}</text>");
+
+    private static string Fmt(double value) => value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Access.EnsureLoadedAsync();
+        var board = await Api.GetBoard(Id);
+        var workflow = await Api.GetWorkflow(Id);
+        if (!board.Ok || !workflow.Ok)
+        {
+            _error = board.NotFound || workflow.NotFound ? "Проект не найден" : board.Error ?? workflow.Error;
+            return;
+        }
+
+        _board = board.Value;
+        Reset(workflow.Value!);
+    }
+
+    private void Reset(WorkflowResponse workflow)
+    {
+        _workflow = workflow;
+        _mode = workflow.Mode;
+        _transitions = workflow.Transitions
+            .Select(t => new TransitionRequest(t.FromStatusId, t.ToStatusId, t.Name, t.Conditions))
+            .ToList();
+        _dirty = false;
+    }
+
+    private TransitionRequest? Find(Guid? from, Guid to) => _transitions.FirstOrDefault(t => t.FromStatusId == from && t.ToStatusId == to);
+
+    private static bool HasConditions(TransitionRequest t) =>
+        t.Conditions is { } c && (c.MinRole is not null || c.RequireAssignee || c.RequireChildrenDone || c.RequireChecklistDone);
+
+    private static bool HasConditions(TransitionResponse t) =>
+        t.Conditions.MinRole is not null || t.Conditions.RequireAssignee || t.Conditions.RequireChildrenDone || t.Conditions.RequireChecklistDone;
+
+    private string? StatusName(Guid? id) => id is null ? null : Statuses.FirstOrDefault(s => s.Id == id)?.Name;
+
+    private void SetMode(WorkflowMode mode)
+    {
+        _mode = mode;
+        _dirty = true;
+    }
+
+    private void Toggle(Guid? from, Guid to)
+    {
+        if (Find(from, to) is { } existing)
+        {
+            _transitions.Remove(existing);
+            if (_selected is { } sel && sel.From == from && sel.To == to)
+                _selected = null;
+        }
+        else
+        {
+            _transitions.Add(new TransitionRequest(from, to, null, new TransitionConditionsDto()));
+        }
+
+        _dirty = true;
+    }
+
+    private void Update((Guid? From, Guid To) cell, TransitionRequest updated)
+    {
+        var i = _transitions.FindIndex(t => t.FromStatusId == cell.From && t.ToStatusId == cell.To);
+        if (i < 0) return;
+        _transitions[i] = updated with { Conditions = updated.Conditions ?? new TransitionConditionsDto() };
+        _dirty = true;
+    }
+
+    /// <summary>«Разрешить всё» — начать с текущего поведения и убирать лишнее: все пары статусов, кроме «в себя».</summary>
+    private void AllowAll()
+    {
+        foreach (var from in Statuses)
+            foreach (var to in Statuses.Where(t => t.Id != from.Id))
+                if (Find(from.Id, to.Id) is null)
+                    _transitions.Add(new TransitionRequest(from.Id, to.Id, null, new TransitionConditionsDto()));
+        _dirty = true;
+    }
+
+    private void Clear()
+    {
+        _transitions.Clear();
+        _selected = null;
+        _dirty = true;
+    }
+
+    private async Task Save()
+    {
+        _busy = true;
+        var result = await Api.SetWorkflow(Id, new SetWorkflowRequest(_mode, _transitions));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось сохранить workflow");
+            return;
+        }
+
+        Reset(result.Value!);
+        Toasts.Ok(_mode == WorkflowMode.Restricted ? "Workflow сохранён и действует" : "Workflow сохранён (режим свободный)");
+    }
+}

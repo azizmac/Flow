@@ -31,6 +31,10 @@
         {
             <MudMenuItem Class="pop-item" OnClick="OnStatuses"><Icon Name="list" Size="15" />Статусы</MudMenuItem>
         }
+        @if (ShowStatuses)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnWorkflow"><Icon Name="link" Size="15" />Workflow</MudMenuItem>
+        }
         @if (ShowTaskTypes)
         {
             <MudMenuItem Class="pop-item" OnClick="OnTaskTypes"><Icon Name="settings" Size="15" />Типы задач</MudMenuItem>
@@ -55,6 +59,8 @@
     /// <summary>Пункт «Статусы» — на тех же условиях, что «Типы задач» (право настраивать проект).</summary>
     [Parameter] public bool ShowStatuses { get; set; }
     [Parameter] public EventCallback OnStatuses { get; set; }
+    /// <summary>Пункт «Workflow» — рядом со «Статусами», на тех же условиях.</summary>
+    [Parameter] public EventCallback OnWorkflow { get; set; }
     /// <summary>Пункт «Доступ» (участники и роль по умолчанию) — для администратора проекта.</summary>
     [Parameter] public bool ShowAccess { get; set; }
     [Parameter] public EventCallback OnAccess { get; set; }

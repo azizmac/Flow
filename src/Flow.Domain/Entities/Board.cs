@@ -14,6 +14,7 @@ public sealed partial class Board
     private readonly List<Status> _statuses = [];
     private readonly List<TaskType> _taskTypes = [];
     private readonly List<TaskItem> _tasks = [];
+    private readonly List<StatusTransition> _transitions = [];
 
     public Guid Id { get; private set; }
 
@@ -43,6 +44,12 @@ public sealed partial class Board
     public IReadOnlyCollection<TaskType> TaskTypes => _taskTypes;
 
     public IReadOnlyCollection<TaskItem> Tasks => _tasks;
+
+    /// <summary>Free — статус меняется на любой; Restricted — только по <see cref="Transitions"/> (docs/TZ_workflow_config.md §2).</summary>
+    public WorkflowMode WorkflowMode { get; private set; }
+
+    /// <summary>Граф переходов. В режиме Free хранится (можно готовить заранее), но не применяется.</summary>
+    public IReadOnlyCollection<StatusTransition> Transitions => _transitions;
 
     private Board()
     {
@@ -191,6 +198,7 @@ public sealed partial class Board
         if (status.IsFinal && _statuses.Count(s => s.IsFinal) == 1)
             throw new InvalidOperationException("The last final status cannot be removed.");
 
+        _transitions.RemoveAll(t => t.FromStatusId == status.Id || t.ToStatusId == status.Id);
         _statuses.Remove(status);
     }
 
@@ -288,6 +296,14 @@ public sealed partial class Board
         {
             if (_statuses.All(s => s.Id != statusId.Value))
                 throw new InvalidOperationException($"Status {statusId.Value} does not belong to board {Id}.");
+
+            // В Restricted сразу в неначальный статус — только если в него есть переход «из любого»: иначе создание
+            // в колонку канбана «В работе» обходило бы граф.
+            var initialId = _statuses.SingleOrDefault(s => s.IsInitial)?.Id;
+            if (WorkflowMode == WorkflowMode.Restricted && statusId != initialId
+                && !_transitions.Any(t => t.FromStatusId is null && t.ToStatusId == statusId.Value))
+                throw new InvalidOperationException($"В статус «{StatusName(statusId.Value)}» задачу нельзя создать сразу: в workflow нет перехода в него «из любого».");
+
             resolvedStatusId = statusId.Value;
         }
 
@@ -303,6 +319,111 @@ public sealed partial class Board
         _tasks.Add(task);
         return task;
     }
+
+    // ---- Workflow (docs/TZ_workflow_config.md §2) ----
+
+    /// <summary>
+    /// Заменяет workflow целиком: режим и переходы (редактор-матрица присылает всё сразу, поэтому частичных правок нет).
+    /// Статусы — из этого проекта, переход в тот же статус не нужен, пары (из, в) не повторяются. В Restricted
+    /// у каждого нефинального статуса должен быть исходящий переход, иначе задача в нём застрянет — отказ перечисляет
+    /// тупиковые статусы.
+    /// </summary>
+    public void SetWorkflow(WorkflowMode mode, IReadOnlyList<TransitionSpec> transitions)
+    {
+        if (!Enum.IsDefined(mode))
+            throw new ArgumentException($"Unknown workflow mode {mode}.", nameof(mode));
+        ArgumentNullException.ThrowIfNull(transitions);
+
+        foreach (var t in transitions)
+        {
+            if (t.FromStatusId is { } from && _statuses.All(s => s.Id != from))
+                throw new InvalidOperationException($"Status {from} does not belong to board {Id}.");
+            if (_statuses.All(s => s.Id != t.ToStatusId))
+                throw new InvalidOperationException($"Status {t.ToStatusId} does not belong to board {Id}.");
+            if (t.FromStatusId == t.ToStatusId)
+                throw new InvalidOperationException("A transition to the same status is not needed.");
+        }
+
+        if (transitions.GroupBy(t => (t.FromStatusId, t.ToStatusId)).Any(g => g.Count() > 1))
+            throw new InvalidOperationException("Each transition (from, to) may appear only once.");
+
+        var next = transitions.Select(t => new StatusTransition(Id, t.FromStatusId, t.ToStatusId, t.Name, t.Conditions ?? TransitionConditions.None)).ToList();
+        if (mode == WorkflowMode.Restricted)
+        {
+            var deadEnds = DeadEnds(next);
+            if (deadEnds.Count > 0)
+                throw new InvalidOperationException(
+                    $"Из статусов {string.Join(", ", deadEnds.Select(s => $"«{s.Name}»"))} нет ни одного перехода: задачи в них застрянут.");
+        }
+
+        _transitions.Clear();
+        _transitions.AddRange(next);
+        WorkflowMode = mode;
+    }
+
+    /// <summary>Нефинальные статусы, из которых нет ни одного перехода (с учётом переходов «из любого»).</summary>
+    public IReadOnlyList<Status> DeadEnds() => DeadEnds(_transitions);
+
+    private List<Status> DeadEnds(IReadOnlyCollection<StatusTransition> transitions) =>
+        _statuses
+            .Where(s => !s.IsFinal)
+            .Where(s => !transitions.Any(t => (t.FromStatusId == s.Id || t.FromStatusId is null) && t.ToStatusId != s.Id))
+            .OrderBy(s => s.SortOrder)
+            .ToList();
+
+    /// <summary>
+    /// Можно ли перевести задачу из <paramref name="fromStatusId"/> в <paramref name="toStatusId"/>. Free — всегда.
+    /// Restricted — нужен переход графа (прямой или «из любого»), чьи условия выполнены; если подходящих переходов
+    /// несколько, хватает одного. Причины отказа — по первому переходу: человеку важнее, чего не хватает, чем все
+    /// варианты сразу.
+    /// </summary>
+    public TransitionCheck CheckTransition(Guid fromStatusId, Guid toStatusId, TransitionContext context)
+    {
+        if (fromStatusId == toStatusId || WorkflowMode == WorkflowMode.Free)
+            return TransitionCheck.Ok;
+
+        var candidates = _transitions
+            .Where(t => t.ToStatusId == toStatusId && (t.FromStatusId == fromStatusId || t.FromStatusId is null))
+            .OrderBy(t => t.FromStatusId is null ? 1 : 0)
+            .ToList();
+        if (candidates.Count == 0)
+            return TransitionCheck.Denied($"Перехода «{StatusName(fromStatusId)}» → «{StatusName(toStatusId)}» в workflow проекта нет");
+
+        List<string>? firstReasons = null;
+        foreach (var transition in candidates)
+        {
+            var reasons = FailedConditions(transition.Conditions, context);
+            if (reasons.Count == 0)
+                return TransitionCheck.Ok;
+            firstReasons ??= reasons;
+        }
+
+        return new TransitionCheck(false, firstReasons!);
+    }
+
+    private static List<string> FailedConditions(TransitionConditions c, TransitionContext ctx)
+    {
+        var reasons = new List<string>();
+        if (c.MinRole is { } role && ctx.ActorRole < role)
+            reasons.Add($"Переход доступен роли «{RoleLabel(role)}» и выше");
+        if (c.RequireAssignee && !ctx.HasAssignee)
+            reasons.Add("Сначала назначьте исполнителя");
+        if (c.RequireChildrenDone && !ctx.ChildrenDone)
+            reasons.Add("Не все подзадачи закрыты");
+        if (c.RequireChecklistDone && !ctx.ChecklistDone)
+            reasons.Add("Чек-лист выполнен не полностью");
+        return reasons;
+    }
+
+    private static string RoleLabel(ProjectRole role) => role switch
+    {
+        ProjectRole.Viewer => "Читатель",
+        ProjectRole.Member => "Участник",
+        ProjectRole.Developer => "Разработчик",
+        _ => "Администратор"
+    };
+
+    private string StatusName(Guid id) => _statuses.FirstOrDefault(s => s.Id == id)?.Name ?? "удалённый статус";
 
     private int NextStatusSortOrder() => _statuses.Count == 0 ? 0 : _statuses.Max(s => s.SortOrder) + 1;
 
