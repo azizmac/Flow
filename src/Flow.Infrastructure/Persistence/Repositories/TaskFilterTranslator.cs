@@ -26,6 +26,7 @@ internal static class TaskFilterTranslator
         TaskFilterCompare compare => Compare(compare),
         TaskFilterText text => Text(text.Text, db),
         TaskFilterBlocked => Blocked(db),
+        TaskFilterCustomField custom => Combine(custom.FieldIds.Select(id => CustomField(id.ToString(), custom)), Expression.OrElse, false),
         _ => throw new NotSupportedException($"Filter node {node.GetType().Name} is not supported.")
     };
 
@@ -99,10 +100,54 @@ internal static class TaskFilterTranslator
     {
         var pattern = $"%{TaskItemRepository.EscapeLike(text)}%";
         var matchedByCode = db.Database.SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM "TaskItems" WHERE "Code" ILIKE {pattern}""");
-        return t => EF.Functions.ILike(t.Title, pattern)
-                    || (t.Description != null && EF.Functions.ILike(t.Description, pattern))
+        return t => EF.Functions.ILike(t.Title, pattern, "\\")
+                    || (t.Description != null && EF.Functions.ILike(t.Description, pattern, "\\"))
                     || matchedByCode.Contains(t.Id);
     }
+
+    /// <summary>
+    /// Одно поле `cf.*` через SQL-функции flow_cf_* (миграция AddCustomFields). Значения — через замыкание, как везде:
+    /// параметры, а не константы. Id поля — тоже параметр: у каждого проекта своё поле с тем же ключом.
+    /// </summary>
+    private static Expression<Func<TaskItem, bool>> CustomField(string fieldId, TaskFilterCustomField node)
+    {
+        switch (node.Op)
+        {
+            case TaskFilterCustomOp.IsEmpty:
+                // Пустые значения домен не хранит (пустая строка и пустой список очищают поле): пусто = ключа нет.
+                return t => !EF.Functions.JsonExists(t.CustomFieldsJson, fieldId);
+            case TaskFilterCustomOp.Any:
+                var ids = ((IReadOnlyList<string>)node.Value!).ToArray();
+                return t => CustomFieldSql.Any(t.CustomFieldsJson, fieldId, ids);
+            case TaskFilterCustomOp.Contains:
+                var pattern = $"%{TaskItemRepository.EscapeLike((string)node.Value!)}%";
+                return t => EF.Functions.ILike(CustomFieldSql.Text(t.CustomFieldsJson, fieldId)!, pattern, "\\");
+        }
+
+        return node.Value switch
+        {
+            decimal => Cmp<decimal?>(t => CustomFieldSql.Number(t.CustomFieldsJson, fieldId), Op(node.Op), node.Value),
+            DateOnly => Cmp<DateOnly?>(t => CustomFieldSql.Date(t.CustomFieldsJson, fieldId), Op(node.Op), node.Value),
+            string text when node.Op == TaskFilterCustomOp.Eq => ExactText(fieldId, text),
+            _ => throw new NotSupportedException($"Custom field filter {node.Op} on {node.Type} is not supported.")
+        };
+    }
+
+    /// <summary>Точное совпадение текста без учёта регистра: ILIKE с экранированными % и _.</summary>
+    private static Expression<Func<TaskItem, bool>> ExactText(string fieldId, string text)
+    {
+        var pattern = TaskItemRepository.EscapeLike(text);
+        return t => EF.Functions.ILike(CustomFieldSql.Text(t.CustomFieldsJson, fieldId)!, pattern, "\\");
+    }
+
+    private static TaskFilterOp Op(TaskFilterCustomOp op) => op switch
+    {
+        TaskFilterCustomOp.Gt => TaskFilterOp.Gt,
+        TaskFilterCustomOp.Gte => TaskFilterOp.Gte,
+        TaskFilterCustomOp.Lt => TaskFilterOp.Lt,
+        TaskFilterCustomOp.Lte => TaskFilterOp.Lte,
+        _ => TaskFilterOp.Eq
+    };
 
     /// <summary>Та же логика, что у TaskResponse.BlockedByCount: входящий Blocks от задачи не в финальном статусе.</summary>
     private static Expression<Func<TaskItem, bool>> Blocked(FlowDbContext db) =>

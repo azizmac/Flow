@@ -44,6 +44,7 @@
                     <DsIconButton Icon="list" Size="30" Title="Статусы проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _statusesOpen = true" />
                     <DsIconButton Icon="link" Size="30" Title="Workflow проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/workflow"))" />
                     <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _typesOpen = true" />
+                    <DsIconButton Icon="check-square" Size="30" Title="Поля проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _fieldsOpen = true" />
                 }
                 <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/milestones"))" />
                 @if (Permissions.CanManageMembers(boardAccess))
@@ -343,6 +344,11 @@
     <StatusesDialog Board="statusesBoard" OnChanged="OnStatusesChanged" OnClose="() => _statusesOpen = false" />
 }
 
+@if (_fieldsOpen && CurrentBoard is { } fieldsBoard)
+{
+    <CustomFieldsDialog Board="fieldsBoard" OnChanged="ReplaceBoard" OnClose="() => _fieldsOpen = false" />
+}
+
 @if (_typesOpen && CurrentBoard is { } typesBoard)
 {
     <TaskTypesDialog Board="typesBoard" OnChanged="ReplaceBoard" OnClose="() => _typesOpen = false" />
@@ -480,6 +486,7 @@
 
     /// <summary>Открыта модалка типов задач текущего проекта.</summary>
     private bool _typesOpen;
+    private bool _fieldsOpen;
 
     /// <summary>Открыта модалка статусов текущего проекта.</summary>
     private bool _statusesOpen;

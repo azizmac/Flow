@@ -55,6 +55,9 @@ internal sealed class TaskUpdateCommandHandler(ITaskItemRepository tasks, IBoard
             var children = await tasks.GetChildrenAsync(task.Id, cancellationToken);
             if (children.Count > 0)
                 minChildLevel = children.Min(c => board!.GetTaskType(c.TypeId).Level);
+
+            // Обязательные поля нового типа должны быть заполнены до смены (docs/TZ_task_model.md §4) — до любых правок.
+            Features.CustomFields.TaskCustomFields.EnsureRequired(board!, task, typeId);
         }
 
         // Журнал: по записи на каждое реально изменённое поле; то же значение — без записи.

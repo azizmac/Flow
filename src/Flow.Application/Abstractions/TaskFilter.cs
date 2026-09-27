@@ -47,5 +47,16 @@ public sealed record TaskFilterText(string Text) : TaskFilterNode;
 /// <summary>Есть незакрытая задача, которая блокирует эту (то же, что TaskResponse.BlockedByCount &gt; 0).</summary>
 public sealed record TaskFilterBlocked : TaskFilterNode;
 
+/// <summary>Операция над пользовательским полем: сравнение, подстрока (~), «одно из» (Id вариантов и людей), пусто.</summary>
+public enum TaskFilterCustomOp { Eq, Gt, Gte, Lt, Lte, Contains, Any, IsEmpty }
+
+/// <summary>
+/// Условие на пользовательское поле `cf.&lt;key&gt;` (docs/TZ_task_model.md §4). FieldIds — поля с этим ключом во всех
+/// видимых проектах (у каждого проекта своё поле, тип у них один — это проверяет биндер). Value: string — текст
+/// (Eq без учёта регистра, Contains — подстрока) и "true"/"false" у флажка; decimal — число; DateOnly — дата;
+/// IReadOnlyList&lt;string&gt; — Id для Any; null — IsEmpty.
+/// </summary>
+public sealed record TaskFilterCustomField(IReadOnlyList<Guid> FieldIds, CustomFieldType Type, TaskFilterCustomOp Op, object? Value) : TaskFilterNode;
+
 /// <summary>Порядок из ORDER BY; первый — главный.</summary>
 public sealed record TaskOrder(TaskSortField Field, bool Descending);

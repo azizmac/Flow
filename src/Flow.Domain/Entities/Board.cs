@@ -15,6 +15,7 @@ public sealed partial class Board
     private readonly List<TaskType> _taskTypes = [];
     private readonly List<TaskItem> _tasks = [];
     private readonly List<StatusTransition> _transitions = [];
+    private readonly List<CustomFieldDefinition> _customFields = [];
 
     public Guid Id { get; private set; }
 
@@ -44,6 +45,9 @@ public sealed partial class Board
     public IReadOnlyCollection<TaskType> TaskTypes => _taskTypes;
 
     public IReadOnlyCollection<TaskItem> Tasks => _tasks;
+
+    /// <summary>Пользовательские поля проекта, включая архивные (docs/TZ_task_model.md §4).</summary>
+    public IReadOnlyCollection<CustomFieldDefinition> CustomFields => _customFields;
 
     /// <summary>Free — статус меняется на любой; Restricted — только по <see cref="Transitions"/> (docs/TZ_workflow_config.md §2).</summary>
     public WorkflowMode WorkflowMode { get; private set; }
@@ -279,6 +283,100 @@ public sealed partial class Board
             throw new InvalidOperationException("The default task type cannot be archived; choose another default first.");
 
         type.SetArchived(isArchived);
+    }
+
+    // ---- пользовательские поля (docs/TZ_task_model.md §4) ----
+
+    /// <summary>
+    /// Новое поле в конце списка. Key уникален в проекте (и среди архивных — по нему FQL находит поле) и потом не
+    /// меняется; у Select/MultiSelect нужен хотя бы один вариант, у остальных вариантов нет. Типы задач — свои.
+    /// </summary>
+    public CustomFieldDefinition AddCustomField(
+        string key, string name, CustomFieldType type, IEnumerable<string>? options = null, bool isRequired = false, IEnumerable<Guid>? taskTypeIds = null)
+    {
+        var normalizedKey = CustomFieldDefinition.ValidateKey(key);
+        if (_customFields.Any(f => f.Key == normalizedKey))
+            throw new InvalidOperationException($"Поле с ключом «{normalizedKey}» в проекте уже есть.");
+
+        var field = new CustomFieldDefinition(Id, normalizedKey, name, type, _customFields.Count == 0 ? 0 : _customFields.Max(f => f.SortOrder) + 1);
+        EnsureCustomFieldNameFree(field.Name, exceptId: null);
+
+        var labels = options?.ToList() ?? [];
+        if (field.HasOptions)
+            field.SetOptions(labels.Select(l => ((Guid?)null, l, (string?)null)));
+        else if (labels.Count > 0)
+            throw new InvalidOperationException($"У поля типа {type} вариантов не бывает.");
+
+        field.SetRequired(isRequired);
+        field.SetTaskTypes(ValidateTaskTypes(taskTypeIds));
+        _customFields.Add(field);
+        return field;
+    }
+
+    /// <summary>PATCH поля: null — не трогать. Тип и ключ не меняются: значения задач уже записаны в своей форме.</summary>
+    public CustomFieldDefinition UpdateCustomField(
+        Guid fieldId,
+        string? name = null,
+        IEnumerable<(Guid? Id, string Label, string? Color)>? options = null,
+        bool? isRequired = null,
+        IEnumerable<Guid>? taskTypeIds = null,
+        bool? isArchived = null)
+    {
+        var field = GetCustomField(fieldId);
+        if (name is not null)
+        {
+            var normalized = CustomFieldDefinition.ValidateName(name);
+            EnsureCustomFieldNameFree(normalized, fieldId);
+            field.Rename(normalized);
+        }
+        if (options is not null)
+            field.SetOptions(options);
+        if (isRequired is { } required)
+            field.SetRequired(required);
+        if (taskTypeIds is not null)
+            field.SetTaskTypes(ValidateTaskTypes(taskTypeIds));
+        if (isArchived is { } archived)
+            field.SetArchived(archived);
+        return field;
+    }
+
+    /// <summary>Полная перестановка полей проекта.</summary>
+    public void ReorderCustomFields(IReadOnlyList<Guid> fieldIds)
+    {
+        if (fieldIds.Count != _customFields.Count || fieldIds.Distinct().Count() != fieldIds.Count
+            || fieldIds.Any(id => _customFields.All(f => f.Id != id)))
+            throw new ArgumentException("The new order must list every custom field of the board exactly once.", nameof(fieldIds));
+
+        for (var i = 0; i < fieldIds.Count; i++)
+            GetCustomField(fieldIds[i]).SetSortOrder(i);
+    }
+
+    public CustomFieldDefinition GetCustomField(Guid fieldId) =>
+        _customFields.SingleOrDefault(f => f.Id == fieldId)
+        ?? throw new InvalidOperationException($"Custom field {fieldId} does not belong to board {Id}.");
+
+    /// <summary>
+    /// Обязательные поля типа <paramref name="typeId"/>, которых у задачи нет. Проверяется при создании и смене типа;
+    /// старые задачи без значения остаются валидными — поле могло стать обязательным после них.
+    /// </summary>
+    public IReadOnlyList<CustomFieldDefinition> MissingRequiredFields(TaskItem task, Guid typeId) =>
+        _customFields
+            .Where(f => f.IsRequired && f.AppliesTo(typeId) && task.GetCustomField(f.Id) is null)
+            .OrderBy(f => f.SortOrder)
+            .ToList();
+
+    private List<Guid> ValidateTaskTypes(IEnumerable<Guid>? taskTypeIds)
+    {
+        var ids = taskTypeIds?.Distinct().ToList() ?? [];
+        foreach (var id in ids)
+            GetTaskType(id);
+        return ids;
+    }
+
+    private void EnsureCustomFieldNameFree(string name, Guid? exceptId)
+    {
+        if (_customFields.Any(f => f.Id != exceptId && string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Поле «{name}» в проекте уже есть.");
     }
 
     public TaskType GetTaskType(Guid typeId) =>

@@ -588,3 +588,12 @@ a.mud-link:hover {
 .sr-table.mud-simple-table { background: transparent; }
 .sr-table.mud-simple-table table * tr > th { color: var(--text-tertiary); font: var(--fw-semibold) 12px var(--font-display); border-bottom: 1px solid var(--border); }
 .sr-table.mud-simple-table table * tr > td { color: #fff; border-bottom: 1px solid var(--border-subtle); font: var(--fw-medium) 13px var(--font-text); }
+
+/* Пользовательские поля: значения в сетке карточки — компактные поля Mud без подчёркивания Material, как селекты рядом;
+   стрелка «выше» в модалке — тот же шеврон, повёрнутый вверх. */
+.cf-input.mud-input-control { margin: 0; flex: 1; min-width: 0; }
+.cf-input .mud-input { color: #fff; font: var(--fw-medium) 13px var(--font-text); }
+.cf-input .mud-input-slot::placeholder { color: var(--text-tertiary); opacity: 1; }
+.cf-select.mud-input-control { margin: 0; }
+.cf-up svg { transform: rotate(180deg); }
+.cf-required.mud-input-control { margin: 0; }

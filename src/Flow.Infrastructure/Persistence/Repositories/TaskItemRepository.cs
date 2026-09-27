@@ -243,7 +243,7 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
             var matchedByCode = db.Database.SqlQuery<Guid>(
                 $"""SELECT "Id" AS "Value" FROM "TaskItems" WHERE "Code" ILIKE {pattern}""");
 
-            query = query.Where(t => EF.Functions.ILike(t.Title, pattern) || matchedByCode.Contains(t.Id));
+            query = query.Where(t => EF.Functions.ILike(t.Title, pattern, "\\") || matchedByCode.Contains(t.Id));
         }
 
         return query;

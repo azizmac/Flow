@@ -181,6 +181,8 @@ else if (_task is not null && _board is not null)
                     <div class="meta-k">ID</div>
                     <div class="meta-v mono" title="Скопировать ID" role="button" tabindex="0"
                          @onclick="CopyId" @onkeydown="OnCopyIdKey">@_task.Id</div>
+                    <CustomFieldsEditor Board="_board" TypeId="_task.TypeId" Values="_task.CustomFields" CanEdit="CanEdit" Disabled="_busy"
+                                        OnChange="c => SetCustomField(c.FieldId, c.Value)" />
                 </div>
             </div>
             @if (_task.AssigneeId is { } aid && Users.Find(aid) is { } who)
@@ -407,6 +409,10 @@ else if (_task is not null && _board is not null)
 
     private Task SetSprint(Guid? sprintId) =>
         Apply(id => Api.SetTaskSprint(id, new SetTaskSprintRequest(sprintId)), "Не удалось перенести задачу в спринт");
+
+    private Task SetCustomField(Guid fieldId, System.Text.Json.JsonElement? value) =>
+        Apply(id => Api.SetTaskCustomFields(id, new SetCustomFieldsRequest(new Dictionary<Guid, System.Text.Json.JsonElement?> { [fieldId] = value })),
+            "Не удалось сохранить поле");
 
     private Task SetMilestone(Guid? milestoneId) =>
         Apply(id => Api.SetTaskMilestone(id, new SetTaskMilestoneRequest(milestoneId)), "Не удалось сменить веху");

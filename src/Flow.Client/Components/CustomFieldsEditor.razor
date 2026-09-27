@@ -1,0 +1,132 @@
+@* Значения пользовательских полей задачи (docs/TZ_task_model.md §4) — пары «meta-k / meta-v» внутри сетки карточки,
+   слайдера и формы создания. Поля — по типу задачи (CustomFieldMeta.ForTask); правка каждого поля уходит наверх
+   одной парой (Id, значение), null — очистить. Текст и число коммитятся по Enter и уходу из поля (Immediate=false),
+   списки и флажок — сразу. Вариант, удалённый из списка, показывается «(удалённое значение)» до следующей правки. *@
+@using System.Text.Json
+@inject UserDirectory Users
+
+@foreach (var field in CustomFieldMeta.ForTask(Board, TypeId, Values))
+{
+    var f = field;
+    var value = Values is not null && Values.TryGetValue(f.Id, out var v) ? v : (JsonElement?)null;
+    var editable = CanEdit && !f.IsArchived;
+    <div class="meta-k" title="@($"cf.{f.Key}")">@f.Name@(f.IsRequired ? " *" : "")</div>
+    <div class="meta-v cf-value">
+        @if (!editable)
+        {
+            <span class="@(value is null ? "muted" : "")">@(value is { } shown ? CustomFieldMeta.Display(f, shown, id => Users.Find(id)?.FullName) : "—")</span>
+        }
+        else
+        {
+            switch (f.Type)
+            {
+                case CustomFieldType.Text or CustomFieldType.Url:
+                    <MudTextField T="string" Value="@(value?.GetString())" ValueChanged="s => Text(f, s)" Immediate="false" Disabled="Disabled"
+                                  Placeholder="—" MaxLength="@(f.Type == CustomFieldType.Url ? 2000 : 500)" Underline="false"
+                                  Variant="Variant.Text" Margin="Margin.None" Class="cf-input" aria-label="@f.Name" />
+                    @if (f.Type == CustomFieldType.Url && value?.GetString() is { } url)
+                    {
+                        <a class="icon-lnk" href="@url" target="_blank" rel="noopener noreferrer" title="Открыть"><Icon Name="external" Size="14" /></a>
+                    }
+                    break;
+                case CustomFieldType.LongText:
+                    <MudTextField T="string" Value="@(value?.GetString())" ValueChanged="s => Text(f, s)" Immediate="false" Disabled="Disabled"
+                                  Placeholder="—" MaxLength="10000" Lines="2" AutoGrow="true" MaxLines="10" Underline="false"
+                                  Variant="Variant.Text" Margin="Margin.None" Class="cf-input" aria-label="@f.Name" />
+                    break;
+                case CustomFieldType.Number:
+                    <MudNumericField T="decimal?" Value="@NumberOf(value)"
+                                     ValueChanged="d => Change(f, d is { } x ? CustomFieldMeta.Json(x) : null)" Immediate="false"
+                                     Disabled="Disabled" HideSpinButtons="true" Placeholder="—" Underline="false" Variant="Variant.Text"
+                                     Margin="Margin.None" Class="cf-input" aria-label="@f.Name" />
+                    break;
+                case CustomFieldType.Date:
+                    <MudDatePicker Date="@DateOf(value)"
+                                   DateChanged="d => ChangeDate(f, d)"
+                                   Culture="Ru.PickerCulture" DateFormat="dd.MM.yyyy" Clearable="true" Disabled="Disabled" PickerVariant="PickerVariant.Inline"
+                                   Placeholder="—" Underline="false" Variant="Variant.Text" Margin="Margin.None" Class="cf-input" PopoverClass="flow-pop" />
+                    break;
+                case CustomFieldType.Select:
+                    var selected = Guid.TryParse(value?.GetString(), out var sel) ? sel : Guid.Empty;
+                    <MudSelect T="Guid" Value="selected" ValueChanged="id => Change(f, id == Guid.Empty ? null : CustomFieldMeta.Json(id.ToString()))"
+                               Disabled="Disabled" Dense="true" Underline="false" Variant="Variant.Text" Margin="Margin.None"
+                               PopoverClass="flow-pop" Class="sprint-select" aria-label="@f.Name">
+                        <MudSelectItem T="Guid" Value="Guid.Empty">—</MudSelectItem>
+                        @if (selected != Guid.Empty && f.Options.All(o => o.Id != selected))
+                        {
+                            <MudSelectItem T="Guid" Value="selected" Disabled="true">(удалённое значение)</MudSelectItem>
+                        }
+                        @foreach (var option in f.Options)
+                        {
+                            <MudSelectItem T="Guid" Value="option.Id">@option.Label</MudSelectItem>
+                        }
+                    </MudSelect>
+                    break;
+                case CustomFieldType.MultiSelect:
+                    var chosen = value is { ValueKind: JsonValueKind.Array } arr
+                        ? arr.EnumerateArray().Select(e => Guid.TryParse(e.GetString(), out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).ToHashSet()
+                        : new HashSet<Guid>();
+                    <MudSelect T="Guid" MultiSelection="true" SelectedValues="chosen" Disabled="Disabled"
+                               SelectedValuesChanged="ids => Change(f, ids.Any() ? CustomFieldMeta.Json(ids.Select(i => i.ToString()).ToArray()) : null)"
+                               MultiSelectionTextFunc="@(list => MultiLabel(f, list))"
+                               Dense="true" Underline="false" Variant="Variant.Text" Margin="Margin.None" PopoverClass="flow-pop" Class="sprint-select" aria-label="@f.Name">
+                        @foreach (var option in f.Options)
+                        {
+                            <MudSelectItem T="Guid" Value="option.Id">@option.Label</MudSelectItem>
+                        }
+                    </MudSelect>
+                    break;
+                case CustomFieldType.User:
+                    var person = Guid.TryParse(value?.GetString(), out var pid) ? pid : Guid.Empty;
+                    <MudSelect T="Guid" Value="person" ValueChanged="id => Change(f, id == Guid.Empty ? null : CustomFieldMeta.Json(id.ToString()))"
+                               Disabled="Disabled" Dense="true" Underline="false" Variant="Variant.Text" Margin="Margin.None"
+                               PopoverClass="flow-pop" Class="sprint-select" aria-label="@f.Name">
+                        <MudSelectItem T="Guid" Value="Guid.Empty">—</MudSelectItem>
+                        @if (person != Guid.Empty && Users.Active.All(u => u.Id != person))
+                        {
+                            <MudSelectItem T="Guid" Value="person" Disabled="true">@(Users.Find(person)?.FullName ?? "(удалённый человек)")</MudSelectItem>
+                        }
+                        @foreach (var user in Users.Active.OrderBy(u => u.FullName))
+                        {
+                            <MudSelectItem T="Guid" Value="user.Id">@user.FullName</MudSelectItem>
+                        }
+                    </MudSelect>
+                    break;
+                case CustomFieldType.Checkbox:
+                    <MudCheckBox T="bool" Value="@(value?.ValueKind == JsonValueKind.True)" ValueChanged="b => Change(f, CustomFieldMeta.Json(b))"
+                                 Disabled="Disabled" Class="check-mud" aria-label="@f.Name" />
+                    break;
+            }
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse? Board { get; set; }
+    [Parameter, EditorRequired] public Guid TypeId { get; set; }
+    [Parameter] public IReadOnlyDictionary<Guid, JsonElement>? Values { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    /// <summary>Правка одного поля: значение в форме хранения или null — очистить.</summary>
+    [Parameter] public EventCallback<(Guid FieldId, JsonElement? Value)> OnChange { get; set; }
+
+    private Task Text(CustomFieldResponse field, string? text) =>
+        Change(field, string.IsNullOrWhiteSpace(text) ? null : CustomFieldMeta.Json(text.Trim()));
+
+    private Task Change(CustomFieldResponse field, JsonElement? value) => OnChange.InvokeAsync((field.Id, value));
+
+    private Task ChangeDate(CustomFieldResponse field, DateTime? date) =>
+        Change(field, date is { } d ? CustomFieldMeta.Json(DateOnly.FromDateTime(d).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)) : null);
+
+    private static decimal? NumberOf(JsonElement? value) => value is { ValueKind: JsonValueKind.Number } n ? n.GetDecimal() : null;
+
+    private static DateTime? DateOf(JsonElement? value) =>
+        value is { ValueKind: JsonValueKind.String } s && DateOnly.TryParse(s.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var d)
+            ? d.ToDateTime(TimeOnly.MinValue)
+            : null;
+
+    private static string MultiLabel(CustomFieldResponse field, IReadOnlyList<string> ids) =>
+        ids.Count == 0
+            ? "—"
+            : string.Join(", ", ids.Select(id => Guid.TryParse(id, out var g) ? field.Options.FirstOrDefault(o => o.Id == g)?.Label ?? "(удалённое значение)" : id));
+}

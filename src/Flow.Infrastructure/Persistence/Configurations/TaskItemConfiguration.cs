@@ -93,6 +93,14 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
             .OnDelete(DeleteBehavior.SetNull);
         builder.HasIndex(t => t.MilestoneId);
 
+        // Значения пользовательских полей — jsonb «Id поля → значение» (docs/TZ_task_model.md §4); GIN jsonb_path_ops
+        // создаётся в миграции. FQL читает поля SQL-функциями flow_cf_* (CustomFieldSql) — они же в миграции.
+        builder.Property(t => t.CustomFieldsJson)
+            .HasColumnName("CustomFields")
+            .HasColumnType("jsonb")
+            .IsRequired()
+            .HasDefaultValueSql("'{}'::jsonb");
+
         // Ранг (§7): COLLATE "C" обязателен — по правилам локали Postgres сравнивал бы 'a' и 'B' не по ASCII,
         // и порядок ключей дробного индекса сломался бы. Unique — страховка от двух одинаковых ключей в гонке
         // (UnitOfWork переводит 23505 по нему в RankConflictException, хендлер пересчитывает ключ).

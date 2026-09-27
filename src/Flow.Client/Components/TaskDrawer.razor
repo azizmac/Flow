@@ -44,6 +44,8 @@
                     <div class="meta-v"><KeyChip Value="@Board.Key" /><span class="val" title="@Board.Name">@Board.Name</span></div>
                 }
             </div>
+            <CustomFieldsEditor Board="Board" TypeId="_typeId" Values="_newCustomFields" CanEdit="true" Disabled="_busy"
+                                OnChange="c => SetNewCustomField(c.FieldId, c.Value)" />
         </div>
         <div class="desc-wrap">
             <div class="desc-head"><div class="meta-k">Описание</div></div>
@@ -167,6 +169,8 @@ else if (Item is not null)
             <div class="meta-v"><KeyChip Value="@Board.Key" /><span class="val" title="@Board.Name">@Board.Name</span></div>
             <div class="meta-k">Создана</div>
             <div class="meta-v">@Ru.DateTimeFull(Item.CreatedAt)</div>
+            <CustomFieldsEditor Board="Board" TypeId="Current.TypeId" Values="Current.CustomFields" CanEdit="CanEdit" Disabled="_busy"
+                                OnChange="c => SetCustomField(c.FieldId, c.Value)" />
         </div>
         @* compact: в просмотре описание занимает высоту по содержимому, иначе оно растянется и отожмёт ленту вниз. *@
         <div class="desc-wrap compact">
@@ -243,6 +247,8 @@ else if (Item is not null)
     private Guid _statusId;
     private Guid _typeId;
     private TaskPriority _priority;
+    /// <summary>Значения пользовательских полей в форме создания — уходят в CreateTaskRequest.</summary>
+    private Dictionary<Guid, System.Text.Json.JsonElement> _newCustomFields = [];
     private Guid? _assigneeId;
     private bool _busy;
     private bool _whoOpen;
@@ -296,6 +302,7 @@ else if (Item is not null)
                 _boardId = Board.Id;
                 _statusId = InitialStatusId();
                 _typeId = DefaultTypeId();
+                _newCustomFields = [];
                 _focusTitle = true;
             }
             else if (_boardId != Board.Id)
@@ -305,6 +312,7 @@ else if (Item is not null)
                 _boardId = Board.Id;
                 _statusId = InitialStatusId();
                 _typeId = DefaultTypeId();
+                _newCustomFields = []; // поля — у каждого проекта свои
             }
 
             return;
@@ -394,7 +402,8 @@ else if (Item is not null)
         _busy = true;
         _error = null;
         var result = await Api.CreateTask(Board.Id, new CreateTaskRequest(title, NullIfEmpty(_description), _statusId,
-            _typeId == Guid.Empty ? null : _typeId, _priority));
+            _typeId == Guid.Empty ? null : _typeId, _priority,
+            CustomFields: _newCustomFields.Count == 0 ? null : _newCustomFields.ToDictionary(p => p.Key, p => (System.Text.Json.JsonElement?)p.Value)));
         _busy = false;
 
         if (!result.Ok)
@@ -455,6 +464,18 @@ else if (Item is not null)
 
     private Task SetSprint(Guid? sprintId) =>
         Apply(id => Api.SetTaskSprint(id, new SetTaskSprintRequest(sprintId)), "Не удалось перенести задачу в спринт");
+
+    private void SetNewCustomField(Guid fieldId, System.Text.Json.JsonElement? value)
+    {
+        if (value is { } v)
+            _newCustomFields[fieldId] = v;
+        else
+            _newCustomFields.Remove(fieldId);
+    }
+
+    private Task SetCustomField(Guid fieldId, System.Text.Json.JsonElement? value) =>
+        Apply(id => Api.SetTaskCustomFields(id, new SetCustomFieldsRequest(new Dictionary<Guid, System.Text.Json.JsonElement?> { [fieldId] = value })),
+            "Не удалось сохранить поле");
 
     private Task SetMilestone(Guid? milestoneId) =>
         Apply(id => Api.SetTaskMilestone(id, new SetTaskMilestoneRequest(milestoneId)), "Не удалось сменить веху");

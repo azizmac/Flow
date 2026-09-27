@@ -2548,3 +2548,14 @@ a.task-row { color: inherit; text-decoration: none; }
 .ms-tasks-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 6px; }
 @media (hover: hover) and (pointer: fine) { .ms-card:hover { border-color: var(--border-strong); } }
 @media (prefers-reduced-motion: reduce) { .ms-card, .ms-card:active { transform: none; transition: none; } }
+
+/* ---- Пользовательские поля (docs/TZ_task_model.md §4, этап 1D) ---- */
+.cf-row.on { background: rgba(255, 186, 0, 0.08); }
+.cf-key { font: var(--fw-semibold) 11.5px var(--font-mono); color: var(--text-tertiary); }
+.cf-form { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.cf-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: end; }
+.cf-key-fixed { display: flex; flex-direction: column; gap: 6px; padding-bottom: 6px; }
+.cf-options { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.cf-option { display: flex; align-items: center; gap: 6px; width: 100%; max-width: 360px; }
+.cf-option .tt-name-input { flex: 1; }
+.cf-value { min-width: 0; }

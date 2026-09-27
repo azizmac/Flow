@@ -20,4 +20,5 @@ public sealed record BoardResponse(
     ProjectRole? DefaultRole,
     BoardVisibility Visibility,
     WorkflowMode WorkflowMode = WorkflowMode.Free,
-    int DoneColumnDays = 14);
+    int DoneColumnDays = 14,
+    IReadOnlyList<Flow.Shared.Contracts.CustomFields.CustomFieldResponse>? CustomFields = null);

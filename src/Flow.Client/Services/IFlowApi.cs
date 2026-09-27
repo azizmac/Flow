@@ -101,6 +101,12 @@ public interface IFlowApi
 
     Task<ApiResult<TaskResponse>> SetTaskSprint(Guid taskId, SetTaskSprintRequest request, CancellationToken ct = default);
 
+    // Пользовательские поля (docs/TZ_task_model.md §4): определения отвечают проектом целиком.
+    Task<ApiResult<BoardResponse>> CreateCustomField(Guid boardId, Flow.Shared.Contracts.CustomFields.CreateCustomFieldRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> UpdateCustomField(Guid boardId, Guid fieldId, Flow.Shared.Contracts.CustomFields.UpdateCustomFieldRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> ReorderCustomFields(Guid boardId, Flow.Shared.Contracts.CustomFields.ReorderCustomFieldsRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> SetTaskCustomFields(Guid taskId, Flow.Shared.Contracts.CustomFields.SetCustomFieldsRequest request, CancellationToken ct = default);
+
     // Вехи (docs/TZ_task_views.md §6).
     Task<ApiResult<IReadOnlyList<MilestoneResponse>>> GetMilestones(Guid boardId, CancellationToken ct = default);
     Task<ApiResult<MilestoneResponse>> GetMilestone(Guid milestoneId, CancellationToken ct = default);

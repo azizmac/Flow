@@ -94,7 +94,7 @@ internal sealed partial class InProcessFlowApi
             var actor = await ActorAsync();
             var response = await mediator.Send(
                 new TaskCreateCommand(actor, boardId, request.Title, request.Description, request.StatusId,
-                    request.TypeId, request.Priority?.ToDomainPriority(), request.ParentId),
+                    request.TypeId, request.Priority?.ToDomainPriority(), request.ParentId, request.CustomFields),
                 ct);
 
             // null — доски нет; ArgumentException/InvalidOperationException (пустой заголовок, чужой статус)

@@ -18,5 +18,6 @@ public sealed record TaskCreateCommand(
     Guid? StatusId,
     Guid? TypeId = null,
     TaskPriority? Priority = null,
-    Guid? ParentId = null)
+    Guid? ParentId = null,
+    IReadOnlyDictionary<Guid, System.Text.Json.JsonElement?>? CustomFields = null)
     : IRequest<TaskResponse?>;

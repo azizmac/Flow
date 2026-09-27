@@ -54,6 +54,8 @@ public sealed partial class FqlBinder(IFqlLookup lookup, Guid actorId, DateOnly 
     private async Task<TaskFilterNode> ClauseAsync(FqlClause c, CancellationToken ct)
     {
         var name = c.Field.Text;
+        if (name.StartsWith("cf.", StringComparison.OrdinalIgnoreCase))
+            return await CustomFieldAsync(c, name[3..], ct);
         if (FqlFields.Future.TryGetValue(name, out var later))
             throw Error($"Поля «{name}» пока нет: {later}", c.Field);
 
@@ -284,6 +286,121 @@ public sealed partial class FqlBinder(IFqlLookup lookup, Guid actorId, DateOnly 
         TaskFilterNode node = nodes.Count == 1 ? nodes[0] : new TaskFilterOr(nodes);
         return IsNegative(c) ? new TaskFilterNot(node) : node;
     }
+
+    // ---- пользовательские поля cf.<key> (docs/TZ_task_model.md §4) ----
+
+    /// <summary>
+    /// Поле ищется по Key во всех видимых проектах (у каждого проекта своё поле с тем же ключом). Операторы — по типу:
+    /// текст — = и ~, число и дата — сравнения, списки и люди — = / IN по подписи варианта и @username, флажок —
+    /// true/false (незаполненный флажок — это false). Везде IS [NOT] EMPTY.
+    /// </summary>
+    private async Task<TaskFilterNode> CustomFieldAsync(FqlClause c, string key, CancellationToken ct)
+    {
+        var fields = _boards.SelectMany(b => b.CustomFields).Where(f => string.Equals(f.Key, key, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (fields.Count == 0)
+            throw Error($"Поля «cf.{key}» нет ни в одном проекте", c.Field);
+        if (fields.Select(f => f.Type).Distinct().Count() > 1)
+            throw Error($"У поля «cf.{key}» в проектах разные типы — уточните условие проектом", c.Field);
+
+        var ids = fields.Select(f => f.Id).ToList();
+        var type = fields[0].Type;
+        TaskFilterNode Node(TaskFilterCustomOp op, object? value) => new TaskFilterCustomField(ids, type, op, value);
+
+        if (c.Operator is FqlOperator.IsEmpty or FqlOperator.IsNotEmpty)
+        {
+            var empty = Node(TaskFilterCustomOp.IsEmpty, null);
+            return c.Operator == FqlOperator.IsNotEmpty ? new TaskFilterNot(empty) : empty;
+        }
+
+        switch (type)
+        {
+            case CustomFieldType.Text or CustomFieldType.LongText or CustomFieldType.Url:
+                if (c.Operator == FqlOperator.Contains)
+                    return Node(TaskFilterCustomOp.Contains, c.Values[0].Text);
+                return AnyOf(c, v => Node(TaskFilterCustomOp.Eq, v.Text));
+
+            case CustomFieldType.Number:
+                return Compared(c, v => decimal.TryParse(v.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out var n)
+                    ? n
+                    : throw Error($"«{v.Text}» — не число", v), Node);
+
+            case CustomFieldType.Date:
+                return Compared(c, v => Date(v), Node);
+
+            case CustomFieldType.Checkbox:
+                return AnyOf(c, v => v.Text.ToLowerInvariant() switch
+                {
+                    "true" or "да" => Node(TaskFilterCustomOp.Eq, "true"),
+                    "false" or "нет" => new TaskFilterOr([Node(TaskFilterCustomOp.Eq, "false"), Node(TaskFilterCustomOp.IsEmpty, null)]),
+                    _ => throw Error($"У флажка значение true или false, а не «{v.Text}»", v)
+                });
+
+            case CustomFieldType.Select or CustomFieldType.MultiSelect:
+            {
+                EnsureOps(c, FqlOperator.Eq, FqlOperator.NotEq, FqlOperator.In, FqlOperator.NotIn);
+                var options = new List<string>();
+                var orEmpty = false;
+                foreach (var v in c.Values)
+                {
+                    if (!v.Quoted && v.Text.Equals("EMPTY", StringComparison.OrdinalIgnoreCase))
+                    {
+                        orEmpty = true;
+                        continue;
+                    }
+
+                    var found = fields.SelectMany(f => f.Options).Where(o => string.Equals(o.Label, v.Text, StringComparison.OrdinalIgnoreCase)).ToList();
+                    options.AddRange(found.Count > 0 ? found.Select(o => o.Id.ToString()) : throw Error($"У поля «cf.{key}» нет варианта «{v.Text}»", v));
+                }
+                return Negated(c, WithEmpty(Node(TaskFilterCustomOp.Any, options), orEmpty ? Node(TaskFilterCustomOp.IsEmpty, null) : null));
+            }
+
+            case CustomFieldType.User:
+            {
+                // Люди — тем же разбором, что assignee: me(), @username, EMPTY.
+                var people = await PeopleAsync(c with { Operator = c.Operator is FqlOperator.NotEq ? FqlOperator.Eq : c.Operator is FqlOperator.NotIn ? FqlOperator.In : c.Operator },
+                    TaskFilterRef.Assignee, TaskFilterNullable.Assignee, ct);
+                var (userIds, orEmpty) = people switch
+                {
+                    TaskFilterIn @in => (@in.Ids, false),
+                    TaskFilterOr { Items: [TaskFilterIn @in, TaskFilterIsEmpty] } => (@in.Ids, true),
+                    _ => throw Error($"Не удалось разобрать значение поля «cf.{key}»", c.Field)
+                };
+                return Negated(c, WithEmpty(Node(TaskFilterCustomOp.Any, userIds.Select(id => id.ToString()).ToList()), orEmpty ? Node(TaskFilterCustomOp.IsEmpty, null) : null));
+            }
+        }
+
+        throw Error($"Поле «cf.{key}» пока не фильтруется", c.Field);
+    }
+
+    /// <summary>= / != / IN / NOT IN как «одно из» равенств.</summary>
+    private static TaskFilterNode AnyOf(FqlClause c, Func<FqlValue, TaskFilterNode> equal)
+    {
+        EnsureOps(c, FqlOperator.Eq, FqlOperator.NotEq, FqlOperator.In, FqlOperator.NotIn);
+        var nodes = c.Values.Select(equal).ToList();
+        return Negated(c, nodes.Count == 1 ? nodes[0] : new TaskFilterOr(nodes));
+    }
+
+    /// <summary>Сравнения числа и даты; IN — «одно из» равенств.</summary>
+    private static TaskFilterNode Compared(FqlClause c, Func<FqlValue, object> parse, Func<TaskFilterCustomOp, object?, TaskFilterNode> node)
+    {
+        if (c.Operator is FqlOperator.In or FqlOperator.NotIn or FqlOperator.Eq or FqlOperator.NotEq)
+            return AnyOf(c, v => node(TaskFilterCustomOp.Eq, parse(v)));
+
+        EnsureOps(c, FqlOperator.Gt, FqlOperator.Gte, FqlOperator.Lt, FqlOperator.Lte);
+        var op = c.Operator switch
+        {
+            FqlOperator.Gt => TaskFilterCustomOp.Gt,
+            FqlOperator.Gte => TaskFilterCustomOp.Gte,
+            FqlOperator.Lt => TaskFilterCustomOp.Lt,
+            _ => TaskFilterCustomOp.Lte
+        };
+        return node(op, parse(c.Values[0]));
+    }
+
+    private static TaskFilterNode WithEmpty(TaskFilterNode node, TaskFilterNode? empty) =>
+        empty is null ? node : new TaskFilterOr([node, empty]);
+
+    private static TaskFilterNode Negated(FqlClause c, TaskFilterNode node) => IsNegative(c) ? new TaskFilterNot(node) : node;
 
     private static FqlValue SingleArg(FqlValue function) =>
         function.Args is [var arg] ? arg : throw Error($"{function.Function}() принимает один код задачи", function);

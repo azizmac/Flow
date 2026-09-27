@@ -260,6 +260,43 @@
         }
     }
 
+    /// <summary>
+    /// «поле «SLA»: Gold → Silver». Определение поля — из проекта (Board.CustomFields); удалённого поля или варианта уже
+    /// нет — пишем, что есть. NewValue — {"field": Id, "value": …}, OldValue — прежнее значение JSON.
+    /// </summary>
+    private RenderFragment CustomField(TaskActivityResponse a)
+    {
+        Guid? fieldId = null;
+        System.Text.Json.JsonElement? next = null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(a.NewValue ?? "{}");
+            if (doc.RootElement.TryGetProperty("field", out var f) && Guid.TryParse(f.GetString(), out var id))
+                fieldId = id;
+            if (doc.RootElement.TryGetProperty("value", out var v) && v.ValueKind != System.Text.Json.JsonValueKind.Null)
+                next = v.Clone();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+
+        var field = Board.CustomFields?.FirstOrDefault(x => x.Id == fieldId);
+        System.Text.Json.JsonElement? old = null;
+        if (a.OldValue is { } raw)
+        {
+            try { using var doc = System.Text.Json.JsonDocument.Parse(raw); old = doc.RootElement.Clone(); }
+            catch (System.Text.Json.JsonException) { }
+        }
+
+        string Show(System.Text.Json.JsonElement? value) => value is not { } v ? "—"
+            : field is null ? v.ToString()
+            : Short(CustomFieldMeta.Display(field, v, id => Users.Find(id)?.FullName));
+
+        return @<span>поле «@(field?.Name ?? "удалённое")»: <s class="tl-old">@Show(old)</s> <span class="tl-arrow">→</span> <b>@Show(next)</b></span>;
+    }
+
+    private static string Short(string text) => text.Length > 80 ? text[..80] + "…" : text;
+
     /// <summary>Имена вех для MilestoneChanged — так же лениво, как спринты.</summary>
     private Dictionary<Guid, string>? _milestoneNames;
 
@@ -343,6 +380,17 @@
             _sprintNames = null;
             _ = LoadNamesThenRedrawAsync();
         }
+        // Пользовательские поля: запись на каждое поле, чьё значение стало другим (в той же форме, что пишет сервер).
+        var oldFields = before.CustomFields ?? new Dictionary<Guid, System.Text.Json.JsonElement>();
+        var newFields = after.CustomFields ?? new Dictionary<Guid, System.Text.Json.JsonElement>();
+        foreach (var fieldId in oldFields.Keys.Union(newFields.Keys))
+        {
+            var was = oldFields.TryGetValue(fieldId, out var o) ? o.GetRawText() : null;
+            var next = newFields.TryGetValue(fieldId, out var n) ? n.GetRawText() : null;
+            if (was != next)
+                _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.CustomFieldChanged, was,
+                    $"{{\"field\":\"{fieldId}\",\"value\":{next ?? "null"}}}", now));
+        }
         if (before.MilestoneId != after.MilestoneId)
         {
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.MilestoneChanged, before.MilestoneId?.ToString(), after.MilestoneId?.ToString(), now));
@@ -423,6 +471,7 @@
         TaskActivityType.LinkRemoved => @<span>связь «@LinkSide(a.OldValue)» убрана: @TaskRef(a.NewValue)</span>,
         TaskActivityType.SprintChanged => Sprints(a),
         TaskActivityType.MilestoneChanged => Milestones(a),
+        TaskActivityType.CustomFieldChanged => CustomField(a),
         TaskActivityType.ChecklistChanged => @<span>чек-лист: <s class="tl-old">@a.OldValue</s> <span class="tl-arrow">→</span> <b>@a.NewValue</b></span>,
         _ => Text(a.Type.ToString())
     };

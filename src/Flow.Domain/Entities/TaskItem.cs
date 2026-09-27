@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Flow.Domain.Ranking;
 
 namespace Flow.Domain.Entities;
@@ -74,6 +76,12 @@ public sealed class TaskItem
 
     /// <summary>Веха задачи (docs/TZ_task_views.md §6); независима от спринта. FK SetNull: удаление вехи её снимает.</summary>
     public Guid? MilestoneId { get; private set; }
+
+    /// <summary>
+    /// Значения пользовательских полей (docs/TZ_task_model.md §4): JSON-объект «Id поля → значение», в БД — jsonb.
+    /// Ключ — Id, а не Key поля: переименование ключа задачи не трогает. Менять — только <see cref="SetCustomField"/>.
+    /// </summary>
+    public string CustomFieldsJson { get; private set; } = "{}";
 
     /// <summary>
     /// Родитель в иерархии (docs/TZ_task_model.md §3); null — задача верхнего уровня. Родитель всегда в том же
@@ -326,6 +334,54 @@ public sealed class TaskItem
             throw new InvalidOperationException("A closed milestone cannot take new tasks.");
 
         MilestoneId = milestone?.Id;
+    }
+
+    /// <summary>Значение поля или null — не заполнено. Копия: исходный документ живёт только внутри вызова.</summary>
+    public JsonElement? GetCustomField(Guid fieldId)
+    {
+        using var document = JsonDocument.Parse(CustomFieldsJson);
+        return document.RootElement.TryGetProperty(fieldId.ToString(), out var value) ? value.Clone() : null;
+    }
+
+    /// <summary>Все значения задачи, в том числе полей, которые с тех пор архивированы.</summary>
+    public IReadOnlyDictionary<Guid, JsonElement> CustomFieldValues()
+    {
+        using var document = JsonDocument.Parse(CustomFieldsJson);
+        return document.RootElement.EnumerateObject()
+            .Where(p => Guid.TryParse(p.Name, out _))
+            .ToDictionary(p => Guid.Parse(p.Name), p => p.Value.Clone());
+    }
+
+    /// <summary>
+    /// Ставит или очищает (null) значение поля своего проекта: поле должно быть у типа задачи и не в архиве,
+    /// значение проходит <see cref="CustomFieldValidator"/>, обязательное не очищается. Возвращает прежнее и новое
+    /// значение JSON-строками (null — пусто) или null, если ничего не поменялось.
+    /// </summary>
+    public (string? Old, string? New)? SetCustomField(CustomFieldDefinition field, JsonElement? value)
+    {
+        if (field.BoardId != BoardId)
+            throw new InvalidOperationException("The custom field belongs to another project.");
+        if (!field.AppliesTo(TypeId))
+            throw new InvalidOperationException($"Поля «{field.Name}» у задач этого типа нет.");
+
+        var normalized = value is { } v ? CustomFieldValidator.Validate(field, v) : null;
+        if (normalized is null && field.IsRequired)
+            throw new InvalidOperationException($"Поле «{field.Name}» обязательное.");
+
+        var values = JsonNode.Parse(CustomFieldsJson)!.AsObject();
+        var key = field.Id.ToString();
+        var old = values.TryGetPropertyValue(key, out var existing) ? existing?.ToJsonString(CustomFieldValidator.JsonOptions) : null;
+        var next = normalized?.ToJsonString(CustomFieldValidator.JsonOptions);
+        if (old == next)
+            return null;
+
+        if (normalized is null)
+            values.Remove(key);
+        else
+            values[key] = normalized;
+
+        CustomFieldsJson = values.ToJsonString(CustomFieldValidator.JsonOptions);
+        return (old, next);
     }
 
     /// <summary>Ставит IUnitOfWork, когда при сохранении изменился StatusId.</summary>

@@ -73,6 +73,35 @@ public class FqlTests
     }
 
     [Fact]
+    public async Task Custom_Fields_Bind_By_Key_And_Type()
+    {
+        var (lookup, board) = World();
+        var other = lookup.Boards[1];
+        var sla = board.AddCustomField("sla", "SLA", CustomFieldType.Select, ["Gold", "Silver"]);
+        var slaOther = other.AddCustomField("sla", "SLA", CustomFieldType.Select, ["Gold"]);
+        board.AddCustomField("budget", "Бюджет", CustomFieldType.Number);
+        board.AddCustomField("urgent", "Срочно", CustomFieldType.Checkbox);
+        other.AddCustomField("budget_other", "Бюджет", CustomFieldType.Text);
+        board.AddCustomField("mixed", "Смешанное", CustomFieldType.Number);
+        other.AddCustomField("mixed", "Смешанное", CustomFieldType.Text);
+
+        // Один ключ в двух проектах — оба поля, варианты с одинаковой подписью — оба Id.
+        var select = Assert.IsType<TaskFilterCustomField>((await Bind("cf.sla = gold", lookup)).Filter);
+        Assert.Equal([sla.Id, slaOther.Id], select.FieldIds);
+        Assert.Equal([sla.Options[0].Id.ToString(), slaOther.Options[0].Id.ToString()], (IReadOnlyList<string>)select.Value!);
+
+        var number = Assert.IsType<TaskFilterCustomField>((await Bind("cf.budget >= 10.5", lookup)).Filter);
+        Assert.Equal((TaskFilterCustomOp.Gte, (object)10.5m), (number.Op, number.Value));
+        Assert.IsType<TaskFilterNot>((await Bind("cf.budget is not empty", lookup)).Filter);
+        Assert.IsType<TaskFilterOr>((await Bind("cf.urgent = false", lookup)).Filter); // «нет» или не заполнено
+
+        await Assert.ThrowsAsync<FqlException>(() => Bind("cf.sla = Bronze", lookup));
+        await Assert.ThrowsAsync<FqlException>(() => Bind("cf.budget = много", lookup));
+        await Assert.ThrowsAsync<FqlException>(() => Bind("cf.mixed = 1", lookup));
+        await Assert.ThrowsAsync<FqlException>(() => Bind("cf.nope = 1", lookup));
+    }
+
+    [Fact]
     public async Task Milestone_Binds_Names_Functions_And_Empty()
     {
         var (lookup, board) = World();

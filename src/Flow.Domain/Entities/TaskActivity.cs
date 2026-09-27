@@ -120,6 +120,11 @@ public sealed class TaskActivity
     public static TaskActivity MilestoneChanged(Guid taskId, Guid actorId, Guid? oldMilestoneId, Guid? newMilestoneId) =>
         new(taskId, actorId, TaskActivityType.MilestoneChanged, oldMilestoneId?.ToString(), newMilestoneId?.ToString());
 
+    /// <summary>OldValue — прежнее значение (JSON, null — пусто); NewValue — объект с Id поля и новым значением.</summary>
+    public static TaskActivity CustomFieldChanged(Guid taskId, Guid actorId, Guid fieldId, string? oldJson, string? newJson) =>
+        new(taskId, actorId, TaskActivityType.CustomFieldChanged, oldJson,
+            $"{{\"field\":\"{fieldId}\",\"value\":{newJson ?? "null"}}}");
+
     private static string LinkSide(TaskLinkType type, bool outward) =>
         outward || type == TaskLinkType.RelatesTo ? type.ToString() : $"{type}:in";
 

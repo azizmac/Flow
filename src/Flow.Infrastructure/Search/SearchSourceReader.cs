@@ -53,6 +53,20 @@ internal sealed class SearchSourceReader(
             ? task.Title
             : $"{task.Title}\n\n{task.Description}";
 
+        // Текстовые пользовательские поля (docs/TZ_task_model.md §4) — тоже содержание задачи: «Шаги воспроизведения»
+        // ищутся так же, как описание. Подпись — имя поля, чтобы в выдаче было видно, откуда совпадение.
+        var textFields = await db.CustomFields.AsNoTracking()
+            .Where(f => f.BoardId == task.BoardId && (f.Type == Domain.Entities.CustomFieldType.Text || f.Type == Domain.Entities.CustomFieldType.LongText))
+            .OrderBy(f => f.SortOrder)
+            .ToListAsync(cancellationToken);
+        if (textFields.Count > 0)
+        {
+            var values = task.CustomFieldValues();
+            foreach (var field in textFields)
+                if (values.TryGetValue(field.Id, out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String)
+                    text += $"\n\n{field.Name}: {value.GetString()}";
+        }
+
         return new SourceSnapshot(task.BoardId, isClosed, task.CreatedAt, BuildChunks(header, text));
     }
 

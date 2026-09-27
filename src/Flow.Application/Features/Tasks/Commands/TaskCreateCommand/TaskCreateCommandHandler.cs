@@ -2,6 +2,7 @@ using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
 using Flow.Domain.Ranking;
+using Flow.Application.Features.CustomFields;
 using Flow.Application.Features.Tasks;
 using Flow.Shared.Contracts.Search;
 using Flow.Shared.Contracts.Tasks;
@@ -10,7 +11,7 @@ using MediatR;
 namespace Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 
 /// <summary>Бросает ArgumentException/InvalidOperationException при невалидных данных (см. Board.CreateTask).</summary>
-internal sealed class TaskCreateCommandHandler(IBoardRepository boards, ITaskItemRepository tasks, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
+internal sealed class TaskCreateCommandHandler(IBoardRepository boards, TaskCustomFields customFields, ITaskItemRepository tasks, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskCreateCommand, TaskResponse?>
 {
     public async Task<TaskResponse?> Handle(TaskCreateCommand request, CancellationToken cancellationToken)
@@ -40,6 +41,11 @@ internal sealed class TaskCreateCommandHandler(IBoardRepository boards, ITaskIte
         // Приоритет в журнал отдельно не пишется: запись Created и так фиксирует начальное состояние задачи.
         if (request.Priority is { } priority)
             task.SetPriority(priority);
+
+        // Значения полей — начальное состояние, как приоритет: журнал их не дублирует. Обязательные — сразу.
+        if (request.CustomFields is { Count: > 0 } values)
+            await customFields.ApplyAsync(board, task, values, actor.Id, journal: false, cancellationToken);
+        TaskCustomFields.EnsureRequired(board, task, task.TypeId);
 
         // Board.Tasks не подгружен (не нужен для создания), поэтому EF не отследит новую задачу
         // через изменение коллекции сам — регистрируем её явно.

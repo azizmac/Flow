@@ -1,6 +1,6 @@
 # ТЗ: модель задачи — иерархия, типы, поля, связи, чек-листы, повторения
 
-Статус: **этапы 1A–1C сделаны** (типы, приоритет, дата начала, оценки, `UpdatedAt`; иерархия и ручной порядок; связи и чек-листы), 1D–1F — не начаты. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 1). Образец — Windshift
+Статус: **этапы 1A–1D сделаны** (типы, приоритет, дата начала, оценки, `UpdatedAt`; иерархия и ручной порядок; связи и чек-листы; пользовательские поля), 1E–1F — не начаты. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 1). Образец — Windshift
 (`internal/models/item.go`, `internal/database/schema/*`), но решения приняты под модель Flow.
 
 ## Исходное требование
@@ -175,6 +175,29 @@ CustomFieldType : Text=0, LongText=1 (Markdown), Number=2, Date=3, Select=4, Mul
   `fieldId`.
 - Поиск: значения `Text`/`LongText` дописываются в `Content` чанка задачи (`SearchSourceReader`). Правка поля
   ставит `Upsert` в очередь индексации.
+
+### Как сделано (этап 1D)
+
+- `CustomFieldDefinition` — часть агрегата `Board` (таблица `CustomFields`), варианты — jsonb-колонка `Options`
+  (`OwnsMany(...).ToJson()`), типы задач — `uuid[]`. `Board.AddCustomField/UpdateCustomField/ReorderCustomFields`,
+  удаления нет — архив. Имя уникально в проекте без учёта регистра, ключ — по регулярке и среди архивных тоже.
+- Значения — `TaskItem.CustomFieldsJson` (колонка `CustomFields jsonb`, GIN `jsonb_path_ops`), меняются только
+  `TaskItem.SetCustomField(field, value)`: поле своего проекта и типа задачи, не в архиве, `CustomFieldValidator`
+  (Domain, чистая функция) нормализует значение, пустая строка и пустой список — очистка, обязательное не очищается.
+  Запись JSON — без `\uXXXX` (журнал читают люди).
+- Команды — `Features/CustomFields`: `CustomFieldCreate/Update/Reorder` (ManageConfig, ответ — проект целиком),
+  `TaskSetCustomFields` (EnsureCanEditTask). Путь записи один — `TaskCustomFields.ApplyAsync`: «человек активен» для
+  `User`, журнал `CustomFieldChanged` (`OldValue` — прежний JSON, `NewValue` — `{"field": Id, "value": …}`), `Upsert`
+  в поиске при правке `Text`/`LongText` (их значения дописываются в чанк задачи с подписью-именем поля).
+  `TaskCreate` принимает значения (без журнала — как приоритет) и проверяет обязательные; `TaskUpdate` при смене
+  типа проверяет обязательные поля нового типа до любых правок.
+- FQL `cf.<key>` — через SQL-функции `flow_cf_text/number/date/any` (миграция `AddCustomFields`, в EF — `CustomFieldSql`
+  как DbFunction): текст `=` (без учёта регистра) и `~`, число и дата — сравнения, списки и люди — `=`/`IN` по подписи
+  варианта и `@username`/`me()`, флажок — `true/false` (не заполнен = `false`), везде `IS [NOT] EMPTY`. Один ключ в
+  нескольких проектах — условие на все поля с ним; разные типы у одного ключа — ошибка с подсказкой. Сортировки по
+  полю (`ORDER BY cf.*`) пока нет.
+- Отступления: экрана `/boards/{id}/settings` нет — поля правятся модалкой «Поля проекта» из топбара «Задач», как
+  типы задач; `RequireFields` в переходах workflow и экраны — этап 3C.
 
 ## 5. Связи между задачами
 

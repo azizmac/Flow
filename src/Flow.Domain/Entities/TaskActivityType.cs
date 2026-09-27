@@ -32,5 +32,8 @@ public enum TaskActivityType
     SprintChanged = 21,
 
     /// <summary>Веха задачи: OldValue/NewValue — Guid вехи, null — без вехи.</summary>
-    MilestoneChanged = 22
+    MilestoneChanged = 22,
+
+    /// <summary>Пользовательское поле: OldValue — прежнее значение JSON, NewValue — {"field": Id поля, "value": новое}.</summary>
+    CustomFieldChanged = 23
 }

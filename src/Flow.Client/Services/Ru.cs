@@ -44,6 +44,15 @@ public static partial class Ru
         return UsernamePattern().IsMatch(s) ? s : "";
     }
 
+    /// <summary>Ключ пользовательского поля из названия: «Уровень SLA» → «uroven_sla». Пустая строка, если не вышло.</summary>
+    public static string SuggestFieldKey(string name)
+    {
+        var s = Slug(name).Replace('-', '_').Replace('.', '_');
+        while (s.Contains("__")) s = s.Replace("__", "_");
+        if (s.Length > 30) s = s[..30].TrimEnd('_');
+        return s.Length >= 2 && s[0] is >= 'a' and <= 'z' ? s : "";
+    }
+
     private static string Slug(string value)
     {
         var sb = new System.Text.StringBuilder();

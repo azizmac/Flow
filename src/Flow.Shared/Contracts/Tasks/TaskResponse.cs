@@ -35,4 +35,5 @@ public sealed record TaskResponse(
     int ChecklistDone = 0,
     int ChecklistTotal = 0,
     Guid? SprintId = null,
-    Guid? MilestoneId = null);
+    Guid? MilestoneId = null,
+    IReadOnlyDictionary<Guid, System.Text.Json.JsonElement>? CustomFields = null);

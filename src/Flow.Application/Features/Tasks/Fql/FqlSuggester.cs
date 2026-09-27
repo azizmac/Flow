@@ -122,6 +122,8 @@ public static class FqlSuggester
         "priority" or "points" or "estimate" or "start" or "due" => ["=", "!=", ">", ">=", "<", "<=", "IN ()", "IS EMPTY", "IS NOT EMPTY"],
         "created" or "updated" => ["=", "!=", ">", ">=", "<", "<="],
         "assignee" or "parent" or "linked" or "sprint" or "milestone" => ["=", "!=", "IN ()", "NOT IN ()", "IS EMPTY", "IS NOT EMPTY"],
+        // Пользовательские поля: тип знает только биндер (он видит проекты) — предлагаем общий набор, лишнее он отклонит с объяснением.
+        { } cf when cf.StartsWith("cf.", StringComparison.Ordinal) => ["=", "!=", "~", ">", "<", "IN ()", "IS EMPTY", "IS NOT EMPTY"],
         _ => ["=", "!=", "IN ()", "NOT IN ()"]
     };
 

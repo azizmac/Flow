@@ -1,0 +1,258 @@
+@* Модалка «Поля проекта» (docs/TZ_task_model.md §4, администратор проекта — ManageConfig): список полей с типом,
+   ключом для FQL (`cf.key`), флажками «обязательное» и «в архиве», порядок стрелками; ниже — форма создания или правки.
+   Ключ и тип после создания не меняются (значения задач уже записаны в своей форме), удаления нет — только архив.
+   Каждое действие — отдельный запрос, ответ — проект целиком, он же уходит наверх через OnChanged. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject ToastService Toasts
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Поля проекта · @_board.Key</h3>
+        <div class="hint">Свои поля задач: в карточке — под основными, в фильтре — <code>cf.ключ</code>. Обязательное поле
+            требуется при создании задачи и при смене её типа; поле в архиве остаётся у старых задач, но не предлагается.</div>
+    </TitleContent>
+    <DialogContent>
+        <div class="tt-list">
+            @{ var fields = _board.CustomFields ?? []; }
+            @if (fields.Count == 0)
+            {
+                <div class="hint">Полей пока нет.</div>
+            }
+            @for (var i = 0; i < fields.Count; i++)
+            {
+                var f = fields[i];
+                var index = i;
+                <div class="tt-row cf-row @(f.IsArchived ? "archived" : "") @(_editing?.Id == f.Id ? "on" : "")" @key="f.Id">
+                    <button type="button" class="tt-name" title="Изменить" disabled="@_busy" @onclick="() => Edit(f)">@f.Name</button>
+                    <span class="tt-kind">@CustomFieldMeta.TypeLabel(f.Type)</span>
+                    <code class="cf-key">cf.@f.Key</code>
+                    <span class="tt-actions">
+                        @if (f.IsRequired)
+                        {
+                            <span class="status-pill sm">обязательное</span>
+                        }
+                        @if (f.IsArchived)
+                        {
+                            <span class="status-pill sm">в архиве</span>
+                            <button type="button" class="icon-lnk" disabled="@_busy" @onclick="() => Update(f.Id, new UpdateCustomFieldRequest(IsArchived: false))">Вернуть</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="icon-lnk" disabled="@_busy" @onclick="() => Update(f.Id, new UpdateCustomFieldRequest(IsArchived: true))">В архив</button>
+                        }
+                        <DsIconButton Icon="chevron-down" Size="24" Title="Выше" Class="cf-up" Disabled="@(_busy || index == 0)" OnClick="() => Move(index, -1)" />
+                        <DsIconButton Icon="chevron-down" Size="24" Title="Ниже" Disabled="@(_busy || index == fields.Count - 1)" OnClick="() => Move(index, 1)" />
+                    </span>
+                </div>
+            }
+        </div>
+
+        <div class="cf-form">
+            <div class="section-title">@(_editing is null ? "Новое поле" : $"Поле «{_editing.Name}»")</div>
+            <div class="cf-form-row">
+                <DsInput Id="cf-name" Label="Название" MaxLength="60" Value="@_name" ValueChanged="OnName" />
+                @if (_editing is null)
+                {
+                    <DsInput Id="cf-key" Label="Ключ для FQL" MaxLength="30" Placeholder="sla_level" Value="@_key"
+                             ValueChanged="v => { _key = v.Trim(); _keyTouched = true; }" />
+                }
+                else
+                {
+                    <div class="cf-key-fixed"><span class="hint">Ключ для FQL (не меняется)</span><code class="cf-key">cf.@_key</code></div>
+                }
+            </div>
+            <div class="cf-form-row">
+                <MudSelect T="CustomFieldType" Label="Тип" Value="_type" ValueChanged="v => _type = v" Disabled="@(_editing is not null)"
+                           Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="cf-select">
+                    @foreach (var type in CustomFieldMeta.Types)
+                    {
+                        <MudSelectItem T="CustomFieldType" Value="type">@CustomFieldMeta.TypeLabel(type)</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="Guid" Label="Типы задач" MultiSelection="true" SelectedValues="_taskTypes" SelectedValuesChanged="v => _taskTypes = v.ToHashSet()"
+                           Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="cf-select" Placeholder="Все типы"
+                           MultiSelectionTextFunc="@(list => list.Count == 0 ? "Все типы" : string.Join(", ", list.Select(TypeName)))">
+                    @foreach (var type in _board.TaskTypes.Where(t => !t.IsArchived))
+                    {
+                        <MudSelectItem T="Guid" Value="type.Id">@type.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </div>
+            @if (CustomFieldMeta.HasOptions(_type))
+            {
+                <div class="cf-options">
+                    <div class="hint">Варианты</div>
+                    @for (var i = 0; i < _optionRows.Count; i++)
+                    {
+                        var row = _optionRows[i];
+                        <div class="cf-option" @key="row">
+                            <input class="tt-name-input" value="@row.Label" maxlength="60" placeholder="Вариант" aria-label="Вариант"
+                                   @oninput="e => row.Label = e.Value?.ToString() ?? string.Empty" />
+                            <DsIconButton Icon="close-simple" Size="24" Title="Убрать вариант" OnClick="() => _optionRows.Remove(row)" />
+                        </div>
+                    }
+                    <button type="button" class="icon-lnk" @onclick="() => _optionRows.Add(new OptionRow(null, string.Empty, null))">+ вариант</button>
+                </div>
+            }
+            <MudCheckBox T="bool" Value="_required" ValueChanged="v => _required = v" Class="check-mud cf-required" Label="Обязательное" />
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_editing is not null)
+        {
+            <DsButton Variant="secondary" Size="md" OnClick="ResetForm" Disabled="_busy">Новое поле</DsButton>
+        }
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Готово</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="@(_name.Trim().Length == 0 || _busy)" Busy="_busy">@(_editing is null ? "Добавить поле" : "Сохранить")</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter] public EventCallback<BoardResponse> OnChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private sealed class OptionRow(Guid? id, string label, string? color)
+    {
+        public Guid? Id { get; } = id;
+        public string Label { get; set; } = label;
+        public string? Color { get; } = color;
+    }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private BoardResponse _board = default!;
+    private Guid _boardId;
+    private CustomFieldResponse? _editing;
+    private string _name = "";
+    private string _key = "";
+    private bool _keyTouched;
+    private CustomFieldType _type = CustomFieldType.Text;
+    private IReadOnlySet<Guid> _taskTypes = new HashSet<Guid>();
+    private List<OptionRow> _optionRows = [];
+    private bool _required;
+    private string? _error;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    /// <summary>Проект из параметра — только при открытии: дальше источник — ответы сервера (как в TaskTypesDialog).</summary>
+    protected override void OnParametersSet()
+    {
+        if (_boardId == Board.Id)
+            return;
+
+        _boardId = Board.Id;
+        _board = Board;
+        ResetForm();
+    }
+
+    private string TypeName(string id) =>
+        Guid.TryParse(id, out var typeId) ? _board.TaskTypes.FirstOrDefault(t => t.Id == typeId)?.Name ?? "?" : id;
+
+    private void OnName(string value)
+    {
+        _name = value;
+        _error = null;
+        if (_editing is null && !_keyTouched)
+            _key = Ru.SuggestFieldKey(value);
+    }
+
+    private void Edit(CustomFieldResponse field)
+    {
+        _editing = field;
+        _name = field.Name;
+        _key = field.Key;
+        _type = field.Type;
+        _taskTypes = field.TaskTypeIds.ToHashSet();
+        _optionRows = field.Options.Select(o => new OptionRow(o.Id, o.Label, o.Color)).ToList();
+        _required = field.IsRequired;
+        _error = null;
+    }
+
+    private void ResetForm()
+    {
+        _editing = null;
+        _name = "";
+        _key = "";
+        _keyTouched = false;
+        _type = CustomFieldType.Text;
+        _taskTypes = new HashSet<Guid>();
+        _optionRows = [new OptionRow(null, string.Empty, null)];
+        _required = false;
+        _error = null;
+    }
+
+    private async Task Save()
+    {
+        var options = _optionRows.Where(o => o.Label.Trim().Length > 0).ToList();
+        var result = _editing is null
+            ? await Run(() => Api.CreateCustomField(_board.Id, new CreateCustomFieldRequest(_key, _name.Trim(), _type,
+                CustomFieldMeta.HasOptions(_type) ? options.Select(o => o.Label.Trim()).ToList() : null, _required, _taskTypes.ToList())))
+            : await Run(() => Api.UpdateCustomField(_board.Id, _editing.Id, new UpdateCustomFieldRequest(_name.Trim(),
+                CustomFieldMeta.HasOptions(_type) ? options.Select(o => new CustomFieldOptionRequest(o.Id, o.Label.Trim(), o.Color)).ToList() : null,
+                _required, _taskTypes.ToList())));
+
+        if (result)
+        {
+            Toasts.Ok(_editing is null ? "Поле добавлено" : "Поле сохранено");
+            ResetForm();
+        }
+    }
+
+    private Task Update(Guid fieldId, UpdateCustomFieldRequest request) => Run(() => Api.UpdateCustomField(_board.Id, fieldId, request));
+
+    private Task Move(int index, int delta)
+    {
+        var ids = (_board.CustomFields ?? []).Select(f => f.Id).ToList();
+        (ids[index], ids[index + delta]) = (ids[index + delta], ids[index]);
+        return Run(() => Api.ReorderCustomFields(_board.Id, new ReorderCustomFieldsRequest(ids)));
+    }
+
+    private async Task<bool> Run(Func<Task<ApiResult<BoardResponse>>> call)
+    {
+        _busy = true;
+        _error = null;
+        var result = await call();
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить поле";
+            return false;
+        }
+
+        _board = result.Value!;
+        if (_editing is not null)
+            _editing = _board.CustomFields?.FirstOrDefault(f => f.Id == _editing.Id);
+        await OnChanged.InvokeAsync(_board);
+        return true;
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

@@ -38,7 +38,8 @@ public static class TaskMappingExtensions
         task.ChecklistDone,
         task.ChecklistTotal,
         task.SprintId,
-        task.MilestoneId);
+        task.MilestoneId,
+        task.CustomFieldValues());
 
     public static TaskChecklistItemResponse ToResponse(this TaskChecklistItem item) =>
         new(item.Id, item.Text, item.IsDone, item.DoneAt, item.DoneById);

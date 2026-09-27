@@ -1,3 +1,4 @@
+using Flow.Domain.Entities;
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Shared.Contracts.Filters;
@@ -26,9 +27,14 @@ internal sealed class FqlSuggestQueryHandler(
         var cursor = FqlSuggester.Analyze(request.Query ?? "", request.Position);
         var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones);
 
+        var visible = await lookup.VisibleBoardsAsync(cancellationToken);
+        var customKeys = visible.SelectMany(b => b.CustomFields).Where(f => !f.IsArchived)
+            .GroupBy(f => f.Key).Select(g => new FqlSuggestion($"cf.{g.Key} ", $"cf.{g.Key}", g.First().Name, "field"));
+
         var items = cursor.Slot switch
         {
             FqlSlot.Field => FqlFields.All.Select(f => new FqlSuggestion(f.Name + " ", f.Name, f.Hint, "field"))
+                .Concat(customKeys)
                 .Append(new FqlSuggestion("NOT ", "NOT", "отрицание условия", "keyword"))
                 .Append(new FqlSuggestion("ORDER BY ", "ORDER BY", "порядок", "keyword")),
             FqlSlot.Operator => FqlSuggester.OperatorsFor(cursor.Field).Select(op => new FqlSuggestion(op + " ", op, null, "operator")),
@@ -55,6 +61,20 @@ internal sealed class FqlSuggestQueryHandler(
         FqlSuggestion Function(string fn, string? hint = null) => new(fn, fn, hint, "value");
 
         var visible = await lookup.VisibleBoardsAsync(ct);
+        if (cursor.Field is { } cf && cf.StartsWith("cf.", StringComparison.OrdinalIgnoreCase))
+        {
+            var fields = visible.SelectMany(b => b.CustomFields).Where(f => string.Equals(f.Key, cf[3..], StringComparison.OrdinalIgnoreCase)).ToList();
+            return fields.FirstOrDefault()?.Type switch
+            {
+                CustomFieldType.Select or CustomFieldType.MultiSelect =>
+                    fields.SelectMany(f => f.Options).Select(o => o.Label).Distinct(StringComparer.OrdinalIgnoreCase).Select(l => Value(l)).Append(Function("EMPTY", "не заполнено")),
+                CustomFieldType.Checkbox => [Function("true", "отмечено"), Function("false", "не отмечено")],
+                CustomFieldType.User => [Function("me()", "я"), Function("EMPTY", "не заполнено")],
+                CustomFieldType.Date => FqlFields.DateFunctions.Select(f => Function(f)).Append(Function(DateTime.UtcNow.ToString("yyyy-MM-dd"), "дата")),
+                _ => [Function("EMPTY", "не заполнено")]
+            };
+        }
+
         switch (cursor.Field?.ToLowerInvariant())
         {
             case "project":

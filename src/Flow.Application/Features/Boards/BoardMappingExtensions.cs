@@ -9,6 +9,7 @@ using SharedProjectRole = Flow.Shared.Contracts.Boards.ProjectRole;
 using DomainPermission = Flow.Domain.Entities.ProjectPermission;
 using SharedPermission = Flow.Shared.Contracts.Boards.ProjectPermission;
 using Flow.Application.Security;
+using Flow.Shared.Contracts.CustomFields;
 
 namespace Flow.Application.Features.Boards;
 
@@ -36,7 +37,22 @@ public static class BoardMappingExtensions
         board.DefaultRole?.ToResponseRole(),
         board.Visibility.ToResponseVisibility(),
         (Flow.Shared.Contracts.Boards.WorkflowMode)(int)board.WorkflowMode,
-        board.DoneColumnDays);
+        board.DoneColumnDays,
+        board.CustomFields
+            .OrderBy(f => f.SortOrder)
+            .Select(f => f.ToResponse())
+            .ToList());
+
+    public static CustomFieldResponse ToResponse(this CustomFieldDefinition field) => new(
+        field.Id,
+        field.Key,
+        field.Name,
+        (Flow.Shared.Contracts.CustomFields.CustomFieldType)(int)field.Type,
+        field.Options.Select(o => new CustomFieldOptionResponse(o.Id, o.Label, o.Color)).ToList(),
+        field.IsRequired,
+        field.TaskTypeIds.ToList(),
+        field.SortOrder,
+        field.IsArchived);
 
     public static WorkflowResponse ToWorkflowResponse(this Board board) => new(
         board.Id,

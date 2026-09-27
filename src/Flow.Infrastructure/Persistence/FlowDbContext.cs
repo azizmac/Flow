@@ -34,6 +34,8 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
 
     public DbSet<Milestone> Milestones => Set<Milestone>();
 
+    public DbSet<CustomFieldDefinition> CustomFields => Set<CustomFieldDefinition>();
+
     /// <summary>
     /// Поисковый индекс — проекция, а не домен: наружу из сборки не торчит, Application работает
     /// с ним через ISearchIndexQueue и ISearchIndexRepository.
@@ -45,5 +47,6 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlowDbContext).Assembly);
+        CustomFieldSql.Register(modelBuilder);
     }
 }
