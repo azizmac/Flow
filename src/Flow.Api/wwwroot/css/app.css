@@ -2710,3 +2710,17 @@ a.task-row { color: inherit; text-decoration: none; }
 .rs-map td { vertical-align: middle; }
 .rs-map .rs-inline { min-width: 160px; }
 .tl-code { margin-right: 6px; font: var(--fw-semibold) 12px var(--font-mono); color: var(--accent); text-decoration: none; }
+
+/* ---- Повторяющиеся задачи (docs/TZ_task_model.md §9, этап 1F) ---- */
+.recurrence { display: flex; flex-direction: column; gap: 4px; }
+.recurrence .subtasks-head .icon-lnk { margin-left: auto; }
+.rec-line { display: flex; align-items: center; gap: 8px; color: var(--text-primary); font: var(--fw-medium) 13px var(--font-text); }
+.rec-line svg { color: var(--sage); flex: none; }
+.rec-line.paused { color: var(--text-tertiary); }
+.rec-line.paused svg { color: var(--text-tertiary); }
+.rec-state { padding: 1px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); font: var(--fw-bold) 11px var(--font-display); }
+.rec-error { color: var(--danger); font: var(--fw-medium) 12px var(--font-text); }
+.rec-days { margin: 6px 0 4px; }
+.rec-checks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
+.rec-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.rec-date { padding: 2px 8px; border-radius: 999px; background: rgba(109, 151, 115, 0.18); color: var(--sage); font: var(--fw-semibold) 12px var(--font-display); }

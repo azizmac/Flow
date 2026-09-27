@@ -1,6 +1,6 @@
 # ТЗ: модель задачи — иерархия, типы, поля, связи, чек-листы, повторения
 
-Статус: **этапы 1A–1E сделаны** (типы, приоритет, дата начала, оценки, `UpdatedAt`; иерархия и ручной порядок; связи и чек-листы; пользовательские поля; слияние, разделение, перенос), 1F — не начат. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 1). Образец — Windshift
+Статус: **все этапы 1A–1F сделаны** (типы, приоритет, дата начала, оценки, `UpdatedAt`; иерархия и ручной порядок; связи и чек-листы; пользовательские поля; слияние, разделение, перенос; повторяющиеся задачи). Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 1). Образец — Windshift
 (`internal/models/item.go`, `internal/database/schema/*`), но решения приняты под модель Flow.
 
 ## Исходное требование
@@ -404,6 +404,28 @@ TaskRecurrenceOccurrence: RecurrenceId, OccursOn (PK пара), TaskId
 - Журнал копии: `Created` + `NewValue = "по расписанию"`. Индексация — как у обычного создания.
 - API: `GET/PUT/DELETE /tasks/{id}/recurrence`, `GET /tasks/{id}/recurrence/preview?count=5` — ближайшие даты.
 - Права: как на редактирование образца.
+
+### Как сделано (этап 1F)
+
+- Домен: `RecurrenceRule` (value object, complex type колонками `Rule*`; дни недели — битовая маска, `MonthDay = -1` —
+  последний день; день больше длины месяца и 29 февраля сдвигаются на последний день месяца), `TaskRecurrence`
+  (`DueDates(today)` — окно генерации с догонкой не старше `CatchUpDays` = 7, `NextDates` — превью, `Pause`/`Resume`,
+  `MarkGenerated`), `TaskRecurrenceOccurrence` (PK `(RecurrenceId, OccursOn)`, `TaskId` → SetNull: удалённая копия
+  не возвращается). Миграция `AddTaskRecurrences`.
+- Application: `Features/Tasks/Recurrence` — `TaskRecurrenceGet/Set/Delete`, `TaskRecurrencePreviewQuery` (черновик или
+  сохранённое правило), `RecurrenceGenerateCommand` (копии одного правила; образца нет или автор деактивирован —
+  пауза с причиной), `RecurrenceRecordErrorCommand`. «Сегодня» — `RecurrenceOptions.Today` по `Recurrence:TimeZone`.
+  Включение правила берёт автора на себя — пауза из-за ушедшего автора снимается вместе с ним.
+- Генератор — `Flow.Infrastructure/Recurrence/RecurrenceWorker` (раз в `Recurrence:IntervalMinutes`, `Recurrence:Enabled`),
+  каждое правило в своём scope: сорвавшееся не пачкает трекер следующему, ошибка пишется в `LastError`.
+- API: GET/PUT/DELETE `/tasks/{id}/recurrence`, GET `/tasks/{id}/recurrence/preview?count=` (сохранённое) и POST того же
+  адреса с правилом в теле (черновик из диалога — правило в клиенте не дублируется).
+- Отступления: копия встаёт под родителя образца, только если её тип ниже (тип образца мог поменяться); архивный тип
+  образца — копия получает тип по умолчанию; экраны создания копию не проверяют — поля берутся у образца.
+- Клиент: `Components/TaskRecurrenceBlock` (строка правила, следующая дата, пауза и причина) в карточке и слайдере,
+  `RecurrenceDialog` (частота и интервал, дни недели сегментами, день месяца, начало/конец `MudDatePicker`, «создавать
+  за» и «срок через», что копировать, включено, ближайшие даты по превью сервера), `Services/RecurrenceText`, журнал
+  «задача создана по расписанию».
 
 ## Клиент
 

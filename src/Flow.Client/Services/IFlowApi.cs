@@ -140,6 +140,12 @@ public interface IFlowApi
     Task<ApiResult<TaskMovePreviewResponse>> PreviewTaskMove(Guid taskId, MoveTaskRequest request, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> MoveTask(Guid taskId, MoveTaskRequest request, CancellationToken ct = default);
 
+    // Повторение задачи (docs/TZ_task_model.md §9): правило на образце и превью ближайших дат черновика.
+    Task<ApiResult<TaskRecurrenceResponse>> GetRecurrence(Guid taskId, CancellationToken ct = default);
+    Task<ApiResult<TaskRecurrenceResponse>> SetRecurrence(Guid taskId, TaskRecurrenceRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteRecurrence(Guid taskId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<DateOnly>>> PreviewRecurrence(Guid taskId, TaskRecurrenceRequest request, int count = 5, CancellationToken ct = default);
+
     // Дашборды (docs/TZ_task_views.md §8): данные каждого виджета — отдельным вызовом; ошибка виджета — в WidgetDataResponse.Error.
     Task<ApiResult<IReadOnlyList<DashboardResponse>>> GetDashboards(CancellationToken ct = default);
     Task<ApiResult<DashboardResponse>> GetDefaultDashboard(CancellationToken ct = default);

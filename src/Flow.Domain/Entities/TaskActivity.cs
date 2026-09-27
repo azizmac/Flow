@@ -128,6 +128,10 @@ public sealed class TaskActivity
     private static string LinkSide(TaskLinkType type, bool outward) =>
         outward || type == TaskLinkType.RelatesTo ? type.ToString() : $"{type}:in";
 
+    /// <summary>Копия, созданная по расписанию (§9): Created с пометкой в NewValue.</summary>
+    public static TaskActivity CreatedByRecurrence(Guid taskId, Guid actorId) =>
+        new(taskId, actorId, TaskActivityType.Created, null, "по расписанию");
+
     public static TaskActivity Merged(Guid taskId, Guid actorId, Guid sourceTaskId, Guid targetTaskId) =>
         new(taskId, actorId, TaskActivityType.Merged, sourceTaskId.ToString(), targetTaskId.ToString());
 

@@ -450,7 +450,7 @@
 
     private RenderFragment Render(TaskActivityResponse a) => a.Type switch
     {
-        TaskActivityType.Created => Text("задача создана"),
+        TaskActivityType.Created => Text(a.NewValue is { Length: > 0 } how ? $"задача создана {how}" : "задача создана"),
         TaskActivityType.TitleChanged => Titles(a),
         TaskActivityType.DescriptionChanged => Text("описание обновлено"),
         TaskActivityType.StatusChanged => Statuses(a),

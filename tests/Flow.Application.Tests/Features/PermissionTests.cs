@@ -1,6 +1,7 @@
 using Flow.Application.Features.Dashboards;
 using Flow.Application.Features.Filters;
 using Flow.Application.Features.Tasks.Restructure;
+using Flow.Application.Features.Tasks.Recurrence;
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
@@ -573,5 +574,20 @@ public class PermissionTests
         Task Move() => mediator.Send(new TaskMoveCommand(actor, task, target), CancellationToken.None);
 
         if (allowed) await Move(); else await Forbidden(Move);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Developer, true)]
+    public async Task Recurrence_Needs_Edit_On_The_Template(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var task = await CreateTaskAsync(mediator, Owner, await CreateBoardAsync(mediator));
+        var rule = new Flow.Shared.Contracts.Tasks.TaskRecurrenceRequest(Flow.Shared.Contracts.Tasks.RecurrenceFrequency.Daily, 1, new DateOnly(2030, 1, 1));
+
+        Task Set() => mediator.Send(new TaskRecurrenceSetCommand(actor, task, rule), CancellationToken.None);
+
+        if (allowed) await Set(); else await Forbidden(Set);
     }
 }

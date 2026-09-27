@@ -200,6 +200,7 @@ else if (Item is not null)
         {
             <TaskChecklist TaskId="Item.Id" CanEdit="CanEdit" OnCountsChanged="OnChecklistChanged" />
         }
+        <TaskRecurrenceBlock TaskId="Item.Id" CanEdit="CanEdit" />
         @if (Shows("links"))
         {
             <TaskLinks TaskId="Item.Id" CanEdit="CanEdit" OnBlockedChanged="n => OnUpdated.InvokeAsync(Current with { BlockedByCount = n })"

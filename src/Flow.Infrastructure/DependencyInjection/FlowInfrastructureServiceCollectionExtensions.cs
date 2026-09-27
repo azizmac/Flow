@@ -1,3 +1,5 @@
+using Flow.Application.Features.Tasks.Recurrence;
+using Flow.Infrastructure.Recurrence;
 using Amazon.Runtime;
 using Amazon.S3;
 using Flow.Application.Abstractions;
@@ -44,6 +46,13 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<IMilestoneRepository, MilestoneRepository>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<ITaskCodeAliasRepository, TaskCodeAliasRepository>();
+        services.AddScoped<ITaskRecurrenceRepository, TaskRecurrenceRepository>();
+
+        // Повторяющиеся задачи (docs/TZ_task_model.md §9): настройки секции Recurrence и фоновый генератор.
+        var recurrence = configuration.GetSection(RecurrenceOptions.SectionName).Get<RecurrenceOptions>() ?? new RecurrenceOptions();
+        services.AddSingleton(recurrence);
+        if (recurrence.Enabled)
+            services.AddHostedService<RecurrenceWorker>();
         services.AddScoped<IBoardMemberRepository, BoardMemberRepository>();
         services.AddScoped<ITaskItemRepository, TaskItemRepository>();
         services.AddScoped<IUserRepository, UserRepository>();

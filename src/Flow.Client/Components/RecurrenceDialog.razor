@@ -1,0 +1,249 @@
+@* Настройка повторения (docs/TZ_task_model.md §9): частота и интервал, дни недели (для недель), день месяца (для месяцев),
+   начало и конец, за сколько дней создавать копию и через сколько после даты срок, что копировать, пауза. Ближайшие
+   даты считает сервер по черновику (превью с паузой 300 мс) — правило в клиенте не дублируется. Жизненный цикл
+   MudDialog — как у MilestoneDialog. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Повторение задачи</h3>
+        <div class="hint">Копии создаются автоматически: обычные задачи со связью «клон» на эту.</div>
+    </TitleContent>
+    <DialogContent>
+        <div class="wd-row">
+            <MudSelect T="RecurrenceFrequency" Label="Как часто" Value="_frequency" ValueChanged="v => Change(() => _frequency = v)" Dense="true"
+                       Variant="Variant.Text" PopoverClass="flow-pop" Class="wd-field">
+                @foreach (var f in Enum.GetValues<RecurrenceFrequency>())
+                {
+                    <MudSelectItem T="RecurrenceFrequency" Value="f">@RecurrenceText.Frequency(f, 1)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudNumericField T="int" Label="Интервал" Value="_interval" ValueChanged="v => Change(() => _interval = v)" Min="1" Max="99"
+                             Variant="Variant.Text" Class="wd-field wd-narrow" />
+        </div>
+
+        @if (_frequency == RecurrenceFrequency.Weekly)
+        {
+            <div class="seg rec-days" role="group" aria-label="Дни недели">
+                @foreach (var day in RecurrenceText.Week)
+                {
+                    <button type="button" class="seg-btn @(_days.Contains(day) ? "on" : "")" aria-pressed="@_days.Contains(day)"
+                            @onclick="() => Change(() => Toggle(day))">@RecurrenceText.Day(day)</button>
+                }
+            </div>
+        }
+        else if (_frequency == RecurrenceFrequency.Monthly)
+        {
+            <MudSelect T="int" Label="День месяца" Value="_monthDay" ValueChanged="v => Change(() => _monthDay = v)" Dense="true"
+                       Variant="Variant.Text" PopoverClass="flow-pop" Class="wd-field wd-narrow">
+                <MudSelectItem T="int" Value="0">как в дате начала</MudSelectItem>
+                @for (var d = 1; d <= 31; d++)
+                {
+                    var day = d;
+                    <MudSelectItem T="int" Value="day">@day-го</MudSelectItem>
+                }
+                <MudSelectItem T="int" Value="-1">последний день</MudSelectItem>
+            </MudSelect>
+        }
+
+        <div class="wd-row">
+            <MudDatePicker Label="Начало" Date="_startsOn" DateChanged="d => Change(() => _startsOn = d ?? _startsOn)" Culture="Ru.PickerCulture"
+                           DateFormat="dd.MM.yyyy" PickerVariant="PickerVariant.Inline" Variant="Variant.Text" Class="wd-field" PopoverClass="flow-pop" />
+            <MudDatePicker Label="Конец" Placeholder="без конца" Date="_endsOn" DateChanged="d => Change(() => _endsOn = d)" Culture="Ru.PickerCulture" Clearable="true"
+                           DateFormat="dd.MM.yyyy" PickerVariant="PickerVariant.Inline" Variant="Variant.Text" Class="wd-field" PopoverClass="flow-pop" />
+        </div>
+        <div class="wd-row">
+            <MudNumericField T="int" Label="Создавать за, дней" Value="_leadDays" ValueChanged="v => Change(() => _leadDays = v)" Min="0" Max="60"
+                             Variant="Variant.Text" Class="wd-field" />
+            <MudNumericField T="int?" Label="Срок через, дней" Value="_dueOffset" ValueChanged="v => Change(() => _dueOffset = v)" Min="0" Max="365"
+                             Variant="Variant.Text" Class="wd-field" Placeholder="без срока" Clearable="true" />
+        </div>
+        <div class="rec-checks">
+            <MudCheckBox T="bool" @bind-Value="_copyAssignee" Size="Size.Small" Color="Color.Primary" Dense="true" Label="Назначать того же исполнителя" />
+            <MudCheckBox T="bool" @bind-Value="_copyChecklist" Size="Size.Small" Color="Color.Primary" Dense="true" Label="Копировать чек-лист" />
+            <MudCheckBox T="bool" @bind-Value="_active" Size="Size.Small" Color="Color.Primary" Dense="true" Label="Включено" />
+        </div>
+
+        <div class="rec-preview">
+            <span class="hint">Ближайшие копии:</span>
+            @if (_preview is null)
+            {
+                <span class="hint">…</span>
+            }
+            else if (_preview.Count == 0)
+            {
+                <span class="hint">нет дат — проверьте конец правила</span>
+            }
+            else
+            {
+                @foreach (var date in _preview)
+                {
+                    <span class="rec-date">@Ru.DateOnlyShort(date)</span>
+                }
+            }
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (Rule is not null)
+        {
+            <DsButton Variant="secondary" Size="md" OnClick="Remove" Disabled="_busy">Не повторять</DsButton>
+        }
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Отмена</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="_busy" Busy="_busy">Сохранить</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public Guid TaskId { get; set; }
+    [Parameter] public TaskRecurrenceResponse? Rule { get; set; }
+    /// <summary>Сохранено правило или снято (null).</summary>
+    [Parameter] public EventCallback<TaskRecurrenceResponse?> OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private string? _error;
+
+    private RecurrenceFrequency _frequency = RecurrenceFrequency.Weekly;
+    private int _interval = 1;
+    private readonly HashSet<DayOfWeek> _days = [];
+    private int _monthDay;
+    private DateTime? _startsOn = DateTime.Today;
+    private DateTime? _endsOn;
+    private int _leadDays;
+    private int? _dueOffset;
+    private bool _copyAssignee = true;
+    private bool _copyChecklist = true;
+    private bool _active = true;
+
+    private IReadOnlyList<DateOnly>? _preview;
+    private CancellationTokenSource? _previewCts;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Rule is { } r)
+        {
+            _frequency = r.Frequency;
+            _interval = r.Interval;
+            _days.UnionWith(r.WeekDays);
+            _monthDay = r.MonthDay ?? 0;
+            _startsOn = r.StartsOn.ToDateTime(TimeOnly.MinValue);
+            _endsOn = r.EndsOn?.ToDateTime(TimeOnly.MinValue);
+            _leadDays = r.LeadDays;
+            _dueOffset = r.DueOffsetDays;
+            _copyAssignee = r.CopyAssignee;
+            _copyChecklist = r.CopyChecklist;
+            _active = r.IsActive;
+        }
+        else
+        {
+            _days.Add(DateTime.Today.DayOfWeek);
+        }
+
+        await PreviewAsync(CancellationToken.None);
+    }
+
+    private void Toggle(DayOfWeek day)
+    {
+        if (!_days.Remove(day))
+            _days.Add(day);
+    }
+
+    private TaskRecurrenceRequest Request() => new(
+        _frequency, _interval, DateOnly.FromDateTime(_startsOn ?? DateTime.Today),
+        _frequency == RecurrenceFrequency.Weekly ? _days.ToList() : null,
+        _frequency == RecurrenceFrequency.Monthly && _monthDay != 0 ? _monthDay : null,
+        _endsOn is { } end ? DateOnly.FromDateTime(end) : null,
+        _leadDays, _dueOffset, _copyAssignee, _copyChecklist, _active);
+
+    /// <summary>Правка поля — черновик превью пересчитывается с паузой: интервал набирают по цифре.</summary>
+    private async Task Change(Action apply)
+    {
+        apply();
+        _error = null;
+        _previewCts?.Cancel();
+        _previewCts = new CancellationTokenSource();
+        var token = _previewCts.Token;
+        try
+        {
+            await Task.Delay(300, token);
+            await PreviewAsync(token);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task PreviewAsync(CancellationToken token)
+    {
+        var result = await Api.PreviewRecurrence(TaskId, Request(), 5, token);
+        if (token.IsCancellationRequested)
+            return;
+        _preview = result.Ok ? result.Value : [];
+        if (!result.Ok)
+            _error = result.Error;
+        StateHasChanged();
+    }
+
+    private async Task Save()
+    {
+        _busy = true;
+        var result = await Api.SetRecurrence(TaskId, Request());
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить повторение";
+            return;
+        }
+
+        await CloseDialog();
+        await OnSaved.InvokeAsync(result.Value);
+    }
+
+    private async Task Remove()
+    {
+        _busy = true;
+        var result = await Api.DeleteRecurrence(TaskId);
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось снять повторение";
+            return;
+        }
+
+        await CloseDialog();
+        await OnSaved.InvokeAsync(null);
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        _previewCts?.Cancel();
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}
