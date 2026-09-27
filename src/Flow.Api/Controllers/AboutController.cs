@@ -1,4 +1,5 @@
 using Flow.Application.Features.About.Queries.AboutQuery;
+using Flow.Shared.Contracts.About;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,6 +11,7 @@ namespace Flow.Api.Controllers;
 public class AboutController(IMediator mediator) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType<AboutResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Get(CancellationToken cancellationToken) =>
         Ok(await mediator.Send(new AboutQuery(), cancellationToken));
 }

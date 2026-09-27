@@ -55,4 +55,28 @@ public sealed class SwaggerTests(ApiFixture api)
         Assert.Equal("/connect/authorize", flow.GetProperty("authorizationUrl").GetString());
         Assert.Equal("/connect/token", flow.GetProperty("tokenUrl").GetString());
     }
+
+    /// <summary>
+    /// Действия отдают IActionResult, и без [ProducesResponseType] схем ответов в документе нет вовсе.
+    /// Проверяется одно действие со всеми видами ответа: тело успеха, { message } ошибки и глобальный 401.
+    /// </summary>
+    [Fact]
+    public async Task Document_Should_Describe_Response_Schemas()
+    {
+        using var client = api.CreateClientAs();
+
+        using var response = await client.GetAsync("/swagger/v1/swagger.json");
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var responses = document.RootElement.GetProperty("paths").GetProperty("/api/boards")
+            .GetProperty("post").GetProperty("responses");
+
+        Assert.Equal("#/components/schemas/BoardResponse", SchemaRef(responses, "201"));
+        Assert.Equal("#/components/schemas/ApiError", SchemaRef(responses, "409"));
+        Assert.Equal("#/components/schemas/ApiError", SchemaRef(responses, "401"));
+    }
+
+    private static string? SchemaRef(JsonElement responses, string status) =>
+        responses.GetProperty(status).GetProperty("content").GetProperty("application/json")
+            .GetProperty("schema").GetProperty("$ref").GetString();
 }

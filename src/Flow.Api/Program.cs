@@ -2,6 +2,7 @@
 using Flow.Api.Bootstrap;
 using Flow.Api.Client;
 using Flow.Api.Components;
+using Flow.Api.Controllers;
 using Flow.Api.OpenApi;
 using Flow.Api.Routing;
 using Flow.Application.Abstractions;
@@ -14,6 +15,7 @@ using Flow.Infrastructure.DependencyInjection;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
 
@@ -52,6 +54,9 @@ builder.Services.AddFlowApplication();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<ApiExceptionFilter>();
+    // Только метаданные для Swagger, на ответы не влияет: 401 возможен на любом маршруте /api — нет токена,
+    // нет профиля или он деактивирован (ApiExceptionFilter), поэтому объявлен один раз, а не на каждом действии.
+    options.Filters.Add(new ProducesResponseTypeAttribute(typeof(ApiError), StatusCodes.Status401Unauthorized));
     // Маршруты JSON-API уезжают под /api: иначе они сталкиваются со страницами интерфейса (см. ApiPrefixConvention).
     options.Conventions.Add(new ApiPrefixConvention("api"));
 });
