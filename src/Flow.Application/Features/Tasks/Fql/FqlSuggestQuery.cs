@@ -14,6 +14,7 @@ internal sealed class FqlSuggestQueryHandler(
     ITaskItemRepository tasks,
     ITaskLinkRepository links,
     ISprintRepository sprints,
+    IMilestoneRepository milestones,
     ActorResolver actors,
     IProjectAccess projectAccess) : IRequestHandler<FqlSuggestQuery, FqlSuggestResponse>
 {
@@ -23,7 +24,7 @@ internal sealed class FqlSuggestQueryHandler(
     {
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
         var cursor = FqlSuggester.Analyze(request.Query ?? "", request.Position);
-        var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints);
+        var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones);
 
         var items = cursor.Slot switch
         {
@@ -86,6 +87,10 @@ internal sealed class FqlSuggestQueryHandler(
                 var sprints = await lookup.SprintsAsync(ct);
                 return new[] { Function("openSprints()", "незавершённые"), Function("closedSprints()", "завершённые"), Function("EMPTY", "бэклог") }
                     .Concat(sprints.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Select(n => Value(n)));
+            case "milestone":
+                var milestones = await lookup.MilestonesAsync(ct);
+                return new[] { Function("openMilestones()", "открытые"), Function("closedMilestones()", "закрытые"), Function("EMPTY", "без вехи") }
+                    .Concat(milestones.Select(m => m.Name).Distinct(StringComparer.OrdinalIgnoreCase).Select(n => Value(n)));
             default:
                 return [];
         }

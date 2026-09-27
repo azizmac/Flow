@@ -40,6 +40,12 @@ internal sealed class PermissionService : IPermissionService
         RequireProject(access, ProjectPermission.ManageSprints, "Спринты ведут разработчики и администраторы проекта.");
     }
 
+    public void EnsureCanManageMilestones(ProjectAccessInfo access)
+    {
+        RequireVisible(access);
+        RequireProject(access, ProjectPermission.ManageMilestones, "Вехи ведут разработчики и администраторы проекта.");
+    }
+
     public void EnsureCanManageMembers(ProjectAccessInfo access, ProjectRole? grantedRole = null)
     {
         RequireVisible(access);

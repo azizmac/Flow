@@ -153,6 +153,48 @@ namespace Flow.Infrastructure.Migrations
                     b.ToTable("BoardMembers");
                 });
 
+            modelBuilder.Entity("Flow.Domain.Entities.Milestone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("TargetDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoardId", "Name")
+                        .IsUnique();
+
+                    b.HasIndex("BoardId", "SortOrder");
+
+                    b.ToTable("Milestones", (string)null);
+                });
+
             modelBuilder.Entity("Flow.Domain.Entities.SavedFilter", b =>
                 {
                     b.Property<Guid>("Id")
@@ -440,6 +482,9 @@ namespace Flow.Infrastructure.Migrations
                     b.Property<int?>("EstimateMinutes")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("MilestoneId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ParentId")
                         .HasColumnType("uuid");
 
@@ -487,6 +532,8 @@ namespace Flow.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("CreatedById");
+
+                    b.HasIndex("MilestoneId");
 
                     b.HasIndex("ParentId");
 
@@ -794,6 +841,15 @@ namespace Flow.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Flow.Domain.Entities.Milestone", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Flow.Domain.Entities.SavedFilter", b =>
                 {
                     b.HasOne("Flow.Domain.Entities.User", null)
@@ -953,6 +1009,11 @@ namespace Flow.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("CreatedById")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Flow.Domain.Entities.Milestone", null)
+                        .WithMany()
+                        .HasForeignKey("MilestoneId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Flow.Domain.Entities.TaskItem", null)
                         .WithMany()

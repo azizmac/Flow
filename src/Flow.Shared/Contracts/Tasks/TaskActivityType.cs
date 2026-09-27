@@ -26,5 +26,8 @@ public enum TaskActivityType
     ChecklistChanged = 20,
 
     /// <summary>Спринт задачи: OldValue/NewValue — Guid спринта, null — бэклог.</summary>
-    SprintChanged = 21
+    SprintChanged = 21,
+
+    /// <summary>Веха задачи: OldValue/NewValue — Guid вехи, null — без вехи.</summary>
+    MilestoneChanged = 22
 }

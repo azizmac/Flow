@@ -15,7 +15,8 @@ internal sealed class FqlLookup(
     ITaskItemRepository tasks,
     ITaskLinkRepository links,
     IProjectAccess projectAccess,
-    ISprintRepository sprints) : IFqlLookup
+    ISprintRepository sprints,
+    IMilestoneRepository milestones) : IFqlLookup
 {
     private IReadOnlyList<Board>? _visible;
 
@@ -49,6 +50,14 @@ internal sealed class FqlLookup(
         var result = new List<Sprint>();
         foreach (var board in await VisibleBoardsAsync(cancellationToken))
             result.AddRange(await sprints.GetByBoardAsync(board.Id, includeCompleted: true, cancellationToken));
+        return result;
+    }
+
+    public async Task<IReadOnlyList<Milestone>> MilestonesAsync(CancellationToken cancellationToken)
+    {
+        var result = new List<Milestone>();
+        foreach (var board in await VisibleBoardsAsync(cancellationToken))
+            result.AddRange(await milestones.GetByBoardAsync(board.Id, cancellationToken));
         return result;
     }
 

@@ -30,6 +30,8 @@ public static class Permissions
     /// <summary>Спринты: создать, начать, завершить, править (docs/TZ_task_views.md §2) — Developer и выше.</summary>
     public static bool CanManageSprints(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageSprints);
 
+    public static bool CanManageMilestones(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageMilestones);
+
     public static bool CanCreateTask(ProjectAccessResponse? access) => Has(access, ProjectPermission.CreateTask);
 
     /// <summary>EditAnyTask — любую задачу; EditOwnTask — свою (создал или исполнитель).</summary>

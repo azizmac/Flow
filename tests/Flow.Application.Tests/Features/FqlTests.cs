@@ -37,6 +37,10 @@ public class FqlTests
         public List<Sprint> Sprints { get; } = [];
 
         public Task<IReadOnlyList<Sprint>> SprintsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Sprint>>(Sprints);
+
+        public List<Milestone> Milestones { get; } = [];
+
+        public Task<IReadOnlyList<Milestone>> MilestonesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Milestone>>(Milestones);
     }
 
     private static (Lookup Lookup, Board Board) World()
@@ -66,6 +70,22 @@ public class FqlTests
         Assert.Equal([closed.Id], Assert.IsType<TaskFilterIn>((await Bind("sprint in (closedSprints())", lookup)).Filter).Ids);
         Assert.Equal(TaskFilterNullable.Sprint, Assert.IsType<TaskFilterIsEmpty>((await Bind("sprint is empty", lookup)).Filter).Field);
         await Assert.ThrowsAsync<FqlException>(() => Bind("sprint = Гамма", lookup));
+    }
+
+    [Fact]
+    public async Task Milestone_Binds_Names_Functions_And_Empty()
+    {
+        var (lookup, board) = World();
+        var open = Milestone.Create(board.Id, "Релиз 1.0", null, null, 0);
+        var closed = Milestone.Create(board.Id, "Бета", null, null, 1);
+        closed.Close(DateTime.UtcNow);
+        lookup.Milestones.AddRange([open, closed]);
+
+        var byName = Assert.IsType<TaskFilterIn>((await Bind("milestone = \"релиз 1.0\"", lookup)).Filter);
+        Assert.Equal((TaskFilterRef.Milestone, open.Id), (byName.Field, Assert.Single(byName.Ids)));
+        Assert.Equal([closed.Id], Assert.IsType<TaskFilterIn>((await Bind("milestone in (closedMilestones())", lookup)).Filter).Ids);
+        Assert.Equal([open.Id], Assert.IsType<TaskFilterIn>((await Bind("milestone in (openMilestones())", lookup)).Filter).Ids);
+        Assert.Equal(TaskFilterNullable.Milestone, Assert.IsType<TaskFilterIsEmpty>((await Bind("milestone is empty", lookup)).Filter).Field);
     }
 
     [Fact]
@@ -143,7 +163,8 @@ public class FqlTests
     [InlineData("status = Отложена", "Статуса «Отложена» нет ни в одном проекте", 9)]
     [InlineData("assignee = @nobody", "Пользователь «@nobody» не найден", 11)]
     [InlineData("color = red", "Неизвестное поле «color»", 0)]
-    [InlineData("milestone = M1", "Поля «milestone» пока нет", 0)]
+    [InlineData("team = A", "Поля «team» пока нет", 0)]
+    [InlineData("milestone = M1", "Вехи «M1» нет ни в одном проекте", 12)]
     [InlineData("priority ~ high", "Оператор ~ к полю «priority» не применим", 0)]
     [InlineData("estimate > 5", "«5» — не оценка", 11)]
     [InlineData("due < tomorrow", "«tomorrow» — не дата", 6)]

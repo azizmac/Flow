@@ -25,6 +25,9 @@ public interface IPermissionService
     /// <summary>Создавать, запускать, завершать и править спринты проекта — ManageSprints (Developer+).</summary>
     void EnsureCanManageSprints(ProjectAccessInfo access);
 
+    /// <summary>Создавать, править, закрывать и удалять вехи проекта — ManageMilestones (Developer+).</summary>
+    void EnsureCanManageMilestones(ProjectAccessInfo access);
+
     /// <summary>Участники и роль по умолчанию — ManageMembers; выдаваемая роль не выше своей роли в проекте.</summary>
     void EnsureCanManageMembers(ProjectAccessInfo access, ProjectRole? grantedRole = null);
 

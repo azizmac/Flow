@@ -56,6 +56,32 @@ public sealed class FakeTaskItemRepository(FakeBoardRepository? boards = null) :
     public Task<IReadOnlyList<TaskItem>> GetBySprintIdAsync(Guid sprintId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<TaskItem>>(_tasks.Where(t => t.SprintId == sprintId).OrderBy(t => t.Rank, StringComparer.Ordinal).ToList());
 
+    public Task<IReadOnlyList<TaskItem>> GetByMilestoneIdAsync(Guid milestoneId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TaskItem>>(_tasks.Where(t => t.MilestoneId == milestoneId).ToList());
+
+    /// <summary>Та же арифметика, что GROUP BY в TaskItemRepository; финальность и вид статуса — из досок фейка.</summary>
+    public async Task<IReadOnlyDictionary<Guid, MilestoneCounts>> CountByMilestonesAsync(
+        IReadOnlyCollection<Guid> milestoneIds, DateOnly today, DateTime closedSince, CancellationToken cancellationToken)
+    {
+        var statuses = boards is null
+            ? new Dictionary<Guid, Status>()
+            : (await boards.GetAllAsync(cancellationToken)).SelectMany(b => b.Statuses).ToDictionary(s => s.Id);
+        bool Final(TaskItem t) => statuses.TryGetValue(t.StatusId, out var s) && s.IsFinal;
+        bool Working(TaskItem t) => statuses.TryGetValue(t.StatusId, out var s) && s.Type is StatusType.InProgress or StatusType.InReview;
+
+        return _tasks
+            .Where(t => t.MilestoneId is { } m && milestoneIds.Contains(m))
+            .GroupBy(t => t.MilestoneId!.Value)
+            .ToDictionary(g => g.Key, g => new MilestoneCounts(
+                g.Count(),
+                g.Count(Final),
+                g.Count(t => !Final(t) && Working(t)),
+                g.Sum(t => t.StoryPoints ?? 0),
+                g.Where(Final).Sum(t => t.StoryPoints ?? 0),
+                g.Count(t => !Final(t) && t.DueDate < today),
+                g.Count(t => Final(t) && t.StatusChangedAt >= closedSince)));
+    }
+
     public Task<IReadOnlyList<Guid>> MatchingIdsAsync(TaskListFilter filter, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Guid>>(Filtered(filter).Select(t => t.Id).ToList());
 

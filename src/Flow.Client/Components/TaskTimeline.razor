@@ -233,26 +233,42 @@
         _comments = comments.Result.Value!.ToList();
         _activity = activity.Result.Value!.ToList();
         await LoadTaskRefsAsync(cts.Token);
-        await LoadSprintNamesAsync();
+        await LoadNamesAsync();
     }
 
-    /// <summary>Имена спринтов для записей SprintChanged — одним запросом по проекту и только когда такие записи есть.</summary>
+    /// <summary>Имена спринтов и вех для записей SprintChanged/MilestoneChanged — одним запросом по проекту и только когда такие записи есть.</summary>
     private Dictionary<Guid, string>? _sprintNames;
 
-    private async Task LoadSprintNamesThenRedrawAsync()
+    private async Task LoadNamesThenRedrawAsync()
     {
-        await LoadSprintNamesAsync();
+        await LoadNamesAsync();
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task LoadSprintNamesAsync()
+    private async Task LoadNamesAsync()
     {
-        if (_sprintNames is not null || _activity.All(a => a.Type != TaskActivityType.SprintChanged))
-            return;
+        if (_sprintNames is null && _activity.Any(a => a.Type == TaskActivityType.SprintChanged))
+        {
+            var result = await Api.GetSprints(Board.Id);
+            _sprintNames = result.Ok ? result.Value!.ToDictionary(s => s.Id, s => s.Name) : new Dictionary<Guid, string>();
+        }
 
-        var result = await Api.GetSprints(Board.Id);
-        _sprintNames = result.Ok ? result.Value!.ToDictionary(s => s.Id, s => s.Name) : new Dictionary<Guid, string>();
+        if (_milestoneNames is null && _activity.Any(a => a.Type == TaskActivityType.MilestoneChanged))
+        {
+            var result = await Api.GetMilestones(Board.Id);
+            _milestoneNames = result.Ok ? result.Value!.ToDictionary(m => m.Id, m => m.Name) : new Dictionary<Guid, string>();
+        }
     }
+
+    /// <summary>Имена вех для MilestoneChanged — так же лениво, как спринты.</summary>
+    private Dictionary<Guid, string>? _milestoneNames;
+
+    /// <summary>«веха: «A» → «B»», null с любой стороны — без вехи.</summary>
+    private RenderFragment Milestones(TaskActivityResponse a) =>
+        @<span>веха: <s class="tl-old">@(a.OldValue is { } o ? MilestoneName(o) : "нет")</s> <span class="tl-arrow">→</span> <b>@(a.NewValue is { } n ? MilestoneName(n) : "нет")</b></span>;
+
+    private string MilestoneName(string value) =>
+        Guid.TryParse(value, out var id) && _milestoneNames?.GetValueOrDefault(id) is { } name ? $"«{name}»" : "удалённая веха";
 
     /// <summary>«спринт: «A» → «B»», null с любой стороны — бэклог.</summary>
     private RenderFragment Sprints(TaskActivityResponse a) =>
@@ -325,7 +341,13 @@
         {
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.SprintChanged, before.SprintId?.ToString(), after.SprintId?.ToString(), now));
             _sprintNames = null;
-            _ = LoadSprintNamesThenRedrawAsync();
+            _ = LoadNamesThenRedrawAsync();
+        }
+        if (before.MilestoneId != after.MilestoneId)
+        {
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.MilestoneChanged, before.MilestoneId?.ToString(), after.MilestoneId?.ToString(), now));
+            _milestoneNames = null;
+            _ = LoadNamesThenRedrawAsync();
         }
         if (before.DueDate != after.DueDate)
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.DueDateChanged,
@@ -400,6 +422,7 @@
         TaskActivityType.LinkAdded => @<span>связь «@LinkSide(a.OldValue)»: @TaskRef(a.NewValue)</span>,
         TaskActivityType.LinkRemoved => @<span>связь «@LinkSide(a.OldValue)» убрана: @TaskRef(a.NewValue)</span>,
         TaskActivityType.SprintChanged => Sprints(a),
+        TaskActivityType.MilestoneChanged => Milestones(a),
         TaskActivityType.ChecklistChanged => @<span>чек-лист: <s class="tl-old">@a.OldValue</s> <span class="tl-arrow">→</span> <b>@a.NewValue</b></span>,
         _ => Text(a.Type.ToString())
     };

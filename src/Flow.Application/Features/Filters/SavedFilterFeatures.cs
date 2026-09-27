@@ -38,6 +38,7 @@ internal sealed class SavedFilterHandlers(
     ITaskItemRepository tasks,
     ITaskLinkRepository links,
     ISprintRepository sprints,
+    IMilestoneRepository milestones,
     ActorResolver actors,
     IPermissionService permissions,
     IProjectAccess projectAccess,
@@ -131,7 +132,7 @@ internal sealed class SavedFilterHandlers(
 
     private async Task ValidateAsync(User actor, string query, CancellationToken cancellationToken)
     {
-        var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints);
+        var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones);
         await FqlBinder.BindAsync(query, lookup, actor.Id, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
     }
 

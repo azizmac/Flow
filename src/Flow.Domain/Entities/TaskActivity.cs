@@ -117,6 +117,9 @@ public sealed class TaskActivity
     public static TaskActivity SprintChanged(Guid taskId, Guid actorId, Guid? oldSprintId, Guid? newSprintId) =>
         new(taskId, actorId, TaskActivityType.SprintChanged, oldSprintId?.ToString(), newSprintId?.ToString());
 
+    public static TaskActivity MilestoneChanged(Guid taskId, Guid actorId, Guid? oldMilestoneId, Guid? newMilestoneId) =>
+        new(taskId, actorId, TaskActivityType.MilestoneChanged, oldMilestoneId?.ToString(), newMilestoneId?.ToString());
+
     private static string LinkSide(TaskLinkType type, bool outward) =>
         outward || type == TaskLinkType.RelatesTo ? type.ToString() : $"{type}:in";
 

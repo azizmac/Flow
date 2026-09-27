@@ -15,6 +15,17 @@ public interface ITaskItemRepository
     /// <summary>Задачи спринта, отслеживаемые — снимок при старте и перенос при завершении.</summary>
     Task<IReadOnlyList<TaskItem>> GetBySprintIdAsync(Guid sprintId, CancellationToken cancellationToken);
 
+    /// <summary>Задачи вехи, отслеживаемые (удаление вехи снимает её с задач с записью в журнале).</summary>
+    Task<IReadOnlyList<TaskItem>> GetByMilestoneIdAsync(Guid milestoneId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Счётчики прогресса вех одним GROUP BY с join статусов (docs/TZ_task_views.md §6). Просроченная — незакрытая
+    /// со сроком раньше <paramref name="today"/>; «закрыта недавно» — финальный статус с StatusChangedAt не раньше
+    /// <paramref name="closedSince"/>. Вехи без задач в ответ не попадают.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, MilestoneCounts>> CountByMilestonesAsync(
+        IReadOnlyCollection<Guid> milestoneIds, DateOnly today, DateTime closedSince, CancellationToken cancellationToken);
+
     /// <summary>
     /// Страница задач по отбору, от новых к старым. Возвращает не больше <see cref="TaskListFilter.Limit"/> задач;
     /// «есть ли ещё» вызывающая сторона определяет по тому, заполнилась ли страница целиком.

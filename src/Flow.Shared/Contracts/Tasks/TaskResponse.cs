@@ -34,4 +34,5 @@ public sealed record TaskResponse(
     int BlockedByCount = 0,
     int ChecklistDone = 0,
     int ChecklistTotal = 0,
-    Guid? SprintId = null);
+    Guid? SprintId = null,
+    Guid? MilestoneId = null);

@@ -15,7 +15,8 @@ internal sealed class TaskTreeQueryHandler(
     IProjectAccess projectAccess,
     IUserRepository users,
     ITaskLinkRepository links,
-    ISprintRepository sprints)
+    ISprintRepository sprints,
+    IMilestoneRepository milestones)
     : IRequestHandler<TaskTreeQuery, IReadOnlyList<TaskTreeNode>?>
 {
     public async Task<IReadOnlyList<TaskTreeNode>?> Handle(TaskTreeQuery request, CancellationToken cancellationToken)
@@ -32,7 +33,7 @@ internal sealed class TaskTreeQueryHandler(
         FqlBound? fql = null;
         if (!string.IsNullOrWhiteSpace(request.Fql))
         {
-            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints);
+            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones);
             fql = await FqlBinder.BindAsync(request.Fql, lookup, actor.Id, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
         }
 

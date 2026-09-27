@@ -26,6 +26,9 @@ public interface IFqlLookup
     /// <summary>Спринты видимых проектов, включая завершённые (docs/TZ_task_views.md §2).</summary>
     Task<IReadOnlyList<Sprint>> SprintsAsync(CancellationToken cancellationToken);
 
+    /// <summary>Вехи видимых проектов, открытые и закрытые.</summary>
+    Task<IReadOnlyList<Milestone>> MilestonesAsync(CancellationToken cancellationToken);
+
     /// <summary>Задачи, которые эта блокирует (исходящие Blocks).</summary>
     Task<IReadOnlyList<Guid>> BlockedByAsync(Guid taskId, CancellationToken cancellationToken);
 }

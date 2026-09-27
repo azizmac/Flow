@@ -17,7 +17,8 @@ internal sealed class TaskBoardQueryHandler(
     IBoardRepository boards,
     IUserRepository users,
     ITaskLinkRepository links,
-    ISprintRepository sprints)
+    ISprintRepository sprints,
+    IMilestoneRepository milestones)
     : IRequestHandler<TaskBoardQuery, TaskBoardResponse?>
 {
     public const int DefaultLimit = 50;
@@ -44,7 +45,7 @@ internal sealed class TaskBoardQueryHandler(
         FqlBound? fql = null;
         if (!string.IsNullOrWhiteSpace(request.Fql))
         {
-            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints);
+            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones);
             fql = await FqlBinder.BindAsync(request.Fql, lookup, actor.Id, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
         }
 

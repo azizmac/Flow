@@ -145,6 +145,46 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
     public async Task<IReadOnlyList<TaskItem>> GetBySprintIdAsync(Guid sprintId, CancellationToken cancellationToken) =>
         await db.TaskItems.Where(t => t.SprintId == sprintId).OrderBy(t => t.Rank).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<TaskItem>> GetByMilestoneIdAsync(Guid milestoneId, CancellationToken cancellationToken) =>
+        await db.TaskItems.Where(t => t.MilestoneId == milestoneId).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, MilestoneCounts>> CountByMilestonesAsync(
+        IReadOnlyCollection<Guid> milestoneIds, DateOnly today, DateTime closedSince, CancellationToken cancellationToken)
+    {
+        if (milestoneIds.Count == 0)
+            return new Dictionary<Guid, MilestoneCounts>();
+
+        // Один GROUP BY с join статусов: финальность и вид — признаки статуса, не задачи.
+        var rows = await db.TaskItems
+            .Where(t => t.MilestoneId != null && milestoneIds.Contains(t.MilestoneId.Value))
+            .Join(db.Statuses, t => t.StatusId, s => s.Id, (t, s) => new
+            {
+                MilestoneId = t.MilestoneId!.Value,
+                s.IsFinal,
+                Working = s.Type == StatusType.InProgress || s.Type == StatusType.InReview,
+                Points = t.StoryPoints ?? 0,
+                t.DueDate,
+                t.StatusChangedAt
+            })
+            .GroupBy(x => x.MilestoneId)
+            .Select(g => new
+            {
+                MilestoneId = g.Key,
+                Total = g.Count(),
+                Done = g.Count(x => x.IsFinal),
+                InProgress = g.Count(x => !x.IsFinal && x.Working),
+                Points = g.Sum(x => x.Points),
+                DonePoints = g.Sum(x => x.IsFinal ? x.Points : 0),
+                Overdue = g.Count(x => !x.IsFinal && x.DueDate != null && x.DueDate < today),
+                ClosedRecently = g.Count(x => x.IsFinal && x.StatusChangedAt >= closedSince)
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(
+            x => x.MilestoneId,
+            x => new MilestoneCounts(x.Total, x.Done, x.InProgress, x.Points, x.DonePoints, x.Overdue, x.ClosedRecently));
+    }
+
     public async Task<IReadOnlyList<Guid>> MatchingIdsAsync(TaskListFilter filter, CancellationToken cancellationToken) =>
         await Filtered(filter).Select(t => t.Id).ToListAsync(cancellationToken);
 

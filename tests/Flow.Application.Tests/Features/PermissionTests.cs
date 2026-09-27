@@ -5,6 +5,7 @@ using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
 using Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
 using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Search.Commands.ReindexCommand;
+using Flow.Application.Features.Milestones;
 using Flow.Application.Features.Sprints.Commands.SprintCreateCommand;
 using Flow.Application.Features.Search.Queries.SearchStatusQuery;
 using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
@@ -151,6 +152,32 @@ public class PermissionTests
         var boardId = await CreateBoardAsync(mediator);
 
         Assert.Equal("Спринт 1", (await mediator.Send(new SprintCreateCommand(actor, boardId), CancellationToken.None))!.Name);
+    }
+
+    // ---- вехи (docs/TZ_task_views.md §6): ManageMilestones — Developer и выше ----
+
+    [Theory]
+    [InlineData(UserRole.Reader)]
+    [InlineData(UserRole.Member)]
+    public async Task Below_Developer_Cannot_Manage_Milestones(UserRole role)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "user");
+        var boardId = await CreateBoardAsync(mediator);
+
+        await Forbidden(() => mediator.Send(new MilestoneCreateCommand(actor, boardId, "1.0"), CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(UserRole.Developer)]
+    [InlineData(UserRole.Admin)]
+    public async Task Developer_And_Above_Can_Manage_Milestones(UserRole role)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "user");
+        var boardId = await CreateBoardAsync(mediator);
+
+        Assert.Equal("1.0", (await mediator.Send(new MilestoneCreateCommand(actor, boardId, "1.0"), CancellationToken.None))!.Name);
     }
 
     // ---- задачи ----

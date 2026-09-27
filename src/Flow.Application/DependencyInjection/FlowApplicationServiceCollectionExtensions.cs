@@ -27,6 +27,8 @@ public static class FlowApplicationServiceCollectionExtensions
         services.AddScoped<Features.Tasks.TaskLinkResponses>();
         services.AddScoped<Features.Tasks.TransitionGuard>();
         services.AddScoped<Features.Sprints.TaskSprints>();
+        services.AddScoped<Features.Milestones.TaskMilestones>();
+        services.AddScoped<Features.Milestones.MilestoneProgressCalculator>();
 
         return services;
     }

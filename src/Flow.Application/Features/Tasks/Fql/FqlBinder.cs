@@ -78,6 +78,7 @@ public sealed partial class FqlBinder(IFqlLookup lookup, Guid actorId, DateOnly 
             "text" => Text(c),
             "linked" => await LinkedAsync(c, ct),
             "sprint" => await SprintAsync(c, ct),
+            "milestone" => await MilestoneAsync(c, ct),
             _ => throw Error($"Неизвестное поле «{name}». Поля: {string.Join(", ", FqlFields.All.Select(f => f.Name))}", c.Field)
         };
     }
@@ -219,6 +220,43 @@ public sealed partial class FqlBinder(IFqlLookup lookup, Guid actorId, DateOnly 
         TaskFilterNode node = new TaskFilterIn(TaskFilterRef.Sprint, ids.Distinct().ToList());
         if (orEmpty)
             node = new TaskFilterOr([node, new TaskFilterIsEmpty(TaskFilterNullable.Sprint)]);
+        return IsNegative(c) ? new TaskFilterNot(node) : node;
+    }
+
+    /// <summary>
+    /// milestone = "1.0" (по имени во всех видимых проектах) | openMilestones() | closedMilestones();
+    /// milestone IS EMPTY — без вехи, как и значение EMPTY в списке.
+    /// </summary>
+    private async Task<TaskFilterNode> MilestoneAsync(FqlClause c, CancellationToken ct)
+    {
+        if (c.Operator is FqlOperator.IsEmpty or FqlOperator.IsNotEmpty)
+            return Empty(c, TaskFilterNullable.Milestone);
+
+        EnsureOps(c, FqlOperator.Eq, FqlOperator.NotEq, FqlOperator.In, FqlOperator.NotIn);
+
+        var milestones = await lookup.MilestonesAsync(ct);
+        var ids = new List<Guid>();
+        var orEmpty = false;
+        foreach (var v in c.Values)
+        {
+            if (v.IsFunction("openMilestones"))
+                ids.AddRange(milestones.Where(m => !m.IsClosed).Select(m => m.Id));
+            else if (v.IsFunction("closedMilestones"))
+                ids.AddRange(milestones.Where(m => m.IsClosed).Select(m => m.Id));
+            else if (v.Function is not null)
+                throw Error($"Функции {v.Function}() у поля «milestone» нет; есть openMilestones(), closedMilestones()", v);
+            else if (!v.Quoted && v.Text.Equals("EMPTY", StringComparison.OrdinalIgnoreCase))
+                orEmpty = true;
+            else
+            {
+                var named = milestones.Where(m => string.Equals(m.Name, v.Text, StringComparison.OrdinalIgnoreCase)).Select(m => m.Id).ToList();
+                ids.AddRange(named.Count > 0 ? named : throw Error($"Вехи «{v.Text}» нет ни в одном проекте", v));
+            }
+        }
+
+        TaskFilterNode node = new TaskFilterIn(TaskFilterRef.Milestone, ids.Distinct().ToList());
+        if (orEmpty)
+            node = new TaskFilterOr([node, new TaskFilterIsEmpty(TaskFilterNullable.Milestone)]);
         return IsNegative(c) ? new TaskFilterNot(node) : node;
     }
 

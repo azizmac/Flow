@@ -87,6 +87,12 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
 
         builder.HasIndex(t => t.SprintId);
 
+        builder.HasOne<Milestone>()
+            .WithMany()
+            .HasForeignKey(t => t.MilestoneId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(t => t.MilestoneId);
+
         // Ранг (§7): COLLATE "C" обязателен — по правилам локали Postgres сравнивал бы 'a' и 'B' не по ASCII,
         // и порядок ключей дробного индекса сломался бы. Unique — страховка от двух одинаковых ключей в гонке
         // (UnitOfWork переводит 23505 по нему в RankConflictException, хендлер пересчитывает ключ).

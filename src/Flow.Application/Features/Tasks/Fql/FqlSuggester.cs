@@ -121,7 +121,7 @@ public static class FqlSuggester
         "text" => ["~"],
         "priority" or "points" or "estimate" or "start" or "due" => ["=", "!=", ">", ">=", "<", "<=", "IN ()", "IS EMPTY", "IS NOT EMPTY"],
         "created" or "updated" => ["=", "!=", ">", ">=", "<", "<="],
-        "assignee" or "parent" or "linked" or "sprint" => ["=", "!=", "IN ()", "NOT IN ()", "IS EMPTY", "IS NOT EMPTY"],
+        "assignee" or "parent" or "linked" or "sprint" or "milestone" => ["=", "!=", "IN ()", "NOT IN ()", "IS EMPTY", "IS NOT EMPTY"],
         _ => ["=", "!=", "IN ()", "NOT IN ()"]
     };
 

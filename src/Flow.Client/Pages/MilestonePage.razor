@@ -1,0 +1,243 @@
+@* Веха (docs/TZ_task_views.md §6, этап 2E): описание, прогресс (задачи и story points, в работе, просроченные,
+   прогноз по скорости закрытия за 14 дней) и задачи вехи — тот же GET /tasks с FQL `milestone = "…"` в рамках
+   проекта. Закрыть веху с открытыми задачами можно — диалог предупреждает, задачи остаются в ней. *@
+@page "/milestones/{Id:guid}"
+@inject IFlowApi Api
+@inject ProjectAccessState Access
+@inject ToastService Toasts
+@inject NavigationManager Nav
+
+<PageTitle>@(_milestone?.Name ?? "Веха") — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        @if (_milestone is not null)
+        {
+            <a class="topbar-back" href="@($"boards/{_milestone.BoardId}/milestones")" title="К вехам проекта"><Icon Name="arrow-left" Size="18" /></a>
+            <h1 class="topbar-title">@_milestone.Name</h1>
+            @if (_milestone.State == MilestoneState.Closed)
+            {
+                <span class="ms-state">закрыта</span>
+            }
+        }
+    </div>
+    <div class="topbar-right">
+        @if (_milestone is not null && CanManage)
+        {
+            <DsIconButton Icon="edit" Size="30" Title="Изменить веху" OnClick="() => _editing = true" />
+            <DsIconButton Icon="trash" Size="30" Title="Удалить веху" OnClick="() => _deleting = true" />
+            @if (_milestone.State == MilestoneState.Open)
+            {
+                <DsButton Variant="primary" Size="sm" OnClick="AskClose" Disabled="_busy">Закрыть веху</DsButton>
+            }
+            else
+            {
+                <DsButton Variant="secondary" Size="sm" OnClick="() => SetClosed(false)" Disabled="_busy">Открыть снова</DsButton>
+            }
+        }
+    </div>
+</div>
+
+<div class="content">
+    @if (_notFound)
+    {
+        <div class="empty"><div class="empty-title">Веха не найдена</div><a href="boards">К проектам</a></div>
+    }
+    else if (_milestone is null)
+    {
+        <Skeleton Kind="rows" Count="4" />
+    }
+    else
+    {
+        var p = _milestone.Progress;
+        <div class="sr-head">
+            <span class="hint">@MilestonesPage.TargetText(_milestone)@(_milestone.ClosedAt is { } closedAt ? $" · закрыта {Ru.DateOnlyShort(DateOnly.FromDateTime(closedAt))}" : "")</span>
+            @if (_milestone.Description is { } description)
+            {
+                <div class="bl-goal">@description</div>
+            }
+        </div>
+
+        <div class="sr-tiles">
+            <div class="sr-tile panel">
+                <div class="sr-tile-label">Закрыто</div>
+                <div class="sr-tile-value">@p.Done <small>из @p.Total</small></div>
+                <div class="hint">@(p.Points > 0 ? $"{Ru.Points(p.DonePoints)} из {Ru.Points(p.Points)} SP" : "без оценок")</div>
+            </div>
+            <div class="sr-tile panel">
+                <div class="sr-tile-label">В работе</div>
+                <div class="sr-tile-value">@p.InProgress</div>
+                <div class="hint">@Ru.Tasks(p.Total - p.Done - p.InProgress) ещё не начато</div>
+            </div>
+            <div class="sr-tile panel">
+                <div class="sr-tile-label">Просрочено</div>
+                <div class="sr-tile-value @(p.Overdue > 0 ? "ms-overdue" : "")">@p.Overdue</div>
+                <div class="hint">незакрытые со сроком в прошлом</div>
+            </div>
+            <div class="sr-tile panel">
+                <div class="sr-tile-label">Прогноз</div>
+                <div class="sr-tile-value @(Late ? "ms-late" : "")">@(p.Forecast is { } f ? Ru.DateOnlyShort(f) : "—")</div>
+                <div class="hint">@ForecastHint</div>
+            </div>
+        </div>
+
+        <div class="panel sr-chart">
+            <MilestoneProgressBar Progress="p" />
+        </div>
+
+        <div class="panel">
+            <div class="ms-tasks-head">
+                <div class="section-title">Задачи вехи</div>
+                <a class="icon-lnk" href="@TasksHref">Открыть в «Задачах»</a>
+            </div>
+            @if (_tasks is null)
+            {
+                <Skeleton Kind="rows" Count="3" />
+            }
+            else if (_tasks.Count == 0)
+            {
+                <div class="hint" style="padding:12px 16px;">Задач нет — веха задаётся полем «Веха» в карточке задачи.</div>
+            }
+            else
+            {
+                <MudSimpleTable Dense="true" Elevation="0" Class="sr-table">
+                    <thead><tr><th>Код</th><th>Задача</th><th>Статус</th><th>Срок</th><th>SP</th></tr></thead>
+                    <tbody>
+                        @foreach (var task in _tasks)
+                        {
+                            var status = _board?.Statuses.FirstOrDefault(s => s.Id == task.StatusId);
+                            <tr>
+                                <td class="code">@task.Code</td>
+                                <td><a href="@($"tasks/{task.Id}")">@task.Title</a></td>
+                                <td><span class="status-pill sm"><span class="sd" style="background:@StatusColors.For(status?.Type)"></span>@(status?.Name ?? "—")</span></td>
+                                <td>@(task.DueDate is { } due ? Ru.DateOnlyShort(due) : "—")</td>
+                                <td>@(task.StoryPoints is { } sp ? Ru.Points(sp) : "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </div>
+    }
+</div>
+
+@if (_editing && _milestone is not null)
+{
+    <MilestoneDialog BoardId="_milestone.BoardId" Milestone="_milestone" OnSaved="OnSaved" OnClose="() => _editing = false" />
+}
+
+@if (_confirmClose && _milestone is not null)
+{
+    <ConfirmDialog Title="@($"Закрыть «{_milestone.Name}»?")"
+                   Text="@($"Открытых задач: {_milestone.Progress.Total - _milestone.Progress.Done}. Они останутся в вехе, но новые задачи в закрытую веху не добавить.")"
+                   ConfirmLabel="Закрыть" OnConfirm="() => SetClosed(true)" OnCancel="() => _confirmClose = false" />
+}
+
+@if (_deleting && _milestone is not null)
+{
+    <ConfirmDialog Title="@($"Удалить «{_milestone.Name}»?")" Text="Задачи останутся без вехи, запись об этом появится в их журнале."
+                   OnConfirm="Delete" OnCancel="() => _deleting = false" />
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private MilestoneResponse? _milestone;
+    private BoardResponse? _board;
+    private IReadOnlyList<TaskResponse>? _tasks;
+    private bool _notFound;
+    private bool _busy;
+    private bool _editing;
+    private bool _deleting;
+    private bool _confirmClose;
+
+    private bool CanManage => _milestone is not null && Permissions.CanManageMilestones(Access.For(_milestone.BoardId));
+
+    private bool Late => _milestone is { TargetDate: { } target, Progress.Forecast: { } forecast } && forecast > target;
+
+    private string ForecastHint => _milestone!.Progress switch
+    {
+        { Total: 0 } => "в вехе нет задач",
+        var p when p.Done == p.Total => "всё закрыто",
+        { Forecast: null } => "за 14 дней ничего не закрыто",
+        var p => $"по скорости {p.ClosedRecently} за 14 дней" + (Late ? " — позже цели" : "")
+    };
+
+    /// <summary>FQL-строка с экранированием: имя вехи может содержать кавычки.</summary>
+    private string Fql => $"milestone = \"{_milestone!.Name.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
+
+    private string TasksHref => $"tasks?board={_milestone!.BoardId}&fql={Uri.EscapeDataString(Fql)}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _milestone = null;
+        _tasks = null;
+        var result = await Api.GetMilestone(Id);
+        if (!result.Ok)
+        {
+            _notFound = true;
+            return;
+        }
+
+        _milestone = result.Value!;
+        await Access.EnsureLoadedAsync();
+        var board = await Api.GetBoard(_milestone.BoardId);
+        _board = board.Ok ? board.Value : null;
+        await LoadTasksAsync();
+    }
+
+    private async Task LoadTasksAsync()
+    {
+        var tasks = await Api.SearchTasks(boardId: _milestone!.BoardId, limit: 200, sort: TaskSortField.Status, fql: Fql);
+        _tasks = tasks.Ok ? tasks.Value!.Items : [];
+    }
+
+    private void AskClose()
+    {
+        if (_milestone!.Progress.Total > _milestone.Progress.Done)
+            _confirmClose = true;
+        else
+            _ = SetClosed(true);
+    }
+
+    private async Task SetClosed(bool closed)
+    {
+        _confirmClose = false;
+        _busy = true;
+        var result = await Api.UpdateMilestone(_milestone!.Id, new UpdateMilestoneRequest(Closed: closed));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось изменить веху");
+            return;
+        }
+
+        _milestone = result.Value!;
+        Toasts.Ok(closed ? $"Веха «{_milestone.Name}» закрыта" : $"Веха «{_milestone.Name}» открыта");
+        StateHasChanged();
+    }
+
+    private async Task OnSaved(MilestoneResponse milestone)
+    {
+        _editing = false;
+        var renamed = milestone.Name != _milestone!.Name;
+        _milestone = milestone;
+        if (renamed)
+            await LoadTasksAsync();
+    }
+
+    private async Task Delete()
+    {
+        _deleting = false;
+        var boardId = _milestone!.BoardId;
+        var result = await Api.DeleteMilestone(_milestone.Id);
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось удалить веху");
+            return;
+        }
+
+        Toasts.Ok("Веха удалена");
+        Nav.NavigateTo($"boards/{boardId}/milestones");
+    }
+}

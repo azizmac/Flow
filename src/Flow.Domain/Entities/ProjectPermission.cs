@@ -23,5 +23,8 @@ public enum ProjectPermission
     DeleteProject = 12,
 
     /// <summary>Создавать, запускать и завершать спринты (docs/TZ_task_views.md §2): Developer и выше.</summary>
-    ManageSprints = 13
+    ManageSprints = 13,
+
+    /// <summary>Создавать, править, закрывать и удалять вехи (docs/TZ_task_views.md §6): Developer и выше.</summary>
+    ManageMilestones = 14
 }

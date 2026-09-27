@@ -45,6 +45,7 @@
                     <DsIconButton Icon="link" Size="30" Title="Workflow проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/workflow"))" />
                     <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _typesOpen = true" />
                 }
+                <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/milestones"))" />
                 @if (Permissions.CanManageMembers(boardAccess))
                 {
                     <DsIconButton Icon="users" Size="30" Title="Доступ к проекту" Style="color:rgba(255,255,255,0.45)" OnClick="() => _accessOpen = true" />

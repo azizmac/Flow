@@ -72,6 +72,9 @@ public sealed class TaskItem
     /// <summary>Спринт задачи (docs/TZ_task_views.md §2); null — бэклог. FK SetNull: удаление спринта возвращает в бэклог.</summary>
     public Guid? SprintId { get; private set; }
 
+    /// <summary>Веха задачи (docs/TZ_task_views.md §6); независима от спринта. FK SetNull: удаление вехи её снимает.</summary>
+    public Guid? MilestoneId { get; private set; }
+
     /// <summary>
     /// Родитель в иерархии (docs/TZ_task_model.md §3); null — задача верхнего уровня. Родитель всегда в том же
     /// проекте и строго выше по уровню типа, поэтому циклов и глубины больше четырёх не бывает по построению.
@@ -309,6 +312,20 @@ public sealed class TaskItem
             throw new InvalidOperationException("A completed sprint cannot take new tasks.");
 
         SprintId = sprint?.Id;
+    }
+
+    /// <summary>
+    /// Веха того же проекта или null. В закрытую веху новые задачи не добавляют: её состав — итог релиза;
+    /// задачи, уже бывшие в ней к закрытию, остаются.
+    /// </summary>
+    public void SetMilestone(Milestone? milestone)
+    {
+        if (milestone is not null && milestone.BoardId != BoardId)
+            throw new InvalidOperationException("A task can be put only into a milestone of its own project.");
+        if (milestone is { IsClosed: true } && milestone.Id != MilestoneId)
+            throw new InvalidOperationException("A closed milestone cannot take new tasks.");
+
+        MilestoneId = milestone?.Id;
     }
 
     /// <summary>Ставит IUnitOfWork, когда при сохранении изменился StatusId.</summary>

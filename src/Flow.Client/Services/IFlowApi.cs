@@ -3,6 +3,7 @@ using Flow.Shared.Contracts.About;
 using Flow.Shared.Contracts.Attachments;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
+using Flow.Shared.Contracts.Milestones;
 using Flow.Shared.Contracts.Sprints;
 using Flow.Shared.Contracts.Tasks;
 using Flow.Shared.Contracts.Users;
@@ -99,6 +100,14 @@ public interface IFlowApi
         CancellationToken ct = default);
 
     Task<ApiResult<TaskResponse>> SetTaskSprint(Guid taskId, SetTaskSprintRequest request, CancellationToken ct = default);
+
+    // Вехи (docs/TZ_task_views.md §6).
+    Task<ApiResult<IReadOnlyList<MilestoneResponse>>> GetMilestones(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<MilestoneResponse>> GetMilestone(Guid milestoneId, CancellationToken ct = default);
+    Task<ApiResult<MilestoneResponse>> CreateMilestone(Guid boardId, CreateMilestoneRequest request, CancellationToken ct = default);
+    Task<ApiResult<MilestoneResponse>> UpdateMilestone(Guid milestoneId, UpdateMilestoneRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteMilestone(Guid milestoneId, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> SetTaskMilestone(Guid taskId, SetTaskMilestoneRequest request, CancellationToken ct = default);
 
     // ---- Доступ к проектам ----
     Task<ApiResult<IReadOnlyList<ProjectAccessResponse>>> GetMyAccess(CancellationToken ct = default);
