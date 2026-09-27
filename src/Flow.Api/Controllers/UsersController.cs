@@ -6,7 +6,9 @@ using Flow.Application.Features.Users.Commands.UserChangeRoleCommand;
 using Flow.Application.Features.Users.Commands.UserChangeUsernameCommand;
 using Flow.Application.Features.Users.Commands.UserCreateCommand;
 using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
+using Flow.Application.Features.Users.Commands.UserRemoveAvatarCommand;
 using Flow.Application.Features.Users.Commands.UserRemoveLinkCommand;
+using Flow.Application.Features.Users.Commands.UserSetAvatarCommand;
 using Flow.Application.Features.Users.Commands.UserSetLinkCommand;
 using Flow.Application.Features.Users.Commands.UserUpdatePreferencesCommand;
 using Flow.Application.Features.Users.Commands.UserUpdateProfileCommand;
@@ -31,6 +33,9 @@ namespace Flow.Api.Controllers;
 [Route("users")]
 public class UsersController(IMediator mediator, IActorAccessor actor) : ControllerBase
 {
+    /// <summary>Потолок тела с запасом над AvatarLimits.MaxBytes: multipart добавляет заголовки частей.</summary>
+    private const long AvatarRequestCeilingBytes = AvatarLimits.MaxBytes + 1024 * 1024;
+
     /// <summary>Создаёт через Auth-модуль учётную запись с начальным паролем и профиль с тем же Id.</summary>
     [HttpPost]
     [ProducesResponseType<UserResponse>(StatusCodes.Status201Created)]
@@ -121,6 +126,44 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         }
     }
 
+    /// <summary>
+    /// Свой аватар: <c>multipart/form-data</c>, поле <c>file</c>, PNG/JPEG/GIF/WebP до <see cref="AvatarLimits.MaxBytes"/>.
+    /// Маршрута с {id} нет намеренно — чужой аватар не меняет никто. Картинка потом отдаётся по
+    /// <c>UserResponse.AvatarUrl</c> (<c>/avatars/{id}/{имя}</c>, AvatarsController).
+    /// </summary>
+    [HttpPut("me/avatar")]
+    [RequestSizeLimit(AvatarRequestCeilingBytes)]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SetAvatar(IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new ApiError("Файл не передан."));
+
+        try
+        {
+            await using var content = file.OpenReadStream();
+            var user = await mediator.Send(
+                new UserSetAvatarCommand(actor.Require(), file.FileName, file.Length, content),
+                cancellationToken);
+
+            return Ok(user);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ApiError(ex.Message));
+        }
+    }
+
+    /// <summary>Убрать свой аватар — вместо картинки снова инициалы. Повтор — не ошибка.</summary>
+    [HttpDelete("me/avatar")]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> RemoveAvatar(CancellationToken cancellationToken)
+    {
+        var user = await mediator.Send(new UserRemoveAvatarCommand(actor.Require()), cancellationToken);
+        return Ok(user);
+    }
+
     [HttpGet("{id:guid}")]
     [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -156,8 +199,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
                     request.LastName,
                     request.JobTitle,
                     request.Bio,
-                    request.PhoneNumber,
-                    request.AvatarUrl),
+                    request.PhoneNumber),
                 cancellationToken);
 
             return ToActionResult(result);

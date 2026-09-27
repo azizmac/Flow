@@ -82,6 +82,7 @@ Shared намеренно **не ссылается** на Domain (свои enum
 | POST/GET | `/users` (POST: `Password` обязателен → учётная запись в Flow.Auth; `Role?` по умолчанию Member), `/users/search?q=&limit=` |
 | GET | `/users/me` — профиль текущего actor (claim sub); 401, если профиля нет |
 | GET/PATCH | `/users/me/preferences` — личные настройки интерфейса; PATCH `{ sidebarMode?, startPage?, tasksPageSize? }`, 400 — значение вне допустимых |
+| PUT/DELETE | `/users/me/avatar` — свой аватар (multipart `file`, PNG/JPEG/GIF/WebP ≤ `AvatarLimits.MaxBytes` 5 МБ, сверка сигнатуры; 400 — не картинка). Чужой не меняет никто — маршрута с `{id}` нет. Объект `avatars/{userId}/{guid}{ext}` в том же S3, `AvatarUrl = /avatars/{userId}/{имя}` — имя новое на каждую загрузку, старый объект удаляется best-effort; отдаёт `Controllers/AvatarsController` вне `/api` (как `/files/{id}`: `nosniff`, CORP, `sandbox`, кэш `immutable`) и только текущий файл. В `PATCH /users/{id}` поля `AvatarUrl` больше нет |
 | GET | `/about` — версия (InformationalVersion хоста, коммит — если SDK его вписал), модули поиска и лимиты вложений; любая роль |
 | POST | `/users/{id}/password` — `{ currentPassword?, newPassword }`; свой — с текущим, чужой — сброс (Owner) |
 | PATCH | `/users/{id}/role` — `{ role }` (Shared `UserRole`); 403 по матрице, 400 — последний Owner |

@@ -5,7 +5,7 @@ using MediatR;
 
 namespace Flow.Application.Features.Users.Commands.UserUpdateProfileCommand;
 
-/// <summary>Бросает ArgumentException при невалидном имени/телефоне/URL (см. методы User.Change*).</summary>
+/// <summary>Бросает ArgumentException при невалидном имени/телефоне (см. методы User.Change*).</summary>
 internal sealed class UserUpdateProfileCommandHandler(IUserRepository users, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
     : IRequestHandler<UserUpdateProfileCommand, UserUpdateResult>
 {
@@ -30,9 +30,6 @@ internal sealed class UserUpdateProfileCommandHandler(IUserRepository users, ISe
 
         if (request.PhoneNumber is not null)
             user.ChangePhoneNumber(request.PhoneNumber);
-
-        if (request.AvatarUrl is not null)
-            user.ChangeAvatar(request.AvatarUrl);
 
         // Чанк человека собирается из имени и ссылок — правка профиля его меняет.
         searchIndex.Enqueue(SearchSourceType.User, user.Id, boardId: null, SearchIndexOperation.Upsert);

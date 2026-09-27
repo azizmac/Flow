@@ -71,7 +71,7 @@ public class UserFeatureTests
         var created = await CreateUserAsync(mediator);
 
         var result = await mediator.Send(
-            new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, created.Id, null, "Иванов", "Backend", null, "+7 (999) 123-45-67", null),
+            new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, created.Id, null, "Иванов", "Backend", null, "+7 (999) 123-45-67"),
             CancellationToken.None);
 
         var response = result.Response!;
@@ -87,9 +87,9 @@ public class UserFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
         var created = await CreateUserAsync(mediator);
-        await mediator.Send(new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, created.Id, null, null, "Backend", null, null, null), CancellationToken.None);
+        await mediator.Send(new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, created.Id, null, null, "Backend", null, null), CancellationToken.None);
 
-        var result = await mediator.Send(new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, created.Id, null, null, "", null, null, null), CancellationToken.None);
+        var result = await mediator.Send(new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, created.Id, null, null, "", null, null), CancellationToken.None);
 
         Assert.Null(result.Response!.JobTitle);
     }
@@ -99,7 +99,7 @@ public class UserFeatureTests
     {
         var (mediator, _, _, _) = TestMediatorFactory.Create();
 
-        var result = await mediator.Send(new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, Guid.NewGuid(), "A", null, null, null, null, null), CancellationToken.None);
+        var result = await mediator.Send(new UserUpdateProfileCommand(TestMediatorFactory.OwnerId, Guid.NewGuid(), "A", null, null, null, null), CancellationToken.None);
 
         Assert.True(result.IsNotFound);
     }

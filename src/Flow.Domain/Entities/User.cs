@@ -28,6 +28,12 @@ public sealed partial class User
     [GeneratedRegex(@"[\s\-().]")]
     private static partial Regex PhoneNoise();
 
+    [GeneratedRegex(@"^[a-z0-9]{8,64}\.(png|jpg|gif|webp)$")]
+    private static partial Regex AvatarFileNamePattern();
+
+    /// <summary>Под этим путём хост отдаёт загруженные аватары: <c>/avatars/{Id}/{имя файла}</c>.</summary>
+    public const string AvatarPathPrefix = "/avatars/";
+
     private readonly List<UserLink> _links = [];
 
     public Guid Id { get; private set; }
@@ -45,6 +51,10 @@ public sealed partial class User
     /// <summary>«Имя Фамилия» — для списков назначаемых и карточек. Вычисляется, в БД не хранится.</summary>
     public string FullName => $"{FirstName} {LastName}";
 
+    /// <summary>
+    /// Адрес картинки: <c>/avatars/{Id}/{имя}</c> для загруженной (<see cref="SetAvatar"/>).
+    /// У старых профилей может остаться внешний http(s)-адрес — его показываем, но новый так не задать.
+    /// </summary>
     public string? AvatarUrl { get; private set; }
 
     /// <summary>Должность, например «Backend-разработчик».</summary>
@@ -120,9 +130,39 @@ public sealed partial class User
         LastName = ValidateName(lastName, nameof(lastName));
     }
 
-    /// <summary><c>null</c> или пустая строка — убрать аватар.</summary>
-    public void ChangeAvatar(string? avatarUrl)
-        => AvatarUrl = string.IsNullOrWhiteSpace(avatarUrl) ? null : UserLink.ValidateUrl(avatarUrl, nameof(avatarUrl));
+    /// <summary>
+    /// Загруженная картинка. Имя придумывает Application и меняет при каждой загрузке: адрес получается
+    /// версионным, и браузер вправе кэшировать картинку навсегда — новая придёт по новому адресу.
+    /// </summary>
+    public void SetAvatar(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName) || !AvatarFileNamePattern().IsMatch(fileName))
+            throw new ArgumentException("Avatar file name must be a lowercase token with .png, .jpg, .gif or .webp extension.", nameof(fileName));
+
+        AvatarUrl = $"{AvatarPathPrefix}{Id}/{fileName}";
+    }
+
+    /// <summary>Убрать аватар — и загруженный, и оставшийся внешний адрес. Возвращает false, если убирать нечего.</summary>
+    public bool RemoveAvatar()
+    {
+        if (AvatarUrl is null)
+            return false;
+
+        AvatarUrl = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Имя загруженного файла, если аватар загружен через Flow; null — аватара нет или это внешний адрес.
+    /// По нему Application находит объект в хранилище, а хост проверяет, что спрошен текущий файл, а не старый.
+    /// </summary>
+    public string? UploadedAvatarFileName()
+    {
+        var prefix = $"{AvatarPathPrefix}{Id}/";
+        return AvatarUrl is not null && AvatarUrl.StartsWith(prefix, StringComparison.Ordinal)
+            ? AvatarUrl[prefix.Length..]
+            : null;
+    }
 
     public void ChangeJobTitle(string? jobTitle)
         => JobTitle = ValidateOptionalText(jobTitle, JobTitleMaxLength, nameof(jobTitle));
