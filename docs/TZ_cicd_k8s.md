@@ -245,7 +245,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 |-------|----------|----------|
 | `build` | Сборка .NET (Release) | всех трёх образов. Для `flow-client` это **единственная** проверка: тестового проекта у Blazor-клиента нет |
 | `test-unit` | Тесты · unit (Domain + Application) | всех трёх образов. Docker не нужен, секунды |
-| `test-infra` | Тесты · Infrastructure (pgvector + MinIO) | `flow-api`. Testcontainers, `--filter "Category!=Model&Category!=Golden"` |
+| `test-infra` | Тесты · Infrastructure (pgvector + MinIO) | `flow-api`. Testcontainers, `--filter "Category!=Model&Category!=Golden&Category!=S3"` (S3 — временно, пока нет доступного образа MinIO) |
 | `test-auth` | Тесты · Auth | `flow-api` (Auth-модуль компилируется внутрь этого образа, поэтому его тесты — гейт образа api) |
 | `test-api` | Тесты · Api | `flow-api` |
 

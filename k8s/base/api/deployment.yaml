@@ -119,6 +119,9 @@ spec:
             # про redirect_uri, а не как ошибка настроек.
             - name: Auth__Client__RedirectUris__0
               value: "${PUBLIC_CLIENT_ORIGIN}/authentication/login-callback"
+            # Возврат кнопки Authorize в Swagger UI (/swagger): токен для ручных запросов к /api.
+            - name: Auth__Client__RedirectUris__1
+              value: "${PUBLIC_API_URL}/swagger/oauth2-redirect.html"
             - name: Auth__Client__PostLogoutRedirectUris__0
               value: "${PUBLIC_CLIENT_ORIGIN}/authentication/logout-callback"
             # true, пока снаружи нет TLS. OpenIddict иначе откажется выдавать токены по http и скажет

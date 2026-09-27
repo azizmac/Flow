@@ -24,6 +24,12 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Swagger: документ OpenAPI строит встроенный генератор ASP.NET Core, Swashbuckle даёт только UI (см. OpenApi/SwaggerSetup). -->
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+        <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.2.3" />
+    </ItemGroup>
+
+    <ItemGroup>
       <Content Include="..\..\.dockerignore">
         <Link>.dockerignore</Link>
       </Content>

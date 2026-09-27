@@ -2,6 +2,8 @@
 using Flow.Api.Bootstrap;
 using Flow.Api.Client;
 using Flow.Api.Components;
+using Flow.Api.Controllers;
+using Flow.Api.OpenApi;
 using Flow.Api.Routing;
 using Flow.Application.Abstractions;
 using Flow.Application.DependencyInjection;
@@ -13,6 +15,7 @@ using Flow.Infrastructure.DependencyInjection;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
 
@@ -51,10 +54,15 @@ builder.Services.AddFlowApplication();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<ApiExceptionFilter>();
+    // Только метаданные для Swagger, на ответы не влияет: 401 возможен на любом маршруте /api — нет токена,
+    // нет профиля или он деактивирован (ApiExceptionFilter), поэтому объявлен один раз, а не на каждом действии.
+    options.Filters.Add(new ProducesResponseTypeAttribute(typeof(ApiError), StatusCodes.Status401Unauthorized));
     // Маршруты JSON-API уезжают под /api: иначе они сталкиваются со страницами интерфейса (см. ApiPrefixConvention).
     options.Conventions.Add(new ApiPrefixConvention("api"));
 });
 builder.Services.AddRazorPages();
+// Swagger UI на /swagger, документ OpenAPI — /swagger/v1/swagger.json; оба за входом (см. OpenApi/SwaggerSetup).
+builder.Services.AddFlowSwagger();
 
 // ---- Интерфейс Flow: серверный рендер (docs/TZ_client_mudblazor.md) ----
 // Клиент перестал быть отдельным приложением WebAssembly и стал библиотекой компонентов этого хоста.
@@ -139,6 +147,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 // Обязателен для Razor Components; ставится после аутентификации.
 app.UseAntiforgery();
+// После UseAuthorization намеренно: статику Swagger UI отдаёт middleware, и закрыть её может только FallbackPolicy.
+app.UseFlowSwagger();
 
 // AllowAnonymous обязателен: FallbackPolicy выше закрывает всё подряд, а проба, получившая 401,
 // означала бы «под не готов никогда». Ответ — одно слово Healthy/Unhealthy (WriteMinimalPlaintext по умолчанию).
@@ -153,7 +163,7 @@ app.MapPost("/account/logout", async (HttpContext context) =>
 {
     await context.SignOutAsync(IdentityConstants.ApplicationScheme);
     return Results.LocalRedirect("/");
-}).DisableAntiforgery().AllowAnonymous();
+}).DisableAntiforgery().AllowAnonymous().ExcludeFromDescription(); // выход страниц, не JSON-API — в Swagger ему не место
 
 app.MapRazorPages();
 app.MapControllers();

@@ -43,6 +43,9 @@ services:
       # браузерного OIDC и без кросс-доменных запросов. Снять вместе с ClientSeeder, когда SSR
       # отработает в проде (docs/TZ_client_ssr.md).
       Auth__Client__RedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/login-callback
+      # Возврат кнопки Authorize в Swagger UI (/swagger) — тем же клиентом flow-client, но уже не ради отката:
+      # без этого адреса Swagger не получит токен. Хост — тот, что видит браузер, как и у issuer.
+      Auth__Client__RedirectUris__1: ${AUTH_ISSUER:-http://localhost:8080}/swagger/oauth2-redirect.html
       Auth__Client__PostLogoutRedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/logout-callback
       # Локальный compose ходит по http; за TLS-терминатором оставить false.
       Auth__AllowInsecureHttp: ${AUTH_ALLOW_INSECURE_HTTP:-true}

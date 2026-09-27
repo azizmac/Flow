@@ -342,13 +342,15 @@ public class SearchIndexPersistenceTests(SearchFixture fixture)
         await fixture.SendAsync(new ReindexCommand(Owner, null, null));
         var task = await CreateTaskAsync(board.Id, "Срочная правка");
 
+        // Тот же отбор, что у SearchIndexingRunner, и по тем же часам — часам приложения, а не now() базы.
+        var now = DateTime.UtcNow;
         var first = await fixture.QueryAsync(db => db.SearchIndexQueue
-            .FromSqlRaw("""
-                        SELECT * FROM "SearchIndexQueue"
-                        WHERE "NextAttemptAt" <= now()
-                        ORDER BY "Priority", "EnqueuedAt"
-                        LIMIT 1
-                        """)
+            .FromSql($"""
+                      SELECT * FROM "SearchIndexQueue"
+                      WHERE "NextAttemptAt" <= {now}
+                      ORDER BY "Priority", "EnqueuedAt"
+                      LIMIT 1
+                      """)
             .Select(r => new { r.SourceId, r.Priority })
             .SingleAsync());
 
