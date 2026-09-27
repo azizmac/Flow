@@ -1,0 +1,197 @@
+# ТЗ: интеграция с Git-хостингами — GitHub, GitLab, Gitea, Forgejo
+
+Статус: **черновик, не начато**. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 5). Образец — Windshift
+(`internal/scm/*`, `internal/database/schema/scm_postgres.sql`).
+
+## Исходное требование
+
+Привязка коммитов, веток и pull/merge request'ов к задачам Flow для GitHub, GitLab, Gitea и Forgejo.
+
+## Принятые решения
+
+- **Основной канал — вебхуки хостинга, а не опрос API.** Хостинг сам сообщает о push и PR. API нужен для
+  регистрации вебхука, дозагрузки истории при подключении и (этап 5D) действий из Flow.
+- **Задача находится по коду в тексте**: имя ветки, заголовок и описание PR, сообщение коммита. Регулярка ключа
+  та же, что у `Board.Key` (`\b([A-Z][A-Z0-9]{1,9})-(\d+)\b`), плюс алиасы кодов после переноса задачи
+  (`TaskCodeAliases`, `docs/TZ_task_model.md` §6).
+- **Репозиторий явно привязывается к проектам.** Код задачи связывается, только если её проект привязан
+  к репозиторию-источнику. Иначе публичный репозиторий с коммитом «fix WEB-12» прицепил бы чужой текст к
+  задаче приватного проекта, а совпадения ключей между организациями дали бы мусорные связи.
+- **Forgejo = Gitea по протоколу.** Forgejo — форк Gitea с совместимым API и вебхуками. Один адаптер
+  `GiteaProvider`, различие — только в заголовке подписи (`X-Forgejo-Signature` или `X-Gitea-Signature`)
+  и в подписи в интерфейсе.
+- **Обработка асинхронная, через очередь в БД** — тот же приём, что у `SearchIndexQueue`. Эндпоинт вебхука
+  проверяет подпись, пишет доставку и сразу отвечает 202. Хостинг ждёт ответ ~10 секунд и считает таймаут
+  ошибкой, а разбор push на сотню коммитов с поиском задач в это окно может не уложиться.
+- **Коммиты не пишутся в журнал задачи.** Сотня коммитов превратила бы ленту в лог git. Для них — отдельный
+  блок «Разработка» в карточке. В журнал попадает только то, что меняет задачу (автоматический переход статуса).
+- **Действия от имени бота — отдельный профиль.** `TaskActivity.ActorId` ссылается на `Users` (FK Restrict).
+  Автопереход без известного автора пишется от профиля `flow-bot` (сеется как bootstrap-пользователь, без учётной
+  записи в Auth-модуле: войти им нельзя).
+
+## 1. Модель
+
+```
+ScmConnection: Id, Provider : GitHub|GitLab|Gitea|Forgejo, Name, BaseUrl (для self-hosted; GitHub.com — null),
+  AuthKind : Token|GitHubApp, SecretProtected (DataProtection), AppId?, InstallationId?,
+  CreatedById, CreatedAt, LastCheckAt?, LastError?
+ScmRepository: Id, ConnectionId, ExternalId, FullName (org/repo), WebUrl, DefaultBranch,
+  WebhookId?, WebhookSecretProtected, IsActive, LastDeliveryAt?
+ScmRepositoryBoard: (RepositoryId, BoardId) PK, AutoTransitions : jsonb?
+ScmLink: Id, TaskId (FK cascade), RepositoryId (FK cascade), Kind : Branch|Commit|PullRequest,
+  ExternalId (sha / номер PR / имя ветки), Url, Title, State : Open|Draft|Merged|Closed|null,
+  AuthorLogin, AuthorUserId?, SourceBranch?, TargetBranch?, OccurredAt, UpdatedAt
+  unique (TaskId, RepositoryId, Kind, ExternalId)
+ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, ReceivedAt, Status : Pending|Done|Failed|Ignored,
+  Attempts, NextAttemptAt, LastError, Payload : jsonb (обрезанный до нужных полей)
+  unique (RepositoryId, DeliveryId)
+```
+
+- Секреты (токены, ключ GitHub App, секрет вебхука) шифруются `IDataProtector` с purpose `Flow.Scm`. Ключи
+  DataProtection уже хранятся на диске (`DataProtection:KeysPath`, том `auth-keys`). Если путь не задан, ключи
+  эфемерные и после рестарта секреты не расшифруются. Тогда подключение помечается «нужно переподключить»
+  с понятной ошибкой, а на старте в лог пишется предупреждение.
+- Обрезанный `Payload` хранит только поля, которые разбирает Flow (не весь JSON вебхука): push хостинга может
+  весить мегабайты. Доставки старше 30 дней удаляет тот же воркер.
+
+## 2. Приём вебхуков
+
+- Маршрут `POST /hooks/scm/{repositoryId}` — **вне `/api`** и с `[AllowAnonymous]`: вебхук не несёт Bearer,
+  а под `/api` принимается только Bearer. `FallbackPolicy` закрывает всё прочее, поэтому анонимность здесь
+  явная и единственная, как у `/health/*`.
+- `RequestSizeLimit` 5 МБ; больше — 413. GitHub режет payload на 25 МБ, но push с таким телом Flow всё равно
+  не нужен.
+- Проверка подписи (до разбора JSON, по сырому телу, сравнение за постоянное время —
+  `CryptographicOperations.FixedTimeEquals`):
+
+  | Провайдер | Заголовок | Алгоритм |
+  |---|---|---|
+  | GitHub | `X-Hub-Signature-256: sha256=<hex>` | HMAC-SHA256(секрет, тело) |
+  | GitLab | `X-Gitlab-Token: <секрет>` | сравнение секрета |
+  | Gitea | `X-Gitea-Signature: <hex>` | HMAC-SHA256 |
+  | Forgejo | `X-Forgejo-Signature: <hex>` (или `X-Gitea-Signature`) | HMAC-SHA256 |
+
+  Неверная подпись → 401 без тела и запись в лог. Неизвестный или выключенный репозиторий → 404.
+- Идентификатор доставки: `X-GitHub-Delivery`, `X-Gitlab-Event-UUID`, `X-Gitea-Delivery` / `X-Forgejo-Delivery`.
+  Повтор с тем же Id → 200 без повторной обработки (хостинги повторяют доставку при таймауте).
+- Принимаемые события: push, pull_request / merge_request, create/delete (ветки). Остальные → 202 + `Ignored`,
+  чтобы вебхук с лишними галочками не копил ошибки.
+
+## 3. Разбор событий (`ScmWorker : BackgroundService`)
+
+Цикл как у `SearchIndexingRunner`: `FOR UPDATE SKIP LOCKED`, savepoint на доставку, backoff 5 с → 5 мин,
+`MaxAttempts` = 8.
+
+| Событие | Где ищем коды | Что делаем |
+|---|---|---|
+| Ветка создана | имя ветки | `ScmLink(Branch)` |
+| Ветка удалена | — | у связи `State = Closed`; связь остаётся (в истории видно, что работа была) |
+| Push | сообщения коммитов (до 100 на push, остальное — ссылкой «ещё N») и имя ветки | `ScmLink(Commit)` на каждый коммит с кодом; коммиты без кода, но в ветке с кодом, связываются с задачей ветки |
+| PR открыт / изменён | заголовок, описание, исходная ветка | `ScmLink(PullRequest)`, `State` |
+| PR смёржен / закрыт / переоткрыт | те же | обновить `State`; автопереход (§4) |
+
+- Коды ищутся только в проектах, привязанных к репозиторию (`ScmRepositoryBoard`). Код, не найденный в этих
+  проектах, игнорируется молча.
+- `AuthorUserId` — сопоставление по e-mail коммита с `Users.Email` или по логину с `UserLink` типа `GitHub`/`GitLab`
+  (`UserLinkType` уже есть; для Gitea/Forgejo добавить `Gitea = 6` в конец enum). Не нашли — показываем логин
+  без аватара.
+- Force-push, который переписал коммиты: старые `ScmLink(Commit)` не удаляются. Сопоставлять историю ради их
+  удаления не стоит — коммит по ссылке на хостинге всё равно откроется или покажет 404.
+- Заголовки PR и сообщения коммитов — **недоверенный текст**: показываются как текст, без Markdown и без HTML,
+  в индекс поиска не попадают (этап 5E, если понадобится).
+
+## 4. Автопереходы статусов
+
+- Настройка на связку «репозиторий × проект» (`ScmRepositoryBoard.AutoTransitions`), по умолчанию выключены:
+  «PR открыт → статус X», «PR смёржен в ветку по умолчанию → статус Y».
+- Переход проходит **через проверку workflow** (`docs/TZ_workflow_config.md` §2). Запрещённый переход не
+  выполняется, в блоке «Разработка» появляется пометка «автопереход не разрешён workflow». Обхода нет.
+- Actor — сопоставленный автор PR, если у него есть право `EditTask` на задачу, иначе `flow-bot`. Журнал:
+  `StatusChanged` с пометкой источника (`TaskActivity.Source = Scm` — новое необязательное поле; клиент
+  показывает «по PR #42»).
+- Задача уже в финальном статусе — merge её не трогает; переоткрытый PR назад не переводит.
+
+## 5. Смарт-коммиты (этап 5C)
+
+- Синтаксис в сообщении коммита: `WEB-12 #done`, `WEB-12 #comment текст`, `WEB-12 #status "В работе"`,
+  `WEB-12 #time 2h` — вне объёма (worklog нет).
+- Выполняются, только если автор коммита сопоставлен с активным пользователем Flow и у него есть права на это
+  действие в проекте (`EnsureCanEditTask`, `EnsureCanComment`). Бот смарт-коммиты не выполняет: иначе любой
+  с правом push в привязанный репозиторий закрывал бы задачи.
+- Выполняются только для коммитов, попавших в ветку по умолчанию (push в неё). Смарт-коммиты в feature-ветках
+  срабатывали бы при каждом rebase.
+- Включаются флагом на связке «репозиторий × проект».
+
+## 6. Подключение и настройка
+
+- Экран «Интеграции» (`/settings/integrations`, глобальный Admin+): подключение — провайдер, адрес (для
+  self-hosted), токен или GitHub App. Кнопка «Проверить» дёргает `GET /user` / `GET /api/v4/user` /
+  `GET /api/v1/user`.
+- Минимальные права токена: чтение репозитория и управление вебхуками (GitHub — `repo` или fine-grained
+  `Metadata:read`, `Contents:read`, `Pull requests:read`, `Webhooks:write`; GitLab — `api` на уровне проекта
+  или группы; Gitea/Forgejo — `read:repository`, `write:repository` для хуков). В интерфейсе — подсказка со
+  ссылкой на страницу создания токена у провайдера.
+- Выбор репозиториев — список из API подключения с поиском. При добавлении Flow сам создаёт вебхук со случайным
+  32-байтным секретом и адресом `{PublicBaseUrl}/hooks/scm/{id}`. `PublicBaseUrl` — новая настройка
+  (`Scm:PublicBaseUrl`): внутри контейнера хост не знает, как его видят снаружи. Если вебхук создать не удалось
+  (нет прав), экран показывает адрес и секрет для ручной настройки.
+- Привязка репозитория к проекту — в настройках проекта, вкладка «Разработка» (право `ManageScm`,
+  `docs/TZ_project_access.md`). Один репозиторий можно привязать к нескольким проектам (монорепозиторий).
+- Дозагрузка истории при привязке (этап 5B): последние 100 PR и 30 дней коммитов ветки по умолчанию через API,
+  фоновой задачей, с учётом rate limit (`X-RateLimit-Remaining` / `RateLimit-Remaining`; при исчерпании — пауза
+  до сброса).
+- Отключение репозитория удаляет вебхук на хостинге (best-effort) и выключает приём. `ScmLink` остаются.
+
+## 7. Клиент
+
+- Блок «Разработка» в `TaskPage` и `TaskDrawer`: ветки, PR (номер, заголовок, статус чипом Open/Draft/Merged/
+  Closed, автор, целевая ветка), коммиты (последние 5 + «ещё N»). Ссылки открываются на хостинге в новой вкладке.
+- Кнопка «Создать ветку» — без обращения к API: копирует `git checkout -b WEB-12-kratkoe-nazvanie`
+  (транслит из `Services/Ru.cs`, как для username).
+- В строке списка и на карточке канбана — значок PR с состоянием (последний PR задачи).
+- FQL (`docs/TZ_task_views.md` §7): `development = openPR | mergedPR | noPR`.
+
+## 8. Этап 5D: действия из Flow (по запросу)
+
+Создание ветки и PR через API из карточки задачи, комментарий в PR со ссылкой на задачу. Отложено: это
+запись в чужую систему, нужны права токена на запись и отдельная матрица «кто в Flow может пушить в репозиторий».
+
+## API
+
+| Метод | Путь | Кто |
+|---|---|---|
+| GET/POST | `/scm/connections`; PATCH/DELETE `/scm/connections/{id}`; POST `/scm/connections/{id}/check` | Admin+ |
+| GET | `/scm/connections/{id}/available-repositories?q=` | Admin+ |
+| POST/DELETE | `/scm/repositories` `{ connectionId, externalId }`, `/scm/repositories/{id}` | Admin+ |
+| PUT/DELETE | `/boards/{id}/repositories/{repoId}` `{ autoTransitions, smartCommits }` | `ManageScm` |
+| GET | `/tasks/{id}/development` — `ScmLink` задачи, сгруппированные по типу | `ViewProject` |
+| GET | `/scm/repositories/{id}/deliveries?status=` — диагностика доставок | Admin+ |
+| POST | `/hooks/scm/{repositoryId}` — приём вебхука | аноним + подпись |
+
+## Тесты
+
+- Application: детектор кодов (границы слова, `WEB-12a`, коды в URL, алиасы после переноса, только привязанные
+  проекты), сопоставление авторов, автопереходы через workflow (разрешён / запрещён / задача уже закрыта),
+  смарт-коммиты (права, только ветка по умолчанию, бот не выполняет).
+- Infrastructure: очередь доставок (`SKIP LOCKED`, повтор, backoff), идемпотентность `ScmLink` и
+  `(RepositoryId, DeliveryId)`, шифрование секретов на DataProtection.
+- Api: подпись каждого провайдера — фикстуры с настоящими payload'ами и заголовками из документации
+  (верная подпись → 202, неверная → 401, повтор доставки → 200, 413 на большом теле); маршрут анонимен
+  и **не** под `/api`.
+- Провайдерские клиенты (`GitHubProvider`, `GitLabProvider`, `GiteaProvider`) — на записанных ответах
+  (`HttpMessageHandler`-заглушка). Живые хостинги в CI не дёргаются.
+
+## Этапы
+
+| Этап | Состав | Зависит от |
+|---|---|---|
+| 5A | Подключения (токен), репозитории, вебхуки, разбор push/PR/веток, блок «Разработка» | `TZ_project_access` 4A (право `ManageScm`) — или Admin+ до него |
+| 5B | Дозагрузка истории, GitHub App, диагностика доставок | 5A |
+| 5C | Автопереходы и смарт-коммиты | 5A, `TZ_workflow_config` 3B |
+| 5D | Действия из Flow (ветка/PR через API) | 5A |
+| 5E | PR и коммиты в индексе поиска | 5A |
+
+## Вне объёма
+
+Bitbucket и Azure DevOps, синхронизация issues хостинга с задачами Flow (двусторонняя), CI-статусы сборок в
+карточке, раннеры и coding-агенты (как в Windshift), `git receive-pack` и хостинг репозиториев.
