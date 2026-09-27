@@ -28,7 +28,7 @@ public sealed class UserLink
 
     internal void ChangeUrl(string url) => Url = ValidateUrl(url);
 
-    /// <summary>Проверяет, что строка — абсолютный http/https URL. Переиспользуется для аватара.</summary>
+    /// <summary>Проверяет, что строка — абсолютный http/https URL.</summary>
     internal static string ValidateUrl(string url, string paramName = "url")
     {
         if (string.IsNullOrWhiteSpace(url))

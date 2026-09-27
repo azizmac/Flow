@@ -1,4 +1,4 @@
-@* Аватар пользователя: картинка по AvatarUrl или инициалы на детерминированном по Id тинте (Services/Avatars).
+@* Аватар пользователя: картинка по AvatarUrl (/avatars/… — загруженная самим человеком) или инициалы на детерминированном по Id тинте (Services/Avatars).
    Деактивированный — приглушён. Size — диаметр в px (22 в строках, 32 в сайдбаре, 64 в шапке профиля). *@
 
 @if (User is null)
@@ -23,6 +23,7 @@ else
 
     private bool _imgFailed;
     private Guid? _lastId;
+    private string? _lastUrl;
 
     private string Dim => $"width:{Size}px;height:{Size}px";
     private int FontSize => Math.Max(9, (int)Math.Round(Size * 0.4));
@@ -30,9 +31,11 @@ else
 
     protected override void OnParametersSet()
     {
-        if (_lastId != User?.Id)
+        // Новый адрес — новая попытка: после загрузки аватара старая ошибка картинки не должна прятать новую.
+        if (_lastId != User?.Id || _lastUrl != User?.AvatarUrl)
         {
             _lastId = User?.Id;
+            _lastUrl = User?.AvatarUrl;
             _imgFailed = false;
         }
     }
