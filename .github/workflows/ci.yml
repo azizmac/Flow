@@ -65,7 +65,7 @@ jobs:
       prefix: ${{ steps.registry.outputs.prefix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Фильтры строго по графу ProjectReference, а не «всё в src/»: Flow.Auth и Flow.Client ссылаются только
       # на Flow.Shared, поэтому правка Flow.Infrastructure их образов не касается и пересобирать их незачем.
@@ -151,7 +151,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Ловит то, что иначе видно только после пуша: опечатки в контекстах, несуществующие поля, ошибки в
       # needs и matrix, а заодно shellcheck по каждому run-блоку.
@@ -174,7 +174,7 @@ jobs:
             dockerfile: src/Flow.Api/Dockerfile
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: hadolint
         uses: hadolint/hadolint-action@v3.1.0
@@ -188,7 +188,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Оба стека проверяем отдельно: ошибка в любом ломает обещание «проект поднимается одной командой».
       # С профилем proxy: без него compose не разбирает сервис caddy вовсе, и ошибка в нём дожила бы до сервера.
@@ -214,7 +214,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Эта проверка пришла из .github/workflows/build.yml, который после переработки пайплайна больше
       # никто не вызывает: он остался reusable-воркфлоу без единого вызывающего. Оставить её там значило бы
@@ -243,7 +243,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Ловит «зелёный dotnet build, красная сборка образа»: в global.json одна версия SDK, а в Dockerfile тег
       # базового образа живёт своей жизнью и меняется руками.
@@ -270,7 +270,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Забытая переменная не роняет приложение: подставляется дев-дефолт из appsettings.json, и прод молча
       # уезжает с паролем flow. Поэтому проверяем состав переменных до того, как что-то соберётся.
@@ -306,7 +306,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Гейт для интерфейса: своего тестового проекта у него по-прежнему нет, и компиляция —
       # всё, что мы про него проверяем. Теперь он собирается вместе с решением, как обычная библиотека.
@@ -323,7 +323,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Flow.Domain.Tests
         uses: ./.github/actions/dotnet-test
@@ -345,7 +345,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Образ базы тянем заранее: он большой, а Testcontainers считает время его скачивания частью таймаута
       # запуска контейнера. Именно pgvector, а не postgres: миграция делает CREATE EXTENSION vector.
@@ -369,7 +369,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Предзагрузка образа БД
         run: docker pull pgvector/pgvector:pg16
@@ -388,7 +388,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Предзагрузка образа БД
         run: docker pull pgvector/pgvector:pg16
@@ -435,7 +435,7 @@ jobs:
       digest: ${{ steps.image.outputs.digest }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Сборка образа
         id: image
@@ -493,7 +493,7 @@ jobs:
       PROXY_ENABLED: ${{ vars.PROXY_ENABLED || 'false' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Всё, что уезжает в .env, перечислено здесь один раз с префиксом FLOW_ENV_: скрипт берёт имена
       # по префиксу, второго списка, который разъехался бы с этим, нет. Пустое значение в .env не пишется —
