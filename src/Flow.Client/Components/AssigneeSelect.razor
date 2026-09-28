@@ -9,15 +9,15 @@
 @inject BrowserInterop Browser
 
 <MudMenu @bind-Open="_open" PopoverClass="flow-pop flow-pop-wide" ListClass="flow-pop-list" AnchorOrigin="@AnchorOrigin"
-         TransformOrigin="@TransformOrigin" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Назначить исполнителя">
+         TransformOrigin="@TransformOrigin" Dense="true" DropShadow="false" Ripple="false" AriaLabel="@AriaLabel">
     <ActivatorContent>
         <div class="assignee-sel @(Compact ? "compact" : "") @(Current is null ? "none" : "")" @onclick="Toggle" @onclick:stopPropagation
              role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-expanded="@(_open ? "true" : "false")"
-             title="@(Disabled ? "" : "Назначить исполнителя")">
+             title="@(Disabled ? "" : AriaLabel)">
             <Avatar User="Current" Size="@(Compact ? 20 : 22)" />
             @if (!Compact)
             {
-                <span class="lbl">@(Current?.FullName ?? "Не назначена")</span>
+                <span class="lbl">@(Current?.FullName ?? EmptyLabel)</span>
                 <Icon Name="chevrons" Size="12" />
             }
         </div>
@@ -55,7 +55,7 @@
         {
             <div class="pop-sep"></div>
             <MudMenuItem Class="pop-item" OnClick="() => Select(null)">
-                <Icon Name="user-off" Size="15" />Снять исполнителя
+                <Icon Name="user-off" Size="15" />@ClearLabel
             </MudMenuItem>
         }
     </ChildContent>
@@ -71,6 +71,10 @@
     [Parameter] public bool Disabled { get; set; }
     /// <summary>Ограничить выбор одним пользователем (Member — только себя); null — все активные.</summary>
     [Parameter] public Guid? OnlyUserId { get; set; }
+    /// <summary>Подписи для других полей «человек» (пользовательское поле задачи): пусто, снять, подсказка.</summary>
+    [Parameter] public string EmptyLabel { get; set; } = "Не назначена";
+    [Parameter] public string ClearLabel { get; set; } = "Снять исполнителя";
+    [Parameter] public string AriaLabel { get; set; } = "Назначить исполнителя";
 
     private readonly string _inputId = "asq-" + Guid.NewGuid().ToString("N")[..8];
     private bool _open;

@@ -42,60 +42,31 @@
                                      Margin="Margin.None" Class="cf-input" aria-label="@f.Name" />
                     break;
                 case CustomFieldType.Date:
-                    <MudDatePicker Date="@DateOf(value)"
-                                   DateChanged="d => ChangeDate(f, d)"
-                                   Culture="Ru.PickerCulture" DateFormat="dd.MM.yyyy" Clearable="true" Disabled="Disabled" PickerVariant="PickerVariant.Inline"
-                                   Placeholder="—" Underline="false" Variant="Variant.Text" Margin="Margin.None" Class="cf-input" PopoverClass="flow-pop" />
+                    <DsDateField Pill="true" Value="@DateOf(value)" ValueChanged="d => ChangeDate(f, d)" Disabled="Disabled" AriaLabel="@f.Name" />
                     break;
                 case CustomFieldType.Select:
-                    var selected = Guid.TryParse(value?.GetString(), out var sel) ? sel : Guid.Empty;
-                    <MudSelect T="Guid" Value="selected" ValueChanged="id => Change(f, id == Guid.Empty ? null : CustomFieldMeta.Json(id.ToString()))"
-                               Disabled="Disabled" Dense="true" Underline="false" Variant="Variant.Text" Margin="Margin.None"
-                               PopoverClass="flow-pop" Class="sprint-select" aria-label="@f.Name">
-                        <MudSelectItem T="Guid" Value="Guid.Empty">—</MudSelectItem>
-                        @if (selected != Guid.Empty && f.Options.All(o => o.Id != selected))
-                        {
-                            <MudSelectItem T="Guid" Value="selected" Disabled="true">(удалённое значение)</MudSelectItem>
-                        }
-                        @foreach (var option in f.Options)
-                        {
-                            <MudSelectItem T="Guid" Value="option.Id">@option.Label</MudSelectItem>
-                        }
-                    </MudSelect>
+                    Guid? selected = Guid.TryParse(value?.GetString(), out var sel) ? sel : null;
+                    <PillSelect T="Guid?" Items="SelectOptions(f, selected)" Value="selected" Disabled="Disabled" AriaLabel="@f.Name"
+                                Empty="@(id => id is null)" Label="@(id => OptionLabel(f, id))"
+                                DisabledReason="@(id => id is { } o && f.Options.All(x => x.Id != o) ? "значение удалено из списка" : null)"
+                                OnChange="@(id => Change(f, id is { } g ? CustomFieldMeta.Json(g.ToString()) : null))" />
                     break;
                 case CustomFieldType.MultiSelect:
                     var chosen = value is { ValueKind: JsonValueKind.Array } arr
-                        ? arr.EnumerateArray().Select(e => Guid.TryParse(e.GetString(), out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).ToHashSet()
-                        : new HashSet<Guid>();
-                    <MudSelect T="Guid" MultiSelection="true" SelectedValues="chosen" Disabled="Disabled"
-                               SelectedValuesChanged="ids => Change(f, ids.Any() ? CustomFieldMeta.Json(ids.Select(i => i.ToString()).ToArray()) : null)"
-                               MultiSelectionTextFunc="@(list => MultiLabel(f, list))"
-                               Dense="true" Underline="false" Variant="Variant.Text" Margin="Margin.None" PopoverClass="flow-pop" Class="sprint-select" aria-label="@f.Name">
-                        @foreach (var option in f.Options)
-                        {
-                            <MudSelectItem T="Guid" Value="option.Id">@option.Label</MudSelectItem>
-                        }
-                    </MudSelect>
+                        ? arr.EnumerateArray().Select(e => Guid.TryParse(e.GetString(), out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).ToList()
+                        : new List<Guid>();
+                    <PillSelect T="Guid" Multiple="true" Items="f.Options.Select(o => o.Id)" Values="chosen" Disabled="Disabled" AriaLabel="@f.Name"
+                                Label="@(id => OptionLabel(f, id))"
+                                ValuesChanged="@(ids => Change(f, ids.Count > 0 ? CustomFieldMeta.Json(ids.Select(i => i.ToString()).ToArray()) : null))" />
                     break;
                 case CustomFieldType.User:
-                    var person = Guid.TryParse(value?.GetString(), out var pid) ? pid : Guid.Empty;
-                    <MudSelect T="Guid" Value="person" ValueChanged="id => Change(f, id == Guid.Empty ? null : CustomFieldMeta.Json(id.ToString()))"
-                               Disabled="Disabled" Dense="true" Underline="false" Variant="Variant.Text" Margin="Margin.None"
-                               PopoverClass="flow-pop" Class="sprint-select" aria-label="@f.Name">
-                        <MudSelectItem T="Guid" Value="Guid.Empty">—</MudSelectItem>
-                        @if (person != Guid.Empty && Users.Active.All(u => u.Id != person))
-                        {
-                            <MudSelectItem T="Guid" Value="person" Disabled="true">@(Users.Find(person)?.FullName ?? "(удалённый человек)")</MudSelectItem>
-                        }
-                        @foreach (var user in Users.Active.OrderBy(u => u.FullName))
-                        {
-                            <MudSelectItem T="Guid" Value="user.Id">@user.FullName</MudSelectItem>
-                        }
-                    </MudSelect>
+                    Guid? person = Guid.TryParse(value?.GetString(), out var pid) ? pid : null;
+                    <AssigneeSelect Value="person" Disabled="Disabled" EmptyLabel="Не выбран" ClearLabel="Очистить поле" AriaLabel="@f.Name"
+                                    OnChange="@(id => Change(f, id is { } u ? CustomFieldMeta.Json(u.ToString()) : null))" />
                     break;
                 case CustomFieldType.Checkbox:
-                    <MudCheckBox T="bool" Value="@(value?.ValueKind == JsonValueKind.True)" ValueChanged="b => Change(f, CustomFieldMeta.Json(b))"
-                                 Disabled="Disabled" Class="check-mud" aria-label="@f.Name" />
+                    <DsCheckbox Value="@(value?.ValueKind == JsonValueKind.True)" ValueChanged="b => Change(f, CustomFieldMeta.Json(b))"
+                                Disabled="Disabled" AriaLabel="@f.Name" />
                     break;
             }
         }
@@ -124,18 +95,26 @@
 
     private Task Change(CustomFieldResponse field, JsonElement? value) => OnChange.InvokeAsync((field.Id, value));
 
-    private Task ChangeDate(CustomFieldResponse field, DateTime? date) =>
-        Change(field, date is { } d ? CustomFieldMeta.Json(DateOnly.FromDateTime(d).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)) : null);
+    private Task ChangeDate(CustomFieldResponse field, DateOnly? date) =>
+        Change(field, date is { } d ? CustomFieldMeta.Json(d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)) : null);
 
     private static decimal? NumberOf(JsonElement? value) => value is { ValueKind: JsonValueKind.Number } n ? n.GetDecimal() : null;
 
-    private static DateTime? DateOf(JsonElement? value) =>
+    private static DateOnly? DateOf(JsonElement? value) =>
         value is { ValueKind: JsonValueKind.String } s && DateOnly.TryParse(s.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var d)
-            ? d.ToDateTime(TimeOnly.MinValue)
+            ? d
             : null;
 
-    private static string MultiLabel(CustomFieldResponse field, IReadOnlyList<string> ids) =>
-        ids.Count == 0
-            ? "—"
-            : string.Join(", ", ids.Select(id => Guid.TryParse(id, out var g) ? field.Options.FirstOrDefault(o => o.Id == g)?.Label ?? "(удалённое значение)" : id));
+    /// <summary>Список поля: «—» (очистить), варианты и — если сохранённый вариант удалили — он же, выключенным.</summary>
+    private static IEnumerable<Guid?> SelectOptions(CustomFieldResponse field, Guid? selected)
+    {
+        var list = new List<Guid?> { null };
+        list.AddRange(field.Options.Select(o => (Guid?)o.Id));
+        if (selected is { } current && field.Options.All(o => o.Id != current))
+            list.Add(current);
+        return list;
+    }
+
+    private static string OptionLabel(CustomFieldResponse field, Guid? id) =>
+        id is null ? "—" : field.Options.FirstOrDefault(o => o.Id == id)?.Label ?? "(удалённое значение)";
 }

@@ -1,22 +1,17 @@
-@* Поле «Веха» задачи (docs/TZ_task_views.md §6): MudSelect из открытых вех проекта и «Нет». Закрытая веха в список
-   не попадает — новые задачи в неё не добавляют; если задача уже в ней, она видна выключенным пунктом.
-   Guid.Empty — «Нет»: null MudSelect рисует пустым. *@
+@* Поле «Веха» задачи (docs/TZ_task_views.md §6) — пилюля PillSelect: «Нет» (null) и открытые вехи проекта. Закрытая
+   веха в список не попадает — новые задачи в неё не добавляют; если задача уже в ней, она видна выключенным пунктом
+   с причиной. Без права править — ссылка на страницу вехи. *@
 @inject IFlowApi Api
 
 @if (CanEdit)
 {
-    <MudSelect T="Guid" Value="@(Value ?? Guid.Empty)" ValueChanged="Change" Disabled="Disabled" Dense="true" Underline="false"
-               Variant="Variant.Text" Margin="Margin.None" PopoverClass="flow-pop" Class="sprint-select" aria-label="Веха">
-        <MudSelectItem T="Guid" Value="Guid.Empty">Нет</MudSelectItem>
-        @foreach (var milestone in _milestones.Where(m => m.State == MilestoneState.Open || m.Id == Value))
-        {
-            <MudSelectItem T="Guid" Value="milestone.Id" Disabled="@(milestone.State == MilestoneState.Closed)">@Label(milestone)</MudSelectItem>
-        }
-    </MudSelect>
+    <PillSelect T="Guid?" Items="Options" Value="Value" OnChange="OnChange" Disabled="Disabled" Empty="@(id => id is null)"
+                Label="LabelFor" DisabledReason="@(id => Find(id)?.State == MilestoneState.Closed ? "веха закрыта — новые задачи в неё не добавляют" : null)"
+                AriaLabel="Сменить веху" />
 }
-else if (Current is { } current)
+else if (Find(Value) is { } current)
 {
-    <a class="parent-link" href="@($"milestones/{current.Id}")"><span class="val">@Label(current)</span></a>
+    <a class="parent-link" href="@($"milestones/{current.Id}")"><span class="val">@LabelFor(current.Id)</span></a>
 }
 else
 {
@@ -33,7 +28,10 @@ else
     private IReadOnlyList<MilestoneResponse> _milestones = [];
     private Guid _loadedFor;
 
-    private MilestoneResponse? Current => _milestones.FirstOrDefault(m => m.Id == Value);
+    private IEnumerable<Guid?> Options =>
+        new Guid?[] { null }.Concat(_milestones.Where(m => m.State == MilestoneState.Open || m.Id == Value).Select(m => (Guid?)m.Id));
+
+    private MilestoneResponse? Find(Guid? id) => _milestones.FirstOrDefault(m => m.Id == id);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -45,10 +43,11 @@ else
         _milestones = result.Ok ? result.Value! : [];
     }
 
-    private static string Label(MilestoneResponse milestone) =>
-        milestone.State == MilestoneState.Closed ? $"{milestone.Name} · закрыта"
-        : milestone.TargetDate is { } date ? $"{milestone.Name} · {Ru.DateOnlyShort(date)}"
-        : milestone.Name;
-
-    private Task Change(Guid id) => OnChange.InvokeAsync(id == Guid.Empty ? null : id);
+    private string LabelFor(Guid? id) => Find(id) switch
+    {
+        null => "Нет",
+        { State: MilestoneState.Closed } m => $"{m.Name} · закрыта",
+        { TargetDate: { } date } m => $"{m.Name} · {Ru.DateOnlyShort(date)}",
+        var m => m.Name
+    };
 }

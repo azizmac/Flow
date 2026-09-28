@@ -146,6 +146,55 @@ a.mud-link:hover {
     padding: 2px;
 }
 
+/* DsDateField Pill — дата как значение на экране: рамка, фон и шрифт те же, что у пилюли-селекта (.status-sel),
+   внутри — поле MudDatePicker с вводом текстом, крестик «снять» и календарь. */
+.date-pill {
+    display: inline-flex;
+    max-width: 100%;
+}
+
+.date-pill .mud-input-control {
+    margin: 0;
+    width: auto;
+}
+
+.date-pill .mud-input {
+    width: 138px;
+    padding: 3px 4px 3px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.04);
+    font: var(--fw-semibold) 12px var(--font-display);
+    color: #fff;
+    transition: border-color 150ms ease;
+}
+
+.date-pill .mud-input:focus-within {
+    border-color: var(--accent);
+}
+
+.date-pill .mud-input > input.mud-input-root {
+    padding: 2px 0;
+    color: #fff;
+}
+
+.date-pill .mud-input > input.mud-input-root::placeholder {
+    color: var(--text-tertiary);
+    opacity: 1;
+}
+
+.date-pill .mud-input-adornment .mud-icon-button {
+    padding: 2px;
+}
+
+.date-pill .mud-input-adornment .mud-icon-root,
+.date-pill .mud-input-clear-button .mud-icon-root {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.4);
+}
+
 /* DsCheckbox: один размер и цвет на всех экранах, подпись — обычный текст интерфейса. */
 .ds-check.mud-input-control {
     margin: 0;

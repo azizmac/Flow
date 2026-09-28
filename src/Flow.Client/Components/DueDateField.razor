@@ -1,26 +1,14 @@
-﻿@* Срок задачи (или дата начала при Plain): чип (просрочен — красный, ближайшие 2 дня — акцент) + при CanEdit нативный date-input и «Снять».
+@* Срок задачи (или дата начала при Plain) в панели свойств. Правка — DsDateField в виде пилюли (docs/TZ_ui_consistency.md,
+   этап 3): календарь в слое Flow, ввод текстом, крестик снимает дату. Без права править — чип срока (просрочен —
+   красный, ближайшие 2 дня — акцент) или просто дата для начала.
 
-   Нативный input[type=date] шлёт change на каждое полное значение: пока человек набирает год с клавиатуры,
-   поле успевает побывать «0002», «0020», «0202» и только потом «2026». Если отправлять всё подряд, задача
-   получает срок в 20-м году и журнал из четырёх записей. Поэтому:
-   — min/max ограничивают и календарь, и ввод разумным диапазоном (±20 лет от сегодня, плюс уже сохранённое
-     значение, если оно вне диапазона, — иначе браузер пометил бы его невалидным);
-   — значения вне диапазона не отправляются, а пустое поле не считается «снять»: очищает только кнопка «Снять»,
-     иначе стирание одного сегмента при правке снимало бы срок и тут же ставило новый;
-   — когда change проигнорирован, после ухода фокуса поле пересоздаётся (@key) и показывает настоящее значение,
-     а не обрывок набора. *@
+   Раньше здесь был нативный input[type=date]: он шлёт change на каждое «полное» значение, и пока год набирали с
+   клавиатуры, на сервер успевали уйти 0002, 0020, 0202. MudDatePicker разбирает текст по уходу из поля или Enter,
+   а Min/Max (±20 лет от сегодня, но не уже сохранённое значение) не дают уйти опечатке в году. *@
 
 @if (CanEdit)
 {
-    <div class="due-edit">
-        <input @key="_revision" type="date" value="@(Value?.ToString("yyyy-MM-dd"))" disabled="@Disabled" aria-label="@Label"
-               min="@(Min.ToString("yyyy-MM-dd"))" max="@(Max.ToString("yyyy-MM-dd"))"
-               @onchange="OnPick" @onblur="OnBlur" />
-        @if (Value is not null)
-        {
-            <button type="button" class="icon-lnk" disabled="@Disabled" @onclick="Clear"><Icon Name="close-simple" Size="12" />Снять</button>
-        }
-    </div>
+    <DsDateField Pill="true" Value="Value" ValueChanged="OnChange" Disabled="Disabled" AriaLabel="@Label" Min="Min" Max="Max" />
 }
 else if (Value is { } d && Plain)
 {
@@ -46,69 +34,9 @@ else
     /// <summary>Без редактирования — просто дата, без окраски «просрочено» (для даты начала она не имеет смысла).</summary>
     [Parameter] public bool Plain { get; set; }
 
-    /// <summary>Ключ input'а: смена пересоздаёт поле и возвращает в него настоящее значение.</summary>
-    private int _revision;
-
-    /// <summary>Последний change был мусором — вернём значение в поле, когда человек уйдёт из него.</summary>
-    private bool _restorePending;
-
     private static DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
 
-    private DateOnly Min
-    {
-        get
-        {
-            var min = Today.AddYears(-20);
-            return Value is { } v && v < min ? v : min;
-        }
-    }
+    private DateOnly Min => Value is { } v && v < Today.AddYears(-20) ? v : Today.AddYears(-20);
 
-    private DateOnly Max
-    {
-        get
-        {
-            var max = Today.AddYears(20);
-            return Value is { } v && v > max ? v : max;
-        }
-    }
-
-    private async Task OnPick(ChangeEventArgs e)
-    {
-        var raw = e.Value?.ToString();
-
-        // Пустое поле — это незаконченный набор, а не «снять срок» (для этого есть кнопка).
-        if (string.IsNullOrEmpty(raw))
-        {
-            _restorePending = Value is not null;
-            return;
-        }
-
-        if (!DateOnly.TryParseExact(raw, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out var next)
-            || next < Min || next > Max)
-        {
-            _restorePending = true;
-            return;
-        }
-
-        _restorePending = false;
-        if (next != Value)
-            await OnChange.InvokeAsync(next);
-    }
-
-    private void OnBlur()
-    {
-        if (!_restorePending)
-            return;
-
-        _restorePending = false;
-        _revision++;
-    }
-
-    private async Task Clear()
-    {
-        _restorePending = false;
-        _revision++;
-        await OnChange.InvokeAsync(null);
-    }
+    private DateOnly Max => Value is { } v && v > Today.AddYears(20) ? v : Today.AddYears(20);
 }

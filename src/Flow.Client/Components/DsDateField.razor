@@ -3,7 +3,23 @@
 
    Набранный текст разбирается по уходу из поля или Enter, а не на каждую цифру: у нативного поля промежуточные
    «0002», «0020» успевали уйти на сервер. Всё, что не разобралось или вне Min/Max, поле отвергает само и
-   показывает прежнее значение. Снять дату — крестик (Clearable), а не стирание текста. *@
+   показывает прежнее значение. Снять дату — крестик (Clearable), а не стирание текста.
+
+   Pill — дата как значение свойства на экране (панель задачи): то же поле, но в рамке пилюли, как статус и приоритет
+   рядом, без подписи и линии. Ввод текстом и календарь те же. *@
+
+@if (Pill)
+{
+    <span class="date-pill @Class" style="@Style" @onclick:stopPropagation>
+        <MudDatePicker Date="@AsDateTime(Value)" DateChanged="OnChanged" Editable="true" ImmediateText="false"
+                       Culture="Ru.PickerCulture" DateFormat="dd.MM.yyyy" Placeholder="@(Placeholder ?? "—")"
+                       MinDate="@AsDateTime(Min)" MaxDate="@AsDateTime(Max)" Clearable="Clearable" Disabled="Disabled"
+                       PickerVariant="PickerVariant.Inline" ShowToolbar="false" PopoverClass="flow-pop"
+                       Underline="false" Variant="Variant.Text" Margin="Margin.None"
+                       AdornmentIcon="@FlowIcons.Glyphs["calendar"]" aria-label="@(AriaLabel ?? Label)" />
+    </span>
+    return;
+}
 
 <div class="ds-field ds-date @(Compact ? "sm" : "") @(Error is null ? "" : "error") @Class" style="@Style">
     @if (!string.IsNullOrEmpty(Label))
@@ -36,6 +52,8 @@
     [Parameter] public bool Clearable { get; set; } = true;
     [Parameter] public bool Disabled { get; set; }
     [Parameter] public bool Compact { get; set; }
+    /// <summary>Пилюля вместо поля с подчёркиванием — для значения на экране.</summary>
+    [Parameter] public bool Pill { get; set; }
     [Parameter] public string? Class { get; set; }
     [Parameter] public string? Style { get; set; }
 

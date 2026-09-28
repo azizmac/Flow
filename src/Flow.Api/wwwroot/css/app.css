@@ -2040,12 +2040,6 @@ a.task-row { color: inherit; text-decoration: none; }
 .due-chip.soon { color: var(--accent); border-color: rgba(255, 186, 0, 0.4); }
 .task-meta-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .count-chip { display: inline-flex; align-items: center; gap: 4px; font: var(--fw-semibold) 11.5px var(--font-display); color: var(--text-tertiary); }
-.due-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.due-edit input[type="date"] {
-    color-scheme: dark; background: rgba(0, 0, 0, 0.18); border: 1px solid var(--border); border-radius: 8px;
-    color: #fff; font: var(--fw-semibold) 12.5px var(--font-display); padding: 5px 8px; outline: 0;
-}
-.due-edit input[type="date"]:focus { border-color: var(--accent); }
 .sk-line { height: 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); }
 
 /* ---------- Вложения (docs/TZ_attachments.md) ---------- */
@@ -2257,7 +2251,8 @@ a.task-row { color: inherit; text-decoration: none; }
     font: var(--fw-semibold) 11.5px var(--font-mono, var(--font-display)); color: var(--accent); flex: none;
 }
 .parent-sel .lbl { min-width: 0; }
-.parent-sel .lbl.muted, .meta-v.muted { color: var(--text-tertiary); }
+/* Пустое значение в любой пилюле («Нет», «Бэклог», «—») — приглушено, как было у «Родителя». */
+.status-sel .lbl.muted, .meta-v.muted { color: var(--text-tertiary); }
 .parent-link { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: #fff; text-decoration: none; }
 .parent-link .val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pop-task { display: inline-flex; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
