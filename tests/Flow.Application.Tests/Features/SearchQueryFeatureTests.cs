@@ -122,9 +122,9 @@ public class SearchQueryFeatureTests
         await mediator.Send(Query(), CancellationToken.None);
 
         // Вложения входят в поиск по умолчанию наравне с остальным: файл, который виден только
-        // при явном фильтре «Файлы», для человека всё равно что не найден.
+        // при явном фильтре «Файлы», для человека всё равно что не найден. PR и коммиты (этап 5E) — так же.
         Assert.Equal(
-            [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User, SearchSourceType.Attachment],
+            [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User, SearchSourceType.Attachment, SearchSourceType.Development],
             index.LastCriteria!.Types.ToArray());
     }
 

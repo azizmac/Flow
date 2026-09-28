@@ -23,7 +23,7 @@ internal sealed class SearchQueryHandler(
     /// <summary>Что ищется, когда тип не выбран. Вложения входят сюда наравне с остальным: файл,
     /// который виден только при явном фильтре «Файлы», для человека всё равно что не найден.</summary>
     private static readonly SearchSourceType[] AllTypes =
-        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User, SearchSourceType.Attachment];
+        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User, SearchSourceType.Attachment, SearchSourceType.Development];
 
     /// <summary>Сколько текста описания уходит в подсказку прямого попадания по коду задачи.</summary>
     private const int DirectSnippetLength = 160;

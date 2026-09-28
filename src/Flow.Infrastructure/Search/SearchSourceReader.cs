@@ -28,6 +28,7 @@ internal sealed class SearchSourceReader(
             SearchSourceType.Board => ReadBoardAsync(sourceId, cancellationToken),
             SearchSourceType.User => ReadUserAsync(sourceId, cancellationToken),
             SearchSourceType.Attachment => ReadAttachmentAsync(sourceId, cancellationToken),
+            SearchSourceType.Development => ReadDevelopmentAsync(sourceId, cancellationToken),
             _ => throw new NotSupportedException($"Источник {sourceType} пока не индексируется.")
         };
 
@@ -95,6 +96,57 @@ internal sealed class SearchSourceReader(
         // Комментарий к закрытой задаче «закрытым» не считается: IsClosed есть только у задач,
         // режим выдачи по архиву выбирается на этапе поиска.
         return new SourceSnapshot(found.BoardId, IsClosed: false, found.EditedAt ?? found.CreatedAt, BuildChunks(header, found.Body));
+    }
+
+    /// <summary>
+    /// PR или коммит задачи (этап 5E). Текст — чужой, с хостинга: он только ищется и показывается текстом, в Markdown не
+    /// рендерится. В содержимом — то, по чему такую связь ищут: номер и заголовок PR с ветками, первая строка коммита и
+    /// короткий sha. Закрытость наследуется от задачи, как у вложений. Ветка (или связи уже нет) — null: чанки уходят.
+    /// </summary>
+    private async Task<SourceSnapshot?> ReadDevelopmentAsync(Guid linkId, CancellationToken cancellationToken)
+    {
+        var found = await (
+            from link in db.ScmLinks.AsNoTracking()
+            join task in db.TaskItems.AsNoTracking() on link.TaskId equals task.Id
+            join repository in db.ScmRepositories.AsNoTracking() on link.RepositoryId equals repository.Id
+            where link.Id == linkId && link.Kind != Domain.Entities.ScmLinkKind.Branch
+            select new
+            {
+                link.Kind,
+                link.ExternalId,
+                link.Title,
+                link.SourceBranch,
+                link.TargetBranch,
+                link.OccurredAt,
+                task.BoardId,
+                TaskCode = task.Code,
+                task.StatusId,
+                repository.FullName
+            }).FirstOrDefaultAsync(cancellationToken);
+
+        if (found is null)
+            return null;
+
+        var isClosed = await db.Statuses.AsNoTracking()
+            .Where(s => s.Id == found.StatusId)
+            .Select(s => s.IsFinal)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        string label, content;
+        if (found.Kind == Domain.Entities.ScmLinkKind.PullRequest)
+        {
+            label = $"PR #{found.ExternalId}";
+            var branches = found.SourceBranch is { } source ? $"\n{source}{(found.TargetBranch is { } target ? $" → {target}" : "")}" : "";
+            content = $"{label} {found.Title}{branches}";
+        }
+        else
+        {
+            label = $"коммит {found.ExternalId[..Math.Min(7, found.ExternalId.Length)]}";
+            content = $"{found.Title}\n{label}";
+        }
+
+        var header = ChunkHeaderBuilder.ForDevelopment(found.TaskCode.Value, found.FullName, label);
+        return new SourceSnapshot(found.BoardId, isClosed, found.OccurredAt, BuildChunks(header, content));
     }
 
     private async Task<SourceSnapshot?> ReadBoardAsync(Guid boardId, CancellationToken cancellationToken)

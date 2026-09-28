@@ -29,6 +29,7 @@ internal sealed class ScmTaskActionHandlers(
     IPermissionService permissions,
     IProjectAccess projectAccess,
     ISender sender,
+    ISearchIndexQueue searchIndex,
     IUnitOfWork unitOfWork) :
     IRequestHandler<TaskScmBranchCreateCommand, TaskDevelopmentResponse?>,
     IRequestHandler<TaskScmPullRequestCreateCommand, TaskDevelopmentResponse?>
@@ -68,6 +69,7 @@ internal sealed class ScmTaskActionHandlers(
         var link = await LinkAsync(ctx, ScmLinkKind.PullRequest, pr.Number, cancellationToken);
         var previous = link.Url.Length == 0 ? (ScmLinkState?)null : link.State;
         link.Apply(pr.Url, pr.Title, pr.State, pr.AuthorLogin, ctx.Actor.Id, pr.SourceBranch ?? source, pr.TargetBranch ?? target, pr.UpdatedAt);
+        searchIndex.Upsert(link, ctx.Task.BoardId);
         // Автопереход «PR открыт» — как если бы PR пришёл вебхуком: через workflow, от имени создавшего.
         await automation.OnPullRequestAsync(ctx.Repository, ctx.Binding, ctx.Task, link, previous, pr, ctx.Actor.Id, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

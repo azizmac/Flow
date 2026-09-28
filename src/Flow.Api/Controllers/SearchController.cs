@@ -23,7 +23,7 @@ public class SearchController(IMediator mediator, IActorAccessor actor) : Contro
     /// 404 — поиск выключен (Search:Enabled=false), 400 — пустой запрос или неизвестный тип источника.
     /// </summary>
     /// <param name="q">Строка запроса.</param>
-    /// <param name="types">Типы источников через запятую: <c>task,comment,board,user</c>; пусто — все.</param>
+    /// <param name="types">Типы источников через запятую: <c>task,comment,board,user,attachment,development</c>; пусто — все.</param>
     /// <param name="boardId">Искать только в одном проекте.</param>
     /// <param name="includeArchived">Включать задачи в финальном статусе; по умолчанию нет.</param>
     /// <param name="mode">hybrid (по умолчанию), semantic или text — для отладки качества.</param>

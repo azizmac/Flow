@@ -45,7 +45,8 @@ internal sealed class SearchStatusQueryHandler(
                 Count(statistics, SearchSourceType.Comment),
                 Count(statistics, SearchSourceType.Board),
                 Count(statistics, SearchSourceType.User),
-                Count(statistics, SearchSourceType.Attachment)),
+                Count(statistics, SearchSourceType.Attachment),
+                Count(statistics, SearchSourceType.Development)),
             OldestQueuedAt: statistics.OldestQueuedAt);
     }
 

@@ -89,6 +89,7 @@ internal sealed class ScmDeliveryHandlers(
     IScmSecretProtector protector,
     ScmOptions options,
     ScmAutomation automation,
+    ISearchIndexQueue searchIndex,
     IUnitOfWork unitOfWork) :
     IRequestHandler<ScmDueDeliveriesQuery, IReadOnlyList<Guid>>,
     IRequestHandler<ScmDeliveryProcessCommand, bool>,
@@ -119,7 +120,7 @@ internal sealed class ScmDeliveryHandlers(
         var connection = repository is null ? null : await store.GetConnectionAsync(repository.ConnectionId, cancellationToken);
         if (repository is not null && connection is not null)
         {
-            var processor = new Processor(store, tasks, users, automation, repository, connection.Provider, delivery.IsBackfill, cancellationToken);
+            var processor = new Processor(store, tasks, users, automation, searchIndex, repository, connection.Provider, delivery.IsBackfill, cancellationToken);
             if (!delivery.IsBackfill)
             {
                 await processor.RunAsync(ScmEvent.Deserialize(delivery.Payload));
@@ -185,7 +186,7 @@ internal sealed class ScmDeliveryHandlers(
     /// <param name="history">Дозагрузка истории: связи пишутся, но автопереходы и смарт-коммиты не выполняются —
     /// прошлое не должно двигать задачи сегодня.</param>
     private sealed class Processor(IScmStore store, ITaskItemRepository tasks, IUserRepository users, ScmAutomation automation,
-        ScmRepository repository, ScmProvider provider, bool history, CancellationToken ct)
+        ISearchIndexQueue searchIndex, ScmRepository repository, ScmProvider provider, bool history, CancellationToken ct)
     {
         private readonly Dictionary<(Guid, ScmLinkKind, string), ScmLink> _links = [];
 
@@ -222,7 +223,9 @@ internal sealed class ScmDeliveryHandlers(
                         var previous = link.Url.Length == 0 ? (ScmLinkState?)null : link.State;
                         if (link.Url.Length == 0 && !history)
                             NewPullRequests.Add((task, link, pr, _boards[task.BoardId]));
+                        var indexed = link.Url.Length == 0 ? default : ScmSearch.Snapshot(link);
                         link.Apply(pr.Url, pr.Title, pr.State, pr.AuthorLogin, author, pr.SourceBranch, pr.TargetBranch, pr.UpdatedAt);
+                        Reindex(link, task, indexed);
                         if (!history)
                             await automation.OnPullRequestAsync(repository, _boards[task.BoardId], task, link, previous, pr, author, ct);
                     }
@@ -256,11 +259,24 @@ internal sealed class ScmDeliveryHandlers(
                     var link = await LinkAsync(task, ScmLinkKind.Commit, commit.Sha);
                     // Коммит уже видели в ветке по умолчанию (повторный push, merge-коммит) — команды не выполняем второй раз.
                     var seenOnDefault = link.Url.Length > 0 && link.SourceBranch == repository.DefaultBranch;
+                    var indexed = link.Url.Length == 0 ? default : ScmSearch.Snapshot(link);
                     link.Apply(commit.Url, title, null, commit.AuthorLogin ?? commit.AuthorEmail, author, branch, null, commit.Timestamp);
+                    Reindex(link, task, indexed);
                     if (smart.TryGetValue(task.Id, out var commands) && !seenOnDefault && _boards![task.BoardId].SmartCommits)
                         await automation.OnSmartCommitAsync(task, link, commit, author, commands, ct);
                 }
             }
+        }
+
+        /// <summary>
+        /// Этап 5E: новая связь или изменившийся текст (заголовок PR, ветки) — в очередь поиска; повторный push того же
+        /// коммита индекс не трогает. Ветку коммита текст чанка не содержит, но снимок сравнивает и её — лишний upsert
+        /// дешёвый: неизменившийся чанк воркер отсекает по ContentHash.
+        /// </summary>
+        private void Reindex(ScmLink link, TaskItem task, (string Title, string? Source, string? Target) before)
+        {
+            if (before == default || ScmSearch.Snapshot(link) != before)
+                searchIndex.Upsert(link, task.BoardId, history ? 1 : 0);
         }
 
         private async Task BranchAsync(TaskItem task, string branch)

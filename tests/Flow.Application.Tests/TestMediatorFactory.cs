@@ -43,7 +43,8 @@ public sealed record ScmTestContext(
     FakeUserRepository Users,
     FakeScmStore Scm,
     FakeScmProviderClient Client,
-    Flow.Application.Features.Scm.ScmOptions Options);
+    Flow.Application.Features.Scm.ScmOptions Options,
+    FakeSearchIndexQueue SearchIndex);
 
 public static class TestMediatorFactory
 {
@@ -99,7 +100,7 @@ public static class TestMediatorFactory
     public static ScmTestContext CreateScmContext()
     {
         var all = Build();
-        return new ScmTestContext(all.Mediator, all.Boards, all.Tasks, all.Users, all.Scm, all.ScmClient, all.ScmOptions);
+        return new ScmTestContext(all.Mediator, all.Boards, all.Tasks, all.Users, all.Scm, all.ScmClient, all.ScmOptions, all.SearchQueue);
     }
 
     /// <summary>Плюс фейковый UnitOfWork — для проверки повторов сохранения (конфликт ранга).</summary>

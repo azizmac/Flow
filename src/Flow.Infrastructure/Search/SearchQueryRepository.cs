@@ -194,15 +194,15 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             SELECT b."SourceType" AS "SourceType",
                    b."SourceId" AS "SourceId",
                    b."BoardId" AS "BoardId",
-                   COALESCE(ti."Title", ct."Title", bd."Name", at."FileName",
+                   COALESCE(ti."Title", ct."Title", bd."Name", at."FileName", sl."Title",
                             NULLIF(btrim(COALESCE(u."FirstName", '') || ' ' || COALESCE(u."LastName", '')), ''),
                             u."Username", '') AS "Title",
                    ts_headline('russian', b."Content", websearch_to_tsquery('russian', @text),
                                'MaxFragments=2, MinWords=5, MaxWords=20, StartSel=<mark>, StopSel=</mark>') AS "Snippet",
                    b.score::double precision AS "Score",
-                   COALESCE(ti."Code", ct."Code", att."Code") AS "TaskCode",
+                   COALESCE(ti."Code", ct."Code", att."Code", slt."Code") AS "TaskCode",
                    b."SourceUpdatedAt" AS "UpdatedAt",
-                   COALESCE(cm."TaskId", at."TaskId") AS "ParentId",
+                   COALESCE(cm."TaskId", at."TaskId", sl."TaskId") AS "ParentId",
                    b."Content" AS "Content",
                    b."IsClosed" AS "IsClosed",
                    count(*) OVER () AS "Total"
@@ -214,6 +214,8 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             LEFT JOIN "Users" u ON b."SourceType" = 4 AND u."Id" = b."SourceId"
             LEFT JOIN "Attachments" at ON b."SourceType" = 5 AND at."Id" = b."SourceId"
             LEFT JOIN "TaskItems" att ON att."Id" = at."TaskId"
+            LEFT JOIN "ScmLinks" sl ON b."SourceType" = 6 AND sl."Id" = b."SourceId"
+            LEFT JOIN "TaskItems" slt ON slt."Id" = sl."TaskId"
             WHERE b."SourceType" <> 4 OR u."Status" <> 2
             ORDER BY b.score DESC, b."SourceUpdatedAt" DESC
             LIMIT @limit OFFSET @offset
