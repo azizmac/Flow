@@ -170,6 +170,53 @@ a.mud-link:hover {
     background: transparent;
 }
 
+/* Слой MudSelect: прокручивается сам список (MudBlazor ведёт по нему стрелками), а у слоя от его отступа
+   появлялась вторая полоса прокрутки. Отступ переезжает в список, слой только обрезает. */
+.mud-popover.flow-pop:has(> .mud-list) {
+    padding: 0;
+    overflow: hidden;
+}
+
+.mud-popover.flow-pop > .mud-list {
+    padding: 6px;
+}
+
+/* Пункты MudSelect в слое Flow (группы, спринт…). Список выше — flex-колонка, и при переполнении слоя
+   (max-height) пункты по умолчанию сжимались: строка в 37px ужималась до 19px, и имена наезжали друг на друга.
+   Не сжимаем, держим в одну строку с многоточием, вид — как у .pop-item. */
+.flow-pop .mud-list-item {
+    flex-shrink: 0;
+    min-height: 0;
+    padding: 7px 10px;
+    border-radius: 8px;
+    transition: background-color 120ms ease;
+}
+
+.flow-pop .mud-list-item .mud-list-item-text {
+    margin: 0;
+    min-width: 0;
+}
+
+.flow-pop .mud-list-item .mud-typography {
+    font: var(--fw-semibold) 12.5px var(--font-display);
+    color: var(--text-secondary);
+    letter-spacing: normal;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.flow-pop .mud-list-item:hover,
+.flow-pop .mud-list-item:focus-visible,
+.flow-pop .mud-list-item.mud-selected-item {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.flow-pop .mud-list-item:hover .mud-typography,
+.flow-pop .mud-list-item:focus-visible .mud-typography {
+    color: #fff;
+}
+
 .flow-pop .pop-item.mud-menu-item {
     min-height: 0;
     padding: 8px 10px;
