@@ -6,7 +6,7 @@
    показывает прежнее значение. Снять дату — крестик (Clearable), а не стирание текста.
 
    Pill — дата как значение свойства на экране (панель задачи): то же поле, но в рамке пилюли, как статус и приоритет
-   рядом, без подписи и линии. Ввод текстом и календарь те же. *@
+   рядом, без подписи и подложки поля. Ввод текстом и календарь те же. *@
 
 @if (Pill)
 {
@@ -52,7 +52,7 @@
     [Parameter] public bool Clearable { get; set; } = true;
     [Parameter] public bool Disabled { get; set; }
     [Parameter] public bool Compact { get; set; }
-    /// <summary>Пилюля вместо поля с подчёркиванием — для значения на экране.</summary>
+    /// <summary>Пилюля вместо поля на подложке — для значения на экране.</summary>
     [Parameter] public bool Pill { get; set; }
     [Parameter] public string? Class { get; set; }
     [Parameter] public string? Style { get; set; }
