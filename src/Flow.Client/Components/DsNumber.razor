@@ -38,11 +38,14 @@
     [Parameter] public string? Class { get; set; }
     [Parameter] public string? Style { get; set; }
 
+    /// <summary>Прочие атрибуты (title с подсказкой) уходят на MudNumericField как есть.</summary>
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? Attributes { get; set; }
+
     private Dictionary<string, object> Limits { get; set; } = [];
 
     protected override void OnParametersSet()
     {
-        var limits = new Dictionary<string, object>();
+        var limits = Attributes is null ? new Dictionary<string, object>() : new Dictionary<string, object>(Attributes);
         if (Min is { } min) limits["Min"] = As(min);
         if (Max is { } max) limits["Max"] = As(max);
         if (Step is { } step) limits["Step"] = As(step);

@@ -14,13 +14,12 @@
     </TitleContent>
     <DialogContent>
         <div class="wd-row">
-            <MudSelect T="ScmProvider" Label="Хостинг" Value="_provider" ValueChanged="SetProvider" Disabled="@(Connection is not null)"
-                       Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="wd-field">
+            <DsSelect T="ScmProvider" Label="Хостинг" Value="_provider" ValueChanged="SetProvider" Disabled="@(Connection is not null)" Class="wd-field">
                 @foreach (var p in ScmMeta.Providers)
                 {
                     <MudSelectItem T="ScmProvider" Value="p">@ScmMeta.Name(p)</MudSelectItem>
                 }
-            </MudSelect>
+            </DsSelect>
             <DsInput Id="scm-name" Label="Название" MaxLength="80" Value="@_name" ValueChanged="v => _name = v" />
         </div>
         <DsInput Label="@(_provider == ScmProvider.GitHub ? "Адрес GitHub Enterprise (пусто — github.com)" : "Адрес сервера")"
@@ -39,14 +38,11 @@
         @if (IsApp)
         {
             <div class="wd-row">
-                <MudNumericField T="long?" Label="App ID" Value="_appId" ValueChanged="v => _appId = v" Min="1" HideSpinButtons="true"
-                                 Variant="Variant.Text" Class="wd-field" />
-                <MudNumericField T="long?" Label="Installation ID" Value="_installationId" ValueChanged="v => _installationId = v" Min="1"
-                                 HideSpinButtons="true" Variant="Variant.Text" Class="wd-field" />
+                <DsNumber T="long?" Label="App ID" Value="_appId" ValueChanged="v => _appId = v" Min="1" Class="wd-field" />
+                <DsNumber T="long?" Label="Installation ID" Value="_installationId" ValueChanged="v => _installationId = v" Min="1" Class="wd-field" />
             </div>
-            <MudTextField T="string" Label="@(Connection is null ? "Закрытый ключ (.pem)" : "Новый закрытый ключ (пусто — не менять)")" Value="_token"
-                          ValueChanged="v => _token = v" Lines="4" Variant="Variant.Text" Class="scm-pem"
-                          Placeholder="-----BEGIN RSA PRIVATE KEY-----" />
+            <DsInput Label="@(Connection is null ? "Закрытый ключ (.pem)" : "Новый закрытый ключ (пусто — не менять)")" Value="@_token"
+                     ValueChanged="v => _token = v" Lines="4" Class="scm-pem" Placeholder="-----BEGIN RSA PRIVATE KEY-----" />
             <div class="hint scm-hint">
                 Права приложения: Metadata и Contents — чтение, Pull requests — чтение, Webhooks — запись. Installation ID — число в адресе
                 страницы установки (…/settings/installations/<b>12345</b>).

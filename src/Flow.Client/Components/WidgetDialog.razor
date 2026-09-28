@@ -14,13 +14,12 @@
     </TitleContent>
     <DialogContent>
         <div class="wd-row">
-            <MudSelect T="WidgetType" Label="Вид" Value="_type" ValueChanged="SetType" Disabled="@(Widget is not null)"
-                       Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="wd-field">
+            <DsSelect T="WidgetType" Label="Вид" Value="_type" ValueChanged="SetType" Disabled="@(Widget is not null)" Class="wd-field">
                 @foreach (var type in Types)
                 {
                     <MudSelectItem T="WidgetType" Value="type">@DashboardWidgetView.DefaultTitle(type)</MudSelectItem>
                 }
-            </MudSelect>
+            </DsSelect>
             <DsInput Id="wd-title" Label="Заголовок (необязательно)" MaxLength="80" Placeholder="@DashboardWidgetView.DefaultTitle(_type)"
                      Value="@_title" ValueChanged="v => _title = v" />
         </div>
@@ -33,13 +32,13 @@
             </div>
             @if (_useFilter)
             {
-                <MudSelect T="Guid?" Label="Фильтр" Value="_filterId" ValueChanged="v => _filterId = v" Dense="true" Variant="Variant.Text"
-                           PopoverClass="flow-pop" Class="wd-field" Placeholder="@(Filters.All.Count == 0 ? "Сохранённых фильтров нет" : "Выберите фильтр")">
+                <DsSelect T="Guid?" Label="Фильтр" Value="_filterId" ValueChanged="v => _filterId = v" Class="wd-field"
+                          Placeholder="@(Filters.All.Count == 0 ? "Сохранённых фильтров нет" : "Выберите фильтр")">
                     @foreach (var f in Filters.All)
                     {
                         <MudSelectItem T="Guid?" Value="f.Id">@f.Name</MudSelectItem>
                     }
-                </MudSelect>
+                </DsSelect>
             }
             else
             {
@@ -51,18 +50,16 @@
         @switch (_type)
         {
             case WidgetType.TaskList:
-                <MudNumericField T="int" Label="Сколько задач показать" Value="_limit" ValueChanged="v => _limit = v" Min="1" Max="50"
-                                 Variant="Variant.Text" Class="wd-field wd-narrow" />
+                <DsNumber T="int" Label="Сколько задач показать" Value="_limit" ValueChanged="v => _limit = v" Min="1" Max="50" Class="wd-field wd-narrow" />
                 break;
             case WidgetType.Breakdown:
                 <div class="wd-row">
-                    <MudSelect T="string" Label="Разбить по" Value="_groupBy" ValueChanged="v => _groupBy = v" Dense="true" Variant="Variant.Text"
-                               PopoverClass="flow-pop" Class="wd-field">
+                    <DsSelect T="string" Label="Разбить по" Value="_groupBy" ValueChanged="v => _groupBy = v" Class="wd-field">
                         @foreach (var (key, label) in GroupOptions)
                         {
                             <MudSelectItem T="string" Value="key">@label</MudSelectItem>
                         }
-                    </MudSelect>
+                    </DsSelect>
                     <div class="seg wd-seg" role="radiogroup" aria-label="График">
                         <button type="button" class="seg-btn @(_chart == "bar" ? "on" : "")" role="radio" aria-checked="@(_chart == "bar")" @onclick="@(() => _chart = "bar")">Полосы</button>
                         <button type="button" class="seg-btn @(_chart == "pie" ? "on" : "")" role="radio" aria-checked="@(_chart == "pie")" @onclick="@(() => _chart = "pie")">Кольцо</button>
@@ -70,44 +67,40 @@
                 </div>
                 break;
             case WidgetType.CreatedVsClosed:
-                <MudSelect T="int" Label="Период" Value="_days" ValueChanged="v => _days = v" Dense="true" Variant="Variant.Text"
-                           PopoverClass="flow-pop" Class="wd-field wd-narrow">
+                <DsSelect T="int" Label="Период" Value="_days" ValueChanged="v => _days = v" Class="wd-field wd-narrow">
                     @foreach (var days in DayOptions)
                     {
                         <MudSelectItem T="int" Value="days">@Ru.Days(days)</MudSelectItem>
                     }
-                </MudSelect>
+                </DsSelect>
                 break;
             case WidgetType.SprintBurndown:
             case WidgetType.MilestoneProgress:
                 <div class="wd-row">
-                    <MudSelect T="Guid?" Label="Проект" Value="_boardId" ValueChanged="OnBoardChanged" Dense="true" Variant="Variant.Text"
-                               PopoverClass="flow-pop" Class="wd-field">
+                    <DsSelect T="Guid?" Label="Проект" Value="_boardId" ValueChanged="OnBoardChanged" Class="wd-field">
                         @foreach (var b in _boards)
                         {
                             <MudSelectItem T="Guid?" Value="b.Id">@b.Key · @b.Name</MudSelectItem>
                         }
-                    </MudSelect>
+                    </DsSelect>
                     @if (_type == WidgetType.SprintBurndown)
                     {
-                        <MudSelect T="Guid?" Label="Спринт" Value="_sprintId" ValueChanged="v => _sprintId = v" Dense="true" Variant="Variant.Text"
-                                   PopoverClass="flow-pop" Class="wd-field" Disabled="@(_boardId is null)">
+                        <DsSelect T="Guid?" Label="Спринт" Value="_sprintId" ValueChanged="v => _sprintId = v" Class="wd-field" Disabled="@(_boardId is null)">
                             <MudSelectItem T="Guid?" Value="null">Активный спринт</MudSelectItem>
                             @foreach (var s in _sprints)
                             {
                                 <MudSelectItem T="Guid?" Value="s.Id">@s.Name</MudSelectItem>
                             }
-                        </MudSelect>
+                        </DsSelect>
                     }
                     else
                     {
-                        <MudSelect T="Guid?" Label="Веха" Value="_milestoneId" ValueChanged="v => _milestoneId = v" Dense="true" Variant="Variant.Text"
-                                   PopoverClass="flow-pop" Class="wd-field" Disabled="@(_boardId is null)">
+                        <DsSelect T="Guid?" Label="Веха" Value="_milestoneId" ValueChanged="v => _milestoneId = v" Class="wd-field" Disabled="@(_boardId is null)">
                             @foreach (var m in _milestones)
                             {
                                 <MudSelectItem T="Guid?" Value="m.Id">@m.Name</MudSelectItem>
                             }
-                        </MudSelect>
+                        </DsSelect>
                     }
                 </div>
                 break;
@@ -122,16 +115,16 @@
             <div class="wd-row">
                 @if (Widget is not null)
                 {
-                    <MudNumericField T="int" Label="Колонка" Value="_x + 1" ValueChanged="v => _x = v - 1" Min="1" Max="12" Variant="Variant.Text" Class="wd-field" />
-                    <MudNumericField T="int" Label="Строка" Value="_y + 1" ValueChanged="v => _y = v - 1" Min="1" Max="99" Variant="Variant.Text" Class="wd-field" />
+                    <DsNumber T="int" Label="Колонка" Value="_x + 1" ValueChanged="v => _x = v - 1" Min="1" Max="12" Class="wd-field" />
+                    <DsNumber T="int" Label="Строка" Value="_y + 1" ValueChanged="v => _y = v - 1" Min="1" Max="99" Class="wd-field" />
                 }
-                <MudSelect T="int" Label="Ширина" Value="_w" ValueChanged="v => _w = v" Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="wd-field">
+                <DsSelect T="int" Label="Ширина" Value="_w" ValueChanged="v => _w = v" Class="wd-field">
                     @foreach (var (w, label) in Widths)
                     {
                         <MudSelectItem T="int" Value="w">@label</MudSelectItem>
                     }
-                </MudSelect>
-                <MudNumericField T="int" Label="Высота, строк" Value="_h" ValueChanged="v => _h = v" Min="1" Max="8" Variant="Variant.Text" Class="wd-field" />
+                </DsSelect>
+                <DsNumber T="int" Label="Высота, строк" Value="_h" ValueChanged="v => _h = v" Min="1" Max="8" Class="wd-field" />
             </div>
         </div>
 

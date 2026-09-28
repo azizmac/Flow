@@ -52,14 +52,8 @@
     else
     {
         <div class="wf-type">
-            <MudSelect T="Guid?" Label="Workflow для" Value="_typeId" ValueChanged="SelectType" Dense="true" Variant="Variant.Text"
-                       PopoverClass="flow-pop" Class="wf-type-select" ToStringFunc="TypeLabel">
-                <MudSelectItem T="Guid?" Value="null">всего проекта</MudSelectItem>
-                @foreach (var type in _board.TaskTypes.Where(t => !t.IsArchived || t.HasOwnWorkflow))
-                {
-                    <MudSelectItem T="Guid?" Value="type.Id">@TypeLabel(type.Id)</MudSelectItem>
-                }
-            </MudSelect>
+            <span class="meta-k">Workflow для</span>
+            <PillSelect T="Guid?" Items="WorkflowTypeOptions" Value="_typeId" OnChange="SelectType" Label="TypeLabel" AriaLabel="Workflow для" />
             @if (_typeId is not null && _workflow.Inherited && !_ownDraft)
             {
                 <span class="hint">Тип живёт по workflow проекта — ниже он, только для чтения.</span>
@@ -145,9 +139,8 @@
                                 var selected = _selected is { } sel && sel.From == fromId && sel.To == to.Id;
                                 <td class="@(selected ? "sel" : "")">
                                     <span class="wf-cell">
-                                        <MudCheckBox T="bool" Value="@(t is not null)" ValueChanged="_ => Toggle(fromId, to.Id)" Disabled="!CanEdit"
-                                                     Size="Size.Small" Color="Color.Primary" Dense="true" Class="wf-check"
-                                                     title="@($"{from?.Name ?? "Из любого"} → {to.Name}")" />
+                                        <DsCheckbox Value="@(t is not null)" ValueChanged="_ => Toggle(fromId, to.Id)" Disabled="!CanEdit"
+                                                    title="@($"{from?.Name ?? "Из любого"} → {to.Name}")" />
                                         @if (t is not null)
                                         {
                                             <button type="button" class="wf-gear @(HasConditions(t) ? "on" : "")" title="Условия перехода"
@@ -190,25 +183,24 @@
                     }
                 </div>
                 <div class="wf-flags">
-                    <MudCheckBox T="bool" Value="edit.Conditions!.RequireAssignee" Disabled="!CanEdit" Size="Size.Small" Color="Color.Primary" Dense="true"
-                                 Label="Назначен исполнитель" ValueChanged="v => Update(cell, edit with { Conditions = edit.Conditions with { RequireAssignee = v } })" />
-                    <MudCheckBox T="bool" Value="edit.Conditions.RequireChildrenDone" Disabled="!CanEdit" Size="Size.Small" Color="Color.Primary" Dense="true"
-                                 Label="Все подзадачи закрыты" ValueChanged="v => Update(cell, edit with { Conditions = edit.Conditions with { RequireChildrenDone = v } })" />
-                    <MudCheckBox T="bool" Value="edit.Conditions.RequireChecklistDone" Disabled="!CanEdit" Size="Size.Small" Color="Color.Primary" Dense="true"
-                                 Label="Чек-лист выполнен" ValueChanged="v => Update(cell, edit with { Conditions = edit.Conditions with { RequireChecklistDone = v } })" />
+                    <DsCheckbox Value="edit.Conditions!.RequireAssignee" Disabled="!CanEdit" Label="Назначен исполнитель"
+                                ValueChanged="v => Update(cell, edit with { Conditions = edit.Conditions with { RequireAssignee = v } })" />
+                    <DsCheckbox Value="edit.Conditions.RequireChildrenDone" Disabled="!CanEdit" Label="Все подзадачи закрыты"
+                                ValueChanged="v => Update(cell, edit with { Conditions = edit.Conditions with { RequireChildrenDone = v } })" />
+                    <DsCheckbox Value="edit.Conditions.RequireChecklistDone" Disabled="!CanEdit" Label="Чек-лист выполнен"
+                                ValueChanged="v => Update(cell, edit with { Conditions = edit.Conditions with { RequireChecklistDone = v } })" />
                 </div>
                 @if ((_board.CustomFields ?? []).Any(f => !f.IsArchived) || edit.Conditions.RequireFields is { Count: > 0 })
                 {
                     @* Обязательные пользовательские поля перехода (этап 3C): «в “На проверке” — только с заполненными “Шагами”». *@
-                    <MudSelect T="Guid" MultiSelection="true" Label="Заполнены поля" Disabled="!CanEdit" Dense="true" Variant="Variant.Text"
-                               SelectedValues="@(edit.Conditions.RequireFields ?? [])" PopoverClass="flow-pop" Class="cf-select wf-fields"
-                               MultiSelectionTextFunc="@(ids => ids.Count == 0 ? "—" : string.Join(", ", ids.Select(FieldName)))"
-                               SelectedValuesChanged="ids => Update(cell, edit with { Conditions = edit.Conditions with { RequireFields = ids.ToList() } })">
+                    <DsSelect T="Guid" Multiple="true" Label="Заполнены поля" Disabled="!CanEdit" SelectedValues="@(edit.Conditions.RequireFields ?? [])"
+                              Class="cf-select wf-fields" MultiSelectionTextFunc="@(ids => ids.Count == 0 ? "—" : string.Join(", ", ids.Select(FieldName)))"
+                              SelectedValuesChanged="ids => Update(cell, edit with { Conditions = edit.Conditions with { RequireFields = ids.ToList() } })">
                         @foreach (var field in (_board.CustomFields ?? []).Where(f => !f.IsArchived || (edit.Conditions.RequireFields?.Contains(f.Id) ?? false)))
                         {
                             <MudSelectItem T="Guid" Value="field.Id">@field.Name</MudSelectItem>
                         }
-                    </MudSelect>
+                    </DsSelect>
                 }
             </div>
         }
@@ -300,6 +292,10 @@
     private string TypeLabel(Guid? typeId) => typeId is { } id && _board?.TaskTypes.FirstOrDefault(t => t.Id == id) is { } type
         ? $"типа «{type.Name}»{(type.HasOwnWorkflow ? " — свой" : "")}"
         : "всего проекта";
+
+    /// <summary>«Всего проекта» (null) и типы: неархивные и те архивные, у которых уже есть свой workflow.</summary>
+    private IEnumerable<Guid?> WorkflowTypeOptions =>
+        new Guid?[] { null }.Concat((_board?.TaskTypes ?? []).Where(t => !t.IsArchived || t.HasOwnWorkflow).Select(t => (Guid?)t.Id));
 
     private void SelectType(Guid? typeId) =>
         Nav.NavigateTo(Nav.GetUriWithQueryParameter("type", typeId?.ToString()), replace: true);

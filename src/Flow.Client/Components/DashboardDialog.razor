@@ -11,8 +11,7 @@
     </TitleContent>
     <DialogContent>
         <DsInput Id="dd-name" Label="Название" MaxLength="80" Placeholder="Команда: неделя" Value="@_name" ValueChanged="v => { _name = v; _error = null; }" />
-        <MudCheckBox T="bool" @bind-Value="_shared" Size="Size.Small" Color="Color.Primary" Dense="true" Class="sf-shared"
-                     Label="Виден всем — каждый увидит в виджетах только задачи доступных ему проектов" />
+        <DsCheckbox @bind-Value="_shared" Class="sf-shared" Label="Виден всем — каждый увидит в виджетах только задачи доступных ему проектов" />
         @if (_error is not null)
         {
             <div class="ds-field-error">@_error</div>

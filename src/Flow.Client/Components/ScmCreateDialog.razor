@@ -17,13 +17,12 @@
         <div class="scm-create">
             @if (Repositories.Count > 1)
             {
-                <MudSelect T="Guid" Label="Репозиторий" Value="_repositoryId" ValueChanged="OnRepository" Dense="true" Variant="Variant.Text"
-                           PopoverClass="flow-pop" ToStringFunc="RepoName" Disabled="_busy">
+                <DsSelect T="Guid" Label="Репозиторий" Value="_repositoryId" ValueChanged="OnRepository" ToStringFunc="RepoName" Disabled="_busy">
                     @foreach (var r in Repositories)
                     {
                         <MudSelectItem T="Guid" Value="r.Id">@r.FullName</MudSelectItem>
                     }
-                </MudSelect>
+                </DsSelect>
             }
             else
             {
@@ -35,7 +34,7 @@
                 <DsInput Id="scm-source" Label="Из ветки" Value="@_branch" ValueChanged="v => _branch = v" MaxLength="200" Class="mono" OnKeyDown="OnKey" />
                 <DsInput Label="В ветку" Placeholder="@Repository?.DefaultBranch" Value="@_target" ValueChanged="v => _target = v" MaxLength="200" OnKeyDown="OnKey" />
                 <DsInput Label="Заголовок" Value="@_title" ValueChanged="v => _title = v" MaxLength="250" OnKeyDown="OnKey" />
-                <MudCheckBox T="bool" @bind-Value="_draft" Size="Size.Small" Color="Color.Primary" Dense="true" Label="Черновик (draft)" Disabled="_busy" />
+                <DsCheckbox @bind-Value="_draft" Label="Черновик (draft)" Disabled="_busy" />
             }
             else
             {

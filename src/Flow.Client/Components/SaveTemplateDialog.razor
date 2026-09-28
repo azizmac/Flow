@@ -14,8 +14,8 @@
     <DialogContent>
         <DsInput Id="st-name" Label="Название шаблона" MaxLength="80" Value="@_name" ValueChanged="v => _name = v" />
         <DsInput Label="Описание" Placeholder="Для чего подходит" MaxLength="500" Value="@_description" ValueChanged="v => _description = v" />
-        <MudCheckBox T="bool" Value="_includeTasks" ValueChanged="v => _includeTasks = v" Size="Size.Small" Color="Color.Primary" Dense="true"
-                     Class="check-mud" Label="С задачами-образцами (до 50 верхнего уровня)" />
+        <DsCheckbox Value="_includeTasks" ValueChanged="v => _includeTasks = v"
+                    Label="С задачами-образцами (до 50 верхнего уровня)" />
         @if (_error is not null)
         {
             <div class="ds-field-error">@_error</div>

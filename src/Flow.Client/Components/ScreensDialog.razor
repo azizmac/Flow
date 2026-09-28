@@ -23,14 +23,13 @@
                             @onclick="() => Switch(_typeId, ctx)">@(ctx == ScreenContext.Detail ? "Карточка" : "Создание")</button>
                 }
             </div>
-            <MudSelect T="Guid" Value="_typeId" ValueChanged="id => Switch(id, _context)" Dense="true" Variant="Variant.Text"
-                       PopoverClass="flow-pop" Class="cf-select sc-type" aria-label="Тип задачи">
+            <DsSelect T="Guid" Value="_typeId" ValueChanged="id => Switch(id, _context)" Class="cf-select sc-type" AriaLabel="Тип задачи">
                 <MudSelectItem T="Guid" Value="Guid.Empty">Все типы</MudSelectItem>
                 @foreach (var type in _board.TaskTypes.Where(t => !t.IsArchived))
                 {
                     <MudSelectItem T="Guid" Value="type.Id">@type.Name</MudSelectItem>
                 }
-            </MudSelect>
+            </DsSelect>
             <span class="hint">@SourceHint</span>
         </div>
 
@@ -45,7 +44,7 @@
                            @oninput="e => row.Section = e.Value?.ToString()" />
                     @if (CanBeRequired(row.Field))
                     {
-                        <MudCheckBox T="bool" Value="row.Required" ValueChanged="v => row.Required = v" Class="check-mud sc-req" Label="обязательное" />
+                        <DsCheckbox Value="row.Required" ValueChanged="v => row.Required = v" Class="sc-req" Label="обязательное" />
                     }
                     else
                     {
@@ -66,13 +65,12 @@
 
         @if (Available.Any())
         {
-            <MudSelect T="string" Value="@((string?)null)" ValueChanged="Add" Dense="true" Variant="Variant.Text" Label="Добавить поле"
-                       PopoverClass="flow-pop" Class="cf-select sc-add">
+            <DsSelect T="string" Value="@((string?)null)" ValueChanged="Add" Label="Добавить поле" Class="cf-select sc-add">
                 @foreach (var field in Available)
                 {
                     <MudSelectItem T="string" Value="field">@ScreenLayout.FieldLabel(_board, new ScreenFieldDto(field))</MudSelectItem>
                 }
-            </MudSelect>
+            </DsSelect>
         }
 
         @if (_error is not null)

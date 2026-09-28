@@ -14,13 +14,8 @@
         <span class="topbar-title">Отчёт спринта</span>
         @if (_sprints.Count > 1)
         {
-            <MudSelect T="Guid" Value="SprintId" ValueChanged="Switch" Dense="true" Underline="false" Variant="Variant.Text"
-                       Margin="Margin.None" PopoverClass="flow-pop" Class="sprint-select" aria-label="Спринт">
-                @foreach (var sprint in _sprints.Where(s => s.State != SprintState.Planned))
-                {
-                    <MudSelectItem T="Guid" Value="sprint.Id">@sprint.Name</MudSelectItem>
-                }
-            </MudSelect>
+            <PillSelect T="Guid" Items="_sprints.Where(s => s.State != SprintState.Planned).Select(s => s.Id)" Value="SprintId" OnChange="Switch"
+                        Label="@(id => _sprints.FirstOrDefault(s => s.Id == id)?.Name ?? "—")" AriaLabel="Спринт" />
         }
     </div>
 </div>

@@ -64,21 +64,20 @@
                 }
             </div>
             <div class="cf-form-row">
-                <MudSelect T="CustomFieldType" Label="Тип" Value="_type" ValueChanged="v => _type = v" Disabled="@(_editing is not null)"
-                           Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="cf-select">
+                <DsSelect T="CustomFieldType" Label="Тип" Value="_type" ValueChanged="v => _type = v" Disabled="@(_editing is not null)" Class="cf-select">
                     @foreach (var type in CustomFieldMeta.Types)
                     {
                         <MudSelectItem T="CustomFieldType" Value="type">@CustomFieldMeta.TypeLabel(type)</MudSelectItem>
                     }
-                </MudSelect>
-                <MudSelect T="Guid" Label="Типы задач" MultiSelection="true" SelectedValues="_taskTypes" SelectedValuesChanged="v => _taskTypes = v.ToHashSet()"
-                           Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="cf-select" Placeholder="Все типы"
-                           MultiSelectionTextFunc="@(list => list.Count == 0 ? "Все типы" : string.Join(", ", list.Select(TypeName)))">
+                </DsSelect>
+                <DsSelect T="Guid" Label="Типы задач" Multiple="true" SelectedValues="_taskTypes" SelectedValuesChanged="v => _taskTypes = v.ToHashSet()"
+                          Class="cf-select" Placeholder="Все типы"
+                          MultiSelectionTextFunc="@(list => list.Count == 0 ? "Все типы" : string.Join(", ", list.Select(TypeName)))">
                     @foreach (var type in _board.TaskTypes.Where(t => !t.IsArchived))
                     {
                         <MudSelectItem T="Guid" Value="type.Id">@type.Name</MudSelectItem>
                     }
-                </MudSelect>
+                </DsSelect>
             </div>
             @if (CustomFieldMeta.HasOptions(_type))
             {
@@ -96,7 +95,7 @@
                     <button type="button" class="icon-lnk" @onclick="() => _optionRows.Add(new OptionRow(null, string.Empty, null))">+ вариант</button>
                 </div>
             }
-            <MudCheckBox T="bool" Value="_required" ValueChanged="v => _required = v" Class="check-mud cf-required" Label="Обязательное" />
+            <DsCheckbox Value="_required" ValueChanged="v => _required = v" Class="cf-required" Label="Обязательное" />
         </div>
 
         @if (_error is not null)

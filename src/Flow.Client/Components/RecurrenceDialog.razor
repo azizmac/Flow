@@ -13,15 +13,14 @@
     </TitleContent>
     <DialogContent>
         <div class="wd-row">
-            <MudSelect T="RecurrenceFrequency" Label="Как часто" Value="_frequency" ValueChanged="v => Change(() => _frequency = v)" Dense="true"
-                       Variant="Variant.Text" PopoverClass="flow-pop" Class="wd-field">
+            <DsSelect T="RecurrenceFrequency" Label="Как часто" Value="_frequency" ValueChanged="v => Change(() => _frequency = v)" Class="wd-field">
                 @foreach (var f in Enum.GetValues<RecurrenceFrequency>())
                 {
                     <MudSelectItem T="RecurrenceFrequency" Value="f">@RecurrenceText.Frequency(f, 1)</MudSelectItem>
                 }
-            </MudSelect>
-            <MudNumericField T="int" Label="Интервал" Value="_interval" ValueChanged="v => Change(() => _interval = v)" Min="1" Max="99"
-                             Variant="Variant.Text" Class="wd-field wd-narrow" />
+            </DsSelect>
+            <DsNumber T="int" Label="Интервал" Value="_interval" ValueChanged="v => Change(() => _interval = v)" Min="1" Max="99"
+                      Class="wd-field wd-narrow" />
         </div>
 
         @if (_frequency == RecurrenceFrequency.Weekly)
@@ -36,8 +35,7 @@
         }
         else if (_frequency == RecurrenceFrequency.Monthly)
         {
-            <MudSelect T="int" Label="День месяца" Value="_monthDay" ValueChanged="v => Change(() => _monthDay = v)" Dense="true"
-                       Variant="Variant.Text" PopoverClass="flow-pop" Class="wd-field wd-narrow">
+            <DsSelect T="int" Label="День месяца" Value="_monthDay" ValueChanged="v => Change(() => _monthDay = v)" Class="wd-field wd-narrow">
                 <MudSelectItem T="int" Value="0">как в дате начала</MudSelectItem>
                 @for (var d = 1; d <= 31; d++)
                 {
@@ -45,25 +43,25 @@
                     <MudSelectItem T="int" Value="day">@day-го</MudSelectItem>
                 }
                 <MudSelectItem T="int" Value="-1">последний день</MudSelectItem>
-            </MudSelect>
+            </DsSelect>
         }
 
         <div class="wd-row">
-            <MudDatePicker Label="Начало" Date="_startsOn" DateChanged="d => Change(() => _startsOn = d ?? _startsOn)" Culture="Ru.PickerCulture"
-                           DateFormat="dd.MM.yyyy" PickerVariant="PickerVariant.Inline" Variant="Variant.Text" Class="wd-field" PopoverClass="flow-pop" />
-            <MudDatePicker Label="Конец" Placeholder="без конца" Date="_endsOn" DateChanged="d => Change(() => _endsOn = d)" Culture="Ru.PickerCulture" Clearable="true"
-                           DateFormat="dd.MM.yyyy" PickerVariant="PickerVariant.Inline" Variant="Variant.Text" Class="wd-field" PopoverClass="flow-pop" />
+            <DsDateField Label="Начало" Value="@DsDateField.Of(_startsOn)" Clearable="false" Class="wd-field"
+                         ValueChanged="d => Change(() => _startsOn = DsDateField.At(d) ?? _startsOn)" />
+            <DsDateField Label="Конец" Placeholder="без конца" Value="@DsDateField.Of(_endsOn)" Class="wd-field"
+                         ValueChanged="d => Change(() => _endsOn = DsDateField.At(d))" />
         </div>
         <div class="wd-row">
-            <MudNumericField T="int" Label="Создавать за, дней" Value="_leadDays" ValueChanged="v => Change(() => _leadDays = v)" Min="0" Max="60"
-                             Variant="Variant.Text" Class="wd-field" />
-            <MudNumericField T="int?" Label="Срок через, дней" Value="_dueOffset" ValueChanged="v => Change(() => _dueOffset = v)" Min="0" Max="365"
-                             Variant="Variant.Text" Class="wd-field" Placeholder="без срока" Clearable="true" />
+            <DsNumber T="int" Label="Создавать за, дней" Value="_leadDays" ValueChanged="v => Change(() => _leadDays = v)" Min="0" Max="60"
+                      Class="wd-field" />
+            <DsNumber T="int?" Label="Срок через, дней" Value="_dueOffset" ValueChanged="v => Change(() => _dueOffset = v)" Min="0" Max="365"
+                      Class="wd-field" Placeholder="без срока" Clearable="true" />
         </div>
         <div class="rec-checks">
-            <MudCheckBox T="bool" @bind-Value="_copyAssignee" Size="Size.Small" Color="Color.Primary" Dense="true" Label="Назначать того же исполнителя" />
-            <MudCheckBox T="bool" @bind-Value="_copyChecklist" Size="Size.Small" Color="Color.Primary" Dense="true" Label="Копировать чек-лист" />
-            <MudCheckBox T="bool" @bind-Value="_active" Size="Size.Small" Color="Color.Primary" Dense="true" Label="Включено" />
+            <DsCheckbox @bind-Value="_copyAssignee" Label="Назначать того же исполнителя" />
+            <DsCheckbox @bind-Value="_copyChecklist" Label="Копировать чек-лист" />
+            <DsCheckbox @bind-Value="_active" Label="Включено" />
         </div>
 
         <div class="rec-preview">

@@ -25,14 +25,13 @@
         {
             @* Шаблон задачи (этап 3G) заполняет форму — поля можно поправить; чек-лист и подзадачи создаст сервер. *@
             <div class="tpl-pick">
-                <MudSelect T="Guid?" Label="Шаблон" Value="_templateId" ValueChanged="ApplyTemplate" Dense="true" Variant="Variant.Text"
-                           PopoverClass="flow-pop" Disabled="_busy">
+                <DsSelect T="Guid?" Label="Шаблон" Value="_templateId" ValueChanged="ApplyTemplate" Disabled="_busy">
                     <MudSelectItem T="Guid?" Value="null">Без шаблона</MudSelectItem>
                     @foreach (var t in _templates)
                     {
                         <MudSelectItem T="Guid?" Value="t.Id">@t.Name</MudSelectItem>
                     }
-                </MudSelect>
+                </DsSelect>
                 @if (_templates.FirstOrDefault(t => t.Id == _templateId) is { } picked && (picked.Checklist.Count > 0 || picked.Subtasks.Count > 0))
                 {
                     <span class="hint">вместе с задачей: @(picked.Checklist.Count > 0 ? $"чек-лист ({picked.Checklist.Count})" : "")@(picked.Checklist.Count > 0 && picked.Subtasks.Count > 0 ? ", " : "")@(picked.Subtasks.Count > 0 ? $"подзадачи ({picked.Subtasks.Count})" : "")</span>

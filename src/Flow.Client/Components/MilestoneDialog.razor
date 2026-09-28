@@ -15,19 +15,17 @@
         <DsInput Id="md-name" Label="Название" MaxLength="80" Placeholder="Релиз 1.0" Value="@_name" ValueChanged="v => _name = v" />
         <DsInput Id="md-desc" Label="Описание (необязательно)" MaxLength="2000" Value="@_description" ValueChanged="v => _description = v" />
         <div class="sd-dates">
-            <MudDatePicker Label="Целевая дата" Date="_target" DateChanged="d => _target = d" Culture="Ru.PickerCulture" DateFormat="dd.MM.yyyy"
-                           Clearable="true" PickerVariant="PickerVariant.Inline" Variant="Variant.Text" Class="sd-date" PopoverClass="flow-pop" />
+            <DsDateField Label="Целевая дата" Value="@DsDateField.Of(_target)" ValueChanged="d => _target = DsDateField.At(d)" Class="sd-date" />
         </div>
         @if (_shareable.Count > 0)
         {
-            <MudSelect T="Guid" MultiSelection="true" Label="Общая с проектами" SelectedValues="_shared" SelectedValuesChanged="v => _shared = v.ToHashSet()"
-                       Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="md-shared"
-                       MultiSelectionTextFunc="@(ids => ids.Count == 0 ? "только этот проект" : string.Join(", ", ids.Select(KeyOf)))">
+            <DsSelect T="Guid" Multiple="true" Label="Общая с проектами" SelectedValues="_shared" SelectedValuesChanged="v => _shared = v.ToHashSet()"
+                      Class="md-shared" MultiSelectionTextFunc="@(ids => ids.Count == 0 ? "только этот проект" : string.Join(", ", ids.Select(KeyOf)))">
                 @foreach (var b in _shareable)
                 {
                     <MudSelectItem T="Guid" Value="b.Id">@b.Key · @b.Name</MudSelectItem>
                 }
-            </MudSelect>
+            </DsSelect>
             <div class="hint">В общую веху кладут задачи всех отмеченных проектов, прогресс считается по всем.</div>
         }
         @if (_error is not null)

@@ -50,10 +50,9 @@
                             <button type="button" class="st-flag @(s.IsFinal ? "on" : "")" role="switch" aria-checked="@(s.IsFinal ? "true" : "false")"
                                     title="@FinalTitle(s)" disabled="@(_busy || !CanToggleFinal(s))"
                                     @onclick="() => Update(s, new UpdateStatusRequest(IsFinal: !s.IsFinal))">финальный</button>
-                            <MudNumericField T="int?" Value="s.WipLimit" ValueChanged="v => SetWip(s, v)" Min="1" Max="999" Placeholder="WIP"
-                                             HideSpinButtons="true" Disabled="_busy" Underline="false" Variant="Variant.Text" Margin="Margin.None"
-                                             Class="st-wip" aria-label="WIP-лимит"
-                                             title="Лимит задач в колонке канбана: превышение подсвечивается, перенос не запрещается. Пусто — без лимита." />
+                            <DsNumber T="int?" Value="s.WipLimit" ValueChanged="v => SetWip(s, v)" Min="1" Max="999" Placeholder="WIP" Compact="true"
+                                      Disabled="_busy" Class="st-wip" AriaLabel="WIP-лимит"
+                                      title="Лимит задач в колонке канбана: превышение подсвечивается, перенос не запрещается. Пусто — без лимита." />
                             <DsIconButton Icon="trash" Size="26" Title="@DeleteTitle(s)" Style="color:rgba(255,255,255,0.45)"
                                           Disabled="@(_busy || !CanDelete(s))" OnClick="() => StartDelete(s)" />
                         </span>

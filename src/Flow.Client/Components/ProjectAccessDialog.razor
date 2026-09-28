@@ -117,15 +117,26 @@
                 @if (GroupCandidates.Count > 0)
                 {
                     <div class="pa-add">
-                        @* Поле — кнопка «добавить», а не значение (ToStringFunc пустой): без этого после выбора в нём оставался Guid добавленной группы. *@
-                        <MudSelect T="Guid?" Placeholder="Добавить группу" Value="null" ValueChanged="id => AddGroup(id)" Dense="true" Variant="Variant.Text"
-                                   PopoverClass="flow-pop" Class="pa-group-add" Disabled="_busy"
-                                   ToStringFunc="@(_ => "")">
-                            @foreach (var g in GroupCandidates)
-                            {
-                                <MudSelectItem T="Guid?" Value="g.Id">@g.Name</MudSelectItem>
-                            }
-                        </MudSelect>
+                        @* Добавить — кнопка с меню, как «Выбрать человека» ниже: это действие, а не значение поля. *@
+                        <MudMenu @bind-Open="_groupMenuOpen" PopoverClass="flow-pop flow-pop-wide" ListClass="flow-pop-list" Dense="true"
+                                 DropShadow="false" Ripple="false" AriaLabel="Добавить группу" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                            <ActivatorContent>
+                                <DsButton Variant="secondary" Size="sm" Icon="users" Disabled="_busy" StopPropagation="true"
+                                          OnClick="() => _groupMenuOpen = !_groupMenuOpen">Выбрать группу</DsButton>
+                            </ActivatorContent>
+                            <ChildContent>
+                                @foreach (var g in GroupCandidates)
+                                {
+                                    <MudMenuItem Class="pop-item" OnClick="() => AddGroup(g.Id)">
+                                        <span class="pa-group-ico"><Icon Name="users" Size="13" /></span>
+                                        <span class="pop-user">
+                                            <span class="pop-user-name">@g.Name</span>
+                                            <span class="pop-user-un">@Ru.People(g.MemberIds.Count)@(g.IsTeam ? " · команда" : "")</span>
+                                        </span>
+                                    </MudMenuItem>
+                                }
+                            </ChildContent>
+                        </MudMenu>
                         <ProjectRoleSelect Value="_newRole" Allowed="Grantable" Sets="_sets" SetId="_newSetId" OnSetChange="v => { _newRole = v.Role; _newSetId = v.SetId; }" />
                     </div>
                 }
@@ -172,6 +183,7 @@
     private bool _busy;
     private Guid _boardId;
     private BoardMembersResponse? _members;
+    private bool _groupMenuOpen;
     private ProjectRole _newRole = ProjectRole.Member;
     private string? _error;
     private IReadOnlyList<GroupResponse> _allGroups = [];

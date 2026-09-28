@@ -47,22 +47,16 @@
                     <div class="meta-k">Приоритет</div>
                     <div><PrioritySelect Value="_draft.Priority" OnChange="p => _draft.Priority = p" /></div>
                 </div>
-                <MudTextField T="string" Label="Описание" Lines="4" Variant="Variant.Text" Value="_draft.Description" ValueChanged="v => _draft.Description = v" Class="tt-area" />
-                <MudTextField T="string" Label="Чек-лист — пункт на строку" Lines="3" Variant="Variant.Text" Value="_draft.Checklist" ValueChanged="v => _draft.Checklist = v" Class="tt-area" />
+                <DsInput Label="Описание" Lines="4" Value="@(_draft.Description ?? "")" ValueChanged="v => _draft.Description = v" Class="tt-area" />
+                <DsInput Label="Чек-лист — пункт на строку" Lines="3" Value="@(_draft.Checklist ?? "")" ValueChanged="v => _draft.Checklist = v" Class="tt-area" />
 
                 <div class="meta-section">Подзадачи</div>
                 @foreach (var sub in _draft.Subtasks)
                 {
                     <div class="tt-sub">
-                        <MudTextField T="string" Placeholder="Название подзадачи" Variant="Variant.Text" Value="sub.Title" ValueChanged="v => sub.Title = v" Class="tt-sub-title" />
-                        <MudSelect T="Guid?" Value="sub.TypeId" ValueChanged="v => sub.TypeId = v" Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="rs-inline"
-                                   aria-label="Тип подзадачи">
-                            <MudSelectItem T="Guid?" Value="null">Тип уровнем ниже</MudSelectItem>
-                            @foreach (var type in Board.TaskTypes.Where(t => !t.IsArchived))
-                            {
-                                <MudSelectItem T="Guid?" Value="type.Id">@type.Name</MudSelectItem>
-                            }
-                        </MudSelect>
+                        <DsInput Compact="true" Placeholder="Название подзадачи" Value="@(sub.Title ?? "")" ValueChanged="v => sub.Title = v" Class="tt-sub-title" />
+                        <PillSelect T="Guid?" Items="SubtaskTypeOptions" Value="sub.TypeId" OnChange="v => sub.TypeId = v" AriaLabel="Тип подзадачи"
+                                    Empty="@(id => id is null)" Label="@(id => id is { } t ? Board.TaskTypes.FirstOrDefault(x => x.Id == t)?.Name ?? "—" : "Тип уровнем ниже")" />
                         <span class="hint">@(sub.Checklist.Count > 0 ? $"☑ {sub.Checklist.Count}" : "")</span>
                         <DsIconButton Icon="close" Size="26" Title="Убрать подзадачу" OnClick="() => _draft.Subtasks.Remove(sub)" />
                     </div>
@@ -102,6 +96,10 @@
 @code {
     [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
     [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Тип подзадачи шаблона: «уровнем ниже» (null) или любой неархивный тип проекта.</summary>
+    private IEnumerable<Guid?> SubtaskTypeOptions =>
+        new Guid?[] { null }.Concat(Board.TaskTypes.Where(t => !t.IsArchived).Select(t => (Guid?)t.Id));
 
     private sealed class SubDraft
     {

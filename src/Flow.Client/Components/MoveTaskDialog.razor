@@ -13,13 +13,13 @@
         <div class="hint">Задача получит новый код, старый продолжит на неё вести.</div>
     </TitleContent>
     <DialogContent>
-        <MudSelect T="Guid?" Label="Проект" Value="_boardId" ValueChanged="OnBoardChanged" Dense="true" Variant="Variant.Text"
-                   PopoverClass="flow-pop" Class="rs-field" Placeholder="@(Targets.Count == 0 ? "Нет проектов, где вы можете создавать задачи" : "Выберите проект")">
+        <DsSelect T="Guid?" Label="Проект" Value="_boardId" ValueChanged="OnBoardChanged" Class="rs-field"
+                  Placeholder="@(Targets.Count == 0 ? "Нет проектов, где вы можете создавать задачи" : "Выберите проект")">
             @foreach (var b in Targets)
             {
                 <MudSelectItem T="Guid?" Value="b.Id">@b.Key · @b.Name</MudSelectItem>
             }
-        </MudSelect>
+        </DsSelect>
 
         @if (_loading)
         {
@@ -62,13 +62,13 @@
                             <td>@m.FromName</td>
                             <td class="hint">→</td>
                             <td>
-                                <MudSelect T="Guid" Value="MappedStatus(m)" ValueChanged="v => MapStatus(m.FromId, v)" Dense="true" Variant="Variant.Text"
-                                           PopoverClass="flow-pop" Class="rs-inline" aria-label="@($"Статус вместо «{m.FromName}»")">
+                                <DsSelect T="Guid" Value="MappedStatus(m)" ValueChanged="v => MapStatus(m.FromId, v)" Class="rs-inline"
+                                          AriaLabel="@($"Статус вместо «{m.FromName}»")">
                                     @foreach (var s in target.Statuses)
                                     {
                                         <MudSelectItem T="Guid" Value="s.Id">@s.Name</MudSelectItem>
                                     }
-                                </MudSelect>
+                                </DsSelect>
                             </td>
                             <td class="hint">статус · @Ru.Tasks(m.TaskCount)</td>
                         </tr>
@@ -79,13 +79,13 @@
                             <td>@m.FromName</td>
                             <td class="hint">→</td>
                             <td>
-                                <MudSelect T="Guid" Value="MappedType(m)" ValueChanged="v => MapType(m.FromId, v)" Dense="true" Variant="Variant.Text"
-                                           PopoverClass="flow-pop" Class="rs-inline" aria-label="@($"Тип вместо «{m.FromName}»")">
+                                <DsSelect T="Guid" Value="MappedType(m)" ValueChanged="v => MapType(m.FromId, v)" Class="rs-inline"
+                                          AriaLabel="@($"Тип вместо «{m.FromName}»")">
                                     @foreach (var t in target.TaskTypes.Where(t => !t.IsArchived))
                                     {
                                         <MudSelectItem T="Guid" Value="t.Id">@t.Name</MudSelectItem>
                                     }
-                                </MudSelect>
+                                </DsSelect>
                             </td>
                             <td class="hint">тип · @Ru.Tasks(m.TaskCount)</td>
                         </tr>

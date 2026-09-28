@@ -16,20 +16,18 @@
         <div class="ac-parts">
             @foreach (var (part, label) in Parts)
             {
-                <MudCheckBox T="bool" Value="_parts.HasFlag(part)" ValueChanged="v => TogglePart(part, v)" Size="Size.Small" Color="Color.Primary"
-                             Dense="true" Class="check-mud" Label="@label" Disabled="_busy" />
+                <DsCheckbox Value="_parts.HasFlag(part)" ValueChanged="v => TogglePart(part, v)" Label="@label" Disabled="_busy" />
             }
         </div>
 
-        <MudSelect T="Guid" MultiSelection="true" Label="Проекты" SelectedValues="_targets" SelectedValuesChanged="OnTargetsChanged"
-                   Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="rs-field" Disabled="_busy"
-                   MultiSelectionTextFunc="@(ids => ids.Count == 0 ? "" : string.Join(", ", ids.Select(KeyOf)))"
-                   Placeholder="@(Candidates.Count == 0 ? "Нет проектов, которые вы можете настраивать" : "Выберите проекты")">
+        <DsSelect T="Guid" Multiple="true" Label="Проекты" SelectedValues="_targets" SelectedValuesChanged="OnTargetsChanged" Class="rs-field"
+                  Disabled="_busy" MultiSelectionTextFunc="@(ids => ids.Count == 0 ? "" : string.Join(", ", ids.Select(KeyOf)))"
+                  Placeholder="@(Candidates.Count == 0 ? "Нет проектов, которые вы можете настраивать" : "Выберите проекты")">
             @foreach (var b in Candidates)
             {
                 <MudSelectItem T="Guid" Value="b.Id">@b.Key · @b.Name</MudSelectItem>
             }
-        </MudSelect>
+        </DsSelect>
 
         @if (_loading)
         {
@@ -71,13 +69,13 @@
                                         <td>@m.Name</td>
                                         <td class="hint">→</td>
                                         <td>
-                                            <MudSelect T="Guid" Value="m.MapsTo" ValueChanged="v => MapStatus(t.BoardId, m.StatusId, v)" Dense="true" Variant="Variant.Text"
-                                                       PopoverClass="flow-pop" Class="rs-inline" Disabled="_busy" aria-label="@($"Во что превратится «{m.Name}»")">
+                                            <DsSelect T="Guid" Value="m.MapsTo" ValueChanged="v => MapStatus(t.BoardId, m.StatusId, v)" Class="rs-inline" Disabled="_busy"
+                                                      AriaLabel="@($"Во что превратится «{m.Name}»")">
                                                 @foreach (var s in p.SourceStatuses)
                                                 {
                                                     <MudSelectItem T="Guid" Value="s.Id">@s.Name</MudSelectItem>
                                                 }
-                                            </MudSelect>
+                                            </DsSelect>
                                         </td>
                                         <td class="hint">
                                             @Ru.Tasks(m.TaskCount)@(!m.Kept && _parts.HasFlag(ConfigParts.Statuses) ? " · статус удалится" : "")

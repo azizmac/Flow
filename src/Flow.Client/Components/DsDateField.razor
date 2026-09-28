@@ -59,6 +59,11 @@
 
     private static DateTime? AsDateTime(DateOnly? date) => date?.ToDateTime(TimeOnly.MinValue);
 
+    /// <summary>Для форм, которые хранят дату как DateTime? (так её отдавал MudDatePicker): значение поля и обратно.</summary>
+    public static DateOnly? Of(DateTime? date) => date is { } d ? DateOnly.FromDateTime(d) : null;
+
+    public static DateTime? At(DateOnly? date) => AsDateTime(date);
+
     private Task OnChanged(DateTime? date)
     {
         var next = date is { } d ? DateOnly.FromDateTime(d) : (DateOnly?)null;

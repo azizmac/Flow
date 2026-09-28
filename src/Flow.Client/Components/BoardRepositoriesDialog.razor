@@ -25,37 +25,32 @@
             @foreach (var r in _repositories)
             {
                 <div class="scm-bind">
-                    <MudCheckBox T="bool" Value="r.IsBound" ValueChanged="v => Set(r, v)" Disabled="_busy" Size="Size.Small" Color="Color.Primary" Dense="true"
-                                 Label="@r.FullName" />
+                    <DsCheckbox Value="r.IsBound" ValueChanged="v => Set(r, v)" Disabled="_busy" Label="@r.FullName" />
                     <span class="hint">@ScmMeta.Name(r.Provider)</span>
                 </div>
                 @if (r.IsBound)
                 {
                     <div class="scm-auto">
-                        <MudSelect T="Guid?" Label="PR открыт →" Value="r.OnPullRequestOpenedStatusId" Disabled="_busy" Dense="true" Variant="Variant.Text"
-                                   PopoverClass="flow-pop" ValueChanged="v => Configure(r with { OnPullRequestOpenedStatusId = v })"
-                                   ToStringFunc="StatusName">
+                        <DsSelect T="Guid?" Label="PR открыт →" Value="r.OnPullRequestOpenedStatusId" Disabled="_busy"
+                                  ValueChanged="v => Configure(r with { OnPullRequestOpenedStatusId = v })" ToStringFunc="StatusName">
                             <MudSelectItem T="Guid?" Value="null">не менять статус</MudSelectItem>
                             @foreach (var s in Board.Statuses)
                             {
                                 <MudSelectItem T="Guid?" Value="s.Id">@s.Name</MudSelectItem>
                             }
-                        </MudSelect>
-                        <MudSelect T="Guid?" Label="PR влит в ветку по умолчанию →" Value="r.OnPullRequestMergedStatusId" Disabled="_busy" Dense="true"
-                                   Variant="Variant.Text" PopoverClass="flow-pop" ToStringFunc="StatusName"
-                                   ValueChanged="v => Configure(r with { OnPullRequestMergedStatusId = v })">
+                        </DsSelect>
+                        <DsSelect T="Guid?" Label="PR влит в ветку по умолчанию →" Value="r.OnPullRequestMergedStatusId" Disabled="_busy" ToStringFunc="StatusName"
+                                  ValueChanged="v => Configure(r with { OnPullRequestMergedStatusId = v })">
                             <MudSelectItem T="Guid?" Value="null">не менять статус</MudSelectItem>
                             @foreach (var s in Board.Statuses)
                             {
                                 <MudSelectItem T="Guid?" Value="s.Id">@s.Name</MudSelectItem>
                             }
-                        </MudSelect>
-                        <MudCheckBox T="bool" Value="r.SmartCommits" Disabled="_busy" Size="Size.Small" Color="Color.Primary" Dense="true"
-                                     ValueChanged="v => Configure(r with { SmartCommits = v })"
-                                     Class="scm-auto-smart" Label="Смарт-коммиты: #done, #comment, #status в ветке по умолчанию" />
-                        <MudCheckBox T="bool" Value="r.CommentOnPullRequests" Disabled="_busy" Size="Size.Small" Color="Color.Primary" Dense="true"
-                                     ValueChanged="v => Configure(r with { CommentOnPullRequests = v })"
-                                     Class="scm-auto-smart" Label="Комментарий в новом PR со ссылкой на задачу" />
+                        </DsSelect>
+                        <DsCheckbox Value="r.SmartCommits" Disabled="_busy" ValueChanged="v => Configure(r with { SmartCommits = v })" Class="scm-auto-smart"
+                                    Label="Смарт-коммиты: #done, #comment, #status в ветке по умолчанию" />
+                        <DsCheckbox Value="r.CommentOnPullRequests" Disabled="_busy" ValueChanged="v => Configure(r with { CommentOnPullRequests = v })"
+                                    Class="scm-auto-smart" Label="Комментарий в новом PR со ссылкой на задачу" />
                     </div>
                 }
             }

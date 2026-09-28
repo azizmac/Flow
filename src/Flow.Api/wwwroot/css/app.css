@@ -2366,7 +2366,6 @@ a.task-row { color: inherit; text-decoration: none; }
 .wf-warn.error { background: rgba(255, 90, 70, 0.1); color: var(--danger); }
 .wf-matrix-wrap, .wf-conditions, .wf-graph { flex: none; }
 .wf-type { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
-.wf-type-select.mud-input-control { width: 280px; flex: none; }
 .wf-graph-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .wf-graph-head .icon-lnk { margin-left: auto; }
 .wf-graph-scroll { overflow: auto; max-height: 560px; }
@@ -2774,6 +2773,8 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .wd-row > * { flex: 1 1 140px; min-width: 0; }
 .wd-seg { align-self: flex-start; margin: 4px 0; }
 .wd-narrow { max-width: 220px; }
+/* Узкое поле (число, короткий выбор) в строке формы — по содержимому, остальное место отдаётся соседу. */
+.wd-row > .wd-narrow { flex: 0 1 110px; }
 .wd-grid { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 
 /* ---- Слияние, разделение, перенос (docs/TZ_task_model.md §6, этап 1E) ---- */
@@ -2886,7 +2887,6 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .gp-x { border: 0; background: none; color: var(--text-tertiary); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
 .gp-x:hover { color: var(--danger); }
 .pa-group-ico { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; background: rgba(255,255,255,0.08); color: var(--text-secondary); }
-.pa-group-add { min-width: 200px; }
 .gp-team { padding: 1px 8px; border-radius: 999px; background: rgba(109,151,115,0.2); color: var(--sage); font: var(--fw-semibold) 11px var(--font-display); }
 .gp-head .mud-checkbox { margin-left: auto; }
 

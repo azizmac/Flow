@@ -727,9 +727,6 @@ a.mud-link:hover {
 
 /* Флажки MudCheckBox в своих местах (матрица workflow, чек-лист, условия, общий фильтр): без лишних отступов Material,
    отмеченный — цвет sage, как прежний свой флажок. */
-.wf-check.mud-input-control, .check-mud.mud-input-control { margin: 0; flex: none; }
-.wf-check .mud-button-root, .check-mud .mud-button-root { padding: 2px; }
-.check-mud .mud-checkbox-true .mud-icon-root { color: var(--sage); }
 .wf-flags .mud-input-control { margin: 0; }
 .wf-flags .mud-checkbox .mud-typography, .sf-shared .mud-typography { color: #fff; font: var(--fw-medium) 13px var(--font-text); }
 
@@ -739,15 +736,14 @@ a.mud-link:hover {
 .wf-matrix.mud-simple-table table * tr > td, .wf-matrix.mud-simple-table table * tr > th { border-bottom: 0; padding: 6px 10px; }
 
 /* Селект окна финальной колонки и поле WIP — компактные, без подчёркивания Material. */
-.kb-select.mud-input-control { width: 110px; flex: none; margin: 0; }
-.kb-select .mud-input { color: #fff; font: var(--fw-semibold) 12.5px var(--font-display); }
-.st-wip.mud-input-control { width: 64px; flex: none; margin: 0; }
-.st-wip .mud-input { background: rgba(0, 0, 0, 0.15); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 6px; }
-.st-wip input { color: #fff; font: var(--fw-semibold) 12px var(--font-display); }
+/* WIP-лимит в строке статуса — DsNumber Compact в рамке, как поля «Оценка» в панели задачи: не поле формы, а число в строке. */
+.ds-field.st-wip { width: 64px; flex: none; gap: 0; }
+.ds-field.st-wip .ds-field-row { padding: 2px 6px; border: 1px solid var(--border); border-radius: var(--r-sm); background: rgba(0, 0, 0, 0.15); }
+.ds-field.st-wip .ds-field-row::after { display: none; }
+.ds-field.st-wip:focus-within .ds-field-row { border-color: var(--accent); }
+.ds-field.st-wip .ds-field-row .mud-input { font: var(--fw-semibold) 12px var(--font-display); }
 
 /* Поле «Спринт» в карточке — компактный MudSelect в строке мета-полей. */
-.sprint-select.mud-input-control { width: 220px; flex: none; margin: 0; }
-.sprint-select .mud-input { color: #fff; font: var(--fw-semibold) 13px var(--font-display); }
 
 /* Бэклог: MudDropZone — наша секция без фона Material; призрак переносимой строки — полупрозрачный. */
 .bl-sections .mud-drop-zone { background: transparent; }

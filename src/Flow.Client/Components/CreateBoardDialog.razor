@@ -31,13 +31,13 @@
         </div>
 
         <div>
-            <MudSelect T="Guid" Label="Шаблон" Value="_templateId" ValueChanged="v => _templateId = v" Dense="true" Variant="Variant.Text"
-                       PopoverClass="flow-pop" Class="cb-template" Disabled="_templates.Count == 0">
+            <DsSelect T="Guid" Label="Шаблон" Value="_templateId" ValueChanged="v => _templateId = v" Class="cb-template"
+                      Disabled="_templates.Count == 0">
                 @foreach (var t in _templates)
                 {
                     <MudSelectItem T="Guid" Value="t.Id">@t.Name@(t.IsBuiltIn ? "" : " · сохранённый")</MudSelectItem>
                 }
-            </MudSelect>
+            </DsSelect>
             @if (Template is { } tpl)
             {
                 <div class="hint cb-template-hint">

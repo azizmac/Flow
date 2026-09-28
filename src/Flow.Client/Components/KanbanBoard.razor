@@ -26,13 +26,8 @@
             Закрытые — за
             @if (Permissions.CanManageConfig(Access.For(board.Id)))
             {
-                <MudSelect T="int" Value="board.DoneColumnDays" ValueChanged="SetDoneDays" Dense="true" Underline="false"
-                           Variant="Variant.Text" Margin="Margin.None" PopoverClass="flow-pop" Class="kb-select" aria-label="Окно финальной колонки">
-                    @foreach (var days in DoneWindowOptions(board.DoneColumnDays))
-                    {
-                        <MudSelectItem T="int" Value="days">@Ru.Days(days)</MudSelectItem>
-                    }
-                </MudSelect>
+                <PillSelect T="int" Items="DoneWindowOptions(board.DoneColumnDays)" Value="board.DoneColumnDays" OnChange="SetDoneDays"
+                            Label="@(d => Ru.Days(d))" AriaLabel="Окно финальной колонки" />
             }
             else
             {
