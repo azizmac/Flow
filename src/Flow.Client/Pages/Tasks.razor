@@ -794,6 +794,7 @@
             _total = 0;
             _countsByType = [];
             _countsByStatus = new();
+            StateHasChanged();
             return new GridData<TaskResponse> { Items = [], TotalItems = 0 };
         }
 
@@ -801,26 +802,27 @@
         {
             _loadError = result.Error;
             _tasks = [];
+            StateHasChanged();
             return new GridData<TaskResponse> { Items = [], TotalItems = 0 };
         }
 
         var page = result.Value!;
         // Копия страницы нужна слайдеру и хоткеям: они ходят по текущему списку.
         _tasks = page.Items.ToList();
-        // ServerData перерисовывает только сам грид; ширина колонки — атрибут грида у страницы, её надо перерисовать.
-        if (CodeColumnWidth(_tasks) is var codeColumn && codeColumn != _codeColumn)
-        {
-            _codeColumn = codeColumn;
-            StateHasChanged();
-        }
+        _codeColumn = CodeColumnWidth(_tasks);
         _total = page.Total;
         _countsByType = page.ByType;
         _countsByStatus = page.ByStatus.ToDictionary(c => c.StatusId, c => c.Count);
+        _matched = page.Matched;
 
         if (BoardId is { } boardId)
             State.SetLastBoard(boardId);
 
-        _matched = page.Matched;
+        // ServerData перерисовывает только сам грид, а счётчики фильтра статусов, «N задач» и ширина колонки кода
+        // живут в разметке страницы. Перерисовать её — после того, как записаны все числа: раньше StateHasChanged
+        // стоял до записи счётчиков, и при заходе в список (с доски или прямо по адресу) они оставались нулями,
+        // пока страницу случайно не перерисовывало что-то ещё.
+        StateHasChanged();
         return new GridData<TaskResponse> { Items = _tasks, TotalItems = page.Matched };
     }
 
