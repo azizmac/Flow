@@ -5,8 +5,8 @@ namespace Flow.Client.Services;
 /// <summary>
 /// Тема MudBlazor, собранная из токенов Flow (wwwroot/css/tokens.css). Источник истины — токены:
 /// цвет правится там, сюда переносится то же значение с пометкой, из какой переменной оно взято.
-/// Форма контролов (pill-кнопки, круглые icon-кнопки, поля-подчёркивания) темой не задаётся —
-/// она живёт в wwwroot/css/mud-overrides.css.
+/// Форма контролов (pill-кнопки, круглые icon-кнопки, поля на подложке) темой не задаётся —
+/// она живёт в wwwroot/css/app.css и mud-overrides.css.
 /// Приложение всегда тёмное: светлой палитры у Flow нет, поэтому PaletteLight не заполняется,
 /// а MudThemeProvider поднимается с IsDarkMode="true" (App.razor).
 /// </summary>

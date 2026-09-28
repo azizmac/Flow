@@ -7,7 +7,7 @@
 
    Что где живёт:
    · цвета, шрифт, радиус по умолчанию — Services/FlowTheme.cs (тема, переменные --mud-palette-*);
-   · форма контролов (pill, круги, подчёркивания) — этот файл;
+   · форма контролов (pill, круги, геометрия полей) — этот файл; подложка поля — .ds-field-row в app.css;
    · собственная вёрстка Flow (сайдбар, карточки, лента, вложения) — app.css.
 
    Подключается последним (wwwroot/index.html), поэтому перебивает и MudBlazor, и app.css.
@@ -55,7 +55,7 @@ a.mud-link:hover {
     transform: scale(0.94);
 }
 /* ---------- Поля ----------
-   Значение в поле Flow крупное (22px semibold), отступов сверху и снизу у него нет: линию и воздух
+   Значение в поле Flow крупное (22px semibold), отступов сверху и снизу у него нет: подложку, рамку и воздух
    задаёт .ds-field-row. Material ставит своё — перебиваем точечно, сама разметка остаётся от MudTextField. */
 /* Размер поле наследует от обёртки (правило библиотеки — font-size: inherit), поэтому задаём его там;
    вертикальные отступы приходят из `.mud-input > input.mud-input-root`, его и перебиваем. */
@@ -738,9 +738,8 @@ a.mud-link:hover {
 /* Селект окна финальной колонки и поле WIP — компактные, без подчёркивания Material. */
 /* WIP-лимит в строке статуса — DsNumber Compact в рамке, как поля «Оценка» в панели задачи: не поле формы, а число в строке. */
 .ds-field.st-wip { width: 64px; flex: none; gap: 0; }
-.ds-field.st-wip .ds-field-row { padding: 2px 6px; border: 1px solid var(--border); border-radius: var(--r-sm); background: rgba(0, 0, 0, 0.15); }
-.ds-field.st-wip .ds-field-row::after { display: none; }
-.ds-field.st-wip:focus-within .ds-field-row { border-color: var(--accent); }
+.ds-field.st-wip .ds-field-row { min-height: 0; padding: 2px 6px; border-radius: var(--r-sm); background: rgba(0, 0, 0, 0.15); }
+.ds-field.st-wip:focus-within .ds-field-row { box-shadow: none; }
 .ds-field.st-wip .ds-field-row .mud-input { font: var(--fw-semibold) 12px var(--font-display); }
 
 /* Поле «Спринт» в карточке — компактный MudSelect в строке мета-полей. */

@@ -305,8 +305,11 @@ input, textarea { font-family: inherit; }
 .ds-iconbtn:active { transform: scale(0.94); }
 .ds-iconbtn:disabled { color: var(--text-disabled); cursor: not-allowed; }
 
-/* ---------- Input (underline field) ---------- */
-.ds-field { display: flex; flex-direction: column; gap: var(--space-3); width: 100%; }
+/* ---------- Input (поле на подложке) ----------
+   Подложка та же, что у многострочного редактора (.desc-edit): тёмная заливка поверх карточки и тонкая рамка —
+   поле читается как место для ввода ещё до наведения. Фокус — акцентная рамка и мягкое кольцо; меняется
+   только цвет, поэтому переход — ease, 150ms, и только по нужным свойствам. */
+.ds-field { display: flex; flex-direction: column; gap: var(--space-2); width: 100%; }
 .ds-field-label {
     font-family: var(--font-display);
     font-weight: var(--fw-medium);
@@ -317,30 +320,30 @@ input, textarea { font-family: inherit; }
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    padding-bottom: var(--space-2);
-    border-bottom: 1px solid var(--border);
-    transition: border-color 0.18s ease;
+    min-height: 42px;
+    padding: 9px 12px;
+    background: rgba(0, 0, 0, 0.12);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
     position: relative;
 }
-.ds-field:focus-within .ds-field-row { border-bottom-color: var(--text-primary); }
-/* Линия под полем «наливается» из центра, а не меняет цвет рывком. */
-.ds-field-row::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -1px;
-    height: 2px;
-    background: var(--accent);
-    transform: scaleX(0);
-    transform-origin: center;
-    transition: transform 220ms var(--ease-out);
+@media (hover: hover) and (pointer: fine) {
+    .ds-field:hover .ds-field-row { border-color: var(--border-strong); }
 }
-.ds-field:focus-within .ds-field-row::after { transform: scaleX(1); }
-.ds-field.error .ds-field-row::after { background: var(--danger); transform: scaleX(1); }
+.ds-field:focus-within .ds-field-row,
+.task-field-wrap:focus-within .ds-field-row {
+    background: rgba(0, 0, 0, 0.18);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .ds-field.error .ds-field-row,
-.ds-field.error:focus-within .ds-field-row { border-bottom-color: var(--danger); }
+.ds-field.error:focus-within .ds-field-row {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px var(--danger-soft);
+}
 .ds-field.error .ds-field-row { animation: field-shake 220ms ease-in-out; }
+.ds-field:has(.mud-disabled) .ds-field-row { opacity: 0.55; }
 @keyframes field-shake {
     0%, 100% { transform: translateX(0); }
     25% { transform: translateX(-4px); }
@@ -360,6 +363,33 @@ input, textarea { font-family: inherit; }
     padding: 0;
 }
 .ds-field-row input::placeholder { color: var(--text-tertiary); font-weight: var(--fw-medium); }
+/* «Глаз» у поля пароля: тихий, как значки-украшения поля, светлеет при фокусе и наведении. Смена глифа без анимации —
+   кнопку жмут часто и подряд; отклик даёт только нажатие. */
+.ds-field-reveal {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: -4px -6px -4px 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: color 150ms ease, background-color 150ms ease, transform 160ms var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
+}
+.ds-field:focus-within .ds-field-reveal,
+.ds-field-reveal[aria-pressed="true"] { color: var(--text-primary); }
+@media (hover: hover) and (pointer: fine) {
+    .ds-field-reveal:hover:not(:disabled) { color: var(--text-primary); background: rgba(255, 255, 255, 0.06); }
+}
+.ds-field-reveal:active:not(:disabled) { transform: scale(0.94); }
+.ds-field-reveal:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ds-field-reveal:disabled { cursor: not-allowed; }
 .ds-field-error {
     font: var(--fw-medium) var(--text-sm) var(--font-text);
     color: var(--danger);
@@ -2003,7 +2033,6 @@ a.task-row { color: inherit; text-decoration: none; }
     .save-state { animation: none; }
     .search-clear, .ds-field-error { animation: none; }
     .ds-field.error .ds-field-row { animation: none; }
-    .ds-field-row::after { transition: none; }
     .att-q-bar span { animation: none; width: 100%; opacity: 0.6; }
     .drop-on::after { transition: none; }
 }
@@ -2332,7 +2361,6 @@ a.task-row { color: inherit; text-decoration: none; }
 .task-field > .ds-icon:last-child { margin-left: auto; color: var(--text-tertiary); flex: none; }
 .task-field.empty-value > span:first-child { color: var(--text-tertiary); font-weight: var(--fw-medium); }
 .task-field .pop-task { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.task-field-wrap:focus-within .ds-field-row::after { transform: scaleX(1); }
 .pop-task { display: inline-flex; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subtasks { display: flex; flex-direction: column; gap: 2px; }
 .subtasks-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
