@@ -1,0 +1,55 @@
+@* Числовое поле формы (docs/TZ_ui_consistency.md): вид DsInput, внутри MudNumericField (разбор числа, границы,
+   шаг). Стрелок-спиннеров нет — числа здесь печатают, а не накручивают.
+
+   Min/Max/Step приходят числами double и передаются в поле, только если заданы: у MudNumericField они типа T, и
+   «не задано» для int от нуля не отличить — а ноль вместо «без минимума» молча запретил бы отрицательные. *@
+@typeparam T
+
+<div class="ds-field ds-number @(Compact ? "sm" : "") @(Error is null ? "" : "error") @Class" style="@Style">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <span class="ds-field-label">@Label</span>
+    }
+    <span class="ds-field-row">
+        <MudNumericField T="T" Value="Value" ValueChanged="ValueChanged" Placeholder="@Placeholder" Disabled="Disabled"
+                         Clearable="Clearable" HideSpinButtons="true" Underline="false" Variant="Variant.Text" Margin="Margin.None"
+                         InputId="@Id" aria-label="@(AriaLabel ?? Label)" @attributes="Limits" />
+    </span>
+    @if (Error is not null)
+    {
+        <span class="ds-field-error">@Error</span>
+    }
+</div>
+
+@code {
+    [Parameter] public T? Value { get; set; }
+    [Parameter] public EventCallback<T?> ValueChanged { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool Clearable { get; set; }
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public double? Min { get; set; }
+    [Parameter] public double? Max { get; set; }
+    [Parameter] public double? Step { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+
+    private Dictionary<string, object> Limits { get; set; } = [];
+
+    protected override void OnParametersSet()
+    {
+        var limits = new Dictionary<string, object>();
+        if (Min is { } min) limits["Min"] = As(min);
+        if (Max is { } max) limits["Max"] = As(max);
+        if (Step is { } step) limits["Step"] = As(step);
+        Limits = limits;
+    }
+
+    /// <summary>double → T (или T из T?): для int? в словарь кладётся int, параметр поля примет его сам.</summary>
+    private static object As(double value) =>
+        Convert.ChangeType(value, Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T), System.Globalization.CultureInfo.InvariantCulture);
+}

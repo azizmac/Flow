@@ -1,0 +1,28 @@
+@* Вкладки разделов страницы (docs/TZ_ui_consistency.md): «Настройки», профиль, «Люди». Сегменты .seg остаются для
+   режима или фильтра внутри экрана; раздел страницы — это вкладки. Разметка своя (.tabs/.tab, линия под активной
+   наливается), MudTabs принёс бы Material-индикатор и прокрутку, которые пришлось бы перебивать целиком. *@
+
+<div class="tabs @Class" role="tablist" aria-label="@AriaLabel">
+    @foreach (var tab in Items)
+    {
+        var on = tab.Key == Value;
+        <button type="button" class="tab @(on ? "on" : "")" role="tab" aria-selected="@(on ? "true" : "false")"
+                @onclick="() => Select(tab.Key)">
+            @tab.Label
+            @if (tab.Count is { } count)
+            {
+                <span class="n">@count</span>
+            }
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<DsTab> Items { get; set; } = [];
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private Task Select(string key) => key == Value ? Task.CompletedTask : ValueChanged.InvokeAsync(key);
+}

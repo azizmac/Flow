@@ -1,0 +1,49 @@
+@* Поле даты (docs/TZ_ui_consistency.md): вид DsInput, внутри MudDatePicker — календарь в слое Flow и ввод текстом
+   («28.09.2026»), вместо нативного input[type=date], который в каждом браузере выглядит по-своему.
+
+   Набранный текст разбирается по уходу из поля или Enter, а не на каждую цифру: у нативного поля промежуточные
+   «0002», «0020» успевали уйти на сервер. Всё, что не разобралось или вне Min/Max, поле отвергает само и
+   показывает прежнее значение. Снять дату — крестик (Clearable), а не стирание текста. *@
+
+<div class="ds-field ds-date @(Compact ? "sm" : "") @(Error is null ? "" : "error") @Class" style="@Style">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <span class="ds-field-label">@Label</span>
+    }
+    <span class="ds-field-row">
+        <MudDatePicker Date="@AsDateTime(Value)" DateChanged="OnChanged" Editable="true" ImmediateText="false"
+                       Culture="Ru.PickerCulture" DateFormat="dd.MM.yyyy" Placeholder="@(Placeholder ?? "дд.мм.гггг")"
+                       MinDate="@AsDateTime(Min)" MaxDate="@AsDateTime(Max)" Clearable="Clearable" Disabled="Disabled"
+                       PickerVariant="PickerVariant.Inline" ShowToolbar="false" PopoverClass="flow-pop"
+                       Underline="false" Variant="Variant.Text" Margin="Margin.None"
+                       AdornmentIcon="@FlowIcons.Glyphs["calendar"]" aria-label="@(AriaLabel ?? Label)" />
+    </span>
+    @if (Error is not null)
+    {
+        <span class="ds-field-error">@Error</span>
+    }
+</div>
+
+@code {
+    [Parameter] public DateOnly? Value { get; set; }
+    [Parameter] public EventCallback<DateOnly?> ValueChanged { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public DateOnly? Min { get; set; }
+    [Parameter] public DateOnly? Max { get; set; }
+    [Parameter] public bool Clearable { get; set; } = true;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+
+    private static DateTime? AsDateTime(DateOnly? date) => date?.ToDateTime(TimeOnly.MinValue);
+
+    private Task OnChanged(DateTime? date)
+    {
+        var next = date is { } d ? DateOnly.FromDateTime(d) : (DateOnly?)null;
+        return next == Value ? Task.CompletedTask : ValueChanged.InvokeAsync(next);
+    }
+}

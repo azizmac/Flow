@@ -1,0 +1,27 @@
+@* Полоса «сделано из» (docs/TZ_ui_consistency.md) — одна на подзадачи, чек-лист, вехи и дерево: MudProgressLinear
+   плюс подпись числами рядом (цвет — не единственный носитель смысла). InProgress — буфер за основной полосой
+   («в работе»), как у вехи. Без Total полоса пустая, а не NaN. *@
+
+<div class="ds-progress @Class" style="@Style">
+    <MudProgressLinear Value="@Percent(Done)" BufferValue="@Percent(Done + InProgress)" Buffer="@(InProgress > 0)"
+                       Color="Color.Success" Rounded="true" Size="Size.Small" Class="ds-progress-bar"
+                       aria-label="@AriaLabel" />
+    @if (ShowText)
+    {
+        <span class="ds-progress-text">@(Text ?? $"{Done}/{Total}")</span>
+    }
+</div>
+
+@code {
+    [Parameter] public int Done { get; set; }
+    [Parameter] public int Total { get; set; }
+    [Parameter] public int InProgress { get; set; }
+    [Parameter] public bool ShowText { get; set; } = true;
+    /// <summary>Своя подпись вместо «N/M» (например, с story points).</summary>
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string AriaLabel { get; set; } = "Прогресс";
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+
+    private double Percent(int count) => Total <= 0 ? 0 : Math.Clamp(100.0 * count / Total, 0, 100);
+}

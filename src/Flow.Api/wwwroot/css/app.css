@@ -2603,6 +2603,12 @@ a.task-row { color: inherit; text-decoration: none; }
     padding: 1px 8px; border-radius: 999px; background: rgba(109, 151, 115, 0.18); color: var(--sage);
     font: var(--fw-bold) 11px var(--font-display);
 }
+/* ProgressBar — одна полоса «сделано из» на подзадачи, чек-лист, вехи и дерево (docs/TZ_ui_consistency.md). */
+.ds-progress { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ds-progress .ds-progress-bar { flex: 1; min-width: 60px; }
+.ds-progress-text { color: var(--text-secondary); font: var(--fw-semibold) 12px var(--font-display); white-space: nowrap; }
+/* InlineActions — «Сохранить / Отмена» при правке на месте. */
+.inline-actions { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .ms-progress { display: flex; align-items: center; gap: 10px; }
 .ms-progress .ms-bar { flex: 1; }
 .ms-progress-text { color: var(--text-secondary); font: var(--fw-semibold) 12px var(--font-display); white-space: nowrap; }

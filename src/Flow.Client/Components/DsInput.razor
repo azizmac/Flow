@@ -3,9 +3,12 @@
 
    Фасад над MudTextField: снаружи API прежний, внутри — поле библиотеки (фокус, маски, счётчик,
    работа внутри MudForm). Подчёркивание Mud выключено (Underline="false") — линию рисует наш
-   .ds-field-row, она наливается из центра; сбросы отступов Material — в mud-overrides.css. *@
+   .ds-field-row, она наливается из центра; сбросы отступов Material — в mud-overrides.css.
 
-<label class="ds-field @(Error is null ? "" : "error") @Class" style="@Style">
+   Lines > 1 — многострочное поле (описание шаблона, «о себе»): текст обычного размера, а не крупный заголовочный.
+   Compact — то же для однострочного поля в плотной форме или строке списка. *@
+
+<label class="ds-field @(Lines > 1 ? "multiline" : "") @(Compact ? "sm" : "") @(Error is null ? "" : "error") @Class" style="@Style">
     @if (!string.IsNullOrEmpty(Label))
     {
         <span class="ds-field-label">@Label</span>
@@ -16,7 +19,7 @@
             <Icon Name="@Icon" Size="20" />
         }
         <MudTextField T="string" InputId="@Id" InputType="@InputType" Value="@Value" ValueChanged="OnInput"
-                      Placeholder="@Placeholder" MaxLength="@(MaxLength ?? 524288)"
+                      Placeholder="@Placeholder" MaxLength="@(MaxLength ?? 524288)" Lines="Lines" AutoGrow="@(Lines > 1)" Disabled="Disabled"
                       Immediate="true" Underline="false" Variant="Variant.Text" Margin="Margin.None"
                       OnKeyDown="OnKeyDown" autocomplete="off" spellcheck="false" />
     </span>
@@ -40,6 +43,10 @@
     [Parameter] public string? Style { get; set; }
     [Parameter] public string? Class { get; set; }
     [Parameter] public EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
+    /// <summary>Строк у многострочного поля; 1 — обычное поле.</summary>
+    [Parameter] public int Lines { get; set; } = 1;
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public bool Disabled { get; set; }
 
     private InputType InputType => Type switch
     {

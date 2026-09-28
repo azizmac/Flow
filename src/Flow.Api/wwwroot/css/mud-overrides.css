@@ -87,6 +87,80 @@ a.mud-link:hover {
     margin: 0;
     padding: 0;
 }
+
+/* Компактное (Compact) и многострочное (Lines > 1) поле — текст интерфейса, а не крупное значение. */
+.ds-field.sm .ds-field-row .mud-input,
+.ds-field.multiline .ds-field-row .mud-input {
+    font-size: var(--text-body);
+    font-weight: var(--fw-medium);
+    letter-spacing: normal;
+}
+
+.ds-field.multiline .ds-field-row .mud-input > textarea.mud-input-root {
+    padding: 0;
+    color: var(--text-primary);
+}
+
+/* DsSelect, DsDateField, DsNumber: у Mud свои обёртки вокруг ввода и значок справа — шеврон или календарь.
+   Значок тихий и светлеет вместе с линией, когда поле в фокусе. */
+.ds-field-row .mud-select,
+.ds-field-row .mud-picker {
+    flex: 1;
+    min-width: 0;
+}
+
+.ds-field-row .mud-input-adornment-end {
+    margin-left: 8px;
+}
+
+/* С выбранным значением MudSelect показывает вместо input такой же div.mud-input-slot — со своими отступами
+   Material: поле вырастало на 13px, и форма под ним прыгала в момент выбора. */
+.ds-field-row .mud-input > div.mud-input-slot {
+    padding: 0;
+    min-height: 0;
+    color: var(--text-primary);
+}
+
+/* Поле-список — не текст: по Tab браузер выделял значение в readonly-input, и оно подсвечивалось как выделение. */
+.ds-select .mud-input > input.mud-input-root {
+    caret-color: transparent;
+}
+
+.ds-select .mud-input > input.mud-input-root::selection {
+    background: transparent;
+}
+
+.ds-field-row .mud-input-adornment .mud-icon-root {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+    color: var(--text-tertiary);
+    transition: color 150ms ease;
+}
+
+.ds-field:focus-within .ds-field-row .mud-input-adornment .mud-icon-root {
+    color: var(--text-primary);
+}
+
+.ds-field-row .mud-input-adornment .mud-icon-button {
+    padding: 2px;
+}
+
+/* DsCheckbox: один размер и цвет на всех экранах, подпись — обычный текст интерфейса. */
+.ds-check.mud-input-control {
+    margin: 0;
+    flex: none;
+}
+
+.ds-check .mud-button-root {
+    padding: 2px;
+}
+
+.ds-check .mud-typography {
+    color: var(--text-primary);
+    font: var(--fw-medium) 13px var(--font-text);
+    letter-spacing: normal;
+}
 /* ---------- Скелетоны ----------
    Ширину и высоту полос задаёт Components/Skeleton.razor, цвет — Palette.Skeleton из темы.
    Здесь: радиус как у остальной вёрстки Flow и выравнивание в строке-сетке списка задач. */
