@@ -1,39 +1,9 @@
-@* Роль в проекте «в строке» — как StatusSelect: пилюля + меню ролей с подсказкой, что каждая может.
-   Allowed — роли, которые actor может выдать (не выше своей); остальные не показываются. *@
+@* Роль в проекте «в строке» — PillSelect: роли с подсказкой, что каждая может, и свои наборы прав (этап 4E) с их
+   основой. Allowed — роли, которые actor может выдать (не выше своей); наборы — по базовой роли не выше разрешённых. *@
 
-<MudMenu @bind-Open="_open" PopoverClass="flow-pop" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomLeft"
-         TransformOrigin="Origin.TopLeft" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Сменить роль в проекте">
-    <ActivatorContent>
-        <div class="status-sel @(Disabled ? "disabled" : "")" @onclick="Toggle" @onclick:stopPropagation
-             @onkeydown="OnKey" @onkeydown:stopPropagation
-             role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-disabled="@(Disabled ? "true" : "false")"
-             aria-expanded="@(_open ? "true" : "false")" title="@(Disabled ? "Сохраняем…" : "Сменить роль в проекте")">
-            <span class="lbl">@(CurrentSet?.Name ?? Permissions.ProjectRoleLabel(Value))</span>
-            <Icon Name="chevrons" Size="12" />
-        </div>
-    </ActivatorContent>
-    <ChildContent>
-        @foreach (var role in Allowed)
-        {
-            <MudMenuItem Class="@($"pop-item role-item {(role == Value && SetId is null ? "cur" : "")}")" OnClick="() => Select(role)">
-                <span class="pop-user">
-                    <span class="pop-user-name">@Permissions.ProjectRoleLabel(role)</span>
-                    <span class="pop-user-un">@Permissions.ProjectRoleHint(role)</span>
-                </span>
-            </MudMenuItem>
-        }
-        @* Свои наборы прав (этап 4E) — по базовой роли не выше разрешённых. *@
-        @foreach (var set in Sets.Where(x => Allowed.Contains(x.BaseRole)))
-        {
-            <MudMenuItem Class="@($"pop-item role-item {(set.Id == SetId ? "cur" : "")}")" OnClick="() => SelectSet(set)">
-                <span class="pop-user">
-                    <span class="pop-user-name">@set.Name</span>
-                    <span class="pop-user-un">набор · основа «@Permissions.ProjectRoleLabel(set.BaseRole)»</span>
-                </span>
-            </MudMenuItem>
-        }
-    </ChildContent>
-</MudMenu>
+<PillSelect T="RoleOption" Items="Options" Value="CurrentOption" Disabled="Disabled" OnChange="Select" Current="IsCurrent"
+            Label="@(o => o?.Set?.Name ?? Permissions.ProjectRoleLabel(o?.Role ?? Value))" Hint="HintFor"
+            ItemClass="role-item" AriaLabel="Сменить роль в проекте" />
 
 @code {
     [Parameter] public ProjectRole Value { get; set; }
@@ -45,37 +15,28 @@
     [Parameter] public Guid? SetId { get; set; }
     [Parameter] public EventCallback<(ProjectRole Role, Guid? SetId)> OnSetChange { get; set; }
 
-    private PermissionSetResponse? CurrentSet => SetId is { } id ? Sets.FirstOrDefault(x => x.Id == id) : null;
+    /// <summary>Пункт списка: встроенная роль (Set = null) или свой набор с его основой.</summary>
+    private sealed record RoleOption(ProjectRole Role, PermissionSetResponse? Set);
 
-    private bool _open;
+    private IEnumerable<RoleOption> Options =>
+        Allowed.Select(r => new RoleOption(r, null))
+            .Concat(Sets.Where(s => Allowed.Contains(s.BaseRole)).Select(s => new RoleOption(s.BaseRole, s)));
 
-    private void OnKey(KeyboardEventArgs e)
+    private RoleOption CurrentOption =>
+        SetId is { } id && Sets.FirstOrDefault(s => s.Id == id) is { } set ? new RoleOption(set.BaseRole, set) : new RoleOption(Value, null);
+
+    private bool IsCurrent(RoleOption o) => o.Set is null ? o.Role == Value && SetId is null : o.Set.Id == SetId;
+
+    private static string HintFor(RoleOption o) =>
+        o.Set is null ? Permissions.ProjectRoleHint(o.Role) : $"набор · основа «{Permissions.ProjectRoleLabel(o.Set.BaseRole)}»";
+
+    private async Task Select(RoleOption o)
     {
-        if (!Disabled && e.Key is "Enter" or " " or "ArrowDown")
-            _open = true;
-    }
-
-    private void Toggle()
-    {
-        if (!Disabled)
-            _open = !_open;
-    }
-
-    private async Task Select(ProjectRole role)
-    {
-        _open = false;
-        if (role == Value && SetId is null)
-            return;
-        if (OnSetChange.HasDelegate)
-            await OnSetChange.InvokeAsync((role, null));
-        else
-            await OnChange.InvokeAsync(role);
-    }
-
-    private async Task SelectSet(PermissionSetResponse set)
-    {
-        _open = false;
-        if (set.Id != SetId)
+        if (o.Set is { } set)
             await OnSetChange.InvokeAsync((set.BaseRole, set.Id));
+        else if (OnSetChange.HasDelegate)
+            await OnSetChange.InvokeAsync((o.Role, null));
+        else
+            await OnChange.InvokeAsync(o.Role);
     }
 }

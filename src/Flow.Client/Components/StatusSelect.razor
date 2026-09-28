@@ -1,42 +1,13 @@
-@* Селект статуса «в строке»: триггер-пилюля с точкой + меню со статусами проекта.
-   Выбор → OnChange(statusId).
-
-   Слой — MudMenu (позиция, закрытие, стрелки и Esc). Открытием управляем сами: триггер лежит внутри
-   кликабельной строки задачи, поэтому клик по нему не должен всплывать. Фокус остаётся на триггере —
-   перехватчик клавиш библиотеки слушает активатор. *@
-
+@* Селект статуса «в строке» — PillSelect с точкой цвета статуса. Выбор → OnChange(statusId).
+   В проекте с workflow (Restricted) при каждом открытии спрашивает у сервера разрешённые переходы и выключает
+   запрещённые статусы с причиной второй строкой (docs/TZ_workflow_config.md §2). Сервер всё равно проверит сам. *@
 @inject IFlowApi Api
 
-<MudMenu @bind-Open="_open" PopoverClass="flow-pop" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomLeft"
-         TransformOrigin="Origin.TopLeft" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Сменить статус">
-    <ActivatorContent>
-        <div class="status-sel @(Disabled ? "disabled" : "")" @onclick="Toggle" @onclick:stopPropagation
-             @onkeydown="OnKey" @onkeydown:stopPropagation
-             role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-disabled="@(Disabled ? "true" : "false")"
-             aria-expanded="@(_open ? "true" : "false")" title="@(Disabled ? "Сохраняем…" : "Сменить статус")">
-            <span class="sd" style="background:@StatusColors.For(Current)"></span>
-            <span class="lbl">@(Current?.Name ?? "—")</span>
-            <Icon Name="chevrons" Size="12" />
-        </div>
-    </ActivatorContent>
-    <ChildContent>
-        @foreach (var s in Statuses)
-        {
-            var denied = Denied(s.Id);
-            <MudMenuItem Class="@($"pop-item {(s.Id == Value ? "cur" : "")} {(denied is not null ? "denied" : "")}")" Disabled="@(denied is not null)"
-                         OnClick="() => Select(s)" title="@denied">
-                <span class="sd" style="background:@StatusColors.For(s)"></span>
-                <span class="pop-user">
-                    <span class="pop-user-name">@s.Name</span>
-                    @if (denied is not null)
-                    {
-                        <span class="pop-user-un">@denied</span>
-                    }
-                </span>
-            </MudMenuItem>
-        }
-    </ChildContent>
-</MudMenu>
+<PillSelect T="StatusResponse" Items="Statuses" Value="Current" Disabled="Disabled"
+            Current="@(s => s.Id == Value)" OnChange="@(s => OnChange.InvokeAsync(s.Id))" OnOpening="LoadTransitionsAsync"
+            DisabledReason="@(s => Denied(s.Id))" Label="@(s => s?.Name ?? "—")" AriaLabel="Сменить статус">
+    <Glyph Context="s"><span class="sd" style="background:@StatusColors.For(s)"></span></Glyph>
+</PillSelect>
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<StatusResponse> Statuses { get; set; } = [];
@@ -45,42 +16,17 @@
     /// <summary>Пока летит PATCH — селект не принимает новые клики.</summary>
     [Parameter] public bool Disabled { get; set; }
 
-    /// <summary>
-    /// Задача, чей статус меняют, и режим workflow её проекта (docs/TZ_workflow_config.md §2). В Restricted при
-    /// открытии меню селект спрашивает GET /tasks/{id}/transitions и выключает запрещённые статусы с причиной —
-    /// без подсказки человек не поймёт, почему нельзя. Сервер всё равно проверит сам.
-    /// </summary>
+    /// <summary>Задача, чей статус меняют, и режим workflow её проекта: в Restricted запрещённые переходы выключены.</summary>
     [Parameter] public Guid? TaskId { get; set; }
     [Parameter] public bool Restricted { get; set; }
 
-    private bool _open;
     private Dictionary<Guid, TaskTransitionResponse>? _transitions;
     private Guid? _transitionsFor;
 
-    private string? Denied(Guid statusId) =>
-        _transitions?.GetValueOrDefault(statusId) is { Allowed: false } t ? string.Join("; ", t.Reasons) : null;
-
     private StatusResponse? Current => Statuses.FirstOrDefault(s => s.Id == Value);
 
-    // Enter/Space/↓ открывают список — как у нативного select.
-    private async Task OnKey(KeyboardEventArgs e)
-    {
-        if (!Disabled && e.Key is "Enter" or " " or "ArrowDown")
-        {
-            _open = true;
-            await LoadTransitionsAsync();
-        }
-    }
-
-    private async Task Toggle()
-    {
-        if (Disabled)
-            return;
-
-        _open = !_open;
-        if (_open)
-            await LoadTransitionsAsync();
-    }
+    private string? Denied(Guid statusId) =>
+        _transitions?.GetValueOrDefault(statusId) is { Allowed: false } t ? string.Join("; ", t.Reasons) : null;
 
     /// <summary>Переходы — при каждом открытии: условия (исполнитель, чек-лист) могли измениться с прошлого раза.</summary>
     private async Task LoadTransitionsAsync()
@@ -98,12 +44,5 @@
         var result = await Api.GetTransitions(taskId);
         if (result.Ok && _transitionsFor == taskId)
             _transitions = result.Value!.ToDictionary(t => t.StatusId);
-    }
-
-    private async Task Select(StatusResponse s)
-    {
-        _open = false;
-        if (s.Id != Value)
-            await OnChange.InvokeAsync(s.Id);
     }
 }
