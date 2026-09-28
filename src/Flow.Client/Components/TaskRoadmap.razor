@@ -14,13 +14,7 @@
 
 <div class="rm" id="@_rootId" data-px="@PxPerDay">
     <div class="kb-toolbar">
-        <div class="seg" role="radiogroup" aria-label="Масштаб">
-            @foreach (var (scale, label) in Scales)
-            {
-                <button type="button" class="seg-btn @(scale == _scale ? "on" : "")" role="radio" aria-checked="@(scale == _scale)"
-                        @onclick="() => _scale = scale">@label</button>
-            }
-        </div>
+        <DsSegmented T="Scale" Items="Scales" Value="_scale" ValueChanged="s => _scale = s" AriaLabel="Масштаб" />
         <button type="button" class="icon-lnk" @onclick="ExpandAll">Раскрыть всё</button>
         <button type="button" class="icon-lnk" @onclick="CollapseAll">Свернуть</button>
     </div>
@@ -161,7 +155,7 @@
 @code {
     private enum Scale { Week, Month, Quarter }
 
-    private static readonly (Scale Scale, string Label)[] Scales = [(Scale.Week, "Неделя"), (Scale.Month, "Месяц"), (Scale.Quarter, "Квартал")];
+    private static readonly DsSegment<Scale>[] Scales = [new(Scale.Week, "Неделя"), new(Scale.Month, "Месяц"), new(Scale.Quarter, "Квартал")];
 
     [Parameter, EditorRequired] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
     [Parameter, EditorRequired] public Guid BoardId { get; set; }

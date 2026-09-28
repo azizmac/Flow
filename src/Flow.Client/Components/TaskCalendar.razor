@@ -8,10 +8,7 @@
 
 <div class="cal">
     <div class="kb-toolbar cal-toolbar">
-        <div class="seg" role="radiogroup" aria-label="Масштаб">
-            <button type="button" class="seg-btn @(_week ? "" : "on")" role="radio" aria-checked="@(!_week)" @onclick="() => SetScale(false)">Месяц</button>
-            <button type="button" class="seg-btn @(_week ? "on" : "")" role="radio" aria-checked="@_week" @onclick="() => SetScale(true)">Неделя</button>
-        </div>
+        <DsSegmented T="bool" Items="ScaleItems" Value="_week" ValueChanged="SetScale" AriaLabel="Масштаб" />
         <DsIconButton Icon="arrow-left" Size="28" Title="Назад" OnClick="() => Shift(-1)" />
         <DsButton Variant="secondary" Size="sm" OnClick="GoToday">Сегодня</DsButton>
         <DsIconButton Icon="arrow-left" Size="28" Title="Вперёд" Class="cal-next" OnClick="() => Shift(1)" />
@@ -102,6 +99,8 @@
     private DateOnly _from;
     private DateOnly _to;
     private bool _week;
+
+    private static readonly DsSegment<bool>[] ScaleItems = [new(false, "Месяц"), new(true, "Неделя")];
     private bool _truncated;
     private string? _error;
     private string? _loadedKey;

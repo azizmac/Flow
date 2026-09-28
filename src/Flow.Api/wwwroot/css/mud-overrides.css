@@ -785,3 +785,55 @@ a.mud-link:hover {
 .cal-days .mud-drop-zone { background: transparent; }
 .cal-days .mud-drop-item { display: block; }
 .cal-days .mud-drop-zone > .mud-drop-item-preview-start:not(.mud-drop-item-draggable) { height: 6px; top: -3px; }
+
+/* ---------- DsSegmented: MudTabs как сегментный переключатель ----------
+   Вид тот же, что у .seg (app.css): тёмная подложка с рамкой, кнопки 12px без прописных. От вкладок берём только
+   ползунок: MudTabs сам меряет кнопки и ставит ему left/width инлайном, а мы растягиваем его на всю высоту кнопки
+   и красим в пилюлю — выбранный вариант «переезжает», а не перескакивает. Промежутков между кнопками нет
+   намеренно: MudTabs считает left суммой ширин предыдущих вкладок, gap сдвинул бы пилюлю мимо кнопки.
+   Панелей у переключателя нет — их контейнер скрыт. */
+.ds-segmented.mud-tabs { display: inline-flex; flex-direction: column; flex: none; }
+.ds-segmented .mud-tabs-tabbar {
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 3px;
+}
+.ds-segmented .mud-tabs-tabbar-inner { min-height: 0; }
+.ds-segmented .mud-tabs-tabbar-content { overflow: visible; }
+.ds-segmented .mud-tab {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    min-height: 0;
+    padding: 6px 12px;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-secondary);
+    opacity: 1;
+    font: var(--fw-semibold) 12px var(--font-display);
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+    transition: color 200ms ease, transform 160ms var(--ease-out);
+}
+.ds-segmented .mud-tab:active { transform: scale(0.97); }
+.ds-segmented .mud-tab.mud-tab-active { color: #fff; }
+.ds-segmented .mud-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ds-segmented .mud-tab-slider.mud-tab-slider-horizontal {
+    z-index: 0;
+    top: 0;
+    bottom: 0;
+    height: auto;
+    border-radius: 7px;
+    background: var(--surface-raised);
+    /* !important — MudTabs пишет transition инлайном и только по left: ширина между «Месяц» и «Неделя» прыгала бы. */
+    transition: left 360ms var(--ease-drawer), width 360ms var(--ease-drawer) !important;
+}
+.ds-segmented .mud-tabs-panels { display: none; }
+@media (hover: hover) and (pointer: fine) {
+    .ds-segmented .mud-tab:hover:not(.mud-tab-active) { background: transparent; color: #fff; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ds-segmented .mud-tab-slider.mud-tab-slider-horizontal { transition: none !important; }
+}

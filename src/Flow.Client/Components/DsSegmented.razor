@@ -1,0 +1,31 @@
+@* Сегментный переключатель режима внутри экрана (масштаб календаря и роадмапа, дорожки доски) — фасад над MudTabs.
+   Вкладки MudBlazor берём ради одного: ползунок (mud-tab-slider) сам меряет кнопки и переезжает между ними
+   анимацией. Здесь он растянут на всю высоту и стал пилюлей под выбранным вариантом — подложка скользит от
+   одного к другому, а не перескакивает. Панелей у вкладок нет: переключатель только меняет значение.
+   Material-вид (линия, прописные буквы, min-width 160px, рябь) гасится в mud-overrides.css (.ds-segmented).
+   Для раздела страницы — DsTabs, для фильтра с выпадающими вариантами — SegCollapse. *@
+@typeparam T
+
+<MudTabs Class="@($"ds-segmented {Class}")" ActivePanelIndex="Index" ActivePanelIndexChanged="OnIndexChanged"
+         MinimumTabWidth="0" Elevation="0" Ripple="false" SliderAnimation="true" ApplyEffectsToContainer="false"
+         aria-label="@AriaLabel">
+    @foreach (var item in Items)
+    {
+        <MudTabPanel Text="@item.Label" />
+    }
+</MudTabs>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<DsSegment<T>> Items { get; set; } = [];
+    [Parameter] public T? Value { get; set; }
+    [Parameter] public EventCallback<T> ValueChanged { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private int Index => Math.Max(0, Items.ToList().FindIndex(i => EqualityComparer<T>.Default.Equals(i.Value, Value)));
+
+    private Task OnIndexChanged(int index) =>
+        index >= 0 && index < Items.Count && !EqualityComparer<T>.Default.Equals(Items[index].Value, Value)
+            ? ValueChanged.InvokeAsync(Items[index].Value)
+            : Task.CompletedTask;
+}

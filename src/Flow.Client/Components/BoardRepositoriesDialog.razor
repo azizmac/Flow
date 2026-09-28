@@ -24,6 +24,8 @@
         {
             @foreach (var r in _repositories)
             {
+                @* Строка репозитория и его настройки — один блок на общей подложке (.scm-repo). *@
+                <div class="scm-repo">
                 <div class="scm-bind">
                     <DsCheckbox Value="r.IsBound" ValueChanged="v => Set(r, v)" Disabled="_busy" Label="@r.FullName" />
                     <span class="hint">@ScmMeta.Name(r.Provider)</span>
@@ -53,6 +55,7 @@
                                     Class="scm-auto-smart" Label="Комментарий в новом PR со ссылкой на задачу" />
                     </div>
                 }
+                </div>
             }
         }
     </DialogContent>

@@ -3004,3 +3004,49 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .ps-cell { text-align: center; }
 .ps-mark { color: var(--text-tertiary); }
 .ps-mark.on { color: var(--sage); font-weight: 700; }
+
+/* ---------- Подложки блоков ----------
+   Каждый самостоятельный блок и каждая строка списка в модалках, слайдере задачи и настройках — на своей
+   карточке, как .tt-row/.st-row в модалках статусов и типов: тёмная подложка, тонкая рамка, радиус --r-md.
+   Не карточкой остаются: секция, в которой строки уже на карточках (иначе карточка в карточке), заголовки
+   страниц и панели инструментов, строки таблиц и основных списков задач/людей (там разделители — норма),
+   события ленты между комментариями (лёгкие намеренно). Правила стоят в конце файла: они перебивают прежние
+   border-top/border-bottom-разделители и отрицательные поля этих блоков. */
+.tpl-row, .pa-row, .scm-remote-row, .scm-repo, .rs-part,
+.subtask-row, .check-row, .links .link-row, .att-row, .dev-row, .similar-row,
+.scm-conn, .gp-group, .link-list .link-row,
+.tt-form, .pa-section:not(:has(.pa-list, .pa-add)), .pa-add, .ac-target, .ac-parts, .scm-manual,
+.rec-preview, .wd-grid, .rs-facts, .rs-notes, .cb-template-hint, .gp-new,
+.recurrence, .drawer-body > .meta-grid {
+    background: rgba(0, 0, 0, 0.14);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-md);
+}
+/* Строки списков */
+.tpl-row, .pa-row, .link-list .link-row { padding: 8px 12px; }
+.tpl-row:last-child, .link-list .link-row:last-child { border-bottom: 1px solid var(--border-subtle); }
+.scm-remote-row { padding: 8px 12px; }
+.subtask-row, .check-row, .links .link-row, .dev-row { padding: 6px 10px; }
+.att-row, .similar-row { margin: 0; padding: 7px 10px; }
+.rs-part { padding: 8px 10px; }
+.pa-list, .checklist, .links, .subtasks, .dev-block, .link-list, .scm-remote { gap: 6px; }
+.tpl-row + .tpl-row { margin-top: 6px; }
+.scm-repo + .scm-repo { margin-top: 8px; }
+/* Самостоятельные блоки */
+.scm-repo { padding: 6px 12px; }
+.scm-repo .scm-auto { border-bottom: 0; margin-bottom: 0; padding-bottom: 8px; }
+.scm-conn, .gp-group { padding: 12px 14px; }
+.scm-conn + .scm-conn, .gp-group + .gp-group { margin-top: 8px; }
+.tt-form, .pa-section:not(:has(.pa-list, .pa-add)), .pa-add, .ac-parts, .scm-manual, .rec-preview, .wd-grid,
+.cb-template-hint, .gp-new, .recurrence, .drawer-body > .meta-grid { padding: 12px 14px; }
+.ac-target { margin-top: 10px; padding: 12px 14px; }
+.rs-facts { padding: 10px 14px; }
+.rs-notes { padding: 10px 14px 10px 32px; }
+/* Наведение на карточку-строку — темнее, а не светлее: светлый налёт прежних строк на тёмной подложке мутнел. */
+@media (hover: hover) and (pointer: fine) {
+    .tpl-row:hover, .pa-row:hover, .scm-remote-row:hover, .subtask-row:hover, .check-row:hover,
+    .links .link-row:hover, .att-row:hover, .dev-row:hover, .similar-row:hover {
+        background: rgba(0, 0, 0, 0.22);
+        border-color: var(--border);
+    }
+}
