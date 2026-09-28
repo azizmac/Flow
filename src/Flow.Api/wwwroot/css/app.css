@@ -363,6 +363,33 @@ input, textarea { font-family: inherit; }
     padding: 0;
 }
 .ds-field-row input::placeholder { color: var(--text-tertiary); font-weight: var(--fw-medium); }
+/* «Глаз» у поля пароля: тихий, как значки-украшения поля, светлеет при фокусе и наведении. Смена глифа без анимации —
+   кнопку жмут часто и подряд; отклик даёт только нажатие. */
+.ds-field-reveal {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: -4px -6px -4px 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: color 150ms ease, background-color 150ms ease, transform 160ms var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
+}
+.ds-field:focus-within .ds-field-reveal,
+.ds-field-reveal[aria-pressed="true"] { color: var(--text-primary); }
+@media (hover: hover) and (pointer: fine) {
+    .ds-field-reveal:hover:not(:disabled) { color: var(--text-primary); background: rgba(255, 255, 255, 0.06); }
+}
+.ds-field-reveal:active:not(:disabled) { transform: scale(0.94); }
+.ds-field-reveal:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ds-field-reveal:disabled { cursor: not-allowed; }
 .ds-field-error {
     font: var(--fw-medium) var(--text-sm) var(--font-text);
     color: var(--danger);
