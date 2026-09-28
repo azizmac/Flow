@@ -2,7 +2,8 @@
    ветка) и последние коммиты задачи из привязанных репозиториев. Заголовки и сообщения — недоверенный текст с
    хостинга: выводятся как текст, без Markdown. Ссылки открываются на хостинге в новой вкладке. «Ветка» копирует
    git checkout -b КОД-название — без обращения к API. Проект без репозиториев — блока нет. Пометка под PR или коммитом —
-   чего Flow не сделал по нему и почему (автопереход запрещён workflow, смарт-коммит без прав; этап 5C). *@
+   чего Flow не сделал по нему и почему (автопереход запрещён workflow, смарт-коммит без прав; этап 5C). С правом
+   WriteScm (этап 5D) — «Создать ветку» и «Создать PR» прямо на хостинге (ScmCreateDialog). *@
 @inject IFlowApi Api
 @inject BrowserInterop Browser
 @inject ToastService Toasts
@@ -14,6 +15,11 @@
         <div class="subtasks-head">
             <div class="meta-k">Разработка</div>
             <button type="button" class="icon-lnk" title="@Checkout" @onclick="CopyBranch"><Icon Name="copy" Size="13" />Ветка</button>
+            @if (d.CanWrite && d.Repositories is { Count: > 0 })
+            {
+                <button type="button" class="icon-lnk" title="Создать ветку на хостинге" @onclick="() => _create = false"><Icon Name="plus" Size="13" />Создать ветку</button>
+                <button type="button" class="icon-lnk" title="Открыть PR на хостинге" @onclick="() => _create = true"><Icon Name="plus" Size="13" />Создать PR</button>
+            }
         </div>
         @if (d.PullRequests.Count == 0 && d.Branches.Count == 0 && d.CommitCount == 0)
         {
@@ -59,11 +65,17 @@
     </div>
 }
 
+@if (_create is { } asPr && _data is { Repositories: { Count: > 0 } repos } data)
+{
+    <ScmCreateDialog Task="Task" Repositories="repos" Branches="data.Branches" PullRequest="asPr" OnDone="d => _data = d" OnClose="() => _create = null" />
+}
+
 @code {
     [Parameter, EditorRequired] public TaskResponse Task { get; set; } = default!;
 
     private TaskDevelopmentResponse? _data;
     private Guid _loadedFor;
+    private bool? _create;
 
     private string Checkout => $"git checkout -b {Ru.BranchName(Task.Code, Task.Title)}";
 

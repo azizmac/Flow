@@ -123,6 +123,7 @@ internal sealed class ScmDeliveryHandlers(
             if (!delivery.IsBackfill)
             {
                 await processor.RunAsync(ScmEvent.Deserialize(delivery.Payload));
+                await CommentOnNewPullRequestsAsync(connection, repository, processor.NewPullRequests, cancellationToken);
             }
             else if (repository.IsActive)
             {
@@ -154,12 +155,42 @@ internal sealed class ScmDeliveryHandlers(
         return true;
     }
 
+    /// <summary>
+    /// Комментарий «задача Flow» в PR, впервые связанном с задачей (этап 5D), — если привязка это просит и ссылки на
+    /// задачу в описании ещё нет (PR, созданный из Flow, её уже несёт). Сбой хостинга — пометка у связи, не ошибка доставки.
+    /// </summary>
+    private async Task CommentOnNewPullRequestsAsync(ScmConnection connection, ScmRepository repository,
+        IReadOnlyList<(TaskItem Task, ScmLink Link, ScmPullRequest Pr, ScmRepositoryBoard Binding)> created, CancellationToken cancellationToken)
+    {
+        var wanted = created.Where(c => c.Binding.CommentOnPullRequests && c.Pr.State is ScmLinkState.Open or ScmLinkState.Draft).ToList();
+        if (wanted.Count == 0 || protector.TryUnprotect(connection.SecretProtected) is not { } token)
+            return;
+
+        foreach (var (task, link, pr, _) in wanted)
+        {
+            var url = options.TaskUrl(task.Code.Value);
+            if (pr.Body?.Contains(url, StringComparison.OrdinalIgnoreCase) == true)
+                continue;
+            try
+            {
+                await client.CommentOnPullRequestAsync(connection, token, repository, pr.Number, ScmUrls.TaskComment(task.Code.Value, task.Title, url), cancellationToken);
+            }
+            catch (ScmProviderException ex)
+            {
+                link.SetNote($"Комментарий в PR не оставлен: {ex.Message}");
+            }
+        }
+    }
+
     /// <param name="history">Дозагрузка истории: связи пишутся, но автопереходы и смарт-коммиты не выполняются —
     /// прошлое не должно двигать задачи сегодня.</param>
     private sealed class Processor(IScmStore store, ITaskItemRepository tasks, IUserRepository users, ScmAutomation automation,
         ScmRepository repository, ScmProvider provider, bool history, CancellationToken ct)
     {
         private readonly Dictionary<(Guid, ScmLinkKind, string), ScmLink> _links = [];
+
+        /// <summary>PR, впервые связанные с задачей этим разбором (не дозагрузкой) — для комментария со ссылкой (этап 5D).</summary>
+        public List<(TaskItem Task, ScmLink Link, ScmPullRequest Pr, ScmRepositoryBoard Binding)> NewPullRequests { get; } = [];
         private Dictionary<Guid, ScmRepositoryBoard>? _boards;
         private IReadOnlyList<User>? _users;
 
@@ -189,6 +220,8 @@ internal sealed class ScmDeliveryHandlers(
                     {
                         var link = await LinkAsync(task, ScmLinkKind.PullRequest, pr.Number);
                         var previous = link.Url.Length == 0 ? (ScmLinkState?)null : link.State;
+                        if (link.Url.Length == 0 && !history)
+                            NewPullRequests.Add((task, link, pr, _boards[task.BoardId]));
                         link.Apply(pr.Url, pr.Title, pr.State, pr.AuthorLogin, author, pr.SourceBranch, pr.TargetBranch, pr.UpdatedAt);
                         if (!history)
                             await automation.OnPullRequestAsync(repository, _boards[task.BoardId], task, link, previous, pr, author, ct);
@@ -237,16 +270,7 @@ internal sealed class ScmDeliveryHandlers(
                 link.Apply(BranchUrl(branch), branch, ScmLinkState.Open, null, null, branch, null, DateTime.UtcNow);
         }
 
-        private string BranchUrl(string branch)
-        {
-            var escaped = string.Join('/', branch.Split('/').Select(Uri.EscapeDataString));
-            return provider switch
-            {
-                ScmProvider.GitHub => $"{repository.WebUrl}/tree/{escaped}",
-                ScmProvider.GitLab => $"{repository.WebUrl}/-/tree/{escaped}",
-                _ => $"{repository.WebUrl}/src/branch/{escaped}"
-            };
-        }
+        private string BranchUrl(string branch) => ScmUrls.Branch(provider, repository.WebUrl, branch);
 
         private async Task<ScmLink> LinkAsync(TaskItem task, ScmLinkKind kind, string externalId)
         {

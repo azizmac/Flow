@@ -1,6 +1,6 @@
 # ТЗ: интеграция с Git-хостингами — GitHub, GitLab, Gitea, Forgejo
 
-Статус: **этапы 5A–5C сделаны** (подключения по токену и GitHub App, репозитории, вебхуки, разбор push/PR/веток, блок «Разработка», дозагрузка истории, диагностика доставок, FQL `development`, автопереходы и смарт-коммиты), 5D–5E — по запросу. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 5). Образец — Windshift
+Статус: **этапы 5A–5D сделаны** (подключения по токену и GitHub App, репозитории, вебхуки, разбор push/PR/веток, блок «Разработка», дозагрузка истории, диагностика доставок, FQL `development`, автопереходы и смарт-коммиты, ветка и PR из карточки, комментарий в PR), 5E — по запросу. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 5). Образец — Windshift
 (`internal/scm/*`, `internal/database/schema/scm_postgres.sql`).
 
 ## Исходное требование
@@ -151,10 +151,10 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 - В строке списка и на карточке канбана — значок PR с состоянием (последний PR задачи).
 - FQL (`docs/TZ_task_views.md` §7): `development = openPR | mergedPR | noPR`.
 
-## 8. Этап 5D: действия из Flow (по запросу)
+## 8. Этап 5D: действия из Flow
 
-Создание ветки и PR через API из карточки задачи, комментарий в PR со ссылкой на задачу. Отложено: это
-запись в чужую систему, нужны права токена на запись и отдельная матрица «кто в Flow может пушить в репозиторий».
+Создание ветки и PR через API из карточки задачи, комментарий в PR со ссылкой на задачу. Это запись в чужую систему:
+нужны права токена на запись и своё право проекта «кто в Flow может писать в репозиторий» (`WriteScm`).
 
 ## Как сделано (этап 5A)
 
@@ -236,6 +236,30 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
   (`FromSource`). Клиент пишет «· по PR #42» ссылкой, бот — «Flow Bot» даже до перезагрузки справочника людей.
 - Дозагрузка истории (5B) автоматизацию не запускает: прошлое не двигает задачи сегодня.
 
+## Как сделано (этап 5D)
+
+- Право `ProjectPermission.WriteScm` (17) — в наборе Developer и выше (`EnsureCanWriteScm`); у своих наборов прав
+  (4E) включается галочкой «Создавать ветки и PR из Flow». Писать можно только в активный репозиторий, привязанный к
+  проекту задачи, иначе 400. Пишет токен подключения: у GitHub App — токен установки, у PAT — его владелец.
+- `Features/Scm/ScmTaskActions`: `TaskScmBranchCreateCommand` (имя проверяет `ScmUrls.ValidateBranch` — латиница,
+  цифры, `._-/`, без `..`, `//`, `.lock`; от ветки по умолчанию, если исходная не задана) и
+  `TaskScmPullRequestCreateCommand` (в ветку по умолчанию, заголовок «КОД Название», описание «Задача Flow: [КОД
+  Название](адрес)», черновик — `draft` у GitHub, «Draft:» у GitLab, «WIP:» у Gitea/Forgejo). Связь пишется сразу, не
+  дожидаясь вебхука (он её лишь обновит), автор — actor; новый PR проходит автопереход «PR открыт» (5C) от имени
+  создавшего. Отказ хостинга (`ScmProviderException`: ветка уже есть, токен без записи) — 400 с его текстом. Ответ —
+  блок «Разработка» целиком (`TaskDevelopmentQuery`).
+- Провайдеры (`IScmProviderClient`): GitHub — sha головы исходной ветки и `POST git/refs`, `POST pulls`, комментарий
+  через `issues/{n}/comments`; GitLab — `POST repository/branches?branch=&ref=`, `merge_requests`, `merge_requests/{n}/notes`;
+  Gitea/Forgejo — `POST branches {new_branch_name, old_branch_name}`, `pulls`, `issues/{n}/comments`.
+- Комментарий в PR — флаг привязки `ScmRepositoryBoard.CommentOnPullRequests` (миграция `AddScmPullRequestComments`,
+  по умолчанию выключен, настраивается в «Репозитории проекта»). Ставится после разбора доставки на каждую **новую**
+  связь PR (не при дозагрузке истории, не на закрытый PR), кроме PR, в описании которого адрес задачи уже есть (так
+  PR, созданный из Flow, не получает дубль). Адрес задачи — `{Scm:PublicBaseUrl}/tasks/{КОД}`. Отказ хостинга не
+  роняет доставку — пометка у связи «Комментарий в PR не оставлен: …».
+- `TaskDevelopmentResponse.Repositories` (привязанные активные репозитории) и `CanWrite` — клиент показывает «Создать
+  ветку» и «Создать PR» только с правом; диалог `Components/ScmCreateDialog` (репозиторий — `MudSelect`, если их
+  несколько; имя ветки — `Ru.BranchName`, исходная для PR — открытая ветка задачи; «Черновик» — `MudCheckBox`).
+
 ## API
 
 | Метод | Путь | Кто |
@@ -243,8 +267,9 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 | GET/POST | `/scm/connections`; PATCH/DELETE `/scm/connections/{id}`; POST `/scm/connections/{id}/check` | Admin+ |
 | GET | `/scm/connections/{id}/available-repositories?q=` | Admin+ |
 | POST/DELETE | `/scm/repositories` `{ connectionId, externalId }`, `/scm/repositories/{id}` | Admin+ |
-| PUT/DELETE | `/boards/{id}/repositories/{repoId}` `{ onPullRequestOpenedStatusId?, onPullRequestMergedStatusId?, smartCommits }` | `ManageScm` |
+| PUT/DELETE | `/boards/{id}/repositories/{repoId}` `{ onPullRequestOpenedStatusId?, onPullRequestMergedStatusId?, smartCommits, commentOnPullRequests }` | `ManageScm` |
 | GET | `/tasks/{id}/development` — `ScmLink` задачи, сгруппированные по типу | `ViewProject` |
+| POST | `/tasks/{id}/development/branch` `{ repositoryId, name, fromBranch? }`, `/tasks/{id}/development/pull-request` `{ repositoryId, sourceBranch, targetBranch?, title?, draft }` — ответ «Разработка»; 400 — имя, непривязанный репозиторий, отказ хостинга | `WriteScm` |
 | GET | `/scm/repositories/{id}/deliveries?status=` — диагностика доставок | Admin+ |
 | POST | `/scm/deliveries/{id}/retry` — повторить доставку с ошибкой (не Failed — 400) | Admin+ |
 | POST | `/scm/repositories/{id}/backfill` — дозагрузить историю, 202 | Admin+ |

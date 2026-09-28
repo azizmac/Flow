@@ -58,4 +58,13 @@ internal sealed partial class InProcessFlowApi
 
     public Task<ApiResult<TaskDevelopmentResponse>> GetTaskDevelopment(Guid taskId, CancellationToken ct = default) =>
         Scoped(async mediator => await mediator.Send(new TaskDevelopmentQuery(await ActorAsync(), taskId), ct) is { } d ? Ok(d) : NotFound<TaskDevelopmentResponse>());
+
+    public Task<ApiResult<TaskDevelopmentResponse>> CreateScmBranch(Guid taskId, CreateScmBranchRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator => await mediator.Send(new TaskScmBranchCreateCommand(await ActorAsync(), taskId, request.RepositoryId, request.Name, request.FromBranch), ct) is { } d
+            ? Ok(d) : NotFound<TaskDevelopmentResponse>());
+
+    public Task<ApiResult<TaskDevelopmentResponse>> CreateScmPullRequest(Guid taskId, CreateScmPullRequestRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator => await mediator.Send(new TaskScmPullRequestCreateCommand(await ActorAsync(), taskId, request.RepositoryId, request.SourceBranch,
+            request.TargetBranch, request.Title, request.Draft), ct) is { } d
+            ? Ok(d) : NotFound<TaskDevelopmentResponse>());
 }

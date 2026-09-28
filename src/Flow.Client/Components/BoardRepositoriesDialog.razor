@@ -33,7 +33,7 @@
                 {
                     <div class="scm-auto">
                         <MudSelect T="Guid?" Label="PR открыт →" Value="r.OnPullRequestOpenedStatusId" Disabled="_busy" Dense="true" Variant="Variant.Text"
-                                   PopoverClass="flow-pop" ValueChanged="v => Configure(r, v, r.OnPullRequestMergedStatusId, r.SmartCommits)"
+                                   PopoverClass="flow-pop" ValueChanged="v => Configure(r with { OnPullRequestOpenedStatusId = v })"
                                    ToStringFunc="StatusName">
                             <MudSelectItem T="Guid?" Value="null">не менять статус</MudSelectItem>
                             @foreach (var s in Board.Statuses)
@@ -43,7 +43,7 @@
                         </MudSelect>
                         <MudSelect T="Guid?" Label="PR влит в ветку по умолчанию →" Value="r.OnPullRequestMergedStatusId" Disabled="_busy" Dense="true"
                                    Variant="Variant.Text" PopoverClass="flow-pop" ToStringFunc="StatusName"
-                                   ValueChanged="v => Configure(r, r.OnPullRequestOpenedStatusId, v, r.SmartCommits)">
+                                   ValueChanged="v => Configure(r with { OnPullRequestMergedStatusId = v })">
                             <MudSelectItem T="Guid?" Value="null">не менять статус</MudSelectItem>
                             @foreach (var s in Board.Statuses)
                             {
@@ -51,8 +51,11 @@
                             }
                         </MudSelect>
                         <MudCheckBox T="bool" Value="r.SmartCommits" Disabled="_busy" Size="Size.Small" Color="Color.Primary" Dense="true"
-                                     ValueChanged="v => Configure(r, r.OnPullRequestOpenedStatusId, r.OnPullRequestMergedStatusId, v)"
+                                     ValueChanged="v => Configure(r with { SmartCommits = v })"
                                      Class="scm-auto-smart" Label="Смарт-коммиты: #done, #comment, #status в ветке по умолчанию" />
+                        <MudCheckBox T="bool" Value="r.CommentOnPullRequests" Disabled="_busy" Size="Size.Small" Color="Color.Primary" Dense="true"
+                                     ValueChanged="v => Configure(r with { CommentOnPullRequests = v })"
+                                     Class="scm-auto-smart" Label="Комментарий в новом PR со ссылкой на задачу" />
                     </div>
                 }
             }
@@ -96,10 +99,12 @@
 
     private string StatusName(Guid? id) => id is { } v ? Board.Statuses.FirstOrDefault(s => s.Id == v)?.Name ?? "—" : "не менять статус";
 
-    private async Task Configure(ScmBoardRepositoryResponse repository, Guid? opened, Guid? merged, bool smartCommits)
+    /// <summary>Настройки привязки уходят целиком — изменённая копия строки.</summary>
+    private async Task Configure(ScmBoardRepositoryResponse r)
     {
         _busy = true;
-        var result = await Api.SetBoardRepository(Board.Id, repository.RepositoryId, true, new UpdateScmBindingRequest(opened, merged, smartCommits));
+        var result = await Api.SetBoardRepository(Board.Id, r.RepositoryId, true,
+            new UpdateScmBindingRequest(r.OnPullRequestOpenedStatusId, r.OnPullRequestMergedStatusId, r.SmartCommits, r.CommentOnPullRequests));
         _busy = false;
         if (result.Ok)
             _repositories = result.Value;

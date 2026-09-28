@@ -137,4 +137,30 @@ public class ScmPersistenceTests(PostgresFixture db)
         await db.SendAsync(new StatusDeleteCommand(Owner, board.Id, review, board.Statuses.Single(s => s.Name == "В работе").Id));
         Assert.Null(await db.QueryAsync(ctx => ctx.ScmRepositoryBoards.Where(b => b.BoardId == board.Id).Select(b => b.OnPullRequestOpenedStatusId).SingleAsync()));
     }
+
+    /// <summary>Этап 5D: флаг «комментарий в новом PR» — колонка привязки, по умолчанию выключен.</summary>
+    [Fact]
+    public async Task Comment_On_Pull_Requests_Flag_Is_Stored_On_The_Binding()
+    {
+        var board = (await db.SendAsync(new BoardCreateCommand(Owner, "Комментарии PR", "SCMPC"))).Response!;
+        var connection = ScmConnection.Create(ScmProvider.GitHub, "GitHub", null, "p:tok", Owner);
+        var repository = ScmRepository.Create(connection.Id, "41", "acme/scmd", "https://github.com/acme/scmd", "main", "p:hooksecret");
+        var plain = ScmRepositoryBoard.Create(repository.Id, board.Id, Owner);
+        await db.QueryAsync(async ctx =>
+        {
+            ctx.ScmConnections.Add(connection);
+            ctx.ScmRepositories.Add(repository);
+            ctx.ScmRepositoryBoards.Add(plain);
+            return await ctx.SaveChangesAsync();
+        });
+        Assert.False(await db.QueryAsync(ctx => ctx.ScmRepositoryBoards.Where(b => b.RepositoryId == repository.Id).Select(b => b.CommentOnPullRequests).SingleAsync()));
+
+        await db.QueryAsync(async ctx =>
+        {
+            var binding = await ctx.ScmRepositoryBoards.AsTracking().SingleAsync(b => b.RepositoryId == repository.Id);
+            binding.Configure(null, null, false, commentOnPullRequests: true);
+            return await ctx.SaveChangesAsync();
+        });
+        Assert.True(await db.QueryAsync(ctx => ctx.ScmRepositoryBoards.Where(b => b.RepositoryId == repository.Id).Select(b => b.CommentOnPullRequests).SingleAsync()));
+    }
 }

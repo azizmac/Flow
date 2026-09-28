@@ -2757,7 +2757,7 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 
 /* ---- Интеграция с Git (docs/TZ_scm_integration.md, этап 5A) ---- */
 .dev { display: flex; flex-direction: column; gap: 4px; }
-.dev .subtasks-head .icon-lnk { margin-left: auto; }
+.dev .subtasks-head .icon-lnk:first-of-type { margin-left: auto; }
 .dev-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; color: var(--text-primary); text-decoration: none; font: var(--fw-medium) 13px var(--font-text); }
 .dev-row:hover { background: rgba(255, 255, 255, 0.04); }
 .dev-kind { color: var(--text-tertiary); font: var(--fw-semibold) 12px var(--font-display); white-space: nowrap; }
@@ -2799,6 +2799,7 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .md-shared { margin-top: 8px; }
 .scm-auto { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; padding: 0 0 12px 30px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
 .scm-auto .scm-auto-smart { grid-column: 1 / -1; }
+.scm-create { display: flex; flex-direction: column; gap: 12px; }
 .dev-note { margin: -2px 0 4px 10px; color: var(--accent); font: var(--fw-medium) 12px var(--font-text); }
 .tl-source { color: var(--text-muted); }
 .tl-source a { color: inherit; text-decoration: underline dotted; }

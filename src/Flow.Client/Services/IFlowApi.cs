@@ -180,6 +180,9 @@ public interface IFlowApi
     Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> SetBoardRepository(Guid boardId, Guid repositoryId, bool bound,
         UpdateScmBindingRequest? settings = null, CancellationToken ct = default);
     Task<ApiResult<TaskDevelopmentResponse>> GetTaskDevelopment(Guid taskId, CancellationToken ct = default);
+    // Этап 5D: ветка и PR из карточки задачи (WriteScm); ответ — блок «Разработка» целиком.
+    Task<ApiResult<TaskDevelopmentResponse>> CreateScmBranch(Guid taskId, CreateScmBranchRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskDevelopmentResponse>> CreateScmPullRequest(Guid taskId, CreateScmPullRequestRequest request, CancellationToken ct = default);
 
     // Дашборды (docs/TZ_task_views.md §8): данные каждого виджета — отдельным вызовом; ошибка виджета — в WidgetDataResponse.Error.
     Task<ApiResult<IReadOnlyList<DashboardResponse>>> GetDashboards(CancellationToken ct = default);

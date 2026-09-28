@@ -275,15 +275,19 @@ public sealed class ScmRepositoryBoard
     /// <summary>Смарт-коммиты (#done, #comment, #status) в push'ах в ветку по умолчанию.</summary>
     public bool SmartCommits { get; private set; }
 
+    /// <summary>Комментарий в новом PR со ссылкой на задачу (этап 5D) — от имени токена подключения.</summary>
+    public bool CommentOnPullRequests { get; private set; }
+
     public static ScmRepositoryBoard Create(Guid repositoryId, Guid boardId, Guid createdById) =>
         new() { RepositoryId = repositoryId, BoardId = boardId, CreatedById = createdById, CreatedAt = DateTime.UtcNow };
 
     /// <summary>Настройки автоматизации привязки. Принадлежность статусов проекту проверяет хендлер — он видит доску.</summary>
-    public void Configure(Guid? onPullRequestOpenedStatusId, Guid? onPullRequestMergedStatusId, bool smartCommits)
+    public void Configure(Guid? onPullRequestOpenedStatusId, Guid? onPullRequestMergedStatusId, bool smartCommits, bool commentOnPullRequests = false)
     {
         OnPullRequestOpenedStatusId = onPullRequestOpenedStatusId;
         OnPullRequestMergedStatusId = onPullRequestMergedStatusId;
         SmartCommits = smartCommits;
+        CommentOnPullRequests = commentOnPullRequests;
     }
 }
 

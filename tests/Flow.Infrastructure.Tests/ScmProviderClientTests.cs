@@ -171,4 +171,48 @@ public class ScmProviderClientTests
         var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmProviderException>(() => client.CheckAsync(broken, "not a key", CancellationToken.None));
         Assert.Contains("PEM", error.Message);
     }
+
+    /// <summary>
+    /// Этап 5D: запись на хостинг. GitHub — ветка через sha головы и git/refs, PR с draft; GitLab — ветка
+    /// query-параметрами, MR с «Draft:», заметка в MR; Gitea — branches и «WIP:», комментарий через issues.
+    /// </summary>
+    [Fact]
+    public async Task Branches_Pull_Requests_And_Comments_Go_To_Provider_Endpoints()
+    {
+        var recorder = new Recorder(r => r.RequestUri!.AbsolutePath switch
+        {
+            var p when p.EndsWith("/git/ref/heads/main") => Json("""{"object":{"sha":"abc123"}}"""),
+            var p when p.EndsWith("/pulls") => Json("""{"number":12,"title":"WEB-1 x","state":"open","html_url":"https://github.com/acme/web/pull/12","user":{"login":"bot"},"head":{"ref":"WEB-1"},"base":{"ref":"main"}}""", HttpStatusCode.Created),
+            var p when p.EndsWith("/merge_requests") => Json("""{"iid":3,"title":"Draft: WEB-1 x","state":"opened","draft":true,"web_url":"https://gl.example.com/g/p/-/merge_requests/3","source_branch":"WEB-1","target_branch":"main"}""", HttpStatusCode.Created),
+            _ => Json("{}", HttpStatusCode.Created)
+        });
+        var client = new ScmProviderClient(new Factory(recorder));
+
+        var github = ScmConnection.Create(ScmProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
+        var ghRepo = ScmRepository.Create(github.Id, "101", "acme/web", "https://github.com/acme/web", "main", "p");
+        await client.CreateBranchAsync(github, "tok", ghRepo, "WEB-1", "main", CancellationToken.None);
+        Assert.Equal("https://api.github.com/repos/acme/web/git/refs", recorder.Requests[^1].Request.RequestUri!.ToString());
+        Assert.Contains("\"sha\":\"abc123\"", recorder.Requests[^1].Body);
+        var pr = await client.CreatePullRequestAsync(github, "tok", ghRepo, "WEB-1", "main", "WEB-1 x", "body", true, CancellationToken.None);
+        Assert.Equal(("12", Flow.Domain.Entities.ScmLinkState.Open), (pr.Number, pr.State));
+        Assert.Contains("\"draft\":true", recorder.Requests[^1].Body);
+        await client.CommentOnPullRequestAsync(github, "tok", ghRepo, "12", "Задача", CancellationToken.None);
+        Assert.Equal("https://api.github.com/repos/acme/web/issues/12/comments", recorder.Requests[^1].Request.RequestUri!.ToString());
+
+        var gitlab = ScmConnection.Create(ScmProvider.GitLab, "GitLab", "https://gl.example.com", "p", Guid.NewGuid());
+        var glRepo = ScmRepository.Create(gitlab.Id, "7", "g/p", "https://gl.example.com/g/p", "main", "p");
+        await client.CreateBranchAsync(gitlab, "tok", glRepo, "WEB-1", "main", CancellationToken.None);
+        Assert.Equal("https://gl.example.com/api/v4/projects/7/repository/branches?branch=WEB-1&ref=main", recorder.Requests[^1].Request.RequestUri!.ToString());
+        var mr = await client.CreatePullRequestAsync(gitlab, "tok", glRepo, "WEB-1", "main", "WEB-1 x", "body", true, CancellationToken.None);
+        Assert.Equal(("3", Flow.Domain.Entities.ScmLinkState.Draft), (mr.Number, mr.State));
+        Assert.Contains("Draft: WEB-1 x", recorder.Requests[^1].Body);
+        await client.CommentOnPullRequestAsync(gitlab, "tok", glRepo, "3", "Задача", CancellationToken.None);
+        Assert.Equal("https://gl.example.com/api/v4/projects/7/merge_requests/3/notes", recorder.Requests[^1].Request.RequestUri!.ToString());
+
+        var gitea = ScmConnection.Create(ScmProvider.Gitea, "Gitea", "https://git.example.com", "p", Guid.NewGuid());
+        var gtRepo = ScmRepository.Create(gitea.Id, "9", "acme/web", "https://git.example.com/acme/web", "main", "p");
+        await client.CreateBranchAsync(gitea, "tok", gtRepo, "WEB-1", "main", CancellationToken.None);
+        Assert.Equal("https://git.example.com/api/v1/repos/acme/web/branches", recorder.Requests[^1].Request.RequestUri!.ToString());
+        Assert.Contains("\"old_branch_name\":\"main\"", recorder.Requests[^1].Body);
+    }
 }

@@ -95,4 +95,33 @@ public sealed class ScmWebhookApiTests(ApiFixture api)
         var list = (await configured.Content.ReadFromJsonAsync<List<ScmBoardRepositoryResponse>>())!;
         Assert.Equal((done, true), (list.Single(r => r.RepositoryId == repository.Id).OnPullRequestMergedStatusId!.Value, list.Single(r => r.RepositoryId == repository.Id).SmartCommits));
     }
+
+    /// <summary>Этап 5D: ветка и PR из карточки — 200 с «Разработкой», отказ хостинга и неверное имя — 400, чужая задача — 404.</summary>
+    [Fact]
+    public async Task Branch_And_Pull_Request_Routes_Answer_With_Development()
+    {
+        using var owner = api.CreateClientAs();
+        using var boardResponse = await owner.PostAsJsonAsync("/api/boards", new Flow.Shared.Contracts.Boards.CreateBoardRequest("Действия", "SCMX"));
+        var board = (await boardResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Boards.BoardResponse>())!;
+        using var taskResponse = await owner.PostAsJsonAsync($"/api/boards/{board.Id}/tasks", new Flow.Shared.Contracts.Tasks.CreateTaskRequest("Кнопка", null, null));
+        var task = (await taskResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Tasks.TaskResponse>())!;
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(ScmProvider.GitHub, "GitHub 5D", "token"));
+        var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
+        api.Scm.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("405", "acme/act", "https://github.com/acme/act", "main"));
+        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "405"));
+        var repository = (await repositoryResponse.Content.ReadFromJsonAsync<ScmRepositoryResponse>())!;
+        using var bind = await owner.PutAsync($"/api/boards/{board.Id}/repositories/{repository.Id}", null);
+
+        using var branch = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/development/branch", new CreateScmBranchRequest(repository.Id, "SCMX-1-knopka"));
+        Assert.Equal(HttpStatusCode.OK, branch.StatusCode);
+        Assert.Equal("SCMX-1-knopka", (await branch.Content.ReadFromJsonAsync<TaskDevelopmentResponse>())!.Branches.Single().ExternalId);
+        using var pr = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/development/pull-request", new CreateScmPullRequestRequest(repository.Id, "SCMX-1-knopka"));
+        Assert.Equal(HttpStatusCode.OK, pr.StatusCode);
+        Assert.Single((await pr.Content.ReadFromJsonAsync<TaskDevelopmentResponse>())!.PullRequests);
+
+        using var bad = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/development/branch", new CreateScmBranchRequest(repository.Id, "плохое имя"));
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+        using var missing = await owner.PostAsJsonAsync($"/api/tasks/{Guid.NewGuid()}/development/branch", new CreateScmBranchRequest(repository.Id, "x-1"));
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
 }

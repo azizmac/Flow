@@ -32,5 +32,8 @@ public enum ProjectPermission
     ManageScm = 15,
 
     /// <summary>Создавать, править и удалять шаблоны задач проекта (docs/TZ_workflow_config.md §5): Developer и выше.</summary>
-    ManageTaskTemplates = 16
+    ManageTaskTemplates = 16,
+
+    /// <summary>Создавать ветки и PR на хостинге из карточки задачи (docs/TZ_scm_integration.md §8, этап 5D): Developer и выше.</summary>
+    WriteScm = 17
 }

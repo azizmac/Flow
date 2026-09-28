@@ -153,6 +153,66 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
         return new ScmHistory(pullRequests, history);
     }
 
+    public async Task CreateBranchAsync(ScmConnection connection, string token, ScmRepository repository, string name, string fromBranch,
+        CancellationToken cancellationToken)
+    {
+        switch (connection.Provider)
+        {
+            case ScmProvider.GitHub:
+                // У GitHub нет «ветки от ветки»: берём sha головы исходной и создаём ref.
+                using (var head = await SendAsync(connection, token, HttpMethod.Get,
+                           $"repos/{repository.FullName}/git/ref/heads/{Uri.EscapeDataString(fromBranch)}", null, cancellationToken))
+                {
+                    var sha = head.RootElement.GetProperty("object").GetProperty("sha").GetString();
+                    using var _ = await SendAsync(connection, token, HttpMethod.Post, $"repos/{repository.FullName}/git/refs",
+                        new { @ref = $"refs/heads/{name}", sha }, cancellationToken);
+                }
+                break;
+            case ScmProvider.GitLab:
+                using (var _ = await SendAsync(connection, token, HttpMethod.Post,
+                           $"projects/{Uri.EscapeDataString(repository.ExternalId)}/repository/branches?branch={Uri.EscapeDataString(name)}&ref={Uri.EscapeDataString(fromBranch)}",
+                           null, cancellationToken))
+                {
+                }
+                break;
+            default:
+                using (var _ = await SendAsync(connection, token, HttpMethod.Post, $"repos/{repository.FullName}/branches",
+                           new { new_branch_name = name, old_branch_name = fromBranch }, cancellationToken))
+                {
+                }
+                break;
+        }
+    }
+
+    public async Task<ScmPullRequest> CreatePullRequestAsync(ScmConnection connection, string token, ScmRepository repository, string sourceBranch,
+        string targetBranch, string title, string body, bool draft, CancellationToken cancellationToken)
+    {
+        (string Path, object Body) request = connection.Provider switch
+        {
+            ScmProvider.GitHub => ($"repos/{repository.FullName}/pulls", new { title, head = sourceBranch, @base = targetBranch, body, draft }),
+            // У GitLab черновик — префикс заголовка «Draft:».
+            ScmProvider.GitLab => ($"projects/{Uri.EscapeDataString(repository.ExternalId)}/merge_requests", new
+            {
+                source_branch = sourceBranch, target_branch = targetBranch, title = draft ? $"Draft: {title}" : title, description = body
+            }),
+            _ => ($"repos/{repository.FullName}/pulls", new { head = sourceBranch, @base = targetBranch, title = draft ? $"WIP: {title}" : title, body })
+        };
+
+        using var json = await SendAsync(connection, token, HttpMethod.Post, request.Path, request.Body, cancellationToken);
+        using var list = JsonDocument.Parse($"[{json.RootElement.GetRawText()}]");
+        return ScmPayloadParser.ParsePullRequests(connection.Provider, list.RootElement).FirstOrDefault()
+               ?? throw new ScmProviderException("Хостинг не вернул созданный PR.");
+    }
+
+    public async Task CommentOnPullRequestAsync(ScmConnection connection, string token, ScmRepository repository, string number, string body,
+        CancellationToken cancellationToken)
+    {
+        var path = connection.Provider == ScmProvider.GitLab
+            ? $"projects/{Uri.EscapeDataString(repository.ExternalId)}/merge_requests/{number}/notes"
+            : $"repos/{repository.FullName}/issues/{number}/comments";
+        using var _ = await SendAsync(connection, token, HttpMethod.Post, path, new { body }, cancellationToken);
+    }
+
     private async Task<List<T>> PagesAsync<T>(ScmConnection connection, string token, Func<int, string> path, int pageSize, int max,
         Func<JsonElement, IReadOnlyList<T>> parse, Func<T, bool>? tooOld, CancellationToken cancellationToken)
     {

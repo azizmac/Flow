@@ -409,7 +409,7 @@ internal sealed class ScmProjectHandlers(
             foreach (var statusId in new[] { settings.OnPullRequestOpenedStatusId, settings.OnPullRequestMergedStatusId }.OfType<Guid>())
                 if (board.Statuses.All(s => s.Id != statusId))
                     throw new ArgumentException("Статус автоперехода — не из этого проекта.", nameof(request.Settings));
-            existing!.Configure(settings.OnPullRequestOpenedStatusId, settings.OnPullRequestMergedStatusId, settings.SmartCommits);
+            existing!.Configure(settings.OnPullRequestOpenedStatusId, settings.OnPullRequestMergedStatusId, settings.SmartCommits, settings.CommentOnPullRequests);
         }
         else if (!request.Bound && existing is not null)
         {
@@ -437,12 +437,18 @@ internal sealed class ScmProjectHandlers(
         }
 
         var commits = links.Where(l => l.Kind == DomainKind.Commit).ToList();
+        var bindings = await store.GetBindingsAsync(task.BoardId, null, cancellationToken);
+        var targets = bindings.Select(b => repositories.GetValueOrDefault(b.RepositoryId)).OfType<ScmRepository>().Where(r => r.IsActive)
+            .Select(r => new ScmTaskRepositoryResponse(r.Id, r.FullName, r.DefaultBranch, providers.GetValueOrDefault(r.ConnectionId).ToShared()))
+            .ToList();
         return new TaskDevelopmentResponse(
             links.Where(l => l.Kind == DomainKind.Branch).Select(Map).ToList(),
             links.Where(l => l.Kind == DomainKind.PullRequest).Select(Map).ToList(),
             commits.Take(ScmMapping.CommitPreview).Select(Map).ToList(),
             commits.Count,
-            (await store.GetBindingsAsync(task.BoardId, null, cancellationToken)).Count > 0);
+            bindings.Count > 0,
+            targets,
+            (await projectAccess.GetAsync(actor, task.BoardId, cancellationToken)).Has(ProjectPermission.WriteScm));
     }
 
     private async Task<IReadOnlyList<ScmBoardRepositoryResponse>> ListAsync(Guid boardId, CancellationToken cancellationToken)
@@ -453,7 +459,7 @@ internal sealed class ScmProjectHandlers(
             .Where(r => r.IsActive || bound.ContainsKey(r.Id))
             .Select(r => bound.GetValueOrDefault(r.Id) is { } b
                 ? new ScmBoardRepositoryResponse(r.Id, providers.GetValueOrDefault(r.ConnectionId).ToShared(), r.FullName, r.WebUrl, true,
-                    b.OnPullRequestOpenedStatusId, b.OnPullRequestMergedStatusId, b.SmartCommits)
+                    b.OnPullRequestOpenedStatusId, b.OnPullRequestMergedStatusId, b.SmartCommits, b.CommentOnPullRequests)
                 : new ScmBoardRepositoryResponse(r.Id, providers.GetValueOrDefault(r.ConnectionId).ToShared(), r.FullName, r.WebUrl, false))
             .ToList();
     }

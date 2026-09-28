@@ -28,6 +28,9 @@ public interface IPermissionService
     /// <summary>Создавать, править и удалять шаблоны задач проекта — ManageTaskTemplates (Developer+, этап 3G).</summary>
     void EnsureCanManageTaskTemplates(ProjectAccessInfo access);
 
+    /// <summary>Создать ветку или PR на хостинге из карточки задачи — WriteScm (Developer+, этап 5D).</summary>
+    void EnsureCanWriteScm(ProjectAccessInfo access);
+
     /// <summary>Создавать, править, закрывать и удалять вехи проекта — ManageMilestones (Developer+).</summary>
     void EnsureCanManageMilestones(ProjectAccessInfo access);
 

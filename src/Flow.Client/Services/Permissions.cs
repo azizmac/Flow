@@ -32,6 +32,7 @@ public static class Permissions
 
     public static bool CanManageMilestones(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageMilestones);
     public static bool CanManageTaskTemplates(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageTaskTemplates);
+    public static bool CanWriteScm(ProjectAccessResponse? access) => Has(access, ProjectPermission.WriteScm);
 
     public static bool CanManageScm(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageScm);
 
@@ -156,6 +157,7 @@ public static class Permissions
         ProjectPermission.ManageMilestones => "Вести вехи",
         ProjectPermission.ManageScm => "Привязывать репозитории",
         ProjectPermission.ManageTaskTemplates => "Вести шаблоны задач",
+        ProjectPermission.WriteScm => "Создавать ветки и PR из Flow",
         _ => permission.ToString()
     };
 

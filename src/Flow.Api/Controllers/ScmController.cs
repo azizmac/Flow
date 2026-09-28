@@ -101,6 +101,16 @@ public class ScmController(IMediator mediator, IActorAccessor actor) : Controlle
     public async Task<IActionResult> Development(Guid id, CancellationToken cancellationToken) =>
         await mediator.Send(new TaskDevelopmentQuery(actor.Require(), id), cancellationToken) is { } development ? Ok(development) : NotFound();
 
+    /// <summary>Этап 5D: ветка задачи на хостинге — WriteScm, репозиторий привязан к проекту; отказ хостинга — 400.</summary>
+    [HttpPost("tasks/{id:guid}/development/branch")]
+    public Task<IActionResult> CreateBranch(Guid id, CreateScmBranchRequest request, CancellationToken cancellationToken) =>
+        Send(async () => (object?)await mediator.Send(new TaskScmBranchCreateCommand(actor.Require(), id, request.RepositoryId, request.Name, request.FromBranch), cancellationToken));
+
+    [HttpPost("tasks/{id:guid}/development/pull-request")]
+    public Task<IActionResult> CreatePullRequest(Guid id, CreateScmPullRequestRequest request, CancellationToken cancellationToken) =>
+        Send(async () => (object?)await mediator.Send(new TaskScmPullRequestCreateCommand(actor.Require(), id, request.RepositoryId, request.SourceBranch,
+            request.TargetBranch, request.Title, request.Draft), cancellationToken));
+
     private async Task<IActionResult> Send(Func<Task<object?>> action)
     {
         try

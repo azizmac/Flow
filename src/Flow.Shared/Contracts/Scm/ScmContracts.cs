@@ -47,10 +47,14 @@ public sealed record ScmRepositoryResponse(
 /// (этап 5C): статус при открытии PR, статус при влитии в ветку по умолчанию, смарт-коммиты.
 /// </summary>
 public sealed record ScmBoardRepositoryResponse(Guid RepositoryId, ScmProvider Provider, string FullName, string WebUrl, bool IsBound,
-    Guid? OnPullRequestOpenedStatusId = null, Guid? OnPullRequestMergedStatusId = null, bool SmartCommits = false);
+    Guid? OnPullRequestOpenedStatusId = null, Guid? OnPullRequestMergedStatusId = null, bool SmartCommits = false, bool CommentOnPullRequests = false);
 
-/// <summary>Тело PUT /boards/{id}/repositories/{repoId}: привязать и настроить. Статусы — проекта; null — автопереход выключен.</summary>
-public sealed record UpdateScmBindingRequest(Guid? OnPullRequestOpenedStatusId = null, Guid? OnPullRequestMergedStatusId = null, bool SmartCommits = false);
+/// <summary>
+/// Тело PUT /boards/{id}/repositories/{repoId}: привязать и настроить. Статусы — проекта; null — автопереход выключен.
+/// CommentOnPullRequests (этап 5D) — комментарий «задача Flow» в каждом новом PR, связанном с задачей проекта.
+/// </summary>
+public sealed record UpdateScmBindingRequest(Guid? OnPullRequestOpenedStatusId = null, Guid? OnPullRequestMergedStatusId = null, bool SmartCommits = false,
+    bool CommentOnPullRequests = false);
 
 public sealed record ScmLinkResponse(
     Guid Id, Guid RepositoryId, string RepositoryName, ScmProvider Provider, ScmLinkKind Kind, string ExternalId, string Url,
@@ -59,11 +63,21 @@ public sealed record ScmLinkResponse(
 
 /// <summary>
 /// Блок «Разработка» задачи: ветки, PR, последние коммиты и сколько их всего. HasRepositories — проект привязан хотя
-/// бы к одному репозиторию: без этого блок в карточке не нужен вовсе.
+/// бы к одному репозиторию: без этого блок в карточке не нужен вовсе. Repositories и CanWrite (этап 5D) — куда из
+/// карточки можно создать ветку или PR и есть ли на это право.
 /// </summary>
 public sealed record TaskDevelopmentResponse(
     IReadOnlyList<ScmLinkResponse> Branches, IReadOnlyList<ScmLinkResponse> PullRequests, IReadOnlyList<ScmLinkResponse> Commits, int CommitCount,
-    bool HasRepositories);
+    bool HasRepositories, IReadOnlyList<ScmTaskRepositoryResponse>? Repositories = null, bool CanWrite = false);
+
+/// <summary>Привязанный к проекту задачи активный репозиторий — цель «Создать ветку / PR».</summary>
+public sealed record ScmTaskRepositoryResponse(Guid Id, string FullName, string DefaultBranch, ScmProvider Provider);
+
+/// <summary>POST /tasks/{id}/development/branch (этап 5D): имя — «КОД-название»; от ветки по умолчанию, если From нет.</summary>
+public sealed record CreateScmBranchRequest(Guid RepositoryId, string Name, string? FromBranch = null);
+
+/// <summary>POST /tasks/{id}/development/pull-request: в ветку по умолчанию, если Target нет; заголовок — «КОД Название».</summary>
+public sealed record CreateScmPullRequestRequest(Guid RepositoryId, string SourceBranch, string? TargetBranch = null, string? Title = null, bool Draft = false);
 
 /// <summary>
 /// Доставка вебхука или задание дозагрузки истории (IsBackfill). NextAttemptAt — когда воркер возьмёт её снова (у

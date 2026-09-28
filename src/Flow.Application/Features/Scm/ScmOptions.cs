@@ -27,6 +27,9 @@ public sealed class ScmOptions
     /// <summary>…но не больше стольких коммитов.</summary>
     public int BackfillMaxCommits { get; set; } = 1000;
 
+    /// <summary>Ссылка на задачу для текста на хостинге (этап 5D): /tasks/{код} ведёт и по прежнему коду.</summary>
+    public string TaskUrl(string code) => $"{(PublicBaseUrl ?? "").TrimEnd('/')}/tasks/{code}";
+
     public string WebhookUrl(Guid repositoryId, string? fallbackBase = null)
     {
         var baseUrl = (PublicBaseUrl ?? fallbackBase ?? "").TrimEnd('/');

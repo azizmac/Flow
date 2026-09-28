@@ -34,6 +34,18 @@ public interface IScmProviderClient
     /// </summary>
     Task<ScmHistory> GetHistoryAsync(ScmConnection connection, string token, ScmRepository repository, DateTime commitsSince,
         int maxPullRequests, int maxCommits, CancellationToken cancellationToken);
+
+    // Действия из Flow (этап 5D): запись на хостинг от имени токена подключения.
+
+    /// <summary>Ветка <paramref name="name"/> от <paramref name="fromBranch"/>; уже есть — ScmProviderException.</summary>
+    Task CreateBranchAsync(ScmConnection connection, string token, ScmRepository repository, string name, string fromBranch, CancellationToken cancellationToken);
+
+    /// <summary>PR/MR из <paramref name="sourceBranch"/> в <paramref name="targetBranch"/>; ответ — созданный PR.</summary>
+    Task<ScmPullRequest> CreatePullRequestAsync(ScmConnection connection, string token, ScmRepository repository, string sourceBranch, string targetBranch,
+        string title, string body, bool draft, CancellationToken cancellationToken);
+
+    /// <summary>Комментарий в PR/MR с номером <paramref name="number"/>.</summary>
+    Task CommentOnPullRequestAsync(ScmConnection connection, string token, ScmRepository repository, string number, string body, CancellationToken cancellationToken);
 }
 
 /// <summary>

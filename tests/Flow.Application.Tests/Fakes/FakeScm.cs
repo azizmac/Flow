@@ -124,6 +124,37 @@ public sealed class FakeScmProviderClient : IScmProviderClient
             throw new ScmProviderException(f);
         return Task.FromResult(History);
     }
+
+    public List<(string Name, string From)> CreatedBranches { get; } = [];
+    public List<(string Source, string Target, string Title, string Body, bool Draft)> CreatedPullRequests { get; } = [];
+    public List<(string Number, string Body)> Comments { get; } = [];
+
+    public Task CreateBranchAsync(ScmConnection connection, string token, ScmRepository repository, string name, string fromBranch, CancellationToken cancellationToken)
+    {
+        if (Failure is { } f)
+            throw new ScmProviderException(f);
+        CreatedBranches.Add((name, fromBranch));
+        return Task.CompletedTask;
+    }
+
+    public Task<Flow.Application.Features.Scm.ScmPullRequest> CreatePullRequestAsync(ScmConnection connection, string token, ScmRepository repository,
+        string sourceBranch, string targetBranch, string title, string body, bool draft, CancellationToken cancellationToken)
+    {
+        if (Failure is { } f)
+            throw new ScmProviderException(f);
+        CreatedPullRequests.Add((sourceBranch, targetBranch, title, body, draft));
+        var number = (41 + CreatedPullRequests.Count).ToString();
+        return Task.FromResult(new Flow.Application.Features.Scm.ScmPullRequest(number, title, body, ScmLinkState.Open,
+            $"{repository.WebUrl}/pull/{number}", "flow-bot-token", sourceBranch, targetBranch, DateTime.UtcNow));
+    }
+
+    public Task CommentOnPullRequestAsync(ScmConnection connection, string token, ScmRepository repository, string number, string body, CancellationToken cancellationToken)
+    {
+        if (Failure is { } f)
+            throw new ScmProviderException(f);
+        Comments.Add((number, body));
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>Обратимое «шифрование» для тестов: префикс, а не криптография.</summary>
