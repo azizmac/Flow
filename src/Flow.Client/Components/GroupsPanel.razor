@@ -44,8 +44,7 @@
                     <span class="hint">@Ru.People(g.MemberIds.Count)</span>
                     @if (CanManage)
                     {
-                        <MudCheckBox T="bool" Value="g.IsTeam" ValueChanged="v => SetTeam(g, v)" Size="Size.Small" Color="Color.Primary" Dense="true"
-                                     Class="check-mud" Label="Команда" Disabled="_busy" />
+                        <DsCheckbox Value="g.IsTeam" ValueChanged="v => SetTeam(g, v)" Label="Команда" Disabled="_busy" />
                         <button type="button" class="icon-lnk" @onclick="() => { _renaming = g.Id; _renameText = g.Name; }">Переименовать</button>
                         <button type="button" class="icon-lnk danger" @onclick="() => Delete(g)" disabled="@_busy">Удалить</button>
                     }
@@ -66,17 +65,7 @@
                 }
                 @if (CanManage)
                 {
-                    var candidates = Users.Active.Where(u => !g.MemberIds.Contains(u.Id)).ToList();
-                    @if (candidates.Count > 0)
-                    {
-                        <MudSelect T="Guid?" Placeholder="+ Добавить человека" Value="null" ValueChanged="id => SetMember(g, id, true)" Dense="true"
-                                   Variant="Variant.Text" PopoverClass="flow-pop" Class="gp-add" Disabled="_busy">
-                            @foreach (var u in candidates)
-                            {
-                                <MudSelectItem T="Guid?" Value="u.Id">@u.FullName · @@@u.Username</MudSelectItem>
-                            }
-                        </MudSelect>
-                    }
+                    <UserPicker Values="g.MemberIds" OnToggle="t => SetMember(g, t.Id, t.Selected)" Disabled="_busy" />
                 }
             </div>
         </div>
@@ -158,9 +147,9 @@
             Toasts.Error(result.Error ?? "Не удалось удалить группу");
     }
 
-    private async Task SetMember(GroupResponse g, Guid? userId, bool member)
+    private async Task SetMember(GroupResponse g, Guid id, bool member)
     {
-        if (userId is { } id && await Run(() => Api.SetGroupMember(g.Id, id, member)) is { } updated)
+        if (await Run(() => Api.SetGroupMember(g.Id, id, member)) is { } updated)
             Replace(updated);
     }
 

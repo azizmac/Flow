@@ -1,0 +1,96 @@
+@* Выбор людей (docs/TZ_ui_consistency.md, этап 4) — один вид на всех экранах: поиск по имени и @username, строка
+   «аватар · имя · @username · должность», как у исполнителя задачи. Этот компонент — режим «несколько»: у строки
+   флажок, меню после клика не закрывается, чтобы отметить людей подряд. Каждый клик — сразу OnToggle(id, выбран);
+   сохранение по одному человеку делает вызывающий (состав группы, участники проекта), здесь очереди изменений нет.
+
+   Слой — MudMenu, как у AssigneeSelect: фокус уходит в поиск (печатать важнее, чем ходить стрелками), Enter
+   переключает первого найденного, Esc закрывает. Список — активные из UserDirectory: деактивированных не добавляют. *@
+@implements IDisposable
+@inject UserDirectory Users
+@inject BrowserInterop Browser
+
+<MudMenu @bind-Open="_open" PopoverClass="flow-pop flow-pop-wide" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomLeft"
+         TransformOrigin="Origin.TopLeft" Dense="true" DropShadow="false" Ripple="false" AriaLabel="@Label">
+    <ActivatorContent>
+        <DsButton Variant="secondary" Size="sm" Icon="user-plus" Disabled="Disabled" StopPropagation="true" OnClick="Toggle">@Label</DsButton>
+    </ActivatorContent>
+    <ChildContent>
+        <label class="pop-search" @onclick:stopPropagation>
+            <Icon Name="search" Size="14" />
+            <input id="@_inputId" placeholder="Имя или @@username" value="@_query" autocomplete="off" spellcheck="false"
+                   @oninput="e => _query = e.Value?.ToString() ?? string.Empty" @onkeydown="OnKey" />
+        </label>
+        @if (!Users.IsLoaded)
+        {
+            <div class="pop-empty">Загрузка…</div>
+        }
+        else
+        {
+            var list = Users.Filter(_query);
+            if (list.Count == 0)
+            {
+                <div class="pop-empty">@(Users.Active.Count == 0 ? "Пока нет людей — добавьте на странице «Люди»" : "Никого не найдено")</div>
+            }
+            @foreach (var u in list)
+            {
+                var on = Values.Contains(u.Id);
+                <MudMenuItem Class="@($"pop-item user pick {(on ? "on" : "")}")" AutoClose="false" Disabled="Disabled"
+                             OnClick="() => Toggle(u.Id)" aria-checked="@(on ? "true" : "false")" role="menuitemcheckbox">
+                    <span class="pick-mark" aria-hidden="true">@if (on) { <Icon Name="check" Size="12" /> }</span>
+                    <Avatar User="u" Size="22" />
+                    <span class="pop-user">
+                        <span class="pop-user-name">@u.FullName</span>
+                        <span class="pop-user-un">@@@u.Username@(string.IsNullOrEmpty(u.JobTitle) ? "" : $" · {u.JobTitle}")</span>
+                    </span>
+                </MudMenuItem>
+            }
+        }
+    </ChildContent>
+</MudMenu>
+
+@code {
+    /// <summary>Кто уже выбран (состав группы, участники).</summary>
+    [Parameter] public IReadOnlyCollection<Guid> Values { get; set; } = [];
+    /// <summary>Клик по строке: (id, true) — добавить, (id, false) — убрать.</summary>
+    [Parameter] public EventCallback<(Guid Id, bool Selected)> OnToggle { get; set; }
+    [Parameter] public string Label { get; set; } = "Добавить людей";
+    [Parameter] public bool Disabled { get; set; }
+
+    private readonly string _inputId = "upk-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _open;
+    private string _query = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Users.Changed += OnUsersChanged;
+        if (!Users.IsLoaded)
+            await Users.EnsureLoadedAsync();
+    }
+
+    private void OnUsersChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task Toggle()
+    {
+        if (Disabled) return;
+        _open = !_open;
+        if (!_open) return;
+
+        _query = "";
+        StateHasChanged();
+        // Меню рендерится в портал провайдера — поле появляется в DOM на кадр позже.
+        await Task.Delay(50);
+        await Browser.FocusAsync(_inputId);
+    }
+
+    private Task Toggle(Guid id) => OnToggle.InvokeAsync((id, !Values.Contains(id)));
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && Users.Filter(_query, 1).FirstOrDefault() is { } first)
+            await Toggle(first.Id);
+        else if (e.Key == "Escape")
+            _open = false;
+    }
+
+    public void Dispose() => Users.Changed -= OnUsersChanged;
+}

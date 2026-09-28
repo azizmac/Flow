@@ -117,8 +117,10 @@
                 @if (GroupCandidates.Count > 0)
                 {
                     <div class="pa-add">
+                        @* Поле — кнопка «добавить», а не значение (ToStringFunc пустой): без этого после выбора в нём оставался Guid добавленной группы. *@
                         <MudSelect T="Guid?" Placeholder="Добавить группу" Value="null" ValueChanged="id => AddGroup(id)" Dense="true" Variant="Variant.Text"
-                                   PopoverClass="flow-pop" Class="pa-group-add" Disabled="_busy">
+                                   PopoverClass="flow-pop" Class="pa-group-add" Disabled="_busy"
+                                   ToStringFunc="@(_ => "")">
                             @foreach (var g in GroupCandidates)
                             {
                                 <MudSelectItem T="Guid?" Value="g.Id">@g.Name</MudSelectItem>
