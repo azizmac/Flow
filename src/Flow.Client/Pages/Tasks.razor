@@ -269,7 +269,7 @@
                         <SortHeader Field="TaskSortField.Assignee" Current="_sortField" Descending="_sortDescending" OnSort="SortBy">Кто</SortHeader>
                     </HeaderTemplate>
                     <CellTemplate>
-                        <AssigneeSelect Compact="true" Value="context.Item.AssigneeId" Disabled="!Permissions.CanAssign(Me, AccessFor(context.Item), context.Item)"
+                        <UserPicker Compact="true" Value="context.Item.AssigneeId" Disabled="!Permissions.CanAssign(Me, AccessFor(context.Item), context.Item)"
                                         OnlyUserId="OnlyAssigneeFor(context.Item.BoardId)" OnChange="id => AssignTask((context.Item, id))" />
                     </CellTemplate>
                 </PropertyColumn>

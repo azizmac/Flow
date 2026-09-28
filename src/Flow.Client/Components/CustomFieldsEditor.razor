@@ -61,7 +61,7 @@
                     break;
                 case CustomFieldType.User:
                     Guid? person = Guid.TryParse(value?.GetString(), out var pid) ? pid : null;
-                    <AssigneeSelect Value="person" Disabled="Disabled" EmptyLabel="Не выбран" ClearLabel="Очистить поле" AriaLabel="@f.Name"
+                    <UserPicker Value="person" Disabled="Disabled" EmptyLabel="Не выбран" ClearLabel="Очистить поле" AriaLabel="@f.Name"
                                     OnChange="@(id => Change(f, id is { } u ? CustomFieldMeta.Json(u.ToString()) : null))" />
                     break;
                 case CustomFieldType.Checkbox:

@@ -262,7 +262,7 @@ else if (_task is not null && _board is not null)
                 }
             </div>,
         "team" => @<div class="meta-v"><TeamSelect Value="_task!.TeamId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetTeam" /></div>,
-        "assignee" => @<div><AssigneeSelect Value="_task!.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" /></div>,
+        "assignee" => @<div><UserPicker Value="_task!.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" /></div>,
         "start" => @<div><DueDateField Value="_task!.StartDate" CanEdit="CanEdit" Disabled="_busy" Plain="true" Label="Дата начала" OnChange="SetStartDate" /></div>,
         "due" => @<div><DueDateField Value="_task!.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>,
         "estimate" => @<div><EstimateField StoryPoints="_task!.StoryPoints" EstimateMinutes="_task.EstimateMinutes" CanEdit="CanEdit" Disabled="_busy" OnChange="SetEstimate" /></div>,

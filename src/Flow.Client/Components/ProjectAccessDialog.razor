@@ -137,27 +137,15 @@
 
             <div class="pa-section">
                 <div class="meta-k">Добавить участника</div>
+                @* Тот же UserPicker, что у исполнителя и в группах: поиск, аватары, @username. Уже участники не предлагаются;
+                   роль новому участнику — из пилюли рядом, её выбирают до добавления. *@
                 <div class="pa-add">
-                    <DsInput Id="pa-search" Placeholder="@SearchPlaceholder" MaxLength="100" Value="@_query"
-                             ValueChanged="v => { _query = v; _error = null; }" />
+                    <UserPicker ButtonLabel="Выбрать человека" ClearLabel="@null" Disabled="_busy" AriaLabel="Добавить участника"
+                                Exclude="@(u => _members!.Members.Any(m => m.UserId == u.Id))"
+                                EmptyText="Никого не нашлось среди активных людей не из списка"
+                                OnChange="@(id => id is { } userId ? SetRole(userId, _newRole, newMember: true) : Task.CompletedTask)" />
                     <ProjectRoleSelect Value="_newRole" Allowed="Grantable" Sets="_sets" SetId="_newSetId" OnSetChange="v => { _newRole = v.Role; _newSetId = v.SetId; }" />
                 </div>
-                @if (_query.Trim().Length > 0)
-                {
-                    <div class="pa-results">
-                        @foreach (var u in Candidates)
-                        {
-                            <button type="button" class="pop-item user" disabled="@_busy" @onclick="() => SetRole(u.Id, _newRole, clearQuery: true)">
-                                <Avatar User="u" Size="22" />
-                                <span class="pop-user"><span class="pop-user-name">@u.FullName</span><span class="pop-user-un">@@@u.Username</span></span>
-                            </button>
-                        }
-                        @if (Candidates.Count == 0)
-                        {
-                            <div class="pop-empty">Никого не нашлось среди активных людей не из списка</div>
-                        }
-                    </div>
-                }
             </div>
         }
 
@@ -176,8 +164,6 @@
     [Parameter] public EventCallback OnClose { get; set; }
 
     /// <summary>null — «по роли во Flow»; Admin потолком быть не может (сервер ответит 400).</summary>
-    private const string SearchPlaceholder = "Имя или @username";
-
     private static readonly IReadOnlyList<ProjectRole?> DefaultOptions = [null, ProjectRole.Developer, ProjectRole.Member, ProjectRole.Viewer];
 
     private MudDialog? _dialog;
@@ -186,7 +172,6 @@
     private bool _busy;
     private Guid _boardId;
     private BoardMembersResponse? _members;
-    private string _query = "";
     private ProjectRole _newRole = ProjectRole.Member;
     private string? _error;
     private IReadOnlyList<GroupResponse> _allGroups = [];
@@ -209,9 +194,6 @@
     /// <summary>Роли, которые можно выдать: не выше своей роли в проекте (сервер проверит то же).</summary>
     private IReadOnlyList<ProjectRole> Grantable =>
         Enum.GetValues<ProjectRole>().Where(r => Access.For(Board.Id) is { } mine && r <= mine.Role).ToList();
-
-    private IReadOnlyList<UserResponse> Candidates =>
-        Users.Filter(_query, limit: 12).Where(u => _members!.Members.All(m => m.UserId != u.Id)).Take(6).ToList();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -268,12 +250,12 @@
     private Task SetDefault(ProjectRole? role) =>
         role == _members?.DefaultRole ? Task.CompletedTask : Send(() => Api.SetBoardDefaultRole(Board.Id, new SetDefaultRoleRequest(role)), affectsMe: true);
 
-    private async Task SetRole(Guid userId, ProjectRole role, bool clearQuery = false, Guid? setId = null)
+    /// <summary>Роль участника; новому участнику (newMember) — ещё и выбранный в пилюле набор прав.</summary>
+    private async Task SetRole(Guid userId, ProjectRole role, bool newMember = false, Guid? setId = null)
     {
-        if (clearQuery)
+        if (newMember)
             setId = _newSetId;
-        if (await Send(() => Api.SetBoardMember(Board.Id, userId, new SetBoardMemberRequest(role, setId)), affectsMe: userId == State.CurrentUserId) && clearQuery)
-            _query = "";
+        await Send(() => Api.SetBoardMember(Board.Id, userId, new SetBoardMemberRequest(role, setId)), affectsMe: userId == State.CurrentUserId);
     }
 
     /// <summary>Группа может содержать и самого actor'а — права перечитываем всегда.</summary>

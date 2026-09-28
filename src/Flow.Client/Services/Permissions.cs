@@ -44,7 +44,7 @@ public static class Permissions
 
     public static bool CanAssignAnyone(ProjectAccessResponse? access) => Has(access, ProjectPermission.AssignAnyone);
 
-    /// <summary>Участник на своей задаче может назначить только себя — AssigneeSelect получает OnlyUserId.</summary>
+    /// <summary>Участник на своей задаче может назначить только себя — UserPicker получает OnlyUserId.</summary>
     public static bool CanAssign(UserResponse? me, ProjectAccessResponse? access, TaskResponse task) =>
         CanAssignAnyone(access) || (me is not null && Has(access, ProjectPermission.EditOwnTask) && IsOwn(me, task));
 

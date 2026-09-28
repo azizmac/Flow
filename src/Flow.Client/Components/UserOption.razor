@@ -1,0 +1,24 @@
+@* Строка «человек» в любом списке выбора (docs/TZ_ui_consistency.md, этап 4): аватар, имя, второй строкой @username и
+   должность, справа — необязательный счётчик. Одна разметка на UserPicker, фильтр по исполнителю, упоминания @ в
+   редакторе и «Доступ» проекта — раньше каждый собирал её сам, и где-то не было аватара или @username. *@
+
+<Avatar User="User" Size="22" />
+<span class="pop-user">
+    <span class="pop-user-name">@(User?.FullName ?? "…")</span>
+    @if (User is not null && ShowUsername)
+    {
+        <span class="pop-user-un">@@@User.Username@(string.IsNullOrEmpty(User.JobTitle) ? "" : $" · {User.JobTitle}")</span>
+    }
+</span>
+@if (Count is { } n)
+{
+    <span class="pop-n">@n</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public UserResponse? User { get; set; }
+    /// <summary>Число справа (задач у исполнителя в фильтре).</summary>
+    [Parameter] public int? Count { get; set; }
+    /// <summary>Вторая строка с @username и должностью; в фильтре со счётчиками её нет — строка остаётся низкой.</summary>
+    [Parameter] public bool ShowUsername { get; set; } = true;
+}

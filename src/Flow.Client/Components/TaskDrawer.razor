@@ -70,7 +70,7 @@
                             <div><PrioritySelect Value="_priority" OnChange="p => _priority = p" /></div>
                             break;
                         case "assignee":
-                            <div><AssigneeSelect Value="_assigneeId" OnlyUserId="OnlyAssigneeId" OnChange="id => _assigneeId = id" /></div>
+                            <div><UserPicker Value="_assigneeId" OnlyUserId="OnlyAssigneeId" OnChange="id => _assigneeId = id" /></div>
                             break;
                     }
                 }
@@ -299,7 +299,7 @@ else if (Item is not null)
             </div>,
         "team" => @<div class="meta-v"><TeamSelect Value="Current.TeamId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetTeam" /></div>,
         "assignee" => @<div class="meta-v">
-                <AssigneeSelect Value="Item!.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" />
+                <UserPicker Value="Item!.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" />
                 @if (Item.AssigneeId is { } aid && Users.Find(aid) is { } who)
                 {
                     @* Обёртка — якорь карточки: MudPopover внутри UserCard позиционируется по ней. *@

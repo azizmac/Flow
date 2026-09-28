@@ -65,7 +65,7 @@
                 }
                 @if (CanManage)
                 {
-                    <UserPicker Values="g.MemberIds" OnToggle="t => SetMember(g, t.Id, t.Selected)" Disabled="_busy" />
+                    <UserPicker Multiple="true" Values="g.MemberIds" OnToggle="t => SetMember(g, t.Id, t.Selected)" Disabled="_busy" />
                 }
             </div>
         </div>
