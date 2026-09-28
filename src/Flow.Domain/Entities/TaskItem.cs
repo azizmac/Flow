@@ -78,6 +78,23 @@ public sealed class TaskItem
     public Guid? MilestoneId { get; private set; }
 
     /// <summary>
+    /// Команда задачи (docs/TZ_project_access.md §1, этап 4D) — группа с IsTeam. Команда — сущность workspace, а не
+    /// проекта: при переносе задачи она сохраняется. FK SetNull: удалённая группа команду снимает.
+    /// </summary>
+    public Guid? TeamId { get; private set; }
+
+    /// <summary>true — команда изменилась. Что это действительно команда, проверяет Application (нужна группа).</summary>
+    public bool SetTeam(Guid? teamId)
+    {
+        if (teamId == Guid.Empty)
+            throw new ArgumentException("Team id must not be empty.", nameof(teamId));
+        if (teamId == TeamId)
+            return false;
+        TeamId = teamId;
+        return true;
+    }
+
+    /// <summary>
     /// Значения пользовательских полей (docs/TZ_task_model.md §4): JSON-объект «Id поля → значение», в БД — jsonb.
     /// Ключ — Id, а не Key поля: переименование ключа задачи не трогает. Менять — только <see cref="SetCustomField"/>.
     /// </summary>

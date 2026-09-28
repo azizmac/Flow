@@ -26,7 +26,7 @@ internal sealed class WidgetDataQueryHandler(
     ITaskItemRepository tasks,
     ITaskLinkRepository links,
     ISprintRepository sprints,
-    IMilestoneRepository milestones,
+    IMilestoneRepository milestones, IGroupRepository groupDirectory,
     TaskResponses responses,
     ActorResolver actors,
     IProjectAccess projectAccess,
@@ -81,7 +81,7 @@ internal sealed class WidgetDataQueryHandler(
         FqlBound? bound = null;
         if (!string.IsNullOrWhiteSpace(fql))
         {
-            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones);
+            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones, groupDirectory);
             bound = await FqlBinder.BindAsync(fql, lookup, actor.Id, DateOnly.FromDateTime(DateTime.UtcNow), ct);
         }
 
@@ -113,7 +113,7 @@ internal sealed class WidgetDataQueryHandler(
     private async Task<WidgetDataResponse> BreakdownAsync(User actor, WidgetConfig config, SharedWidgetType type, CancellationToken ct)
     {
         var (filter, fql) = await FilterAsync(actor, config, 1, ct);
-        var visible = await new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones).VisibleBoardsAsync(ct);
+        var visible = await new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones, groupDirectory).VisibleBoardsAsync(ct);
         var groupBy = config.GroupBy ?? "status";
 
         TaskGroupField field;

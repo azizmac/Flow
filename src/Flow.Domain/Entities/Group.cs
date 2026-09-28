@@ -19,17 +19,26 @@ public sealed class Group
 
     public DateTime CreatedAt { get; private set; }
 
+    /// <summary>
+    /// Команда (этап 4D): такую группу указывают в задаче (<see cref="TaskItem.TeamId"/>), по ней фильтруют (FQL <c>team</c>)
+    /// и раскладывают дорожки канбана. Отдельной сущности «команда» нет — разница с группой в этом флаге.
+    /// Снятый флаг задачи не трогает: команда в них остаётся, но новых задач ей уже не назначают.
+    /// </summary>
+    public bool IsTeam { get; private set; }
+
     private Group()
     {
         // EF Core
     }
 
-    public static Group Create(string name, string? description)
+    public static Group Create(string name, string? description, bool isTeam = false)
     {
-        var group = new Group { Id = Guid.NewGuid(), CreatedAt = DateTime.UtcNow };
+        var group = new Group { Id = Guid.NewGuid(), CreatedAt = DateTime.UtcNow, IsTeam = isTeam };
         group.Update(name, description);
         return group;
     }
+
+    public void SetTeam(bool isTeam) => IsTeam = isTeam;
 
     /// <summary>Уникальность имени без учёта регистра проверяет Application (нужен список групп).</summary>
     public void Update(string name, string? description)

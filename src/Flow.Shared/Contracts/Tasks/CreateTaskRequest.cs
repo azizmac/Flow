@@ -6,3 +6,6 @@ public sealed record CreateTaskRequest(string Title, string? Description, Guid? 
     IReadOnlyDictionary<Guid, System.Text.Json.JsonElement?>? CustomFields = null,
     Guid? AssigneeId = null,
     Guid? TemplateId = null);
+
+/// <summary>Команда задачи (этап 4D): группа-команда или null — снять.</summary>
+public sealed record SetTaskTeamRequest(Guid? TeamId);

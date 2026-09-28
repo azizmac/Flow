@@ -11,10 +11,10 @@ internal sealed partial class InProcessFlowApi
         Scoped(async mediator => Ok(await mediator.Send(new GroupListQuery(await ActorAsync()), ct)));
 
     public Task<ApiResult<GroupResponse>> CreateGroup(SaveGroupRequest request, CancellationToken ct = default) =>
-        Scoped(async mediator => Ok(await mediator.Send(new GroupCreateCommand(await ActorAsync(), request.Name, request.Description), ct)));
+        Scoped(async mediator => Ok(await mediator.Send(new GroupCreateCommand(await ActorAsync(), request.Name, request.Description, request.IsTeam), ct)));
 
     public Task<ApiResult<GroupResponse>> UpdateGroup(Guid groupId, SaveGroupRequest request, CancellationToken ct = default) =>
-        Scoped(async mediator => await mediator.Send(new GroupUpdateCommand(await ActorAsync(), groupId, request.Name, request.Description), ct) is { } g
+        Scoped(async mediator => await mediator.Send(new GroupUpdateCommand(await ActorAsync(), groupId, request.Name, request.Description, request.IsTeam), ct) is { } g
             ? Ok(g)
             : NotFound<GroupResponse>());
 

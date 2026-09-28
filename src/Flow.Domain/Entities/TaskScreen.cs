@@ -80,7 +80,7 @@ public static class ScreenFields
 
     /// <summary>Порядок встроенного экрана — тот же, что был в карточке до экранов.</summary>
     public static readonly IReadOnlyList<string> System =
-        ["type", "parent", "sprint", "milestone", "priority", "assignee", "start", "due", "estimate", "description", "checklist", "links", "attachments"];
+        ["type", "parent", "sprint", "milestone", "priority", "assignee", "team", "start", "due", "estimate", "description", "checklist", "links", "attachments"];
 
     /// <summary>
     /// Что заполняется в форме создания. Остальное (даты, оценки, спринт, связи, файлы) ставится уже у созданной
@@ -96,6 +96,7 @@ public static class ScreenFields
         "milestone" => "Веха",
         "priority" => "Приоритет",
         "assignee" => "Исполнитель",
+        "team" => "Команда",
         "start" => "Начало",
         "due" => "Срок",
         "estimate" => "Оценка",

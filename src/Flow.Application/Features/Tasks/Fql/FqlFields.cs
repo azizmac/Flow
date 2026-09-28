@@ -32,13 +32,13 @@ public static class FqlFields
         new("linked", "linkedTo(КОД), blockedBy(КОД), isBlocked(), EMPTY"),
         new("sprint", "имя спринта, openSprints(), closedSprints(), EMPTY — бэклог"),
         new("milestone", "имя вехи, openMilestones(), closedMilestones(), EMPTY"),
-        new("development", "openPR, mergedPR, noPR — pull request'ы задачи")
+        new("development", "openPR, mergedPR, noPR — pull request'ы задачи"),
+        new("team", "имя команды, myTeams(), EMPTY")
     ];
 
     /// <summary>Поля, которые появятся с будущими этапами: биндер отвечает понятной ошибкой, а не «неизвестное поле».</summary>
     public static readonly IReadOnlyDictionary<string, string> Future = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        ["team"] = "команды появятся на этапе 4D"
     };
 
     public static readonly IReadOnlyDictionary<string, Domain.Entities.TaskTypeKind> Kinds = Map(

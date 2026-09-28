@@ -93,6 +93,13 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
             .OnDelete(DeleteBehavior.SetNull);
         builder.HasIndex(t => t.MilestoneId);
 
+        // Команда (этап 4D) — группа workspace; удалённая группа снимает команду с задач.
+        builder.HasOne<Group>()
+            .WithMany()
+            .HasForeignKey(t => t.TeamId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(t => t.TeamId);
+
         // Значения пользовательских полей — jsonb «Id поля → значение» (docs/TZ_task_model.md §4); GIN jsonb_path_ops
         // создаётся в миграции. FQL читает поля SQL-функциями flow_cf_* (CustomFieldSql) — они же в миграции.
         builder.Property(t => t.CustomFieldsJson)

@@ -2,6 +2,7 @@
    экран создания проекта); Mode=View — просмотр/редактирование существующей, поля — по экрану карточки
    (PATCH Title/Description/StatusId/TypeId/Priority, PATCH /assignee, /schedule, /estimate, DELETE). Содержимое рендерится внутри общего Drawer. *@
 @implements IDisposable
+@inject TeamDirectory Teams
 @inject IFlowApi Api
 @inject ToastService Toasts
 @inject BrowserInterop Browser
@@ -258,7 +259,11 @@ else if (Item is not null)
 
 @code {
     /// <summary>Раскладка карточки для типа задачи (экран типа → «для всех типов» → встроенный).</summary>
-    private IReadOnlyList<ScreenFieldDto> DetailLayout => ScreenLayout.Resolve(Board, Current.TypeId, ScreenContext.Detail, Current.CustomFields);
+    /// <summary>Строка «Команда» (этап 4D) — только когда команды заведены или у задачи она уже есть.</summary>
+    private IReadOnlyList<ScreenFieldDto> DetailLayout => ScreenLayout.Resolve(Board, Current.TypeId, ScreenContext.Detail, Current.CustomFields)
+        .Where(f => ScreenLayout.SystemName(f) != "team" || Teams.HasTeams || Current.TeamId is not null).ToList();
+
+    protected override Task OnInitializedAsync() => Teams.EnsureLoadedAsync();
 
     /// <summary>Форма создания: тип в форме ещё не выбран — тип проекта по умолчанию.</summary>
     private IReadOnlyList<ScreenFieldDto> CreateLayout =>
@@ -292,6 +297,7 @@ else if (Item is not null)
                     <span class="status-pill"><PriorityIcon Value="Item!.Priority" Size="13" ShowNone="true" />@TaskMeta.PriorityLabel(Item.Priority)</span>
                 }
             </div>,
+        "team" => @<div class="meta-v"><TeamSelect Value="Current.TeamId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetTeam" /></div>,
         "assignee" => @<div class="meta-v">
                 <AssigneeSelect Value="Item!.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" />
                 @if (Item.AssigneeId is { } aid && Users.Find(aid) is { } who)
@@ -606,6 +612,9 @@ else if (Item is not null)
     private Task SetCustomField(Guid fieldId, System.Text.Json.JsonElement? value) =>
         Apply(id => Api.SetTaskCustomFields(id, new SetCustomFieldsRequest(new Dictionary<Guid, System.Text.Json.JsonElement?> { [fieldId] = value })),
             "Не удалось сохранить поле");
+
+    private Task SetTeam(Guid? teamId) =>
+        Apply(id => Api.SetTaskTeam(id, new SetTaskTeamRequest(teamId)), "Не удалось сменить команду");
 
     private Task SetMilestone(Guid? milestoneId) =>
         Apply(id => Api.SetTaskMilestone(id, new SetTaskMilestoneRequest(milestoneId)), "Не удалось сменить веху");

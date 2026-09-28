@@ -46,6 +46,7 @@ internal static class TaskFilterTranslator
             TaskFilterRef.Parent => t => nullable.Contains(t.ParentId),
             TaskFilterRef.Sprint => t => nullable.Contains(t.SprintId),
             TaskFilterRef.Milestone => t => nullable.Contains(t.MilestoneId),
+            TaskFilterRef.Team => t => nullable.Contains(t.TeamId),
             _ => throw new NotSupportedException($"Field {node.Field} is not supported.")
         };
     }
@@ -60,6 +61,7 @@ internal static class TaskFilterTranslator
         TaskFilterNullable.Estimate => t => t.EstimateMinutes == null,
         TaskFilterNullable.Sprint => t => t.SprintId == null,
         TaskFilterNullable.Milestone => t => t.MilestoneId == null,
+        TaskFilterNullable.Team => t => t.TeamId == null,
         TaskFilterNullable.Links => t => !db.TaskLinks.Any(l => l.SourceTaskId == t.Id || l.TargetTaskId == t.Id),
         _ => throw new NotSupportedException($"Field {field} is not supported.")
     };

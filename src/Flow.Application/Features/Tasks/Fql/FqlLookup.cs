@@ -16,7 +16,8 @@ internal sealed class FqlLookup(
     ITaskLinkRepository links,
     IProjectAccess projectAccess,
     ISprintRepository sprints,
-    IMilestoneRepository milestones) : IFqlLookup
+    IMilestoneRepository milestones,
+    IGroupRepository groups) : IFqlLookup
 {
     private IReadOnlyList<Board>? _visible;
 
@@ -60,6 +61,13 @@ internal sealed class FqlLookup(
             result.AddRange(await milestones.GetByBoardAsync(board.Id, cancellationToken));
         // Общая веха приходит от каждого проекта, где она видна.
         return result.DistinctBy(m => m.Id).ToList();
+    }
+
+    public async Task<IReadOnlyList<FqlTeam>> TeamsAsync(CancellationToken cancellationToken)
+    {
+        var all = await groups.GetAllAsync(cancellationToken);
+        var members = await groups.GetMemberIdsAsync(all.Select(g => g.Id).ToList(), cancellationToken);
+        return all.Select(g => new FqlTeam(g.Id, g.Name, g.IsTeam, members.GetValueOrDefault(g.Id)?.Contains(actor.Id) == true)).ToList();
     }
 
     public Task<IReadOnlyList<Guid>> BlockedByAsync(Guid taskId, CancellationToken cancellationToken) =>

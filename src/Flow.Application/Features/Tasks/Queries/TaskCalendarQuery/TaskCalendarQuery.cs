@@ -35,7 +35,7 @@ internal sealed class TaskCalendarQueryHandler(
     IUserRepository users,
     ITaskLinkRepository links,
     ISprintRepository sprints,
-    IMilestoneRepository milestones)
+    IMilestoneRepository milestones, IGroupRepository groupDirectory)
     : IRequestHandler<TaskCalendarQuery, TaskCalendarResponse?>
 {
     public const int MaxItems = 1000;
@@ -56,7 +56,7 @@ internal sealed class TaskCalendarQueryHandler(
         TaskFilterNode window = Window(request.From, request.To);
         if (!string.IsNullOrWhiteSpace(request.Fql))
         {
-            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones);
+            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones, groupDirectory);
             var fql = await FqlBinder.BindAsync(request.Fql, lookup, actor.Id, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
             if (fql.Filter is { } condition)
                 window = new TaskFilterAnd([window, condition]);

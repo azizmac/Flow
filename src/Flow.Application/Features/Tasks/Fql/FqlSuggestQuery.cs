@@ -15,7 +15,7 @@ internal sealed class FqlSuggestQueryHandler(
     ITaskItemRepository tasks,
     ITaskLinkRepository links,
     ISprintRepository sprints,
-    IMilestoneRepository milestones,
+    IMilestoneRepository milestones, IGroupRepository groupDirectory,
     ActorResolver actors,
     IProjectAccess projectAccess) : IRequestHandler<FqlSuggestQuery, FqlSuggestResponse>
 {
@@ -25,7 +25,7 @@ internal sealed class FqlSuggestQueryHandler(
     {
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
         var cursor = FqlSuggester.Analyze(request.Query ?? "", request.Position);
-        var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones);
+        var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones, groupDirectory);
 
         var visible = await lookup.VisibleBoardsAsync(cancellationToken);
         var customKeys = visible.SelectMany(b => b.CustomFields).Where(f => !f.IsArchived)
@@ -113,6 +113,10 @@ internal sealed class FqlSuggestQueryHandler(
                 var milestones = await lookup.MilestonesAsync(ct);
                 return new[] { Function("openMilestones()", "открытые"), Function("closedMilestones()", "закрытые"), Function("EMPTY", "без вехи") }
                     .Concat(milestones.Select(m => m.Name).Distinct(StringComparer.OrdinalIgnoreCase).Select(n => Value(n)));
+            case "team":
+                var teams = await lookup.TeamsAsync(ct);
+                return new[] { Function("myTeams()", "мои команды"), Function("EMPTY", "без команды") }
+                    .Concat(teams.Where(t => t.IsTeam).Select(t => Value(t.Name)));
             default:
                 return [];
         }

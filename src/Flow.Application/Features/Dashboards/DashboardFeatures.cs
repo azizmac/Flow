@@ -83,7 +83,7 @@ internal sealed class DashboardHandlers(
     ITaskItemRepository tasks,
     ITaskLinkRepository links,
     ISprintRepository sprints,
-    IMilestoneRepository milestones,
+    IMilestoneRepository milestones, IGroupRepository groupDirectory,
     ActorResolver actors,
     IPermissionService permissions,
     IProjectAccess projectAccess,
@@ -230,7 +230,7 @@ internal sealed class DashboardHandlers(
             var fql = string.IsNullOrWhiteSpace(c.Fql) ? null : c.Fql.Trim();
             if (fql is not null)
             {
-                var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones);
+                var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones, groupDirectory);
                 await FqlBinder.BindAsync(fql, lookup, actor.Id, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
             }
             return c with { Fql = fql };

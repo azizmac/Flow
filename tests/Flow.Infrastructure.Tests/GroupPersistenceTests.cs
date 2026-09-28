@@ -54,4 +54,25 @@ public class GroupPersistenceTests(PostgresFixture db)
         Assert.False(await db.QueryAsync(ctx => ctx.BoardGroups.AnyAsync(g => g.GroupId == b.Id)));
         Assert.False(await db.QueryAsync(ctx => ctx.GroupMembers.AnyAsync(m => m.GroupId == b.Id)));
     }
+
+    [Fact]
+    public async Task Team_Filters_In_Fql_And_Is_Cleared_When_Group_Goes()
+    {
+        var board = (await db.SendAsync(new BoardCreateCommand(Owner, "Команды", "TEAMP"))).Response!;
+        var a = (await db.SendAsync(new Flow.Application.Features.Tasks.Commands.TaskCreateCommand.TaskCreateCommand(Owner, board.Id, "С командой", null, null)))!;
+        var b = (await db.SendAsync(new Flow.Application.Features.Tasks.Commands.TaskCreateCommand.TaskCreateCommand(Owner, board.Id, "Без команды", null, null)))!;
+        var team = await db.SendAsync(new GroupCreateCommand(Owner, "Команда TEAMP", null, IsTeam: true));
+        await db.SendAsync(new GroupMemberSetCommand(Owner, team.Id, Owner, true));
+        await db.SendAsync(new TaskSetTeamCommand(Owner, a.Id, team.Id));
+
+        async Task<List<Guid>> Find(string fql) =>
+            (await db.SendAsync(new Flow.Application.Features.Tasks.Queries.TaskSearchQuery.TaskSearchQuery(Owner, board.Id, Fql: fql))).Items.Select(t => t.Id).ToList();
+
+        Assert.Equal([a.Id], await Find("team = \"Команда TEAMP\""));
+        Assert.Equal([a.Id], await Find("team in (myTeams())"));
+        Assert.Equal([b.Id], await Find("team IS EMPTY"));
+
+        Assert.True(await db.SendAsync(new GroupDeleteCommand(Owner, team.Id)));
+        Assert.Null(await db.QueryAsync(ctx => ctx.Set<TaskItem>().Where(t => t.Id == a.Id).Select(t => t.TeamId).SingleAsync()));
+    }
 }

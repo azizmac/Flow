@@ -81,6 +81,7 @@ public sealed partial class FqlBinder(IFqlLookup lookup, Guid actorId, DateOnly 
             "linked" => await LinkedAsync(c, ct),
             "sprint" => await SprintAsync(c, ct),
             "milestone" => await MilestoneAsync(c, ct),
+            "team" => await TeamAsync(c, ct),
             "development" => Enums(c, v => Lookup(FqlFields.Development, v, "признак разработки"),
                 states => states.Count == 1 ? new TaskFilterPullRequest(states[0]) : new TaskFilterOr(states.Select(s => (TaskFilterNode)new TaskFilterPullRequest(s)).ToList())),
             _ => throw Error($"Неизвестное поле «{name}». Поля: {string.Join(", ", FqlFields.All.Select(f => f.Name))}", c.Field)
@@ -261,6 +262,38 @@ public sealed partial class FqlBinder(IFqlLookup lookup, Guid actorId, DateOnly 
         TaskFilterNode node = new TaskFilterIn(TaskFilterRef.Milestone, ids.Distinct().ToList());
         if (orEmpty)
             node = new TaskFilterOr([node, new TaskFilterIsEmpty(TaskFilterNullable.Milestone)]);
+        return IsNegative(c) ? new TaskFilterNot(node) : node;
+    }
+
+    /// <summary>team = "Бэкенд" | myTeams() (команды actor'а); team IS EMPTY — без команды (этап 4D).</summary>
+    private async Task<TaskFilterNode> TeamAsync(FqlClause c, CancellationToken ct)
+    {
+        if (c.Operator is FqlOperator.IsEmpty or FqlOperator.IsNotEmpty)
+            return Empty(c, TaskFilterNullable.Team);
+
+        EnsureOps(c, FqlOperator.Eq, FqlOperator.NotEq, FqlOperator.In, FqlOperator.NotIn);
+
+        var teams = await lookup.TeamsAsync(ct);
+        var ids = new List<Guid>();
+        var orEmpty = false;
+        foreach (var v in c.Values)
+        {
+            if (v.IsFunction("myTeams"))
+                ids.AddRange(teams.Where(t => t.IsTeam && t.IsMine).Select(t => t.Id));
+            else if (v.Function is not null)
+                throw Error($"Функции {v.Function}() у поля «team» нет; есть myTeams()", v);
+            else if (!v.Quoted && v.Text.Equals("EMPTY", StringComparison.OrdinalIgnoreCase))
+                orEmpty = true;
+            else
+            {
+                var named = teams.Where(t => string.Equals(t.Name, v.Text, StringComparison.OrdinalIgnoreCase)).Select(t => t.Id).ToList();
+                ids.AddRange(named.Count > 0 ? named : throw Error($"Команды «{v.Text}» нет", v));
+            }
+        }
+
+        TaskFilterNode node = new TaskFilterIn(TaskFilterRef.Team, ids.Distinct().ToList());
+        if (orEmpty)
+            node = new TaskFilterOr([node, new TaskFilterIsEmpty(TaskFilterNullable.Team)]);
         return IsNegative(c) ? new TaskFilterNot(node) : node;
     }
 

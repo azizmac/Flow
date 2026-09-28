@@ -2838,3 +2838,5 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .gp-add { max-width: 240px; }
 .pa-group-ico { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; background: rgba(255,255,255,0.08); color: var(--text-secondary); }
 .pa-group-add { min-width: 200px; }
+.gp-team { padding: 1px 8px; border-radius: 999px; background: rgba(109,151,115,0.2); color: var(--sage); font: var(--fw-semibold) 11px var(--font-display); }
+.gp-head .mud-checkbox { margin-left: auto; }

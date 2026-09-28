@@ -35,5 +35,8 @@ public enum TaskActivityType
     CustomFieldChanged = 23,
     Merged = 24,
     Split = 25,
-    Moved = 26
+    Moved = 26,
+
+    /// <summary>Команда задачи (этап 4D): OldValue/NewValue — Id группы-команды строкой, null — без команды.</summary>
+    TeamChanged = 27
 }

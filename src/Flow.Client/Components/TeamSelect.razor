@@ -1,0 +1,34 @@
+@* Поле «Команда» задачи (docs/TZ_project_access.md §1, этап 4D): MudSelect из групп-команд и «Нет». Прежняя команда
+   (флаг снят) у задачи видна выключенным пунктом — новым задачам её не назначить. Guid.Empty — «Нет». *@
+@inject TeamDirectory Teams
+
+@if (CanEdit)
+{
+    <MudSelect T="Guid" Value="@(Value ?? Guid.Empty)" ValueChanged="Change" Disabled="Disabled" Dense="true" Underline="false"
+               Variant="Variant.Text" Margin="Margin.None" PopoverClass="flow-pop" Class="sprint-select team-select" aria-label="Команда">
+        <MudSelectItem T="Guid" Value="Guid.Empty">Нет</MudSelectItem>
+        @foreach (var team in Teams.Teams)
+        {
+            <MudSelectItem T="Guid" Value="team.Id">@team.Name</MudSelectItem>
+        }
+        @if (Value is { } current && Teams.Teams.All(t => t.Id != current))
+        {
+            <MudSelectItem T="Guid" Value="current" Disabled="true">@(Teams.Find(current)?.Name ?? "(удалённая команда)")</MudSelectItem>
+        }
+    </MudSelect>
+}
+else
+{
+    <span class="meta-v @(Value is null ? "muted" : "")">@(Teams.Find(Value)?.Name ?? "—")</span>
+}
+
+@code {
+    [Parameter] public Guid? Value { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<Guid?> OnChange { get; set; }
+
+    protected override Task OnInitializedAsync() => Teams.EnsureLoadedAsync();
+
+    private Task Change(Guid id) => OnChange.InvokeAsync(id == Guid.Empty ? null : id);
+}

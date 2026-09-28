@@ -30,6 +30,7 @@ public static class FlowClientServiceCollectionExtensions
         });
 
         services.AddScoped<UserDirectory>();
+        services.AddScoped<TeamDirectory>();
         services.AddScoped<ProjectAccessState>();
         services.AddScoped<BrowserInterop>();
         services.AddScoped<HotkeyService>();

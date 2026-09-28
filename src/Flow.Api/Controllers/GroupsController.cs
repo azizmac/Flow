@@ -21,7 +21,7 @@ public class GroupsController(IMediator mediator, IActorAccessor actor) : Contro
         try
         {
             return StatusCode(StatusCodes.Status201Created,
-                await mediator.Send(new GroupCreateCommand(actor.Require(), request.Name, request.Description), cancellationToken));
+                await mediator.Send(new GroupCreateCommand(actor.Require(), request.Name, request.Description, request.IsTeam), cancellationToken));
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -31,7 +31,7 @@ public class GroupsController(IMediator mediator, IActorAccessor actor) : Contro
 
     [HttpPatch("{id:guid}")]
     public Task<IActionResult> Update(Guid id, SaveGroupRequest request, CancellationToken cancellationToken) =>
-        Send(() => mediator.Send(new GroupUpdateCommand(actor.Require(), id, request.Name, request.Description), cancellationToken));
+        Send(() => mediator.Send(new GroupUpdateCommand(actor.Require(), id, request.Name, request.Description, request.IsTeam), cancellationToken));
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken) =>

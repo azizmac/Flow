@@ -29,6 +29,11 @@ public interface IFqlLookup
     /// <summary>Вехи видимых проектов, открытые и закрытые.</summary>
     Task<IReadOnlyList<Milestone>> MilestonesAsync(CancellationToken cancellationToken);
 
+    /// <summary>Группы (этап 4D): команды и прежние команды — по имени; IsMine — actor в группе (для myTeams()).</summary>
+    Task<IReadOnlyList<FqlTeam>> TeamsAsync(CancellationToken cancellationToken);
+
     /// <summary>Задачи, которые эта блокирует (исходящие Blocks).</summary>
     Task<IReadOnlyList<Guid>> BlockedByAsync(Guid taskId, CancellationToken cancellationToken);
 }
+
+public sealed record FqlTeam(Guid Id, string Name, bool IsTeam, bool IsMine);

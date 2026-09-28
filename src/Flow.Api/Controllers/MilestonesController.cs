@@ -56,6 +56,21 @@ public class MilestonesController(IMediator mediator, IActorAccessor actor) : Co
         }
     }
 
+    /// <summary>Команда задачи (этап 4D): teamId — группа-команда, null — снять; 400 — не команда.</summary>
+    [HttpPatch("tasks/{id:guid}/team")]
+    public async Task<IActionResult> SetTaskTeam(Guid id, Flow.Shared.Contracts.Tasks.SetTaskTeamRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await mediator.Send(new Flow.Application.Features.Groups.TaskSetTeamCommand(actor.Require(), id, request.TeamId), cancellationToken);
+            return result.IsNotFound ? NotFound() : Ok(result.Response);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
+
     private async Task<IActionResult> Send(IRequest<MilestoneResponse?> command, CancellationToken cancellationToken)
     {
         try

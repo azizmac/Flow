@@ -149,6 +149,7 @@ public interface IFlowApi
     Task<ApiResult<MilestoneResponse>> ShareMilestone(Guid milestoneId, ShareMilestoneRequest request, CancellationToken ct = default);
     Task<ApiResult<bool>> DeleteMilestone(Guid milestoneId, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> SetTaskMilestone(Guid taskId, SetTaskMilestoneRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> SetTaskTeam(Guid taskId, SetTaskTeamRequest request, CancellationToken ct = default);
 
     // Слияние, разделение, перенос (docs/TZ_task_model.md §6); код — живой или прежний (после переноса).
     Task<ApiResult<TaskResponse>> GetTaskByCode(string code, CancellationToken ct = default);

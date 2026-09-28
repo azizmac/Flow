@@ -28,6 +28,9 @@ internal sealed partial class InProcessFlowApi
     public Task<ApiResult<bool>> DeleteMilestone(Guid milestoneId, CancellationToken ct = default) =>
         Scoped(async mediator => await mediator.Send(new MilestoneDeleteCommand(await ActorAsync(), milestoneId), ct) ? Ok(true) : NotFound<bool>());
 
+    public Task<ApiResult<TaskResponse>> SetTaskTeam(Guid taskId, SetTaskTeamRequest request, CancellationToken ct = default) =>
+        SendUpdate(actor => new Flow.Application.Features.Groups.TaskSetTeamCommand(actor, taskId, request.TeamId), ct);
+
     public Task<ApiResult<TaskResponse>> SetTaskMilestone(Guid taskId, SetTaskMilestoneRequest request, CancellationToken ct = default) =>
         SendUpdate(actor => new TaskSetMilestoneCommand(actor, taskId, request.MilestoneId), ct);
 

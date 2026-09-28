@@ -8,6 +8,7 @@
 @inject ToastService Toasts
 @inject AppState State
 @inject UserDirectory Users
+@inject TeamDirectory Teams
 @inject ProjectAccessState Access
 
 <div class="timeline" id="timeline">
@@ -397,6 +398,8 @@
             _milestoneNames = null;
             _ = LoadNamesThenRedrawAsync();
         }
+        if (before.TeamId != after.TeamId)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.TeamChanged, before.TeamId?.ToString(), after.TeamId?.ToString(), now));
         if (before.DueDate != after.DueDate)
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.DueDateChanged,
                 before.DueDate?.ToString("yyyy-MM-dd"), after.DueDate?.ToString("yyyy-MM-dd"), now));
@@ -471,6 +474,7 @@
         TaskActivityType.LinkRemoved => @<span>связь «@LinkSide(a.OldValue)» убрана: @TaskRef(a.NewValue)</span>,
         TaskActivityType.SprintChanged => Sprints(a),
         TaskActivityType.MilestoneChanged => Milestones(a),
+        TaskActivityType.TeamChanged => Change("команда", a, v => Teams.Find(Guid.Parse(v))?.Name ?? "удалённая команда"),
         TaskActivityType.CustomFieldChanged => CustomField(a),
         TaskActivityType.Merged when a.NewValue == TaskItem.Id.ToString() => @<span>влита задача @TaskRef(a.OldValue)</span>,
         TaskActivityType.Merged => @<span>влита в @TaskRef(a.NewValue) как дубликат</span>,

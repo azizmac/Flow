@@ -3,6 +3,7 @@
 @inject IFlowApi Api
 @inject UserDirectory Users
 @inject ToastService Toasts
+@inject TeamDirectory Teams
 
 <div class="panel groups-panel">
     @if (CanManage)
@@ -36,9 +37,15 @@
                 else
                 {
                     <b>@g.Name</b>
+                    @if (g.IsTeam)
+                    {
+                        <span class="gp-team">команда</span>
+                    }
                     <span class="hint">@Ru.People(g.MemberIds.Count)</span>
                     @if (CanManage)
                     {
+                        <MudCheckBox T="bool" Value="g.IsTeam" ValueChanged="v => SetTeam(g, v)" Size="Size.Small" Color="Color.Primary" Dense="true"
+                                     Class="check-mud" Label="Команда" Disabled="_busy" />
                         <button type="button" class="icon-lnk" @onclick="() => { _renaming = g.Id; _renameText = g.Name; }">Переименовать</button>
                         <button type="button" class="icon-lnk danger" @onclick="() => Delete(g)" disabled="@_busy">Удалить</button>
                     }
@@ -125,9 +132,16 @@
 
     private async Task Rename(GroupResponse g)
     {
-        if (await Run(() => Api.UpdateGroup(g.Id, new SaveGroupRequest(_renameText.Trim(), g.Description))) is { } updated)
+        if (await Run(() => Api.UpdateGroup(g.Id, new SaveGroupRequest(_renameText.Trim(), g.Description, g.IsTeam))) is { } updated)
             Replace(updated);
         _renaming = null;
+    }
+
+    /// <summary>Команду (этап 4D) указывают в задаче и раскладывают по ней дорожки канбана.</summary>
+    private async Task SetTeam(GroupResponse g, bool isTeam)
+    {
+        if (await Run(() => Api.UpdateGroup(g.Id, new SaveGroupRequest(g.Name, g.Description, isTeam))) is { } updated)
+            Replace(updated);
     }
 
     private async Task Delete(GroupResponse g)
@@ -136,7 +150,10 @@
         var result = await Api.DeleteGroup(g.Id);
         _busy = false;
         if (result.Ok)
+        {
             _groups.Remove(g);
+            Teams.Invalidate();
+        }
         else
             Toasts.Error(result.Error ?? "Не удалось удалить группу");
     }
@@ -160,7 +177,10 @@
         var result = await call();
         _busy = false;
         if (result.Ok)
+        {
+            Teams.Invalidate();
             return result.Value;
+        }
         Toasts.Error(result.Error ?? "Не удалось сохранить группу");
         return null;
     }

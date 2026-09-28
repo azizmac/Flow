@@ -8,6 +8,7 @@
 @inject ToastService Toasts
 @inject BrowserInterop Browser
 @inject UserDirectory Users
+@inject TeamDirectory Teams
 @inject ProjectAccessState Access
 @implements IDisposable
 
@@ -208,14 +209,15 @@ else
     /// <summary>Задача создана быстрым вводом внизу колонки.</summary>
     [Parameter] public EventCallback<TaskResponse> OnCreated { get; set; }
 
-    private enum LaneMode { None, Assignee, Parent, Priority }
+    private enum LaneMode { None, Assignee, Parent, Priority, Team }
 
     private static readonly (LaneMode Mode, string Label)[] LaneModes =
     [
         (LaneMode.None, "Без дорожек"),
         (LaneMode.Assignee, "Исполнитель"),
         (LaneMode.Parent, "Родитель"),
-        (LaneMode.Priority, "Приоритет")
+        (LaneMode.Priority, "Приоритет"),
+        (LaneMode.Team, "Команда")
     ];
 
     private sealed class ColumnState
@@ -419,6 +421,7 @@ else
         LaneMode.Assignee => task.AssigneeId?.ToString() ?? NoneKey,
         LaneMode.Parent => task.ParentId?.ToString() ?? NoneKey,
         LaneMode.Priority => task.Priority == TaskPriority.None ? NoneKey : task.Priority.ToString(),
+        LaneMode.Team => task.TeamId?.ToString() ?? NoneKey,
         _ => ""
     };
 
@@ -449,12 +452,16 @@ else
         (LaneMode.Parent, _) => _parents.GetValueOrDefault(Guid.Parse(key)) is { } parent ? $"{parent.Code} {parent.Title}" : "Задача недоступна",
         (LaneMode.Priority, NoneKey) => "Без приоритета",
         (LaneMode.Priority, _) => TaskMeta.PriorityLabel(Enum.Parse<TaskPriority>(key)),
+        (LaneMode.Team, NoneKey) => "Без команды",
+        (LaneMode.Team, _) => Teams.Find(Guid.Parse(key))?.Name ?? "Удалённая команда",
         _ => ""
     };
 
     private async Task SetLanes(LaneMode mode)
     {
         _lanes = mode;
+        if (mode == LaneMode.Team)
+            await Teams.EnsureLoadedAsync();
         await LoadParentsAsync();
     }
 

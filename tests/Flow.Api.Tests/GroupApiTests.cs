@@ -45,6 +45,17 @@ public sealed class GroupApiTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.OK, unlinked.StatusCode);
         using var unlinkedAgain = await owner.DeleteAsync($"/api/boards/{board.Id}/groups/{group.Id}");
         Assert.Equal(HttpStatusCode.NotFound, unlinkedAgain.StatusCode);
+        using var team = await owner.PostAsJsonAsync("/api/groups", new SaveGroupRequest("API-команда", IsTeam: true));
+        var teamGroup = (await team.Content.ReadFromJsonAsync<GroupResponse>())!;
+        using var taskResponse = await owner.PostAsJsonAsync($"/api/boards/{board.Id}/tasks", new Flow.Shared.Contracts.Tasks.CreateTaskRequest("T", null, null));
+        var task = (await taskResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Tasks.TaskResponse>())!;
+        using var withTeam = await owner.PatchAsJsonAsync($"/api/tasks/{task.Id}/team", new Flow.Shared.Contracts.Tasks.SetTaskTeamRequest(teamGroup.Id));
+        Assert.Equal(teamGroup.Id, (await withTeam.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Tasks.TaskResponse>())!.TeamId);
+        using var notTeam = await owner.PatchAsJsonAsync($"/api/tasks/{task.Id}/team", new Flow.Shared.Contracts.Tasks.SetTaskTeamRequest(group.Id));
+        Assert.Equal(HttpStatusCode.BadRequest, notTeam.StatusCode);
+        using var noTask = await owner.PatchAsJsonAsync($"/api/tasks/{Guid.NewGuid()}/team", new Flow.Shared.Contracts.Tasks.SetTaskTeamRequest(null));
+        Assert.Equal(HttpStatusCode.NotFound, noTask.StatusCode);
+
         using var deleted = await owner.DeleteAsync($"/api/groups/{group.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
         using var gone = await owner.PatchAsJsonAsync($"/api/groups/{group.Id}", new SaveGroupRequest("X"));

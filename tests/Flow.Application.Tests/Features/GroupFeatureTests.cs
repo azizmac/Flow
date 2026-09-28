@@ -110,4 +110,27 @@ public class GroupFeatureTests
         Assert.Equal("Наши", renamed!.Name);
         await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new GroupMemberSetCommand(Owner, group, Guid.NewGuid(), true), CancellationToken.None));
     }
+
+    [Fact]
+    public async Task Task_Team_Is_A_Team_Group_With_Journal()
+    {
+        var (mediator, _, _, _, activities, _, _) = TestMediatorFactory.CreateWithJournal();
+        var boardId = (await mediator.Send(new BoardCreateCommand(Owner, "Проект", "TEAM"), CancellationToken.None)).Response!.Id;
+        var task = (await mediator.Send(new TaskCreateCommand(Owner, boardId, "Задача", null, null), CancellationToken.None))!;
+        var team = await mediator.Send(new GroupCreateCommand(Owner, "Бэкенд", null, IsTeam: true), CancellationToken.None);
+        var plain = await mediator.Send(new GroupCreateCommand(Owner, "Все", null), CancellationToken.None);
+        Assert.True(team.IsTeam);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new TaskSetTeamCommand(Owner, task.Id, plain.Id), CancellationToken.None));
+        var set = await mediator.Send(new TaskSetTeamCommand(Owner, task.Id, team.Id), CancellationToken.None);
+        Assert.Equal(team.Id, set.Response!.TeamId);
+        Assert.Equal(team.Id.ToString(), Assert.Single(activities.ForTask(task.Id), a => a.Type == Flow.Domain.Entities.TaskActivityType.TeamChanged).NewValue);
+
+        // Снятый флаг не выбивает команду из задачи: повтор — no-op, а новую такую назначить уже нельзя.
+        await mediator.Send(new GroupUpdateCommand(Owner, team.Id, "Бэкенд", null, IsTeam: false), CancellationToken.None);
+        Assert.Equal(team.Id, (await mediator.Send(new TaskSetTeamCommand(Owner, task.Id, team.Id), CancellationToken.None)).Response!.TeamId);
+        Assert.Null((await mediator.Send(new TaskSetTeamCommand(Owner, task.Id, null), CancellationToken.None)).Response!.TeamId);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new TaskSetTeamCommand(Owner, task.Id, team.Id), CancellationToken.None));
+        Assert.True((await mediator.Send(new TaskSetTeamCommand(Owner, Guid.NewGuid(), null), CancellationToken.None)).IsNotFound);
+    }
 }

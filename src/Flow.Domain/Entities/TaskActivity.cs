@@ -143,6 +143,9 @@ public sealed class TaskActivity
     public static TaskActivity MilestoneChanged(Guid taskId, Guid actorId, Guid? oldMilestoneId, Guid? newMilestoneId) =>
         new(taskId, actorId, TaskActivityType.MilestoneChanged, oldMilestoneId?.ToString(), newMilestoneId?.ToString());
 
+    public static TaskActivity TeamChanged(Guid taskId, Guid actorId, Guid? oldTeamId, Guid? newTeamId) =>
+        new(taskId, actorId, TaskActivityType.TeamChanged, oldTeamId?.ToString(), newTeamId?.ToString());
+
     /// <summary>OldValue — прежнее значение (JSON, null — пусто); NewValue — объект с Id поля и новым значением.</summary>
     public static TaskActivity CustomFieldChanged(Guid taskId, Guid actorId, Guid fieldId, string? oldJson, string? newJson) =>
         new(taskId, actorId, TaskActivityType.CustomFieldChanged, oldJson,

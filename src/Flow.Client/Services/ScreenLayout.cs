@@ -17,7 +17,7 @@ public static class ScreenLayout
 
     /// <summary>Порядок встроенного экрана (Domain.ScreenFields.System).</summary>
     public static readonly IReadOnlyList<string> SystemFields =
-        ["type", "parent", "sprint", "milestone", "priority", "assignee", "start", "due", "estimate", "description", "checklist", "links", "attachments"];
+        ["type", "parent", "sprint", "milestone", "priority", "assignee", "team", "start", "due", "estimate", "description", "checklist", "links", "attachments"];
 
     /// <summary>Что заполняется в форме создания (Domain.ScreenFields.OnCreate).</summary>
     public static readonly IReadOnlySet<string> OnCreate = new HashSet<string> { "type", "priority", "assignee", "description" };
@@ -30,6 +30,7 @@ public static class ScreenLayout
         "milestone" => "Веха",
         "priority" => "Приоритет",
         "assignee" => "Исполнитель",
+        "team" => "Команда",
         "start" => "Начало",
         "due" => "Срок",
         "estimate" => "Оценка",
@@ -80,6 +81,7 @@ public static class ScreenLayout
         "milestone" => task.MilestoneId is null,
         "priority" => task.Priority == TaskPriority.None,
         "assignee" => task.AssigneeId is null,
+        "team" => task.TeamId is null,
         "start" => task.StartDate is null,
         "due" => task.DueDate is null,
         "estimate" => task.StoryPoints is null && task.EstimateMinutes is null,

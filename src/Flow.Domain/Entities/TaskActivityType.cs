@@ -44,5 +44,8 @@ public enum TaskActivityType
     Split = 25,
 
     /// <summary>Перенос в другой проект: OldValue — прежний код, NewValue — новый.</summary>
-    Moved = 26
+    Moved = 26,
+
+    /// <summary>Команда задачи (этап 4D): OldValue/NewValue — Id группы-команды строкой, null — без команды.</summary>
+    TeamChanged = 27
 }

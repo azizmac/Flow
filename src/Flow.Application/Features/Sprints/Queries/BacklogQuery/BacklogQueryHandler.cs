@@ -13,7 +13,7 @@ internal sealed class BacklogQueryHandler(
     IBoardRepository boards,
     ITaskItemRepository tasks,
     ISprintRepository sprints,
-    IMilestoneRepository milestones,
+    IMilestoneRepository milestones, IGroupRepository groupDirectory,
     TaskResponses responses,
     ActorResolver actors,
     IProjectAccess projectAccess,
@@ -89,7 +89,7 @@ internal sealed class BacklogQueryHandler(
         FqlBound? fql = null;
         if (!string.IsNullOrWhiteSpace(request.Fql))
         {
-            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones);
+            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones, groupDirectory);
             fql = await FqlBinder.BindAsync(request.Fql, lookup, actor.Id, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
         }
 

@@ -1,6 +1,7 @@
 ﻿@* Экран 5 — задача на всю страницу (GET /tasks/{id} → GET /boards/{boardId}). *@
 @page "/tasks/{Id:guid}"
 @implements IDisposable
+@inject TeamDirectory Teams
 @inject IFlowApi Api
 @inject NavigationManager Nav
 @inject ToastService Toasts
@@ -229,7 +230,9 @@ else if (_task is not null && _board is not null)
 
 @code {
     /// <summary>Раскладка карточки по экрану типа задачи (docs/TZ_workflow_config.md §3).</summary>
-    private IReadOnlyList<ScreenFieldDto> DetailLayout => ScreenLayout.Resolve(_board!, _task!.TypeId, ScreenContext.Detail, _task.CustomFields);
+    /// <summary>Строка «Команда» (этап 4D) — только когда команды заведены или у задачи она уже есть.</summary>
+    private IReadOnlyList<ScreenFieldDto> DetailLayout => ScreenLayout.Resolve(_board!, _task!.TypeId, ScreenContext.Detail, _task.CustomFields)
+        .Where(f => ScreenLayout.SystemName(f) != "team" || Teams.HasTeams || _task.TeamId is not null).ToList();
 
     private bool Shows(string name) => DetailLayout.Any(f => ScreenLayout.SystemName(f) == name);
 
@@ -258,6 +261,7 @@ else if (_task is not null && _board is not null)
                     <span class="status-pill"><PriorityIcon Value="_task!.Priority" Size="13" ShowNone="true" />@TaskMeta.PriorityLabel(_task.Priority)</span>
                 }
             </div>,
+        "team" => @<div class="meta-v"><TeamSelect Value="_task!.TeamId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetTeam" /></div>,
         "assignee" => @<div><AssigneeSelect Value="_task!.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" /></div>,
         "start" => @<div><DueDateField Value="_task!.StartDate" CanEdit="CanEdit" Disabled="_busy" Plain="true" Label="Дата начала" OnChange="SetStartDate" /></div>,
         "due" => @<div><DueDateField Value="_task!.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>,
@@ -355,6 +359,7 @@ else if (_task is not null && _board is not null)
         if (_loadedId != Id)
         {
             _loadedId = Id;
+            await Teams.EnsureLoadedAsync();
             await Load();
         }
     }
@@ -470,6 +475,9 @@ else if (_task is not null && _board is not null)
     private Task SetCustomField(Guid fieldId, System.Text.Json.JsonElement? value) =>
         Apply(id => Api.SetTaskCustomFields(id, new SetCustomFieldsRequest(new Dictionary<Guid, System.Text.Json.JsonElement?> { [fieldId] = value })),
             "Не удалось сохранить поле");
+
+    private Task SetTeam(Guid? teamId) =>
+        Apply(id => Api.SetTaskTeam(id, new SetTaskTeamRequest(teamId)), "Не удалось сменить команду");
 
     private Task SetMilestone(Guid? milestoneId) =>
         Apply(id => Api.SetTaskMilestone(id, new SetTaskMilestoneRequest(milestoneId)), "Не удалось сменить веху");

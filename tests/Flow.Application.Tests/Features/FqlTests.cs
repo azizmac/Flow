@@ -41,6 +41,10 @@ public class FqlTests
         public List<Milestone> Milestones { get; } = [];
 
         public Task<IReadOnlyList<Milestone>> MilestonesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Milestone>>(Milestones);
+
+        public List<FqlTeam> Teams { get; } = [];
+
+        public Task<IReadOnlyList<FqlTeam>> TeamsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<FqlTeam>>(Teams);
     }
 
     private static (Lookup Lookup, Board Board) World()
@@ -99,6 +103,23 @@ public class FqlTests
         await Assert.ThrowsAsync<FqlException>(() => Bind("cf.budget = много", lookup));
         await Assert.ThrowsAsync<FqlException>(() => Bind("cf.mixed = 1", lookup));
         await Assert.ThrowsAsync<FqlException>(() => Bind("cf.nope = 1", lookup));
+    }
+
+    [Fact]
+    public async Task Team_Binds_Names_MyTeams_And_Empty()
+    {
+        var (lookup, _) = World();
+        var backend = new FqlTeam(Guid.NewGuid(), "Бэкенд", IsTeam: true, IsMine: true);
+        var design = new FqlTeam(Guid.NewGuid(), "Дизайн", IsTeam: true, IsMine: false);
+        var former = new FqlTeam(Guid.NewGuid(), "Старая", IsTeam: false, IsMine: true);
+        lookup.Teams.AddRange([backend, design, former]);
+
+        Assert.Equal([design.Id], Assert.IsType<TaskFilterIn>((await Bind("team = дизайн", lookup)).Filter).Ids);
+        Assert.Equal([former.Id], Assert.IsType<TaskFilterIn>((await Bind("team = \"Старая\"", lookup)).Filter).Ids);
+        Assert.Equal([backend.Id], Assert.IsType<TaskFilterIn>((await Bind("team in (myTeams())", lookup)).Filter).Ids);
+        Assert.Equal(TaskFilterNullable.Team, Assert.IsType<TaskFilterIsEmpty>((await Bind("team IS EMPTY", lookup)).Filter).Field);
+        var notMine = Assert.IsType<TaskFilterNot>((await Bind("team != myTeams()", lookup)).Filter);
+        Assert.IsType<TaskFilterIn>(notMine.Item);
     }
 
     [Fact]
@@ -192,7 +213,7 @@ public class FqlTests
     [InlineData("status = Отложена", "Статуса «Отложена» нет ни в одном проекте", 9)]
     [InlineData("assignee = @nobody", "Пользователь «@nobody» не найден", 11)]
     [InlineData("color = red", "Неизвестное поле «color»", 0)]
-    [InlineData("team = A", "Поля «team» пока нет", 0)]
+    [InlineData("team = A", "Команды «A» нет", 7)]
     [InlineData("milestone = M1", "Вехи «M1» нет ни в одном проекте", 12)]
     [InlineData("priority ~ high", "Оператор ~ к полю «priority» не применим", 0)]
     [InlineData("estimate > 5", "«5» — не оценка", 11)]
