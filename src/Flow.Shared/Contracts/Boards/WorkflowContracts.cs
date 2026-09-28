@@ -22,8 +22,10 @@ public sealed record TransitionResponse(Guid Id, Guid? FromStatusId, Guid ToStat
 /// Workflow проекта. DeadEnds — нефинальные статусы без исходящих переходов: в Restricted их не бывает
 /// (сохранение с тупиками отклоняется), в Free — подсказка, что поправить перед включением.
 /// </summary>
+/// TaskTypeId — чей это workflow (этап 3E): null — проекта; Inherited — у запрошенного типа своего нет, и пришёл
+/// workflow проекта, по которому тип живёт.
 public sealed record WorkflowResponse(Guid BoardId, WorkflowMode Mode, IReadOnlyList<TransitionResponse> Transitions, IReadOnlyList<Guid> DeadEnds,
-    IReadOnlyList<StatusPosition>? Layout = null);
+    IReadOnlyList<StatusPosition>? Layout = null, Guid? TaskTypeId = null, bool Inherited = false);
 
 /// <summary>Место узла статуса на графе workflow (этап 3D). Статуса нет в списке — автораскладка.</summary>
 public sealed record StatusPosition(Guid StatusId, double X, double Y);
@@ -32,9 +34,10 @@ public sealed record TransitionRequest(Guid? FromStatusId, Guid ToStatusId, stri
 
 /// <summary>
 /// Workflow заменяется целиком: режим и все переходы. Layout — раскладка графа: null — не менять, пустой список —
-/// вернуть автораскладку.
+/// вернуть автораскладку (раскладка общая для всех workflow проекта). TaskTypeId — сохранить свой workflow типа.
 /// </summary>
-public sealed record SetWorkflowRequest(WorkflowMode Mode, IReadOnlyList<TransitionRequest> Transitions, IReadOnlyList<StatusPosition>? Layout = null);
+public sealed record SetWorkflowRequest(WorkflowMode Mode, IReadOnlyList<TransitionRequest> Transitions, IReadOnlyList<StatusPosition>? Layout = null,
+    Guid? TaskTypeId = null);
 
 /// <summary>Куда можно перевести задачу: по каждому статусу проекта (кроме текущего) — можно ли и почему нет.</summary>
 public sealed record TaskTransitionResponse(Guid StatusId, bool Allowed, IReadOnlyList<string> Reasons);

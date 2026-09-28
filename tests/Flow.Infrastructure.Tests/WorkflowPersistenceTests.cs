@@ -85,4 +85,24 @@ public class WorkflowPersistenceTests(PostgresFixture db)
         var read = (await db.SendAsync(new WorkflowGetQuery(Owner, board.Id)))!;
         Assert.Equal((todo, 123.4, 56.7), (read.Layout!.Single().StatusId, read.Layout!.Single().X, read.Layout!.Single().Y));
     }
+
+    /// <summary>Этап 3E: одна пара «из → в» в workflow проекта и в workflow типа — разные строки уникального индекса; сброс удаляет свои.</summary>
+    [Fact]
+    public async Task Type_Workflow_Lives_Next_To_Project_Workflow()
+    {
+        var board = (await db.SendAsync(new BoardCreateCommand(Owner, "Типы", "WFT"))).Response!;
+        Guid Id(string name) => board.Statuses.Single(s => s.Name == name).Id;
+        var bug = board.TaskTypes.Single(t => t.Kind == Flow.Shared.Contracts.Boards.TaskTypeKind.Bug).Id;
+
+        await db.SendAsync(new WorkflowSetCommand(Owner, board.Id, SharedMode.Free, [new(Id("Не начата"), Id("В работе"))]));
+        await db.SendAsync(new WorkflowSetCommand(Owner, board.Id, SharedMode.Restricted,
+            [new(Id("Не начата"), Id("В работе")), new(Id("В работе"), Id("Сделана")), new(Id("На проверке"), Id("Сделана"))], TaskTypeId: bug));
+        Assert.Equal(4, await db.QueryAsync(ctx => ctx.Set<StatusTransition>().CountAsync(t => t.BoardId == board.Id)));
+
+        var read = (await db.SendAsync(new WorkflowGetQuery(Owner, board.Id, bug)))!;
+        Assert.Equal((SharedMode.Restricted, 3, false), (read.Mode, read.Transitions.Count, read.Inherited));
+
+        await db.SendAsync(new WorkflowResetTypeCommand(Owner, board.Id, bug));
+        Assert.Equal(1, await db.QueryAsync(ctx => ctx.Set<StatusTransition>().CountAsync(t => t.BoardId == board.Id)));
+    }
 }

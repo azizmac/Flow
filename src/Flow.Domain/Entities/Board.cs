@@ -510,8 +510,8 @@ public sealed partial class Board
             // В Restricted сразу в неначальный статус — только если в него есть переход «из любого»: иначе создание
             // в колонку канбана «В работе» обходило бы граф.
             var initialId = _statuses.SingleOrDefault(s => s.IsInitial)?.Id;
-            if (WorkflowMode == WorkflowMode.Restricted && statusId != initialId
-                && !_transitions.Any(t => t.FromStatusId is null && t.ToStatusId == statusId.Value))
+            if (WorkflowModeFor(type.Id) == WorkflowMode.Restricted && statusId != initialId
+                && !TransitionsFor(type.Id).Any(t => t.FromStatusId is null && t.ToStatusId == statusId.Value))
                 throw new InvalidOperationException($"В статус «{StatusName(statusId.Value)}» задачу нельзя создать сразу: в workflow нет перехода в него «из любого».");
 
             resolvedStatusId = statusId.Value;
@@ -585,11 +585,32 @@ public sealed partial class Board
         }
     }
 
-    public void SetWorkflow(WorkflowMode mode, IReadOnlyList<TransitionSpec> transitions)
+    /// <summary>Режим workflow, по которому живут задачи типа: свой у типа (этап 3E) или проекта.</summary>
+    public WorkflowMode WorkflowModeFor(Guid? taskTypeId) =>
+        taskTypeId is { } id && _taskTypes.FirstOrDefault(t => t.Id == id)?.OwnWorkflowMode is { } own ? own : WorkflowMode;
+
+    /// <summary>Есть ли у типа свой workflow.</summary>
+    public bool HasOwnWorkflow(Guid taskTypeId) => _taskTypes.FirstOrDefault(t => t.Id == taskTypeId)?.OwnWorkflowMode is not null;
+
+    /// <summary>Переходы workflow, по которому живут задачи типа: свои у типа или проекта (TaskTypeId = null).</summary>
+    public IReadOnlyList<StatusTransition> TransitionsFor(Guid? taskTypeId)
+    {
+        var owner = taskTypeId is { } id && HasOwnWorkflow(id) ? taskTypeId : null;
+        return _transitions.Where(t => t.TaskTypeId == owner).ToList();
+    }
+
+    /// <summary>
+    /// Заменить workflow целиком: проекта (taskTypeId = null) или свой у типа задачи (этап 3E) — тогда тип перестаёт
+    /// жить по workflow проекта. Статусы общие для всех workflow проекта.
+    /// </summary>
+    public void SetWorkflow(WorkflowMode mode, IReadOnlyList<TransitionSpec> transitions, Guid? taskTypeId = null)
     {
         if (!Enum.IsDefined(mode))
             throw new ArgumentException($"Unknown workflow mode {mode}.", nameof(mode));
         ArgumentNullException.ThrowIfNull(transitions);
+        var type = taskTypeId is { } typeId
+            ? _taskTypes.FirstOrDefault(t => t.Id == typeId) ?? throw new InvalidOperationException($"Task type {typeId} does not belong to board {Id}.")
+            : null;
 
         foreach (var t in transitions)
         {
@@ -606,7 +627,7 @@ public sealed partial class Board
         if (transitions.GroupBy(t => (t.FromStatusId, t.ToStatusId)).Any(g => g.Count() > 1))
             throw new InvalidOperationException("Each transition (from, to) may appear only once.");
 
-        var next = transitions.Select(t => new StatusTransition(Id, t.FromStatusId, t.ToStatusId, t.Name, t.Conditions ?? TransitionConditions.None)).ToList();
+        var next = transitions.Select(t => new StatusTransition(Id, t.FromStatusId, t.ToStatusId, t.Name, t.Conditions ?? TransitionConditions.None, type?.Id)).ToList();
         if (mode == WorkflowMode.Restricted)
         {
             var deadEnds = DeadEnds(next);
@@ -615,13 +636,25 @@ public sealed partial class Board
                     $"Из статусов {string.Join(", ", deadEnds.Select(s => $"«{s.Name}»"))} нет ни одного перехода: задачи в них застрянут.");
         }
 
-        _transitions.Clear();
+        _transitions.RemoveAll(t => t.TaskTypeId == type?.Id);
         _transitions.AddRange(next);
-        WorkflowMode = mode;
+        if (type is null)
+            WorkflowMode = mode;
+        else
+            type.SetOwnWorkflowMode(mode);
     }
 
-    /// <summary>Нефинальные статусы, из которых нет ни одного перехода (с учётом переходов «из любого»).</summary>
-    public IReadOnlyList<Status> DeadEnds() => DeadEnds(_transitions);
+    /// <summary>Тип снова живёт по workflow проекта: свои переходы типа удаляются (этап 3E).</summary>
+    public void ResetTypeWorkflow(Guid taskTypeId)
+    {
+        var type = _taskTypes.FirstOrDefault(t => t.Id == taskTypeId)
+                   ?? throw new InvalidOperationException($"Task type {taskTypeId} does not belong to board {Id}.");
+        _transitions.RemoveAll(t => t.TaskTypeId == type.Id);
+        type.SetOwnWorkflowMode(null);
+    }
+
+    /// <summary>Нефинальные статусы, из которых нет ни одного перехода (с учётом переходов «из любого») в workflow типа или проекта.</summary>
+    public IReadOnlyList<Status> DeadEnds(Guid? taskTypeId = null) => DeadEnds(TransitionsFor(taskTypeId));
 
     private List<Status> DeadEnds(IReadOnlyCollection<StatusTransition> transitions) =>
         _statuses
@@ -631,22 +664,24 @@ public sealed partial class Board
             .ToList();
 
     /// <summary>
-    /// Можно ли перевести задачу из <paramref name="fromStatusId"/> в <paramref name="toStatusId"/>. Free — всегда.
-    /// Restricted — нужен переход графа (прямой или «из любого»), чьи условия выполнены; если подходящих переходов
-    /// несколько, хватает одного. Причины отказа — по первому переходу: человеку важнее, чего не хватает, чем все
-    /// варианты сразу.
+    /// Можно ли перевести задачу из <paramref name="fromStatusId"/> в <paramref name="toStatusId"/> — по workflow её типа
+    /// (свой у типа или проекта, этап 3E). Free — всегда. Restricted — нужен переход графа (прямой или «из любого»), чьи
+    /// условия выполнены; если подходящих несколько, хватает одного. Причины отказа — по первому переходу: человеку
+    /// важнее, чего не хватает, чем все варианты сразу.
     /// </summary>
-    public TransitionCheck CheckTransition(Guid fromStatusId, Guid toStatusId, TransitionContext context)
+    public TransitionCheck CheckTransition(Guid fromStatusId, Guid toStatusId, TransitionContext context, Guid? taskTypeId = null)
     {
-        if (fromStatusId == toStatusId || WorkflowMode == WorkflowMode.Free)
+        if (fromStatusId == toStatusId || WorkflowModeFor(taskTypeId) == WorkflowMode.Free)
             return TransitionCheck.Ok;
 
-        var candidates = _transitions
+        var candidates = TransitionsFor(taskTypeId)
             .Where(t => t.ToStatusId == toStatusId && (t.FromStatusId == fromStatusId || t.FromStatusId is null))
             .OrderBy(t => t.FromStatusId is null ? 1 : 0)
             .ToList();
         if (candidates.Count == 0)
-            return TransitionCheck.Denied($"Перехода «{StatusName(fromStatusId)}» → «{StatusName(toStatusId)}» в workflow проекта нет");
+            return TransitionCheck.Denied(taskTypeId is { } typeId && HasOwnWorkflow(typeId)
+                ? $"Перехода «{StatusName(fromStatusId)}» → «{StatusName(toStatusId)}» в workflow типа «{_taskTypes.First(t => t.Id == typeId).Name}» нет"
+                : $"Перехода «{StatusName(fromStatusId)}» → «{StatusName(toStatusId)}» в workflow проекта нет");
 
         List<string>? firstReasons = null;
         foreach (var transition in candidates)

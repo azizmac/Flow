@@ -5,4 +5,5 @@ namespace Flow.Shared.Contracts.Boards;
 /// Архивные типы тоже приходят: их носят старые задачи, но в выборе при создании их быть не должно.
 /// Массив типов в BoardResponse отсортирован сервером.
 /// </summary>
-public sealed record TaskTypeResponse(Guid Id, string Name, TaskTypeKind Kind, int Level, bool IsDefault, bool IsArchived);
+/// <remarks>HasOwnWorkflow — у типа свой workflow (этап 3E), иначе он живёт по workflow проекта.</remarks>
+public sealed record TaskTypeResponse(Guid Id, string Name, TaskTypeKind Kind, int Level, bool IsDefault, bool IsArchived, bool HasOwnWorkflow = false);

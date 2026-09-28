@@ -25,6 +25,12 @@ public sealed class TaskType
 
     public bool IsArchived { get; private set; }
 
+    /// <summary>
+    /// Свой workflow типа (docs/TZ_workflow_config.md §2, этап 3E): режим, а переходы — StatusTransition с этим
+    /// TaskTypeId. null — тип живёт по workflow проекта.
+    /// </summary>
+    public WorkflowMode? OwnWorkflowMode { get; private set; }
+
     public int Level => Kind.Level();
 
     private TaskType()
@@ -50,6 +56,8 @@ public sealed class TaskType
     internal void SetDefault(bool isDefault) => IsDefault = isDefault;
 
     internal void SetArchived(bool isArchived) => IsArchived = isArchived;
+
+    internal void SetOwnWorkflowMode(WorkflowMode? mode) => OwnWorkflowMode = mode;
 
     internal static string ValidateName(string name)
     {

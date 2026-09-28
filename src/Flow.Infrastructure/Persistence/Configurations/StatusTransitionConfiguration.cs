@@ -7,8 +7,8 @@ namespace Flow.Infrastructure.Persistence.Configurations;
 /// <summary>
 /// Переходы workflow (docs/TZ_workflow_config.md §2) — часть агрегата Board. Id задаёт домен (ValueGeneratedNever,
 /// как у TaskType и Status). FK на статусы — каскадом: удалить статус значит убрать и его переходы (домен делает
-/// то же в RemoveStatus). Unique (BoardId, FromStatusId, ToStatusId) с NULLS NOT DISTINCT: иначе Postgres считал бы
-/// два перехода «из любого» в один статус разными.
+/// то же в RemoveStatus). Unique (BoardId, TaskTypeId, FromStatusId, ToStatusId) с NULLS NOT DISTINCT: иначе Postgres
+/// считал бы два перехода «из любого» в один статус (или два перехода workflow проекта) разными.
 /// </summary>
 public sealed class StatusTransitionConfiguration : IEntityTypeConfiguration<StatusTransition>
 {
@@ -25,7 +25,9 @@ public sealed class StatusTransitionConfiguration : IEntityTypeConfiguration<Sta
         builder.HasOne<Status>().WithMany().HasForeignKey(t => t.FromStatusId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Status>().WithMany().HasForeignKey(t => t.ToStatusId).OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(t => new { t.BoardId, t.FromStatusId, t.ToStatusId }).IsUnique().AreNullsDistinct(false);
+        // Свой workflow типа (этап 3E): переходы типа уходят вместе с типом; пара «из → в» уникальна в каждом workflow.
+        builder.HasOne<TaskType>().WithMany().HasForeignKey(t => t.TaskTypeId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(t => new { t.BoardId, t.TaskTypeId, t.FromStatusId, t.ToStatusId }).IsUnique().AreNullsDistinct(false);
         builder.HasIndex(t => t.ToStatusId);
         builder.HasIndex(t => t.FromStatusId);
     }

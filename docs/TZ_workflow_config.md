@@ -1,6 +1,6 @@
 # ТЗ: настраиваемый процесс — статусы, workflow, экраны, шаблоны
 
-Статус: **этапы 3A–3D сделаны** (управление статусами, несколько финальных; workflow с условиями, матричный редактор; экраны и обязательные поля перехода; редактируемый граф), 3E–3G — не начаты. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 3). Опирается на
+Статус: **этапы 3A–3E сделаны** (управление статусами, несколько финальных; workflow с условиями, матричный редактор; экраны и обязательные поля перехода; редактируемый граф; workflow по типу задачи), 3F–3G — не начаты. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 3). Опирается на
 `docs/TZ_task_model.md` (типы задач, пользовательские поля).
 
 ## Исходное требование
@@ -142,6 +142,25 @@ TransitionConditions (value object, jsonb):
   без фреймворка) или `@xyflow/system`. Сборка — как `flow-editor.js`: исходник в `src/Flow.Client/editor`,
   бандл в `src/Flow.Api/wwwroot/js`, стадия в Dockerfile и проверка бандла в CI. Позиции узлов —
   `Status.GraphX/GraphY` (nullable, null — автораскладка).
+
+### Как сделано (этап 3E)
+
+- Своя сущность `Workflow` не заведена: у типа задачи — `TaskType.OwnWorkflowMode` (null — живёт по workflow проекта),
+  переходы — те же `StatusTransition` с `TaskTypeId` (null — проектный). FK на тип — каскадом (типы и так не удаляются,
+  только архивируются), unique теперь `(BoardId, TaskTypeId, FromStatusId, ToStatusId)` NULLS NOT DISTINCT. Миграция
+  `AddTypeWorkflows`. Статусы общие для всех workflow проекта — меняется только граф между ними.
+- Домен: `WorkflowModeFor(typeId)`, `TransitionsFor(typeId)`, `HasOwnWorkflow`, `SetWorkflow(mode, specs, typeId?)`
+  (замена затрагивает только свой workflow), `ResetTypeWorkflow`, `DeadEnds(typeId?)`,
+  `CheckTransition(from, to, ctx, typeId?)` — текст отказа называет workflow типа. `CreateTask` сразу в неначальный
+  статус проверяет workflow своего типа.
+- Все пути смены статуса уже шли через `TransitionGuard` — он передаёт `task.TypeId`, отдельных правок в `TaskUpdate`,
+  канбане и автопереходах SCM не понадобилось; `GET /tasks/{id}/transitions` — тоже по типу задачи.
+- API: `GET /boards/{id}/workflow?typeId=` (у типа без своего — проектный с `inherited: true`), `PUT` с `taskTypeId`
+  в теле, `DELETE /boards/{id}/workflow?typeId=` — вернуть проектный. `TaskTypeResponse.HasOwnWorkflow`.
+- Клиент: «Workflow для» на `WorkflowPage` (`?type=`): тип без своего — проектный граф только для чтения и «Сделать
+  свой workflow» (черновик из копии), со своим — «Вернуть workflow проекта». Раскладка графа одна на проект.
+- Смена типа задачи не проверяет, «разрешён» ли её текущий статус в новом workflow: статусы общие, а следующий
+  переход уже пойдёт по новому графу — задача не застрянет, пока в графе нет тупиков.
 
 ### Как сделано (этап 3D)
 

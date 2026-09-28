@@ -37,6 +37,9 @@ public sealed class StatusTransition
 
     public Guid BoardId { get; private set; }
 
+    /// <summary>Чей это переход: null — workflow проекта, иначе — свой workflow этого типа задачи (этап 3E).</summary>
+    public Guid? TaskTypeId { get; private set; }
+
     public Guid? FromStatusId { get; private set; }
 
     public Guid ToStatusId { get; private set; }
@@ -64,10 +67,11 @@ public sealed class StatusTransition
         // EF Core
     }
 
-    internal StatusTransition(Guid boardId, Guid? fromStatusId, Guid toStatusId, string? name, TransitionConditions conditions)
+    internal StatusTransition(Guid boardId, Guid? fromStatusId, Guid toStatusId, string? name, TransitionConditions conditions, Guid? taskTypeId = null)
     {
         Id = Guid.NewGuid();
         BoardId = boardId;
+        TaskTypeId = taskTypeId;
         FromStatusId = fromStatusId;
         ToStatusId = toStatusId;
         Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim().Length <= NameMaxLength

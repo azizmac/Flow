@@ -58,18 +58,21 @@ public static class BoardMappingExtensions
         field.SortOrder,
         field.IsArchived);
 
-    public static WorkflowResponse ToWorkflowResponse(this Board board) => new(
+    /// <summary>Workflow проекта или типа (этап 3E); тип без своего — workflow проекта с Inherited.</summary>
+    public static WorkflowResponse ToWorkflowResponse(this Board board, Guid? taskTypeId = null) => new(
         board.Id,
-        (Flow.Shared.Contracts.Boards.WorkflowMode)(int)board.WorkflowMode,
-        board.Transitions
+        (Flow.Shared.Contracts.Boards.WorkflowMode)(int)board.WorkflowModeFor(taskTypeId),
+        board.TransitionsFor(taskTypeId)
             .OrderBy(t => t.FromStatusId is null ? int.MaxValue : board.Statuses.FirstOrDefault(s => s.Id == t.FromStatusId)?.SortOrder ?? 0)
             .ThenBy(t => board.Statuses.FirstOrDefault(s => s.Id == t.ToStatusId)?.SortOrder ?? 0)
             .Select(t => new TransitionResponse(t.Id, t.FromStatusId, t.ToStatusId, t.Name,
                 new TransitionConditionsDto(t.MinRole?.ToResponseRole(), t.RequireAssignee, t.RequireChildrenDone, t.RequireChecklistDone, t.RequireFields.ToList())))
             .ToList(),
-        board.DeadEnds().Select(s => s.Id).ToList(),
+        board.DeadEnds(taskTypeId).Select(s => s.Id).ToList(),
         board.Statuses.Where(s => s.GraphX is not null && s.GraphY is not null)
-            .Select(s => new StatusPosition(s.Id, s.GraphX!.Value, s.GraphY!.Value)).ToList());
+            .Select(s => new StatusPosition(s.Id, s.GraphX!.Value, s.GraphY!.Value)).ToList(),
+        taskTypeId,
+        taskTypeId is { } typeId && !board.HasOwnWorkflow(typeId));
 
     public static TransitionSpec ToSpec(this TransitionRequest request) => new(
         request.FromStatusId,
@@ -111,7 +114,7 @@ public static class BoardMappingExtensions
         Enum.IsDefined(permission) ? (SharedPermission)(int)permission : throw new ArgumentOutOfRangeException(nameof(permission), permission, "Unknown ProjectPermission.");
 
     public static TaskTypeResponse ToResponse(this TaskType type) =>
-        new(type.Id, type.Name, type.Kind.ToResponseKind(), type.Level, type.IsDefault, type.IsArchived);
+        new(type.Id, type.Name, type.Kind.ToResponseKind(), type.Level, type.IsDefault, type.IsArchived, type.OwnWorkflowMode is not null);
 
     /// <summary>Зеркала с одинаковыми значениями (Shared не ссылается на Domain) — приведение с проверкой.</summary>
     public static SharedTypeKind ToResponseKind(this DomainTypeKind kind) =>

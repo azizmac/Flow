@@ -8,7 +8,10 @@
    сюда приходит только итог; раскладка сохраняется вместе с workflow (Status.GraphX/GraphY), «Авто-раскладка» —
    статусы в ряд по порядку. Отклонение от ТЗ: вместо Drawflow/xyflow — свой SVG и pointer-события в flow.js: граф из
    десятка узлов не стоит второго бандла и стадии сборки. Стрелки — дуги по нормали к отрезку, поэтому встречные
-   переходы A→B и B→A расходятся. «Из любого» — значком у статуса. *@
+   переходы A→B и B→A расходятся. «Из любого» — значком у статуса.
+   Этап 3E: «Workflow для» выбирает проект или тип задачи (?type=). Тип без своего показывает workflow проекта только
+   для чтения; «Сделать свой workflow» начинает черновик с его копии, «Вернуть workflow проекта» удаляет свой.
+   Раскладка графа одна на проект — статусы общие. *@
 @page "/boards/{Id:guid}/workflow"
 @implements IAsyncDisposable
 @inject IFlowApi Api
@@ -48,6 +51,33 @@
     }
     else
     {
+        <div class="wf-type">
+            <MudSelect T="Guid?" Label="Workflow для" Value="_typeId" ValueChanged="SelectType" Dense="true" Variant="Variant.Text"
+                       PopoverClass="flow-pop" Class="wf-type-select" ToStringFunc="TypeLabel">
+                <MudSelectItem T="Guid?" Value="null">всего проекта</MudSelectItem>
+                @foreach (var type in _board.TaskTypes.Where(t => !t.IsArchived || t.HasOwnWorkflow))
+                {
+                    <MudSelectItem T="Guid?" Value="type.Id">@TypeLabel(type.Id)</MudSelectItem>
+                }
+            </MudSelect>
+            @if (_typeId is not null && _workflow.Inherited && !_ownDraft)
+            {
+                <span class="hint">Тип живёт по workflow проекта — ниже он, только для чтения.</span>
+                @if (CanManage)
+                {
+                    <DsButton Variant="secondary" Size="sm" OnClick="StartOwn">Сделать свой workflow</DsButton>
+                }
+            }
+            else if (_typeId is not null)
+            {
+                <span class="hint">Свой workflow типа: задачи этого типа меняют статус по нему, а не по workflow проекта.</span>
+                @if (CanManage && !_workflow.Inherited)
+                {
+                    <DsButton Variant="secondary" Size="sm" OnClick="ResetOwn" Disabled="_busy">Вернуть workflow проекта</DsButton>
+                }
+            }
+        </div>
+
         <div class="wf-head">
             <div class="seg" role="radiogroup" aria-label="Режим workflow">
                 @foreach (var mode in new[] { WorkflowMode.Free, WorkflowMode.Restricted })
@@ -254,7 +284,53 @@
     private bool _busy;
     private string? _error;
 
-    private bool CanEdit => Permissions.CanManageConfig(Access.For(Id));
+    private bool CanManage => Permissions.CanManageConfig(Access.For(Id));
+
+    /// <summary>Править можно workflow проекта или свой workflow типа; унаследованный тип — только смотреть.</summary>
+    private bool CanEdit => CanManage && !(_typeId is not null && _workflow?.Inherited == true && !_ownDraft);
+
+    /// <summary>Чей workflow на экране (этап 3E): null — проекта, иначе тип задачи (?type=).</summary>
+    [SupplyParameterFromQuery(Name = "type")] public Guid? TypeQuery { get; set; }
+
+    private Guid? _typeId;
+
+    /// <summary>У типа без своего workflow начат свой — черновик из копии workflow проекта.</summary>
+    private bool _ownDraft;
+
+    private string TypeLabel(Guid? typeId) => typeId is { } id && _board?.TaskTypes.FirstOrDefault(t => t.Id == id) is { } type
+        ? $"типа «{type.Name}»{(type.HasOwnWorkflow ? " — свой" : "")}"
+        : "всего проекта";
+
+    private void SelectType(Guid? typeId) =>
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("type", typeId?.ToString()), replace: true);
+
+    private void StartOwn()
+    {
+        _ownDraft = true;
+        _dirty = true;
+    }
+
+    private async Task ResetOwn()
+    {
+        _busy = true;
+        var result = await Api.ResetTypeWorkflow(Id, _typeId!.Value);
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось вернуть workflow проекта");
+            return;
+        }
+
+        await ReloadBoardAsync();
+        Reset(result.Value!);
+        Toasts.Ok("Тип снова живёт по workflow проекта");
+    }
+
+    private async Task ReloadBoardAsync()
+    {
+        if (await Api.GetBoard(Id) is { Ok: true } board)
+            _board = board.Value;
+    }
 
     private IReadOnlyList<StatusResponse> Statuses => _board?.Statuses ?? [];
 
@@ -360,8 +436,9 @@
     protected override async Task OnParametersSetAsync()
     {
         await Access.EnsureLoadedAsync();
+        _typeId = TypeQuery;
         var board = await Api.GetBoard(Id);
-        var workflow = await Api.GetWorkflow(Id);
+        var workflow = await Api.GetWorkflow(Id, _typeId);
         if (!board.Ok || !workflow.Ok)
         {
             _error = board.NotFound || workflow.NotFound ? "Проект не найден" : board.Error ?? workflow.Error;
@@ -381,6 +458,7 @@
             .ToList();
         _positions = (workflow.Layout ?? []).ToDictionary(p => p.StatusId, p => (p.X, p.Y));
         _layoutChanged = false;
+        _ownDraft = false;
         _dirty = false;
     }
 
@@ -449,7 +527,7 @@
     {
         _busy = true;
         var layout = _layoutChanged ? _positions.Select(p => new StatusPosition(p.Key, p.Value.X, p.Value.Y)).ToList() : null;
-        var result = await Api.SetWorkflow(Id, new SetWorkflowRequest(_mode, _transitions, layout));
+        var result = await Api.SetWorkflow(Id, new SetWorkflowRequest(_mode, _transitions, layout, _typeId));
         _busy = false;
         if (!result.Ok)
         {
@@ -457,6 +535,8 @@
             return;
         }
 
+        if (_ownDraft)
+            await ReloadBoardAsync();
         Reset(result.Value!);
         Toasts.Ok(_mode == WorkflowMode.Restricted ? "Workflow сохранён и действует" : "Workflow сохранён (режим свободный)");
     }

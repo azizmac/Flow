@@ -192,9 +192,15 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
 
     // ---- Workflow (docs/TZ_workflow_config.md §2) ----
 
+    /// <summary>typeId — workflow типа (этап 3E): свой или проекта с inherited = true; чужой тип — 404.</summary>
     [HttpGet("{id:guid}/workflow")]
-    public async Task<IActionResult> GetWorkflow(Guid id, CancellationToken cancellationToken) =>
-        await mediator.Send(new WorkflowGetQuery(actor.Require(), id), cancellationToken) is { } workflow ? Ok(workflow) : NotFound();
+    public async Task<IActionResult> GetWorkflow(Guid id, [FromQuery] Guid? typeId, CancellationToken cancellationToken) =>
+        await mediator.Send(new WorkflowGetQuery(actor.Require(), id, typeId), cancellationToken) is { } workflow ? Ok(workflow) : NotFound();
+
+    /// <summary>Тип снова живёт по workflow проекта (этап 3E).</summary>
+    [HttpDelete("{id:guid}/workflow")]
+    public async Task<IActionResult> ResetTypeWorkflow(Guid id, [FromQuery] Guid typeId, CancellationToken cancellationToken) =>
+        await mediator.Send(new WorkflowResetTypeCommand(actor.Require(), id, typeId), cancellationToken) is { } workflow ? Ok(workflow) : NotFound();
 
     /// <summary>Workflow целиком: режим и переходы. 400 — тупики в Restricted, чужой статус, повтор пары.</summary>
     [HttpPut("{id:guid}/workflow")]
@@ -202,7 +208,7 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
     {
         try
         {
-            var workflow = await mediator.Send(new WorkflowSetCommand(actor.Require(), id, request.Mode, request.Transitions, request.Layout), cancellationToken);
+            var workflow = await mediator.Send(new WorkflowSetCommand(actor.Require(), id, request.Mode, request.Transitions, request.Layout, request.TaskTypeId), cancellationToken);
             return workflow is null ? NotFound() : Ok(workflow);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)

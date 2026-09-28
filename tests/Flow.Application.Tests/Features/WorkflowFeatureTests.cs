@@ -142,4 +142,34 @@ public class WorkflowFeatureTests
         var reset = (await mediator.Send(new WorkflowSetCommand(Owner, board.Id, SharedMode.Free, [new(todo, done)], []), CancellationToken.None))!;
         Assert.Empty(reset.Layout!);
     }
+
+    /// <summary>Этап 3E: смена статуса проверяется по workflow типа задачи; тип без своего получает проектный с Inherited.</summary>
+    [Fact]
+    public async Task Type_Workflow_Is_Used_For_Its_Tasks()
+    {
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
+        var (board, todo, doing, review, done) = await ArrangeAsync(mediator);
+        var bug = board.TaskTypes.Single(t => t.Kind == Flow.Shared.Contracts.Boards.TaskTypeKind.Bug).Id;
+
+        var inherited = (await mediator.Send(new WorkflowGetQuery(Owner, board.Id, bug), CancellationToken.None))!;
+        Assert.True(inherited.Inherited);
+
+        var own = (await mediator.Send(new WorkflowSetCommand(Owner, board.Id, SharedMode.Restricted,
+            [new(todo, review), new(review, done), new(doing, done)], TaskTypeId: bug), CancellationToken.None))!;
+        Assert.Equal((false, bug), (own.Inherited, own.TaskTypeId!.Value));
+
+        var bugTask = (await mediator.Send(new TaskCreateCommand(Owner, board.Id, "Баг", null, null, TypeId: bug), CancellationToken.None))!.Id;
+        var plainTask = (await mediator.Send(new TaskCreateCommand(Owner, board.Id, "Задача", null, null), CancellationToken.None))!.Id;
+        Assert.NotNull((await mediator.Send(new TaskUpdateCommand(Owner, bugTask, null, null, done), CancellationToken.None)).Reasons);
+        Assert.NotNull((await mediator.Send(new TaskUpdateCommand(Owner, plainTask, null, null, done), CancellationToken.None)).Response);
+
+        var allowed = (await mediator.Send(new TaskTransitionsQuery(Owner, bugTask), CancellationToken.None))!.Where(t => t.Allowed).Select(t => t.StatusId);
+        Assert.Equal([review], allowed);
+        var board2 = (await mediator.Send(new Flow.Application.Features.Boards.Queries.BoardGetQuery.BoardGetQuery(Owner, board.Id), CancellationToken.None))!;
+        Assert.True(board2.TaskTypes.Single(t => t.Id == bug).HasOwnWorkflow);
+
+        var reset = (await mediator.Send(new WorkflowResetTypeCommand(Owner, board.Id, bug), CancellationToken.None))!;
+        Assert.True(reset.Inherited);
+        Assert.NotNull((await mediator.Send(new TaskUpdateCommand(Owner, bugTask, null, null, done), CancellationToken.None)).Response);
+    }
 }

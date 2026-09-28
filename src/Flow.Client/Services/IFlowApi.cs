@@ -59,7 +59,8 @@ public interface IFlowApi
     Task<ApiResult<BoardResponse>> ReorderStatuses(Guid boardId, ReorderStatusesRequest request, CancellationToken ct = default);
 
     // Workflow (docs/TZ_workflow_config.md §2)
-    Task<ApiResult<WorkflowResponse>> GetWorkflow(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<WorkflowResponse>> GetWorkflow(Guid boardId, Guid? typeId = null, CancellationToken ct = default);
+    Task<ApiResult<WorkflowResponse>> ResetTypeWorkflow(Guid boardId, Guid typeId, CancellationToken ct = default);
     Task<ApiResult<WorkflowResponse>> SetWorkflow(Guid boardId, SetWorkflowRequest request, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<TaskTransitionResponse>>> GetTransitions(Guid taskId, CancellationToken ct = default);
 

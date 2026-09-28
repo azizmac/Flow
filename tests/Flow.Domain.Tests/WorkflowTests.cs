@@ -136,4 +136,35 @@ public class WorkflowTests
         board.SetStatusLayout([]);
         Assert.All(statuses, s => Assert.Null(s.GraphX));
     }
+
+    /// <summary>Workflow по типу задачи (этап 3E): свой у типа замещает проектный только для этого типа.</summary>
+    [Fact]
+    public void Task_Type_Own_Workflow_Overrides_Project_Only_For_That_Type()
+    {
+        var board = Board.Create("Проект", "PRJ");
+        var statuses = board.Statuses.OrderBy(s => s.SortOrder).ToList();
+        var (todo, doing, done) = (statuses[0].Id, statuses[1].Id, statuses[3].Id);
+        var bug = board.TaskTypes.Single(t => t.Kind == TaskTypeKind.Bug);
+        var task = board.TaskTypes.Single(t => t.Kind == TaskTypeKind.Task);
+        var ctx = new TransitionContext(ProjectRole.Admin, true, true, true);
+
+        board.SetWorkflow(WorkflowMode.Restricted, [new(todo, doing), new(doing, done), new(null, todo), new(statuses[2].Id, done)], bug.Id);
+        Assert.True(board.HasOwnWorkflow(bug.Id));
+        Assert.Equal(WorkflowMode.Free, board.WorkflowMode);
+        Assert.False(board.CheckTransition(todo, done, ctx, bug.Id).Allowed);
+        Assert.Contains("типа «Ошибка»", board.CheckTransition(todo, done, ctx, bug.Id).Reasons.Single());
+        Assert.True(board.CheckTransition(todo, done, ctx, task.Id).Allowed);
+        Assert.Throws<InvalidOperationException>(() => board.CreateTask("Баг", statusId: doing, typeId: bug.Id));
+        board.CreateTask("Задача", statusId: doing, typeId: task.Id);
+
+        // Проектный workflow и workflow типа живут рядом: замена одного не трогает другой.
+        board.SetWorkflow(WorkflowMode.Restricted, [new(todo, done), new(doing, done), new(statuses[2].Id, done)]);
+        Assert.Equal(4, board.TransitionsFor(bug.Id).Count);
+        Assert.Equal(3, board.TransitionsFor(task.Id).Count);
+
+        board.ResetTypeWorkflow(bug.Id);
+        Assert.False(board.HasOwnWorkflow(bug.Id));
+        Assert.True(board.CheckTransition(todo, done, ctx, bug.Id).Allowed);
+        Assert.Equal(3, board.Transitions.Count);
+    }
 }
