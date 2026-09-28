@@ -13,8 +13,9 @@ namespace Flow.Application.Features.Boards.Workflow;
 
 public sealed record WorkflowGetQuery(Guid ActorId, Guid BoardId) : IRequest<WorkflowResponse?>;
 
-public sealed record WorkflowSetCommand(Guid ActorId, Guid BoardId, WorkflowMode Mode, IReadOnlyList<TransitionRequest> Transitions)
-    : IRequest<WorkflowResponse?>;
+/// <summary>Layout — раскладка графа (этап 3D): null — не менять, пустой — автораскладка.</summary>
+public sealed record WorkflowSetCommand(Guid ActorId, Guid BoardId, WorkflowMode Mode, IReadOnlyList<TransitionRequest> Transitions,
+    IReadOnlyList<StatusPosition>? Layout = null) : IRequest<WorkflowResponse?>;
 
 /// <summary>Куда можно перевести задачу; null — задачи нет или она скрыта (404).</summary>
 public sealed record TaskTransitionsQuery(Guid ActorId, Guid TaskId) : IRequest<IReadOnlyList<TaskTransitionResponse>?>;
@@ -53,6 +54,8 @@ internal sealed class WorkflowHandlers(
             throw new ArgumentException($"Unknown workflow mode {request.Mode}.", nameof(request.Mode));
 
         board.SetWorkflow((Domain.Entities.WorkflowMode)(int)request.Mode, request.Transitions.Select(t => t.ToSpec()).ToList());
+        if (request.Layout is { } layout)
+            board.SetStatusLayout(layout.Select(p => (p.StatusId, p.X, p.Y)).ToList());
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return board.ToWorkflowResponse();
     }

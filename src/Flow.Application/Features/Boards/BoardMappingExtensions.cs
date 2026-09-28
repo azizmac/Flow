@@ -67,7 +67,9 @@ public static class BoardMappingExtensions
             .Select(t => new TransitionResponse(t.Id, t.FromStatusId, t.ToStatusId, t.Name,
                 new TransitionConditionsDto(t.MinRole?.ToResponseRole(), t.RequireAssignee, t.RequireChildrenDone, t.RequireChecklistDone, t.RequireFields.ToList())))
             .ToList(),
-        board.DeadEnds().Select(s => s.Id).ToList());
+        board.DeadEnds().Select(s => s.Id).ToList(),
+        board.Statuses.Where(s => s.GraphX is not null && s.GraphY is not null)
+            .Select(s => new StatusPosition(s.Id, s.GraphX!.Value, s.GraphY!.Value)).ToList());
 
     public static TransitionSpec ToSpec(this TransitionRequest request) => new(
         request.FromStatusId,

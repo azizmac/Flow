@@ -120,6 +120,19 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
+    /// <summary>Граф workflow: перетаскивание узлов и протягивание переходов (flow.graphAttach).</summary>
+    public async Task<bool> GraphAttachAsync<T>(string rootId, DotNetObjectReference<T> dotNetRef) where T : class
+    {
+        try
+        {
+            return await js.InvokeAsync<bool>("flow.graphAttach", rootId, dotNetRef);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     public async Task DragDetachAsync(string rootId)
     {
         try

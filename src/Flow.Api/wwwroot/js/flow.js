@@ -92,6 +92,29 @@ window.flow = (function () {
         return true;
     }
 
+    // Дуга перехода графа workflow — та же формула, что WorkflowPage.EdgePath: от края узла к краю, изгиб по нормали.
+    function graphEdgePath(ax, ay, bx, by, nw, nh) {
+        const dx = bx - ax, dy = by - ay;
+        const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+        const ux = dx / len, uy = dy / len;
+        const trim = function (extra) {
+            return Math.min(ux === 0 ? Infinity : nw / 2 / Math.abs(ux), uy === 0 ? Infinity : nh / 2 / Math.abs(uy)) + extra;
+        };
+        const lift = 26 + len * 0.22;
+        const r = function (v) { return Math.round(v * 10) / 10; };
+        return 'M ' + r(ax + ux * trim(0)) + ' ' + r(ay + uy * trim(0))
+            + ' Q ' + r((ax + bx) / 2 + uy * lift) + ' ' + r((ay + by) / 2 - ux * lift)
+            + ' ' + r(bx - ux * trim(6)) + ' ' + r(by - uy * trim(6));
+    }
+
+    // Точка экрана → координаты холста SVG (viewBox может быть сжат под ширину панели).
+    function svgPoint(svg, clientX, clientY) {
+        const m = svg.getScreenCTM();
+        if (!m) return { x: clientX, y: clientY };
+        const p = new DOMPoint(clientX, clientY).matrixTransform(m.inverse());
+        return { x: p.x, y: p.y };
+    }
+
     function detachPointerDrag(rootId) {
         const off = pointerDrags.get(rootId);
         if (!off) return;
@@ -430,6 +453,69 @@ window.flow = (function () {
                     const c = cell(root);
                     const cols = Math.round(dx / c.w), rows = Math.round(dy / c.h);
                     if (cols !== 0 || rows !== 0) ref.invokeMethodAsync('OnWidgetDragged', s.id, s.mode, cols, rows);
+                });
+        },
+
+        // Граф workflow (docs/TZ_workflow_config.md §2, этап 3D): узел ([data-node]) тянется целиком, стрелки его
+        // переходов перерисовываются следом; от кружка [data-connect] тянется линия к другому узлу. .NET получает
+        // только итог: OnNodeMoved(id, x, y) в координатах холста или OnConnect(from, to).
+        graphAttach: function (rootId, ref) {
+            const size = function (svg) { return { w: Number(svg.dataset.nw) || 128, h: Number(svg.dataset.nh) || 34 }; };
+            return attachPointerDrag(rootId,
+                function (e, root) {
+                    const svg = root.querySelector('svg');
+                    if (!svg) return null;
+                    const connect = e.target.closest('[data-connect]');
+                    if (connect && root.contains(connect)) {
+                        const node = connect.closest('[data-node]');
+                        return { el: node, svg: svg, mode: 'connect', id: connect.dataset.connect,
+                            x: Number(node.dataset.x), y: Number(node.dataset.y), start: svgPoint(svg, e.clientX, e.clientY) };
+                    }
+                    const node = e.target.closest('[data-node]');
+                    if (!node || !root.contains(node)) return null;
+                    const edges = Array.from(svg.querySelectorAll('path[data-from="' + node.dataset.node + '"], path[data-to="' + node.dataset.node + '"]'))
+                        .map(function (p) { return { el: p, d: p.getAttribute('d') }; });
+                    return { el: node, svg: svg, mode: 'move', id: node.dataset.node, x: Number(node.dataset.x), y: Number(node.dataset.y),
+                        start: svgPoint(svg, e.clientX, e.clientY), edges: edges };
+                },
+                function (s, dx, dy, e) {
+                    const p = svgPoint(s.svg, e.clientX, e.clientY);
+                    const mx = p.x - s.start.x, my = p.y - s.start.y;
+                    if (s.mode === 'connect') {
+                        if (!s.line) {
+                            s.line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            s.line.setAttribute('class', 'wf-temp');
+                            s.svg.appendChild(s.line);
+                        }
+                        s.line.setAttribute('x1', s.x);
+                        s.line.setAttribute('y1', s.y);
+                        s.line.setAttribute('x2', p.x);
+                        s.line.setAttribute('y2', p.y);
+                        return;
+                    }
+                    s.el.style.transform = 'translate(' + mx + 'px, ' + my + 'px)';
+                    const nx = s.x + mx, ny = s.y + my, sz = size(s.svg);
+                    s.edges.forEach(function (edge) {
+                        const other = edge.el.dataset.from === s.id ? edge.el.dataset.to : edge.el.dataset.from;
+                        const o = s.svg.querySelector('[data-node="' + other + '"]');
+                        if (!o) return;
+                        const ox = Number(o.dataset.x), oy = Number(o.dataset.y);
+                        edge.el.setAttribute('d', edge.el.dataset.from === s.id
+                            ? graphEdgePath(nx, ny, ox, oy, sz.w, sz.h)
+                            : graphEdgePath(ox, oy, nx, ny, sz.w, sz.h));
+                    });
+                },
+                function (s, dx, dy, e) {
+                    if (s.line) s.line.remove();
+                    if (s.edges) s.edges.forEach(function (edge) { edge.el.setAttribute('d', edge.d); });
+                    const p = svgPoint(s.svg, e.clientX, e.clientY);
+                    if (s.mode === 'connect') {
+                        const hit = document.elementFromPoint(e.clientX, e.clientY);
+                        const target = hit && hit.closest('[data-node]');
+                        if (target && target.dataset.node !== s.id) ref.invokeMethodAsync('OnConnect', s.id, target.dataset.node);
+                        return;
+                    }
+                    ref.invokeMethodAsync('OnNodeMoved', s.id, s.x + p.x - s.start.x, s.y + p.y - s.start.y);
                 });
         },
 

@@ -124,4 +124,22 @@ public class WorkflowFeatureTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => Set(mediator, board.Id, new TransitionRequest(todo, doing)));
     }
+
+    /// <summary>Раскладка графа уходит вместе с workflow (этап 3D): null — не трогать, пустой список — автораскладка.</summary>
+    [Fact]
+    public async Task Layout_Is_Saved_With_Workflow()
+    {
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
+        var (board, todo, doing, _, done) = await ArrangeAsync(mediator);
+
+        var saved = (await mediator.Send(new WorkflowSetCommand(Owner, board.Id, SharedMode.Free, [new(todo, doing)],
+            [new StatusPosition(todo, 90, 60), new StatusPosition(done, 400, 220)]), CancellationToken.None))!;
+        Assert.Equal([(todo, 90d, 60d), (done, 400d, 220d)], saved.Layout!.Select(p => (p.StatusId, p.X, p.Y)).OrderBy(p => p.Item2));
+
+        var kept = (await mediator.Send(new WorkflowSetCommand(Owner, board.Id, SharedMode.Free, [new(todo, done)]), CancellationToken.None))!;
+        Assert.Equal(2, kept.Layout!.Count);
+
+        var reset = (await mediator.Send(new WorkflowSetCommand(Owner, board.Id, SharedMode.Free, [new(todo, done)], []), CancellationToken.None))!;
+        Assert.Empty(reset.Layout!);
+    }
 }

@@ -22,12 +22,19 @@ public sealed record TransitionResponse(Guid Id, Guid? FromStatusId, Guid ToStat
 /// Workflow проекта. DeadEnds — нефинальные статусы без исходящих переходов: в Restricted их не бывает
 /// (сохранение с тупиками отклоняется), в Free — подсказка, что поправить перед включением.
 /// </summary>
-public sealed record WorkflowResponse(Guid BoardId, WorkflowMode Mode, IReadOnlyList<TransitionResponse> Transitions, IReadOnlyList<Guid> DeadEnds);
+public sealed record WorkflowResponse(Guid BoardId, WorkflowMode Mode, IReadOnlyList<TransitionResponse> Transitions, IReadOnlyList<Guid> DeadEnds,
+    IReadOnlyList<StatusPosition>? Layout = null);
+
+/// <summary>Место узла статуса на графе workflow (этап 3D). Статуса нет в списке — автораскладка.</summary>
+public sealed record StatusPosition(Guid StatusId, double X, double Y);
 
 public sealed record TransitionRequest(Guid? FromStatusId, Guid ToStatusId, string? Name = null, TransitionConditionsDto? Conditions = null);
 
-/// <summary>Workflow заменяется целиком: режим и все переходы.</summary>
-public sealed record SetWorkflowRequest(WorkflowMode Mode, IReadOnlyList<TransitionRequest> Transitions);
+/// <summary>
+/// Workflow заменяется целиком: режим и все переходы. Layout — раскладка графа: null — не менять, пустой список —
+/// вернуть автораскладку.
+/// </summary>
+public sealed record SetWorkflowRequest(WorkflowMode Mode, IReadOnlyList<TransitionRequest> Transitions, IReadOnlyList<StatusPosition>? Layout = null);
 
 /// <summary>Куда можно перевести задачу: по каждому статусу проекта (кроме текущего) — можно ли и почему нет.</summary>
 public sealed record TaskTransitionResponse(Guid StatusId, bool Allowed, IReadOnlyList<string> Reasons);

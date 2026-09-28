@@ -202,7 +202,7 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
     {
         try
         {
-            var workflow = await mediator.Send(new WorkflowSetCommand(actor.Require(), id, request.Mode, request.Transitions), cancellationToken);
+            var workflow = await mediator.Send(new WorkflowSetCommand(actor.Require(), id, request.Mode, request.Transitions, request.Layout), cancellationToken);
             return workflow is null ? NotFound() : Ok(workflow);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)

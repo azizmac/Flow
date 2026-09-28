@@ -2322,6 +2322,18 @@ a.task-row { color: inherit; text-decoration: none; }
 .wf-warn { margin-bottom: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(255, 196, 0, 0.08); color: var(--accent); font: var(--fw-medium) 12.5px var(--font-text); }
 .wf-warn.error { background: rgba(255, 90, 70, 0.1); color: var(--danger); }
 .wf-matrix-wrap, .wf-conditions, .wf-graph { flex: none; }
+.wf-graph-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.wf-graph-head .icon-lnk { margin-left: auto; }
+.wf-graph-scroll { overflow: auto; max-height: 560px; }
+.wf-graph svg { display: block; }
+.wf-node.editable { cursor: grab; touch-action: none; }
+.wf-node.dragging { cursor: grabbing; opacity: 0.9; }
+.wf-connect { fill: var(--surface, #1B4A3B); stroke: var(--accent); stroke-width: 1.5; cursor: crosshair; opacity: 0; transition: opacity 120ms var(--ease-out); }
+.wf-node:hover .wf-connect, .wf-node:focus-within .wf-connect { opacity: 1; }
+.wf-temp { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; pointer-events: none; }
+.wf-edge { cursor: pointer; }
+.wf-edge-hit { fill: none; stroke: transparent; stroke-width: 12; }
+@media (hover: none) { .wf-connect { opacity: 1; } }
 .wf-matrix-wrap { overflow-x: auto; padding: 8px; margin-bottom: 12px; }
 .wf-matrix { border-collapse: separate; border-spacing: 0; }
 .wf-matrix th, .wf-matrix td { padding: 6px 10px; text-align: center; white-space: nowrap; }

@@ -13,7 +13,7 @@ internal sealed partial class InProcessFlowApi
 
     public Task<ApiResult<WorkflowResponse>> SetWorkflow(Guid boardId, SetWorkflowRequest request, CancellationToken ct = default) =>
         Scoped(async mediator =>
-            await mediator.Send(new WorkflowSetCommand(await ActorAsync(), boardId, request.Mode, request.Transitions), ct) is { } workflow
+            await mediator.Send(new WorkflowSetCommand(await ActorAsync(), boardId, request.Mode, request.Transitions, request.Layout), ct) is { } workflow
                 ? Ok(workflow)
                 : NotFound<WorkflowResponse>());
 

@@ -116,4 +116,24 @@ public class WorkflowTests
 
         Assert.Equal([(doing, done)], board.Transitions.Select(t => (t.FromStatusId!.Value, t.ToStatusId)));
     }
+
+    /// <summary>Раскладка графа (этап 3D): свои статусы, 0…5000, непереданный статус и пустой список — автораскладка.</summary>
+    [Fact]
+    public void Status_Layout_Is_Set_Whole_And_Validated()
+    {
+        var board = Board.Create("Проект", "PRJ");
+        var statuses = board.Statuses.OrderBy(s => s.SortOrder).ToList();
+
+        board.SetStatusLayout([(statuses[0].Id, 100.04, 80), (statuses[1].Id, 300, 200)]);
+        Assert.Equal(((double?)100.0, (double?)80), (statuses[0].GraphX, statuses[0].GraphY));
+        Assert.Null(statuses[2].GraphX);
+
+        Assert.Throws<InvalidOperationException>(() => board.SetStatusLayout([(Guid.NewGuid(), 1, 1)]));
+        Assert.Throws<ArgumentException>(() => board.SetStatusLayout([(statuses[0].Id, -1, 1)]));
+        Assert.Throws<ArgumentException>(() => board.SetStatusLayout([(statuses[0].Id, 1, 5001)]));
+        Assert.Equal((double?)300, statuses[1].GraphX);
+
+        board.SetStatusLayout([]);
+        Assert.All(statuses, s => Assert.Null(s.GraphX));
+    }
 }

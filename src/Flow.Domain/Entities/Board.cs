@@ -560,6 +560,31 @@ public sealed partial class Board
     /// у каждого нефинального статуса должен быть исходящий переход, иначе задача в нём застрянет — отказ перечисляет
     /// тупиковые статусы.
     /// </summary>
+    /// <summary>
+    /// Раскладка графа workflow (этап 3D): позиции узлов своих статусов, 0…5000 по каждой оси. Пустой список — вернуть
+    /// автораскладку всем; статус, не попавший в непустой список, получает автораскладку (новый статус не должен
+    /// оказаться поверх других).
+    /// </summary>
+    public void SetStatusLayout(IReadOnlyCollection<(Guid StatusId, double X, double Y)> positions)
+    {
+        foreach (var (statusId, x, y) in positions)
+        {
+            if (_statuses.All(s => s.Id != statusId))
+                throw new InvalidOperationException($"Status {statusId} does not belong to board {Id}.");
+            if (double.IsNaN(x) || double.IsNaN(y) || x < 0 || y < 0 || x > Status.MaxGraphCoordinate || y > Status.MaxGraphCoordinate)
+                throw new ArgumentException($"Координаты узла — от 0 до {Status.MaxGraphCoordinate}.", nameof(positions));
+        }
+
+        var byId = positions.GroupBy(p => p.StatusId).ToDictionary(g => g.Key, g => g.Last());
+        foreach (var status in _statuses)
+        {
+            if (byId.TryGetValue(status.Id, out var p))
+                status.SetGraphPosition(Math.Round(p.X, 1), Math.Round(p.Y, 1));
+            else
+                status.SetGraphPosition(null, null);
+        }
+    }
+
     public void SetWorkflow(WorkflowMode mode, IReadOnlyList<TransitionSpec> transitions)
     {
         if (!Enum.IsDefined(mode))

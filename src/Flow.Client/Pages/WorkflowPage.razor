@@ -3,10 +3,16 @@
    (ManageConfig), остальные видят только чтение. Всё правится локально и уходит одним PUT: workflow заменяется
    целиком. Тупики (нефинальные статусы без исходящих переходов) подсвечиваются сразу; в режиме «По переходам»
    сохранить с тупиками нельзя — сервер ответит тем же.
-   Граф — SVG без JS: статусы в ряд по порядку, переходы вперёд дугой сверху, назад — снизу, «из любого» — значком
-   у статуса. Отклонение от ТЗ: раскладку считает клиент, а не сервер — она зависит только от порядка статусов. *@
+   Граф (этап 3D — редактируемый): узлы-статусы перетаскиваются, переход тянется от кружка справа у узла к другому узлу,
+   клик по стрелке выбирает переход в матрице (там же условия и удаление). Движение считает flow.graphAttach в браузере,
+   сюда приходит только итог; раскладка сохраняется вместе с workflow (Status.GraphX/GraphY), «Авто-раскладка» —
+   статусы в ряд по порядку. Отклонение от ТЗ: вместо Drawflow/xyflow — свой SVG и pointer-события в flow.js: граф из
+   десятка узлов не стоит второго бандла и стадии сборки. Стрелки — дуги по нормали к отрезку, поэтому встречные
+   переходы A→B и B→A расходятся. «Из любого» — значком у статуса. *@
 @page "/boards/{Id:guid}/workflow"
+@implements IAsyncDisposable
 @inject IFlowApi Api
+@inject BrowserInterop Browser
 @inject ToastService Toasts
 @inject ProjectAccessState Access
 @inject NavigationManager Nav
@@ -177,39 +183,57 @@
             </div>
         }
 
-        <div class="panel wf-graph">
-            <div class="meta-k">Граф</div>
-            <svg viewBox="0 0 @GraphWidth @GraphHeight" width="@GraphWidth" height="@GraphHeight" style="max-width:100%;height:auto" role="img" aria-label="Граф переходов">
-                <defs>
-                    <marker id="wf-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                        <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.55)" />
-                    </marker>
-                </defs>
-                @foreach (var t in _transitions.Where(t => t.FromStatusId is not null))
+        <div class="panel wf-graph" id="@_graphId">
+            <div class="wf-graph-head">
+                <div class="meta-k">Граф</div>
+                @if (CanEdit)
                 {
-                    var (x1, x2) = (NodeX(t.FromStatusId!.Value), NodeX(t.ToStatusId));
-                    var forward = x2 > x1;
-                    var lift = 26 + Math.Abs(x2 - x1) * 0.22;
-                    var y = forward ? NodeY - NodeH / 2 : NodeY + NodeH / 2;
-                    var cy = forward ? y - lift : y + lift;
-                    <path d="@FormattableString.Invariant($"M {x1} {y} Q {(x1 + x2) / 2} {cy} {x2 + (forward ? -6 : 6)} {y}")"
-                          fill="none" stroke="@(HasConditions(t) ? "var(--accent)" : "rgba(255,255,255,0.45)")" stroke-width="1.5" marker-end="url(#wf-arrow)" />
+                    <span class="hint">Перетаскивайте статусы; переход — от кружка у статуса к другому статусу; клик по стрелке — выбрать.</span>
+                    <button type="button" class="icon-lnk" @onclick="AutoLayout" disabled="@(_positions.Count == 0)">Авто-раскладка</button>
                 }
-                @foreach (var s in Statuses)
-                {
-                    var x = NodeX(s.Id);
-                    var global = _transitions.Any(t => t.FromStatusId is null && t.ToStatusId == s.Id);
-                    <g>
-                        <rect x="@Fmt(x - NodeW / 2)" y="@Fmt(NodeY - NodeH / 2)" width="@NodeW" height="@NodeH" rx="10"
-                              fill="rgba(0,0,0,0.25)" stroke="@(DeadEnds.Any(d => d.Id == s.Id) ? "var(--danger)" : StatusColors.For(s))" stroke-width="1.5" />
-                        @SvgText(x, NodeY + 4, s.Name, "#fff", "12", bold: true)
-                        @if (global)
-                        {
-                            @SvgText(x, NodeY + NodeH / 2 + 16, "★ из любого", "var(--accent)", "10.5")
-                        }
-                    </g>
-                }
-            </svg>
+            </div>
+            <div class="wf-graph-scroll">
+                <svg viewBox="0 0 @Fmt(GraphWidth) @Fmt(GraphHeight)" width="@Fmt(GraphWidth)" height="@Fmt(GraphHeight)" role="img" aria-label="Граф переходов"
+                     data-nw="@Fmt(NodeW)" data-nh="@Fmt(NodeH)">
+                    <defs>
+                        <marker id="wf-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                            <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.55)" />
+                        </marker>
+                    </defs>
+                    @foreach (var t in _transitions.Where(t => t.FromStatusId is not null))
+                    {
+                        var from = Pos(t.FromStatusId!.Value);
+                        var to = Pos(t.ToStatusId);
+                        var d = EdgePath(from, to);
+                        var selected = _selected is { } sel && sel.From == t.FromStatusId && sel.To == t.ToStatusId;
+                        var edgeCell = ((Guid?)t.FromStatusId, t.ToStatusId);
+                        <g class="wf-edge @(selected ? "sel" : "")" @onclick="() => _selected = edgeCell">
+                            <path d="@d" class="wf-edge-hit" data-from="@t.FromStatusId" data-to="@t.ToStatusId" />
+                            <path d="@d" fill="none" stroke="@(selected ? "#fff" : HasConditions(t) ? "var(--accent)" : "rgba(255,255,255,0.45)")"
+                                  stroke-width="@(selected ? "2.5" : "1.5")" marker-end="url(#wf-arrow)" data-from="@t.FromStatusId" data-to="@t.ToStatusId" />
+                            <title>@StatusName(t.FromStatusId) → @StatusName(t.ToStatusId)</title>
+                        </g>
+                    }
+                    @foreach (var s in Statuses)
+                    {
+                        var (x, y) = Pos(s.Id);
+                        var global = _transitions.Any(t => t.FromStatusId is null && t.ToStatusId == s.Id);
+                        <g class="wf-node @(CanEdit ? "editable" : "")" data-node="@(CanEdit ? s.Id.ToString() : null)" data-x="@Fmt(x)" data-y="@Fmt(y)">
+                            <rect x="@Fmt(x - NodeW / 2)" y="@Fmt(y - NodeH / 2)" width="@Fmt(NodeW)" height="@Fmt(NodeH)" rx="10"
+                                  fill="#1f3d33" stroke="@(DeadEnds.Any(d => d.Id == s.Id) ? "var(--danger)" : StatusColors.For(s))" stroke-width="1.5" />
+                            @SvgText(x, y + 4, s.Name, "#fff", "12", bold: true)
+                            @if (global)
+                            {
+                                @SvgText(x, y + NodeH / 2 + 16, "★ из любого", "var(--accent)", "10.5")
+                            }
+                            @if (CanEdit)
+                            {
+                                <circle class="wf-connect" data-connect="@s.Id" cx="@Fmt(x + NodeW / 2)" cy="@Fmt(y)" r="6"><title>Потяните к статусу, чтобы добавить переход</title></circle>
+                            }
+                        </g>
+                    }
+                </svg>
+            </div>
         </div>
     }
 </div>
@@ -244,13 +268,87 @@
 
     private bool SaveBlocked => _mode == WorkflowMode.Restricted && DeadEnds.Count > 0;
 
-    private double GraphWidth => Math.Max(Statuses.Count, 1) * Gap + 40;
-    private double GraphHeight => NodeY * 2 + 20;
+    /// <summary>Сохранённые или перетащенные позиции узлов; пусто — автораскладка всех.</summary>
+    private Dictionary<Guid, (double X, double Y)> _positions = [];
+    private bool _layoutChanged;
+    private readonly string _graphId = $"wf-{Guid.NewGuid():N}";
+    private DotNetObjectReference<WorkflowPage>? _ref;
+    private bool _attached;
 
-    private double NodeX(Guid statusId)
+    private double GraphWidth => Math.Max(Math.Max(Statuses.Count, 1) * Gap + 40, Statuses.Select(s => Pos(s.Id).X).DefaultIfEmpty(0).Max() + NodeW / 2 + 40);
+    private double GraphHeight => Math.Max(NodeY * 2 + 20, Statuses.Select(s => Pos(s.Id).Y).DefaultIfEmpty(0).Max() + NodeH / 2 + 80);
+
+    /// <summary>Автораскладка: статусы в ряд по порядку.</summary>
+    private (double X, double Y) AutoPos(Guid statusId)
     {
         var index = Statuses.ToList().FindIndex(s => s.Id == statusId);
-        return 20 + Gap / 2 + Math.Max(index, 0) * Gap;
+        return (20 + Gap / 2 + Math.Max(index, 0) * Gap, NodeY);
+    }
+
+    private (double X, double Y) Pos(Guid statusId) => _positions.TryGetValue(statusId, out var p) ? p : AutoPos(statusId);
+
+    /// <summary>
+    /// Дуга перехода: от края узла к краю узла, изгиб по нормали к отрезку (влево от направления) — встречные переходы
+    /// расходятся. Та же формула — в flow.js (graphEdgePath), чтобы стрелки следовали за узлом во время перетаскивания.
+    /// </summary>
+    private static string EdgePath((double X, double Y) a, (double X, double Y) b)
+    {
+        var (dx, dy) = (b.X - a.X, b.Y - a.Y);
+        var len = Math.Max(1, Math.Sqrt(dx * dx + dy * dy));
+        var (ux, uy) = (dx / len, dy / len);
+        double Trim(double extra) => Math.Min(ux == 0 ? double.MaxValue : NodeW / 2 / Math.Abs(ux), uy == 0 ? double.MaxValue : NodeH / 2 / Math.Abs(uy)) + extra;
+        var (sx, sy) = (a.X + ux * Trim(0), a.Y + uy * Trim(0));
+        var (ex, ey) = (b.X - ux * Trim(6), b.Y - uy * Trim(6));
+        var lift = 26 + len * 0.22;
+        var (cx, cy) = ((a.X + b.X) / 2 + uy * lift, (a.Y + b.Y) / 2 - ux * lift);
+        return FormattableString.Invariant($"M {sx:0.#} {sy:0.#} Q {cx:0.#} {cy:0.#} {ex:0.#} {ey:0.#}");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_attached || !CanEdit || _workflow is null)
+            return;
+        _ref ??= DotNetObjectReference.Create(this);
+        _attached = await Browser.GraphAttachAsync(_graphId, _ref);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Browser.DragDetachAsync(_graphId);
+        _ref?.Dispose();
+    }
+
+    /// <summary>Узел отпущен: позиция в координатах холста. Остальные узлы фиксируются там, где их видно сейчас.</summary>
+    [JSInvokable]
+    public void OnNodeMoved(string statusId, double x, double y)
+    {
+        if (!Guid.TryParse(statusId, out var id) || Statuses.All(s => s.Id != id))
+            return;
+        foreach (var s in Statuses)
+            _positions.TryAdd(s.Id, AutoPos(s.Id));
+        _positions[id] = (Math.Clamp(x, NodeW / 2, 4900), Math.Clamp(y, NodeH / 2, 4900));
+        _layoutChanged = true;
+        _dirty = true;
+        StateHasChanged();
+    }
+
+    /// <summary>Связь протянута от узла к узлу: такой переход добавляется (если есть — выбирается).</summary>
+    [JSInvokable]
+    public void OnConnect(string fromId, string toId)
+    {
+        if (!Guid.TryParse(fromId, out var from) || !Guid.TryParse(toId, out var to) || from == to)
+            return;
+        if (Find(from, to) is null)
+            Toggle(from, to);
+        _selected = (from, to);
+        StateHasChanged();
+    }
+
+    private void AutoLayout()
+    {
+        _positions.Clear();
+        _layoutChanged = true;
+        _dirty = true;
     }
 
     /// <summary>SVG-элемент text: в разметке Razor тег &lt;text&gt; зарезервирован, поэтому собираем его строкой (имя экранируем).</summary>
@@ -281,6 +379,8 @@
         _transitions = workflow.Transitions
             .Select(t => new TransitionRequest(t.FromStatusId, t.ToStatusId, t.Name, t.Conditions))
             .ToList();
+        _positions = (workflow.Layout ?? []).ToDictionary(p => p.StatusId, p => (p.X, p.Y));
+        _layoutChanged = false;
         _dirty = false;
     }
 
@@ -348,7 +448,8 @@
     private async Task Save()
     {
         _busy = true;
-        var result = await Api.SetWorkflow(Id, new SetWorkflowRequest(_mode, _transitions));
+        var layout = _layoutChanged ? _positions.Select(p => new StatusPosition(p.Key, p.Value.X, p.Value.Y)).ToList() : null;
+        var result = await Api.SetWorkflow(Id, new SetWorkflowRequest(_mode, _transitions, layout));
         _busy = false;
         if (!result.Ok)
         {

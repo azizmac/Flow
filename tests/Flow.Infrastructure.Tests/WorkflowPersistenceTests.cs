@@ -73,4 +73,16 @@ public class WorkflowPersistenceTests(PostgresFixture db)
         }));
         Assert.Equal(Npgsql.PostgresErrorCodes.UniqueViolation, error.SqlState);
     }
+
+    /// <summary>Координаты узлов графа (этап 3D) — колонки Statuses.GraphX/GraphY.</summary>
+    [Fact]
+    public async Task Status_Layout_Is_Persisted()
+    {
+        var board = (await db.SendAsync(new BoardCreateCommand(Owner, "Граф", "WFL"))).Response!;
+        var todo = board.Statuses.Single(s => s.Name == "Не начата").Id;
+        await db.SendAsync(new WorkflowSetCommand(Owner, board.Id, SharedMode.Free, [], [new StatusPosition(todo, 123.4, 56.7)]));
+
+        var read = (await db.SendAsync(new WorkflowGetQuery(Owner, board.Id)))!;
+        Assert.Equal((todo, 123.4, 56.7), (read.Layout!.Single().StatusId, read.Layout!.Single().X, read.Layout!.Single().Y));
+    }
 }

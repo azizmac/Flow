@@ -31,6 +31,22 @@ public sealed class Status
 
     public const int MaxWipLimit = 999;
 
+    /// <summary>
+    /// Место узла на графе workflow (docs/TZ_workflow_config.md §2, этап 3D) в координатах холста; null — автораскладка
+    /// по порядку статусов. Ставится только целиком для всех статусов (<see cref="Board.SetStatusLayout"/>).
+    /// </summary>
+    public double? GraphX { get; private set; }
+
+    public double? GraphY { get; private set; }
+
+    public const double MaxGraphCoordinate = 5000;
+
+    internal void SetGraphPosition(double? x, double? y)
+    {
+        GraphX = x;
+        GraphY = y;
+    }
+
     private Status()
     {
         // EF Core
