@@ -2893,6 +2893,11 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 
 /* Наборы прав (этап 4E) */
 .ps-hint { margin-bottom: 12px; max-width: 760px; }
+/* Форма нового набора — как «Новая группа»: поле, основа, кнопка по содержимому. */
+.ps-new { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 240px) max-content; justify-content: start; gap: 16px; align-items: end; }
+/* Таблица лежит в карточке: подложка — карточка, у MudSimpleTable своего фона нет, липкая колонка «Право» — цвета карточки. */
+.ps-card .ps-matrix.mud-simple-table { background: transparent; }
+.ps-card .ps-matrix th:first-child, .ps-card .ps-matrix td.ps-perm { background: var(--surface); }
 .ps-wrap { overflow-x: auto; }
 .ps-matrix th, .ps-matrix td { white-space: nowrap; }
 .ps-matrix th:first-child, .ps-matrix td.ps-perm { position: sticky; left: 0; z-index: 1; background: var(--bg-content); white-space: normal; min-width: 220px; max-width: 280px; }

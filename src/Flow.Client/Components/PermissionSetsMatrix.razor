@@ -1,6 +1,8 @@
 @* «Настройки → Наборы прав» (docs/TZ_project_access.md §7, этап 4E): матрица «право × набор». Встроенные наборы — роли
    проекта, только для чтения; свой набор — клон с базовой ролью (по ней «не выше своей» и максимум ролей), права
-   правятся галочками и сохраняются сразу. Правит только Owner (CanEdit), остальные Admin+ видят матрицу. *@
+   правятся галочками и сохраняются сразу. Правит только Owner (CanEdit), остальные Admin+ видят матрицу.
+   Новый набор создаётся формой над таблицей — имя и основа, права берутся у встроенного набора этой роли (то же, что
+   «Клонировать» у встроенного, но без поиска нужной колонки и переименования «… (копия)»). *@
 @inject IFlowApi Api
 @inject ToastService Toasts
 
@@ -14,6 +16,27 @@ else
         Роль участника или группы в проекте можно заменить своим набором прав — в «Доступе» проекта. Права всех ролей и
         наборов человека в проекте складываются; в открытом проекте к ним добавляется роль во Flow.
     </div>
+    @* Блоки вкладки — карточки .side-card, как на вкладке «Интерфейс»: форма и таблица читаются отдельными частями. *@
+    @if (CanEdit)
+    {
+        <section class="side-card">
+            <div class="section-title">Новый набор</div>
+            <div class="ps-new">
+                <DsInput Id="ps-new" Label="Название" Placeholder="Например, «Тестировщик»" MaxLength="60" Value="@_newName"
+                         ValueChanged="v => _newName = v" OnKeyDown="OnNewKey" />
+                <DsSelect T="ProjectRole" Label="Основа — права этой роли" Value="_newBase" ValueChanged="v => _newBase = v"
+                          ToStringFunc="@(r => Permissions.ProjectRoleLabel(r))">
+                    @foreach (var role in Enum.GetValues<ProjectRole>())
+                    {
+                        <MudSelectItem T="ProjectRole" Value="role">@Permissions.ProjectRoleLabel(role)</MudSelectItem>
+                    }
+                </DsSelect>
+                <DsButton Variant="primary" Size="sm" Icon="plus" Busy="_busy" Disabled="@(_busy || _newName.Trim().Length == 0)" OnClick="Create">Создать набор</DsButton>
+            </div>
+        </section>
+    }
+    <section class="side-card ps-card">
+    <div class="section-title">Права наборов</div>
     <div class="ps-wrap">
         <MudSimpleTable Dense="true" Elevation="0" Class="ps-matrix">
             <thead>
@@ -60,8 +83,8 @@ else
                                 }
                                 else
                                 {
-                                    <MudCheckBox T="bool" Value="on" ValueChanged="v => Toggle(set, permission, v)" Size="Size.Small" Color="Color.Primary"
-                                                 Dense="true" Disabled="_busy" aria-label="@($"{set.Name}: {Permissions.PermissionLabel(permission)}")" />
+                                    <DsCheckbox Value="on" ValueChanged="v => Toggle(set, permission, v)" Disabled="_busy"
+                                                AriaLabel="@($"{set.Name}: {Permissions.PermissionLabel(permission)}")" />
                                 }
                             </td>
                         }
@@ -70,6 +93,7 @@ else
             </tbody>
         </MudSimpleTable>
     </div>
+    </section>
 }
 
 @code {
@@ -79,6 +103,8 @@ else
     private bool _busy;
     private Guid? _renaming;
     private string _renameText = "";
+    private string _newName = "";
+    private ProjectRole _newBase = ProjectRole.Member;
 
     protected override async Task OnInitializedAsync()
     {
@@ -122,6 +148,34 @@ else
         }
 
         _sets![_sets.FindIndex(s => s.Id == before.Id)] = result.Value!;
+    }
+
+    private async Task OnNewKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Create();
+    }
+
+    /// <summary>Новый набор с правами встроенного набора выбранной основы; дальше права правятся галочками в его колонке.</summary>
+    private async Task Create()
+    {
+        var name = _newName.Trim();
+        if (name.Length == 0 || _busy)
+            return;
+
+        var basis = _sets!.FirstOrDefault(s => s.IsBuiltIn && s.BaseRole == _newBase);
+        _busy = true;
+        var result = await Api.CreatePermissionSet(new SavePermissionSetRequest(name, null, _newBase, basis?.Permissions ?? []));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось создать набор");
+            return;
+        }
+
+        _sets!.Add(result.Value!);
+        _newName = "";
+        Toasts.Ok($"Набор «{name}» создан — отметьте его права в новой колонке");
     }
 
     /// <summary>Клон — новый свой набор с теми же правами и базовой ролью; имя «… (копия N)», пока не занято.</summary>
