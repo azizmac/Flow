@@ -37,7 +37,8 @@
         <button type="button" class="tab @(Tab == "about" ? "on" : "")" role="tab" @onclick="@(() => SetTab("about"))">О системе</button>
     </div>
 
-    <div class="settings-body">
+    @* Матрица прав — таблица на все наборы: узкая колонка настроек её обрезала бы, поэтому вкладка во всю ширину. *@
+    <div class="settings-body @(Tab == "permissions" ? "wide" : "")">
         @if (Tab == "ui")
         {
             @if (Preferences.Current is not { } prefs)

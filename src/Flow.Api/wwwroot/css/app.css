@@ -1675,6 +1675,8 @@ a.sb-me:active { transform: scale(0.98); }
 /* ---------- Настройки: вкладки профиля, одна колонка карточек ---------- */
 .settings-tabs { padding-top: 8px; }
 .settings-body { display: flex; flex-direction: column; gap: 16px; padding: 24px 40px 36px; max-width: 760px; }
+/* Широкие вкладки (матрица наборов прав) — во всю ширину; пояснение над таблицей держит свою ширину (.ps-hint). */
+.settings-body.wide { max-width: none; }
 .settings-body .meta-grid { grid-template-columns: 140px minmax(0, 1fr); row-gap: 12px; }
 .settings-body .seg { align-self: flex-start; }
 .settings-body .mono { font: var(--fw-medium) 12px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2877,7 +2879,8 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 
 /* Группы (этап 4C) */
 .groups-panel { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
-.gp-new { display: grid; grid-template-columns: minmax(0, 360px) auto; gap: 12px; align-items: end; }
+/* Кнопка — по содержимому (колонка auto растягивалась на весь остаток), полю — место под подсказку крупным шрифтом поля. */
+.gp-new { display: grid; grid-template-columns: minmax(0, 460px) max-content; justify-content: start; gap: 16px; align-items: end; }
 .gp-group { padding: 12px 0; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px; }
 .gp-head { display: flex; align-items: center; gap: 12px; color: #fff; font: var(--fw-medium) 14px var(--font-text); }
 .gp-members { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
