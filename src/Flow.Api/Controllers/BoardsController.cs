@@ -262,7 +262,7 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
             return BadRequest(new { Message = $"Unknown project role {request.Role}." });
 
         return await MemberResult(() => mediator.Send(
-            new BoardMemberSetCommand(actor.Require(), id, userId, request.Role.ToDomainRole()), cancellationToken));
+            new BoardMemberSetCommand(actor.Require(), id, userId, request.Role.ToDomainRole(), request.PermissionSetId), cancellationToken));
     }
 
     /// <summary>Убрать участие: роль вернётся к роли по умолчанию. 404 — человек не участник.</summary>
@@ -278,7 +278,7 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
             return BadRequest(new { Message = $"Unknown project role {request.Role}." });
 
         return await MemberResult(() => mediator.Send(
-            new Flow.Application.Features.Groups.BoardGroupSetCommand(actor.Require(), id, groupId, request.Role.ToDomainRole()), cancellationToken));
+            new Flow.Application.Features.Groups.BoardGroupSetCommand(actor.Require(), id, groupId, request.Role.ToDomainRole(), request.PermissionSetId), cancellationToken));
     }
 
     [HttpDelete("{id:guid}/groups/{groupId:guid}")]

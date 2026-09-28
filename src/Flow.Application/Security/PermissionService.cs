@@ -111,6 +111,9 @@ internal sealed class PermissionService : IPermissionService
     public void EnsureCanManageUsers(User actor) =>
         Require(actor.Role >= UserRole.Admin, "Добавлять людей могут Admin и Owner.");
 
+    public void EnsureCanManagePermissionSets(User actor) =>
+        Require(actor.Role == UserRole.Owner, "Наборы прав правит только Owner.");
+
     public void EnsureCanManageGroups(User actor) =>
         Require(actor.Role >= UserRole.Admin, "Группы ведут Admin и Owner.");
 

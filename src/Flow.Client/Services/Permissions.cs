@@ -136,6 +136,29 @@ public static class Permissions
         _ => role.ToString()
     };
 
+    /// <summary>Подписи прав проекта — строки матрицы наборов прав (этап 4E).</summary>
+    public static string PermissionLabel(ProjectPermission permission) => permission switch
+    {
+        ProjectPermission.ViewProject => "Видеть проект и задачи",
+        ProjectPermission.CreateTask => "Создавать задачи",
+        ProjectPermission.EditOwnTask => "Править свои задачи",
+        ProjectPermission.EditAnyTask => "Править любые задачи",
+        ProjectPermission.AssignAnyone => "Назначать любого исполнителя",
+        ProjectPermission.Comment => "Комментировать",
+        ProjectPermission.Attach => "Прикреплять файлы",
+        ProjectPermission.DeleteAnyComment => "Удалять чужие комментарии",
+        ProjectPermission.DeleteAnyAttachment => "Удалять чужие файлы",
+        ProjectPermission.ManageConfig => "Настраивать проект: статусы, workflow, типы, поля, экраны",
+        ProjectPermission.ManageMembers => "Управлять участниками и доступом",
+        ProjectPermission.RenameProject => "Переименовывать проект",
+        ProjectPermission.DeleteProject => "Удалять проект",
+        ProjectPermission.ManageSprints => "Вести спринты",
+        ProjectPermission.ManageMilestones => "Вести вехи",
+        ProjectPermission.ManageScm => "Привязывать репозитории",
+        ProjectPermission.ManageTaskTemplates => "Вести шаблоны задач",
+        _ => permission.ToString()
+    };
+
     public static string ProjectRoleHint(ProjectRole role) => role switch
     {
         ProjectRole.Viewer => "Читает задачи проекта",

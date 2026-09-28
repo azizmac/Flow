@@ -128,14 +128,14 @@ internal sealed partial class InProcessFlowApi
 
     public Task<ApiResult<BoardMembersResponse>> SetBoardMember(Guid boardId, Guid userId, SetBoardMemberRequest request, CancellationToken ct = default) =>
         Scoped(async mediator => MemberResult(await mediator.Send(
-            new BoardMemberSetCommand(await ActorAsync(), boardId, userId, request.Role.ToDomainRole()), ct)));
+            new BoardMemberSetCommand(await ActorAsync(), boardId, userId, request.Role.ToDomainRole(), request.PermissionSetId), ct)));
 
     public Task<ApiResult<BoardMembersResponse>> RemoveBoardMember(Guid boardId, Guid userId, CancellationToken ct = default) =>
         Scoped(async mediator => MemberResult(await mediator.Send(new BoardMemberRemoveCommand(await ActorAsync(), boardId, userId), ct)));
 
     public Task<ApiResult<BoardMembersResponse>> SetBoardGroup(Guid boardId, Guid groupId, SetBoardMemberRequest request, CancellationToken ct = default) =>
         Scoped(async mediator => MemberResult(await mediator.Send(
-            new Flow.Application.Features.Groups.BoardGroupSetCommand(await ActorAsync(), boardId, groupId, request.Role.ToDomainRole()), ct)));
+            new Flow.Application.Features.Groups.BoardGroupSetCommand(await ActorAsync(), boardId, groupId, request.Role.ToDomainRole(), request.PermissionSetId), ct)));
 
     public Task<ApiResult<BoardMembersResponse>> RemoveBoardGroup(Guid boardId, Guid groupId, CancellationToken ct = default) =>
         Scoped(async mediator => MemberResult(await mediator.Send(

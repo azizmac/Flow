@@ -9,14 +9,12 @@ public sealed class FakeBoardMemberRepository(FakeBoardRepository boards, FakeGr
     private readonly List<BoardMember> _members = [];
     private readonly List<BoardGroup> _groups = [];
 
-    /// <summary>Роль участия: максимум из прямой и ролей групп человека в проекте (удалённые группы не считаются).</summary>
-    private ProjectRole? RoleOf(Guid boardId, Guid userId)
-    {
-        var roles = _members.Where(m => m.BoardId == boardId && m.UserId == userId).Select(m => m.Role)
-            .Concat(LiveGroups(boardId).Where(g => groups.Members.Any(m => m.GroupId == g.GroupId && m.UserId == userId)).Select(g => g.Role))
+    /// <summary>Участия человека: прямое и через группы (удалённые группы не считаются), с ролью и набором каждое.</summary>
+    private List<AccessGrant> GrantsOf(Guid boardId, Guid userId) =>
+        _members.Where(m => m.BoardId == boardId && m.UserId == userId).Select(m => new AccessGrant(m.Role, m.PermissionSetId))
+            .Concat(LiveGroups(boardId).Where(g => groups.Members.Any(m => m.GroupId == g.GroupId && m.UserId == userId))
+                .Select(g => new AccessGrant(g.Role, g.PermissionSetId)))
             .ToList();
-        return roles.Count == 0 ? null : roles.Max();
-    }
 
     private IEnumerable<BoardGroup> LiveGroups(Guid boardId) => _groups.Where(g => g.BoardId == boardId && groups.Groups.Any(x => x.Id == g.GroupId));
 
@@ -27,12 +25,12 @@ public sealed class FakeBoardMemberRepository(FakeBoardRepository boards, FakeGr
         var board = await boards.GetByIdAsync(boardId, cancellationToken);
         return board is null
             ? null
-            : new BoardAccessData(board.Id, board.Visibility, board.DefaultRole, RoleOf(board.Id, userId));
+            : new BoardAccessData(board.Id, board.Visibility, board.DefaultRole, GrantsOf(board.Id, userId));
     }
 
     public async Task<IReadOnlyList<BoardAccessData>> GetAccessDataForUserAsync(Guid userId, CancellationToken cancellationToken) =>
         (await boards.GetAllAsync(cancellationToken))
-            .Select(b => new BoardAccessData(b.Id, b.Visibility, b.DefaultRole, RoleOf(b.Id, userId)))
+            .Select(b => new BoardAccessData(b.Id, b.Visibility, b.DefaultRole, GrantsOf(b.Id, userId)))
             .ToList();
 
     public async Task<IReadOnlyList<Guid>?> GetVisibleBoardIdsAsync(Guid userId, CancellationToken cancellationToken)
@@ -42,7 +40,7 @@ public sealed class FakeBoardMemberRepository(FakeBoardRepository boards, FakeGr
             return null;
 
         return all
-            .Where(b => b.Visibility == BoardVisibility.Open || RoleOf(b.Id, userId) is not null)
+            .Where(b => b.Visibility == BoardVisibility.Open || GrantsOf(b.Id, userId).Count > 0)
             .Select(b => b.Id)
             .ToList();
     }

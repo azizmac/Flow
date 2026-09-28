@@ -18,6 +18,7 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
     public DbSet<BoardGroup> BoardGroups => Set<BoardGroup>();
+    public DbSet<PermissionSet> PermissionSets => Set<PermissionSet>();
 
     public DbSet<User> Users => Set<User>();
 

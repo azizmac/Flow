@@ -201,6 +201,12 @@ public interface IFlowApi
     Task<ApiResult<BoardMembersResponse>> SetBoardGroup(Guid boardId, Guid groupId, SetBoardMemberRequest request, CancellationToken ct = default);
     Task<ApiResult<BoardMembersResponse>> RemoveBoardGroup(Guid boardId, Guid groupId, CancellationToken ct = default);
 
+    // Наборы прав (этап 4E): читают все, правит Owner
+    Task<ApiResult<IReadOnlyList<PermissionSetResponse>>> GetPermissionSets(CancellationToken ct = default);
+    Task<ApiResult<PermissionSetResponse>> CreatePermissionSet(SavePermissionSetRequest request, CancellationToken ct = default);
+    Task<ApiResult<PermissionSetResponse>> UpdatePermissionSet(Guid setId, SavePermissionSetRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeletePermissionSet(Guid setId, CancellationToken ct = default);
+
     // Группы людей (этап 4C): читают все, меняют Admin+
     Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Users.GroupResponse>>> GetGroups(CancellationToken ct = default);
     Task<ApiResult<Flow.Shared.Contracts.Users.GroupResponse>> CreateGroup(Flow.Shared.Contracts.Users.SaveGroupRequest request, CancellationToken ct = default);

@@ -1,3 +1,4 @@
+using Flow.Application.Abstractions;
 using Flow.Domain.Entities;
 
 namespace Flow.Application.Security;
@@ -50,6 +51,35 @@ public static class ProjectRoles
             derived = ceiling;
 
         return memberRole is { } member && member > derived ? member : derived;
+    }
+
+    /// <summary>
+    /// Права с наборами (этап 4E): роль — как раньше (максимум), а права — объединение прав всех источников: роли по
+    /// умолчанию (в открытом проекте) и каждого участия — прямого и через группы; у участия со своим набором — права
+    /// набора, иначе права роли. Запретов нет, поэтому свой набор в открытом проекте не отнимает то, что человек и так
+    /// получает по роли во Flow: урезать права можно потолком проекта или приватностью.
+    /// </summary>
+    public static ProjectAccessInfo Resolve(UserRole globalRole, BoardAccessData data, IReadOnlyDictionary<Guid, PermissionSet> sets)
+    {
+        var role = Effective(globalRole, data.Visibility, data.DefaultRole, data.MemberRole);
+        if (role is null)
+            return Access(data.BoardId, null);
+        if (globalRole.ToProjectRole() == ProjectRole.Admin)
+            return Access(data.BoardId, ProjectRole.Admin);
+
+        var permissions = new HashSet<ProjectPermission> { ProjectPermission.ViewProject };
+        if (data.Visibility == BoardVisibility.Open)
+        {
+            var derived = globalRole.ToProjectRole();
+            if (data.DefaultRole is { } ceiling && ceiling < derived)
+                derived = ceiling;
+            permissions.UnionWith(PermissionsOf(derived));
+        }
+
+        foreach (var grant in data.Grants)
+            permissions.UnionWith(grant.PermissionSetId is { } id && sets.TryGetValue(id, out var set) ? set.Permissions : PermissionsOf(grant.Role));
+
+        return new ProjectAccessInfo(data.BoardId, role, permissions);
     }
 
     public static ProjectAccessInfo Access(Guid boardId, ProjectRole? role) =>

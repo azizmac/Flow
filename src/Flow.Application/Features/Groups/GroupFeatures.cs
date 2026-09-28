@@ -1,3 +1,4 @@
+using Flow.Application.Features.PermissionSets;
 using Flow.Application.Abstractions;
 using Flow.Application.Features.Boards;
 using Flow.Application.Features.Boards.Commands.BoardMemberSetCommand;
@@ -28,7 +29,7 @@ public sealed record GroupDeleteCommand(Guid ActorId, Guid GroupId) : IRequest<b
 public sealed record GroupMemberSetCommand(Guid ActorId, Guid GroupId, Guid UserId, bool Member) : IRequest<GroupResponse?>;
 
 /// <summary>Роль группы в проекте (выдать или сменить) — ManageMembers, не выше своей.</summary>
-public sealed record BoardGroupSetCommand(Guid ActorId, Guid BoardId, Guid GroupId, ProjectRole Role) : IRequest<BoardMemberResult>;
+public sealed record BoardGroupSetCommand(Guid ActorId, Guid BoardId, Guid GroupId, ProjectRole Role, Guid? PermissionSetId = null) : IRequest<BoardMemberResult>;
 
 public sealed record BoardGroupRemoveCommand(Guid ActorId, Guid BoardId, Guid GroupId) : IRequest<BoardMemberResult>;
 
@@ -37,6 +38,7 @@ internal sealed class GroupHandlers(
     IUserRepository users,
     IBoardRepository boards,
     IBoardMemberRepository members,
+    IPermissionSetRepository permissionSets,
     ActorResolver actors,
     IPermissionService permissions,
     IProjectAccess projectAccess,
@@ -122,7 +124,8 @@ internal sealed class GroupHandlers(
     public async Task<BoardMemberResult> Handle(BoardGroupSetCommand request, CancellationToken cancellationToken)
     {
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
-        permissions.EnsureCanManageMembers(await projectAccess.GetAsync(actor, request.BoardId, cancellationToken), request.Role);
+        var (role, setId) = await PermissionSetRoles.RoleOfAsync(permissionSets, request.Role, request.PermissionSetId, cancellationToken);
+        permissions.EnsureCanManageMembers(await projectAccess.GetAsync(actor, request.BoardId, cancellationToken), role);
         var board = await boards.GetByIdAsync(request.BoardId, cancellationToken);
         if (board is null)
             return BoardMemberResult.NotFound();
@@ -132,10 +135,10 @@ internal sealed class GroupHandlers(
         var link = await members.GetGroupAsync(board.Id, request.GroupId, cancellationToken);
         if (link is null)
         {
-            members.AddGroup(BoardGroup.Create(board.Id, request.GroupId, request.Role, actor.Id));
+            members.AddGroup(BoardGroup.Create(board.Id, request.GroupId, role, actor.Id, setId));
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
-        else if (link.ChangeRole(request.Role))
+        else if (link.ChangeRole(role, setId))
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }

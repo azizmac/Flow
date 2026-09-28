@@ -5,7 +5,7 @@ using MediatR;
 
 namespace Flow.Application.Features.Boards.Queries.BoardMyAccessQuery;
 
-internal sealed class BoardMyAccessQueryHandler(IBoardMemberRepository members, ActorResolver actors)
+internal sealed class BoardMyAccessQueryHandler(IBoardMemberRepository members, IPermissionSetRepository permissionSets, ActorResolver actors)
     : IRequestHandler<BoardMyAccessQuery, IReadOnlyList<ProjectAccessResponse>>
 {
     public async Task<IReadOnlyList<ProjectAccessResponse>> Handle(BoardMyAccessQuery request, CancellationToken cancellationToken)
@@ -17,8 +17,9 @@ internal sealed class BoardMyAccessQueryHandler(IBoardMemberRepository members, 
             : await members.GetAccessDataForUserAsync(actor.Id, cancellationToken);
 
         // Скрытые проекты в ответ не попадают: их права — «ничего», и сам факт существования не нужен клиенту.
+        var sets = await ProjectAccess.SetsAsync(permissionSets, data, cancellationToken);
         return data
-            .Select(d => ProjectRoles.Access(d.BoardId, ProjectRoles.Effective(actor.Role, d.Visibility, d.DefaultRole, d.MemberRole)))
+            .Select(d => ProjectRoles.Resolve(actor.Role, d, sets))
             .Where(a => a.CanView)
             .Select(a => a.ToResponse())
             .ToList();

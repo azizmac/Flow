@@ -1,3 +1,4 @@
+using Flow.Application.Features.PermissionSets;
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
@@ -9,6 +10,7 @@ internal sealed class BoardMemberSetCommandHandler(
     IBoardRepository boards,
     IBoardMemberRepository members,
     IUserRepository users,
+    IPermissionSetRepository permissionSets,
     ActorResolver actors,
     IPermissionService permissions,
     IProjectAccess projectAccess,
@@ -18,7 +20,8 @@ internal sealed class BoardMemberSetCommandHandler(
     public async Task<BoardMemberResult> Handle(BoardMemberSetCommand request, CancellationToken cancellationToken)
     {
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
-        permissions.EnsureCanManageMembers(await projectAccess.GetAsync(actor, request.BoardId, cancellationToken), request.Role);
+        var (role, setId) = await PermissionSetRoles.RoleOfAsync(permissionSets, request.Role, request.PermissionSetId, cancellationToken);
+        permissions.EnsureCanManageMembers(await projectAccess.GetAsync(actor, request.BoardId, cancellationToken), role);
 
         var board = await boards.GetByIdAsync(request.BoardId, cancellationToken);
         if (board is null)
@@ -36,13 +39,13 @@ internal sealed class BoardMemberSetCommandHandler(
             if (!user.IsActive)
                 return BoardMemberResult.Invalid($"User {user.Username} is deactivated.");
 
-            members.Add(BoardMember.Create(board.Id, user.Id, request.Role, actor.Id));
+            members.Add(BoardMember.Create(board.Id, user.Id, role, actor.Id, setId));
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
         else
         {
-            EnsureNotLastPrivateAdmin(board, await members.GetByBoardAsync(board.Id, cancellationToken), member, request.Role);
-            if (!member.ChangeRole(request.Role))
+            EnsureNotLastPrivateAdmin(board, await members.GetByBoardAsync(board.Id, cancellationToken), member, role);
+            if (!member.ChangeRole(role, setId))
                 return BoardMemberResult.Success(await members.MembersResponseAsync(board, cancellationToken));
 
             await unitOfWork.SaveChangesAsync(cancellationToken);

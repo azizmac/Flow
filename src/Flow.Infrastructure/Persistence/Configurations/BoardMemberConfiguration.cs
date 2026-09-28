@@ -30,6 +30,13 @@ public sealed class BoardMemberConfiguration : IEntityTypeConfiguration<BoardMem
             .HasForeignKey(m => m.AddedById)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Свой набор прав (этап 4E): удалённый набор возвращает участию права его роли.
+        builder.HasOne<PermissionSet>()
+            .WithMany()
+            .HasForeignKey(m => m.PermissionSetId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(m => m.PermissionSetId);
+
         // «Мои проекты и роли» (GET /boards/my-access) идут от пользователя.
         builder.HasIndex(m => m.UserId);
         builder.HasIndex(m => m.AddedById);

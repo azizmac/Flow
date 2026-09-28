@@ -3,10 +3,16 @@ using Flow.Domain.Entities;
 namespace Flow.Application.Abstractions;
 
 /// <summary>
-/// Данные для расчёта роли в проекте: потолок проекта и участие человека — MemberRole уже максимум из прямого участия
-/// и ролей его групп в проекте (этап 4C), поэтому ProjectRoles.Effective о группах не знает.
+/// Данные для расчёта роли в проекте: потолок проекта и участие человека — прямое и через группы (этап 4C), у каждого
+/// участия своя роль и, возможно, свой набор прав (этап 4E). MemberRole — максимум ролей участия.
 /// </summary>
-public sealed record BoardAccessData(Guid BoardId, BoardVisibility Visibility, ProjectRole? DefaultRole, ProjectRole? MemberRole);
+public sealed record BoardAccessData(Guid BoardId, BoardVisibility Visibility, ProjectRole? DefaultRole, IReadOnlyList<AccessGrant> Grants)
+{
+    public ProjectRole? MemberRole => Grants.Count == 0 ? null : Grants.Max(g => g.Role);
+}
+
+/// <summary>Одно участие: роль (для набора — его базовая) и набор прав; null — права самой роли.</summary>
+public sealed record AccessGrant(ProjectRole Role, Guid? PermissionSetId = null);
 
 public sealed record BoardGroupView(BoardGroup Link, string Name, int MemberCount);
 

@@ -90,6 +90,9 @@ public sealed class BoardGroup
 
     public ProjectRole Role { get; private set; }
 
+    /// <summary>Свой набор прав (этап 4E); null — права роли. Role тогда — базовая роль набора.</summary>
+    public Guid? PermissionSetId { get; private set; }
+
     public Guid AddedById { get; private set; }
 
     public DateTime AddedAt { get; private set; }
@@ -99,7 +102,7 @@ public sealed class BoardGroup
         // EF Core
     }
 
-    public static BoardGroup Create(Guid boardId, Guid groupId, ProjectRole role, Guid addedById)
+    public static BoardGroup Create(Guid boardId, Guid groupId, ProjectRole role, Guid addedById, Guid? permissionSetId = null)
     {
         if (boardId == Guid.Empty)
             throw new ArgumentException("Board id must not be empty.", nameof(boardId));
@@ -107,16 +110,20 @@ public sealed class BoardGroup
             throw new ArgumentException("Group id must not be empty.", nameof(groupId));
         if (addedById == Guid.Empty)
             throw new ArgumentException("Added-by id must not be empty.", nameof(addedById));
-        return new BoardGroup { BoardId = boardId, GroupId = groupId, Role = ValidateRole(role), AddedById = addedById, AddedAt = DateTime.UtcNow };
+        return new BoardGroup
+        {
+            BoardId = boardId, GroupId = groupId, Role = ValidateRole(role), PermissionSetId = permissionSetId, AddedById = addedById, AddedAt = DateTime.UtcNow
+        };
     }
 
-    /// <summary>true — роль изменилась; та же роль — no-op.</summary>
-    public bool ChangeRole(ProjectRole role)
+    /// <summary>true — роль или набор изменились; то же самое — no-op.</summary>
+    public bool ChangeRole(ProjectRole role, Guid? permissionSetId = null)
     {
         role = ValidateRole(role);
-        if (role == Role)
+        if (role == Role && permissionSetId == PermissionSetId)
             return false;
         Role = role;
+        PermissionSetId = permissionSetId;
         return true;
     }
 

@@ -152,6 +152,7 @@ public static class TestMediatorFactory
         services.AddSingleton<IBoardRepository>(boards);
         var groups = new FakeGroupRepository();
         services.AddSingleton<IGroupRepository>(groups);
+        services.AddSingleton<IPermissionSetRepository>(new FakePermissionSetRepository());
         services.AddSingleton<IBoardMemberRepository>(new FakeBoardMemberRepository(boards, groups));
         services.AddSingleton<ITaskItemRepository>(tasks);
         services.AddSingleton<ISprintRepository>(new FakeSprintRepository(tasks));

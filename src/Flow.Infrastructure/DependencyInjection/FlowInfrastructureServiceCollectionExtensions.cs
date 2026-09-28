@@ -67,6 +67,7 @@ public static class FlowInfrastructureServiceCollectionExtensions
             services.AddHostedService<RecurrenceWorker>();
         services.AddScoped<IBoardMemberRepository, BoardMemberRepository>();
         services.AddScoped<IGroupRepository, GroupRepository>();
+        services.AddScoped<IPermissionSetRepository, PermissionSetRepository>();
         services.AddScoped<ITaskItemRepository, TaskItemRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();

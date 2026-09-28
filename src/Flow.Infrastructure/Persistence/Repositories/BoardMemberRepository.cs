@@ -58,19 +58,29 @@ public sealed class BoardMemberRepository(FlowDbContext db) : IBoardMemberReposi
 
     public void Remove(BoardMember member) => db.BoardMembers.Remove(member);
 
-    private sealed record AccessRow(Guid BoardId, BoardVisibility Visibility, ProjectRole? DefaultRole, ProjectRole? Direct, ProjectRole? ViaGroup);
+    private sealed class AccessRow
+    {
+        public Guid BoardId { get; init; }
+        public BoardVisibility Visibility { get; init; }
+        public ProjectRole? DefaultRole { get; init; }
+        public List<AccessGrant> Direct { get; init; } = [];
+        public List<AccessGrant> ViaGroups { get; init; } = [];
+    }
 
+    /// <summary>Участия человека — прямое и через группы, с ролью и набором прав каждое (этапы 4C, 4E).</summary>
     private IQueryable<AccessRow> AccessRows(IQueryable<Board> boards, Guid userId) =>
-        boards.Select(b => new AccessRow(
-            b.Id,
-            b.Visibility,
-            b.DefaultRole,
-            db.BoardMembers.Where(m => m.BoardId == b.Id && m.UserId == userId).Select(m => (ProjectRole?)m.Role).FirstOrDefault(),
-            db.BoardGroups
+        boards.Select(b => new AccessRow
+        {
+            BoardId = b.Id,
+            Visibility = b.Visibility,
+            DefaultRole = b.DefaultRole,
+            Direct = db.BoardMembers.Where(m => m.BoardId == b.Id && m.UserId == userId)
+                .Select(m => new AccessGrant(m.Role, m.PermissionSetId)).ToList(),
+            ViaGroups = db.BoardGroups
                 .Where(g => g.BoardId == b.Id && db.GroupMembers.Any(gm => gm.GroupId == g.GroupId && gm.UserId == userId))
-                .Select(g => (ProjectRole?)g.Role)
-                .Max()));
+                .Select(g => new AccessGrant(g.Role, g.PermissionSetId)).ToList()
+        });
 
     private static BoardAccessData ToData(AccessRow row) =>
-        new(row.BoardId, row.Visibility, row.DefaultRole, row.Direct is { } d && (row.ViaGroup is null || d >= row.ViaGroup) ? d : row.ViaGroup);
+        new(row.BoardId, row.Visibility, row.DefaultRole, row.Direct.Concat(row.ViaGroups).ToList());
 }

@@ -2840,3 +2840,17 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .pa-group-add { min-width: 200px; }
 .gp-team { padding: 1px 8px; border-radius: 999px; background: rgba(109,151,115,0.2); color: var(--sage); font: var(--fw-semibold) 11px var(--font-display); }
 .gp-head .mud-checkbox { margin-left: auto; }
+
+/* Наборы прав (этап 4E) */
+.ps-hint { margin-bottom: 12px; max-width: 760px; }
+.ps-wrap { overflow-x: auto; }
+.ps-matrix th, .ps-matrix td { white-space: nowrap; }
+.ps-matrix th:first-child, .ps-matrix td.ps-perm { position: sticky; left: 0; z-index: 1; background: var(--bg-content); white-space: normal; min-width: 220px; max-width: 280px; }
+.ps-col { vertical-align: top; min-width: 140px; }
+.ps-name { display: block; color: #fff; font: var(--fw-semibold) 13px var(--font-display); cursor: default; }
+.ps-base { display: block; color: var(--text-tertiary); font: var(--fw-medium) 11px var(--font-text); }
+.ps-actions { display: flex; gap: 8px; margin-top: 4px; }
+.ps-perm { color: var(--text-primary); }
+.ps-cell { text-align: center; }
+.ps-mark { color: var(--text-tertiary); }
+.ps-mark.on { color: var(--sage); font-weight: 700; }

@@ -9,6 +9,6 @@ namespace Flow.Shared.Contracts.Boards;
 public sealed record BoardMembersResponse(Guid BoardId, ProjectRole? DefaultRole, BoardVisibility Visibility, IReadOnlyList<BoardMemberResponse> Members,
     IReadOnlyList<BoardGroupResponse>? Groups = null);
 
-public sealed record BoardGroupResponse(Guid GroupId, string Name, ProjectRole Role, int MemberCount, Guid AddedById, DateTime AddedAt);
+public sealed record BoardGroupResponse(Guid GroupId, string Name, ProjectRole Role, int MemberCount, Guid AddedById, DateTime AddedAt, Guid? PermissionSetId = null);
 
-public sealed record BoardMemberResponse(Guid UserId, ProjectRole Role, Guid AddedById, DateTime AddedAt);
+public sealed record BoardMemberResponse(Guid UserId, ProjectRole Role, Guid AddedById, DateTime AddedAt, Guid? PermissionSetId = null);

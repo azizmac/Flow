@@ -35,7 +35,9 @@ public sealed class GroupConfiguration : IEntityTypeConfiguration<Group>, IEntit
         builder.HasOne<Board>().WithMany().HasForeignKey(g => g.BoardId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Group>().WithMany().HasForeignKey(g => g.GroupId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<User>().WithMany().HasForeignKey(g => g.AddedById).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<PermissionSet>().WithMany().HasForeignKey(g => g.PermissionSetId).OnDelete(DeleteBehavior.SetNull);
         builder.HasIndex(g => g.GroupId);
         builder.HasIndex(g => g.AddedById);
+        builder.HasIndex(g => g.PermissionSetId);
     }
 }

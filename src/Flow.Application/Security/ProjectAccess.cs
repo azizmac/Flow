@@ -20,15 +20,25 @@ public interface IProjectAccess
     Task<IReadOnlyCollection<Guid>?> VisibleBoardIdsAsync(User actor, CancellationToken cancellationToken);
 }
 
-internal sealed class ProjectAccess(IBoardMemberRepository members) : IProjectAccess
+internal sealed class ProjectAccess(IBoardMemberRepository members, IPermissionSetRepository permissionSets) : IProjectAccess
 {
     public async Task<ProjectAccessInfo> GetAsync(User actor, Guid boardId, CancellationToken cancellationToken)
     {
         // Проекта нет — считаем открытым без ограничений: хендлер ответит 404 по своему пути (загрузка сущности),
         // а глобальному Admin+ проверка прав не должна мешать увидеть этот 404.
-        var data = await members.GetAccessDataAsync(boardId, actor.Id, cancellationToken);
-        var role = ProjectRoles.Effective(actor.Role, data?.Visibility ?? BoardVisibility.Open, data?.DefaultRole, data?.MemberRole);
-        return ProjectRoles.Access(boardId, role);
+        var data = await members.GetAccessDataAsync(boardId, actor.Id, cancellationToken)
+                   ?? new BoardAccessData(boardId, BoardVisibility.Open, null, []);
+        return ProjectRoles.Resolve(actor.Role, data, await SetsAsync(permissionSets, [data], cancellationToken));
+    }
+
+    /// <summary>Свои наборы участий — отдельным запросом и только когда они вообще есть (обычно нет).</summary>
+    public static async Task<IReadOnlyDictionary<Guid, PermissionSet>> SetsAsync(
+        IPermissionSetRepository repository, IEnumerable<BoardAccessData> data, CancellationToken cancellationToken)
+    {
+        var ids = data.SelectMany(d => d.Grants).Select(g => g.PermissionSetId).OfType<Guid>().Distinct().ToList();
+        return ids.Count == 0
+            ? new Dictionary<Guid, PermissionSet>()
+            : (await repository.GetByIdsAsync(ids, cancellationToken)).ToDictionary(s => s.Id);
     }
 
     public async Task<IReadOnlyCollection<Guid>?> VisibleBoardIdsAsync(User actor, CancellationToken cancellationToken) =>

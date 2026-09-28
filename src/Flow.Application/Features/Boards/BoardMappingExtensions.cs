@@ -94,12 +94,12 @@ public static class BoardMappingExtensions
         members
             .OrderByDescending(m => m.Role)
             .ThenBy(m => m.AddedAt)
-            .Select(m => new BoardMemberResponse(m.UserId, m.Role.ToResponseRole(), m.AddedById, m.AddedAt))
+            .Select(m => new BoardMemberResponse(m.UserId, m.Role.ToResponseRole(), m.AddedById, m.AddedAt, m.PermissionSetId))
             .ToList(),
         (groups ?? [])
             .OrderByDescending(g => g.Link.Role)
             .ThenBy(g => g.Name)
-            .Select(g => new BoardGroupResponse(g.Link.GroupId, g.Name, g.Link.Role.ToResponseRole(), g.MemberCount, g.Link.AddedById, g.Link.AddedAt))
+            .Select(g => new BoardGroupResponse(g.Link.GroupId, g.Name, g.Link.Role.ToResponseRole(), g.MemberCount, g.Link.AddedById, g.Link.AddedAt, g.Link.PermissionSetId))
             .ToList());
 
     /// <summary>Только для видимого проекта: у скрытого роли нет, и в ответы он не попадает.</summary>

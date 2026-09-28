@@ -30,6 +30,10 @@
         {
             <button type="button" class="tab @(Tab == "integrations" ? "on" : "")" role="tab" @onclick="@(() => SetTab("integrations"))">Интеграции</button>
         }
+        @if (CanManageIntegrations)
+        {
+            <button type="button" class="tab @(Tab == "permissions" ? "on" : "")" role="tab" @onclick="@(() => SetTab("permissions"))">Наборы прав</button>
+        }
         <button type="button" class="tab @(Tab == "about" ? "on" : "")" role="tab" @onclick="@(() => SetTab("about"))">О системе</button>
     </div>
 
@@ -105,6 +109,10 @@
         else if (Tab == "integrations")
         {
             <ScmIntegrations />
+        }
+        else if (Tab == "permissions")
+        {
+            <PermissionSetsMatrix CanEdit="@(Me?.Role == UserRole.Owner)" />
         }
         else if (Tab == "search")
         {
@@ -329,6 +337,7 @@
     {
         "search" when CanViewSearch => "search",
         "integrations" when CanManageIntegrations => "integrations",
+        "permissions" when CanManageIntegrations => "permissions",
         "about" => "about",
         _ => "ui"
     };

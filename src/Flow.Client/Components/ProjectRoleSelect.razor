@@ -8,17 +8,27 @@
              @onkeydown="OnKey" @onkeydown:stopPropagation
              role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-disabled="@(Disabled ? "true" : "false")"
              aria-expanded="@(_open ? "true" : "false")" title="@(Disabled ? "Сохраняем…" : "Сменить роль в проекте")">
-            <span class="lbl">@Permissions.ProjectRoleLabel(Value)</span>
+            <span class="lbl">@(CurrentSet?.Name ?? Permissions.ProjectRoleLabel(Value))</span>
             <Icon Name="chevrons" Size="12" />
         </div>
     </ActivatorContent>
     <ChildContent>
         @foreach (var role in Allowed)
         {
-            <MudMenuItem Class="@($"pop-item role-item {(role == Value ? "cur" : "")}")" OnClick="() => Select(role)">
+            <MudMenuItem Class="@($"pop-item role-item {(role == Value && SetId is null ? "cur" : "")}")" OnClick="() => Select(role)">
                 <span class="pop-user">
                     <span class="pop-user-name">@Permissions.ProjectRoleLabel(role)</span>
                     <span class="pop-user-un">@Permissions.ProjectRoleHint(role)</span>
+                </span>
+            </MudMenuItem>
+        }
+        @* Свои наборы прав (этап 4E) — по базовой роли не выше разрешённых. *@
+        @foreach (var set in Sets.Where(x => Allowed.Contains(x.BaseRole)))
+        {
+            <MudMenuItem Class="@($"pop-item role-item {(set.Id == SetId ? "cur" : "")}")" OnClick="() => SelectSet(set)">
+                <span class="pop-user">
+                    <span class="pop-user-name">@set.Name</span>
+                    <span class="pop-user-un">набор · основа «@Permissions.ProjectRoleLabel(set.BaseRole)»</span>
                 </span>
             </MudMenuItem>
         }
@@ -30,6 +40,12 @@
     [Parameter] public IReadOnlyList<ProjectRole> Allowed { get; set; } = [ProjectRole.Viewer, ProjectRole.Member, ProjectRole.Developer, ProjectRole.Admin];
     [Parameter] public EventCallback<ProjectRole> OnChange { get; set; }
     [Parameter] public bool Disabled { get; set; }
+    /// <summary>Свои наборы прав (этап 4E); выбор набора приходит в OnSetChange, если он задан.</summary>
+    [Parameter] public IReadOnlyList<PermissionSetResponse> Sets { get; set; } = [];
+    [Parameter] public Guid? SetId { get; set; }
+    [Parameter] public EventCallback<(ProjectRole Role, Guid? SetId)> OnSetChange { get; set; }
+
+    private PermissionSetResponse? CurrentSet => SetId is { } id ? Sets.FirstOrDefault(x => x.Id == id) : null;
 
     private bool _open;
 
@@ -48,7 +64,18 @@
     private async Task Select(ProjectRole role)
     {
         _open = false;
-        if (role != Value)
+        if (role == Value && SetId is null)
+            return;
+        if (OnSetChange.HasDelegate)
+            await OnSetChange.InvokeAsync((role, null));
+        else
             await OnChange.InvokeAsync(role);
+    }
+
+    private async Task SelectSet(PermissionSetResponse set)
+    {
+        _open = false;
+        if (set.Id != SetId)
+            await OnSetChange.InvokeAsync((set.BaseRole, set.Id));
     }
 }

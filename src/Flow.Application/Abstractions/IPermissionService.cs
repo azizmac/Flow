@@ -64,6 +64,9 @@ public interface IPermissionService
     /// <summary>Создавать, править и удалять группы и их состав — глобальный Admin+ (этап 4C).</summary>
     void EnsureCanManageGroups(User actor);
 
+    /// <summary>Править матрицу наборов прав — только Owner (этап 4E).</summary>
+    void EnsureCanManagePermissionSets(User actor);
+
     /// <summary>Создать человека с ролью: не выше своей; Admin не выдаёт Admin и Owner.</summary>
     void EnsureCanCreateUser(User actor, UserRole role);
 

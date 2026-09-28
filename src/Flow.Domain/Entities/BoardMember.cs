@@ -14,6 +14,12 @@ public sealed class BoardMember
 
     public ProjectRole Role { get; private set; }
 
+    /// <summary>
+    /// Свой набор прав (этап 4E) вместо встроенного набора роли; null — права роли. <see cref="Role"/> тогда — базовая
+    /// роль набора: по ней сравнивают «не выше своей» и считают максимум. Удалённый набор — снова права роли (SetNull).
+    /// </summary>
+    public Guid? PermissionSetId { get; private set; }
+
     /// <summary>Кто добавил (User.Id).</summary>
     public Guid AddedById { get; private set; }
 
@@ -33,6 +39,14 @@ public sealed class BoardMember
         AddedAt = DateTime.UtcNow;
     }
 
+    /// <summary>Участник со своим набором прав (этап 4E): role — базовая роль набора.</summary>
+    public static BoardMember Create(Guid boardId, Guid userId, ProjectRole role, Guid addedById, Guid? permissionSetId)
+    {
+        var member = Create(boardId, userId, role, addedById);
+        member.PermissionSetId = permissionSetId;
+        return member;
+    }
+
     public static BoardMember Create(Guid boardId, Guid userId, ProjectRole role, Guid addedById)
     {
         if (boardId == Guid.Empty)
@@ -45,14 +59,15 @@ public sealed class BoardMember
         return new BoardMember(boardId, userId, ValidateRole(role), addedById);
     }
 
-    /// <summary>true — роль изменилась; та же роль — no-op.</summary>
-    public bool ChangeRole(ProjectRole role)
+    /// <summary>true — роль или набор изменились; то же самое — no-op.</summary>
+    public bool ChangeRole(ProjectRole role, Guid? permissionSetId = null)
     {
         role = ValidateRole(role);
-        if (role == Role)
+        if (role == Role && permissionSetId == PermissionSetId)
             return false;
 
         Role = role;
+        PermissionSetId = permissionSetId;
         return true;
     }
 
