@@ -22,7 +22,7 @@
             {
                 var s = _board.Statuses[i];
                 var index = i;
-                <div class="st-row @(_deletingId == s.Id ? "deleting" : "")" @key="s.Id">
+                <div class="st-row hover-row @(_deletingId == s.Id ? "deleting" : "")" @key="s.Id">
                     <div class="st-main">
                         <span class="st-move">
                             <button type="button" class="st-arrow up" title="Выше" aria-label="Выше" disabled="@(_busy || index == 0)"
@@ -32,9 +32,8 @@
                         </span>
                         @if (_editingId == s.Id)
                         {
-                            <input id="st-edit" class="tt-name-input" value="@_editName" maxlength="@NameMaxLength"
-                                   @oninput="e => _editName = e.Value?.ToString() ?? string.Empty"
-                                   @onkeydown="OnEditKey" @onblur="CommitRename" />
+                            <DsInput Id="st-edit" Compact="true" Class="tt-name-input" MaxLength="NameMaxLength" Value="@_editName"
+                                     ValueChanged="v => _editName = v" OnKeyDown="OnEditKey" OnBlur="CommitRename" EscapeReverts="true" />
                         }
                         else
                         {
@@ -53,8 +52,8 @@
                             <DsNumber T="int?" Value="s.WipLimit" ValueChanged="v => SetWip(s, v)" Min="1" Max="999" Placeholder="WIP" Compact="true"
                                       Disabled="_busy" Class="st-wip" AriaLabel="WIP-лимит"
                                       title="Лимит задач в колонке канбана: превышение подсвечивается, перенос не запрещается. Пусто — без лимита." />
-                            <DsIconButton Icon="trash" Size="26" Title="@DeleteTitle(s)" Style="color:rgba(255,255,255,0.45)"
-                                          Disabled="@(_busy || !CanDelete(s))" OnClick="() => StartDelete(s)" />
+                            <RowActions Disabled="_busy" OnEdit="() => StartRename(s)" OnDelete="() => StartDelete(s)"
+                                        DeleteTitle="@DeleteTitle(s)" DeleteDisabled="@(!CanDelete(s))" />
                         </span>
                     </div>
                     @if (_deletingId == s.Id)
@@ -62,10 +61,8 @@
                         <div class="st-delete">
                             <span class="hint">Задачи статуса перейдут в</span>
                             <StatusSelect Statuses="MoveTargets(s)" Value="_moveTo" OnChange="id => _moveTo = id" Disabled="_busy" />
-                            <span class="st-delete-actions">
-                                <button type="button" class="icon-lnk" disabled="@_busy" @onclick="() => _deletingId = null">Отмена</button>
-                                <button type="button" class="icon-lnk danger" disabled="@_busy" @onclick="() => Delete(s)">Удалить «@s.Name»</button>
-                            </span>
+                            <InlineActions Class="st-delete-actions" SaveLabel="@($"Удалить «{s.Name}»")" SaveVariant="danger" Busy="_busy"
+                                           OnSave="() => Delete(s)" OnCancel="() => _deletingId = null" />
                         </div>
                     }
                 </div>
@@ -187,7 +184,8 @@
         _editName = status.Name;
         _editCancelled = false;
         StateHasChanged();
-        await Task.Yield();
+        // Содержимое MudDialog рисует провайдер следующим проходом — Yield не дождётся поля (AGENTS.md, «Диалоги»).
+        await Task.Delay(50);
         await Browser.FocusAsync("st-edit", select: true);
     }
 

@@ -21,7 +21,7 @@
         }
         @if (ShowRename)
         {
-            <MudMenuItem Class="pop-item" OnClick="OnRename"><Icon Name="edit" Size="15" />Переименовать</MudMenuItem>
+            <MudMenuItem Class="pop-item" OnClick="OnRename"><Icon Name="edit" Size="15" />@RenameLabel</MudMenuItem>
         }
         @if (ShowAccess)
         {
@@ -47,7 +47,11 @@
         {
             <MudMenuItem Class="pop-item" OnClick="OnSaveTemplate"><Icon Name="plus" Size="15" />Сохранить как шаблон…</MudMenuItem>
         }
-        <MudMenuItem Class="pop-item" OnClick="OnCopy"><Icon Name="copy" Size="15" />Скопировать код</MudMenuItem>
+        @Extra
+        @if (ShowCopy)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnCopy"><Icon Name="copy" Size="15" />Скопировать код</MudMenuItem>
+        }
         @if (ShowRestructure)
         {
             <div class="pop-sep" role="separator"></div>
@@ -67,6 +71,11 @@
     [Parameter] public bool ShowOpen { get; set; } = true;
     /// <summary>Пункты, требующие прав (Permissions.CanEditTask / CanManageBoards); без них меню — открыть и скопировать.</summary>
     [Parameter] public bool ShowRename { get; set; } = true;
+    /// <summary>Подпись пункта правки: у дашборда это «Название и доступ».</summary>
+    [Parameter] public string RenameLabel { get; set; } = "Переименовать";
+    [Parameter] public bool ShowCopy { get; set; } = true;
+    /// <summary>Свои пункты строки (MudMenuItem с классом pop-item) — после правки, до «Скопировать код».</summary>
+    [Parameter] public RenderFragment? Extra { get; set; }
     [Parameter] public bool ShowDelete { get; set; } = true;
     /// <summary>Пункт «Типы задач» — только у проекта и только для тех, кто может им управлять.</summary>
     [Parameter] public bool ShowTaskTypes { get; set; }

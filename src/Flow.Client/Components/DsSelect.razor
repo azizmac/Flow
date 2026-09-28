@@ -64,7 +64,11 @@
     [Parameter] public bool Multiple { get; set; }
     [Parameter] public IReadOnlyCollection<T>? SelectedValues { get; set; }
     [Parameter] public EventCallback<IReadOnlyCollection<T>> SelectedValuesChanged { get; set; }
-    [Parameter] public Func<List<string?>, string>? MultiSelectionTextFunc { get; set; }
+    /// <summary>
+    /// Тип ровно как у MudSelect 9 (IReadOnlyList, не List): параметры компонента передаются как object, и
+    /// несовпадение типа делегата компилятор не видит — оно падает InvalidCastException на первом рендере.
+    /// </summary>
+    [Parameter] public Func<IReadOnlyList<string?>, string>? MultiSelectionTextFunc { get; set; }
 
     [Parameter] public Func<T?, string?>? ToStringFunc { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }

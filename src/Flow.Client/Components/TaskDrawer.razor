@@ -192,10 +192,7 @@ else if (Item is not null)
                 <div class="meta-k">Описание</div>
                 @if (_editingDesc)
                 {
-                    <div class="desc-actions">
-                        <button type="button" class="icon-lnk" @onclick="CancelDesc">Отмена</button>
-                        <DsButton Variant="primary" Size="sm" OnClick="SaveDesc" Busy="_busy">Сохранить</DsButton>
-                    </div>
+                    <InlineActions Class="desc-actions" Busy="_busy" OnSave="SaveDesc" OnCancel="CancelDesc" />
                 }
                 else if (CanEdit)
                 {
@@ -240,7 +237,7 @@ else if (Item is not null)
         <div class="kbd-hint"><span class="kbd">↑</span><span class="kbd">↓</span> между задачами <span class="kbd">Esc</span> закрыть</div>
         @if (CanEdit)
         {
-            <button type="button" class="icon-lnk danger" @onclick="() => OnDelete.InvokeAsync(Item)"><Icon Name="trash" Size="14" />Удалить</button>
+            <button type="button" class="icon-lnk danger task-delete" @onclick="() => OnDelete.InvokeAsync(Item)"><Icon Name="trash" Size="14" />Удалить задачу</button>
         }
     </div>
 }

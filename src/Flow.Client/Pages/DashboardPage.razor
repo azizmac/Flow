@@ -32,27 +32,15 @@
             }
             @if (_dashboard.IsOwn || CanDelete)
             {
-                <MudMenu @bind-Open="_menu" PopoverClass="flow-pop" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomRight"
-                         TransformOrigin="Origin.TopRight" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Действия с дашбордом">
-                    <ActivatorContent>
-                        <DsIconButton Icon="more" Size="30" Title="Действия" AriaHasPopup="menu" AriaExpanded="_menu" OnClick="() => _menu = !_menu" />
-                    </ActivatorContent>
-                    <ChildContent>
-                        @if (_dashboard.IsOwn)
+                <RowMenu Size="30" ShowOpen="false" ShowCopy="false" ShowRename="_dashboard.IsOwn" RenameLabel="Название и доступ"
+                         OnRename="() => _editing = true" OnDelete="() => _deleting = true">
+                    <Extra>
+                        @if (_dashboard.IsOwn && !_dashboard.IsDefault)
                         {
-                            <MudMenuItem Class="pop-item" OnClick="() => _editing = true"><Icon Name="edit" Size="15" />Название и доступ</MudMenuItem>
-                            @if (!_dashboard.IsDefault)
-                            {
-                                <MudMenuItem Class="pop-item" OnClick="MakeDefault"><Icon Name="check" Size="15" />Сделать стартовым</MudMenuItem>
-                            }
+                            <MudMenuItem Class="pop-item" OnClick="MakeDefault"><Icon Name="check" Size="15" />Сделать стартовым</MudMenuItem>
                         }
-                        @if (_dashboard.IsOwn || CanDelete)
-                        {
-                            <div class="pop-sep" role="separator"></div>
-                            <MudMenuItem Class="pop-item danger" OnClick="() => _deleting = true"><Icon Name="trash" Size="15" />Удалить</MudMenuItem>
-                        }
-                    </ChildContent>
-                </MudMenu>
+                    </Extra>
+                </RowMenu>
             }
         }
     </div>
@@ -122,7 +110,6 @@
 
     private DashboardResponse? _dashboard;
     private bool _notFound;
-    private bool _menu;
     private bool _editing;
     private bool _deleting;
     private DashboardWidgetResponse? _editingWidget;

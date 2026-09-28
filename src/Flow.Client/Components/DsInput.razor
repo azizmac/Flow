@@ -8,7 +8,8 @@
    Lines > 1 — многострочное поле (описание шаблона, «о себе»): текст обычного размера, а не крупный заголовочный.
    Compact — то же для однострочного поля в плотной форме или строке списка. *@
 
-<label class="ds-field @(Lines > 1 ? "multiline" : "") @(Compact ? "sm" : "") @(Error is null ? "" : "error") @Class" style="@Style">
+<label class="ds-field @(Lines > 1 ? "multiline" : "") @(Compact ? "sm" : "") @(Error is null ? "" : "error") @Class" style="@Style"
+       data-esc-revert="@(EscapeReverts ? _original : null)">
     @if (!string.IsNullOrEmpty(Label))
     {
         <span class="ds-field-label">@Label</span>
@@ -21,7 +22,7 @@
         <MudTextField T="string" InputId="@Id" InputType="@InputType" Value="@Value" ValueChanged="OnInput"
                       Placeholder="@Placeholder" MaxLength="@(MaxLength ?? 524288)" Lines="Lines" AutoGrow="@(Lines > 1)" Disabled="Disabled"
                       Immediate="true" Underline="false" Variant="Variant.Text" Margin="Margin.None"
-                      OnKeyDown="OnKeyDown" autocomplete="off" spellcheck="false" />
+                      OnKeyDown="OnKeyDown" OnBlur="OnBlur" autocomplete="off" spellcheck="false" />
     </span>
     @if (Error is not null)
     {
@@ -43,6 +44,18 @@
     [Parameter] public string? Style { get; set; }
     [Parameter] public string? Class { get; set; }
     [Parameter] public EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
+    /// <summary>Потеря фокуса — переименование на месте сохраняется по ней, как по Enter.</summary>
+    [Parameter] public EventCallback<FocusEventArgs> OnBlur { get; set; }
+    /// <summary>
+    /// Переименование на месте: Esc возвращает значение, с которым поле появилось, и снимает фокус — правку
+    /// завершает OnBlur, диалог вокруг не закрывается. Делает это flow.js по атрибуту data-esc-revert: перехватчик
+    /// Esc у MudDialog нативный, и Razor-овский stopPropagation его не останавливает.
+    /// </summary>
+    [Parameter] public bool EscapeReverts { get; set; }
+
+    private string _original = "";
+
+    protected override void OnInitialized() => _original = Value;
     /// <summary>Строк у многострочного поля; 1 — обычное поле.</summary>
     [Parameter] public int Lines { get; set; } = 1;
     [Parameter] public bool Compact { get; set; }

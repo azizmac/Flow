@@ -4,6 +4,7 @@
 @inject UserDirectory Users
 @inject ToastService Toasts
 @inject TeamDirectory Teams
+@inject BrowserInterop Browser
 
 <div class="panel groups-panel">
     @if (CanManage)
@@ -28,11 +29,11 @@
     @foreach (var g in _groups)
     {
         <div class="gp-group" @key="g.Id" data-group="@g.Name">
-            <div class="gp-head">
+            <div class="gp-head hover-row">
                 @if (_renaming == g.Id)
                 {
-                    <DsInput Value="@_renameText" ValueChanged="v => _renameText = v" MaxLength="80" OnKeyDown="e => OnRenameKey(e, g)" />
-                    <button type="button" class="icon-lnk" @onclick="() => Rename(g)">Сохранить</button>
+                    <DsInput Id="gp-rename" Compact="true" Class="tt-name-input" Value="@_renameText" ValueChanged="v => _renameText = v" MaxLength="80"
+                             OnKeyDown="e => OnRenameKey(e, g)" OnBlur="() => Rename(g)" EscapeReverts="true" />
                 }
                 else
                 {
@@ -45,8 +46,7 @@
                     @if (CanManage)
                     {
                         <DsCheckbox Value="g.IsTeam" ValueChanged="v => SetTeam(g, v)" Label="Команда" Disabled="_busy" />
-                        <button type="button" class="icon-lnk" @onclick="() => { _renaming = g.Id; _renameText = g.Name; }">Переименовать</button>
-                        <button type="button" class="icon-lnk danger" @onclick="() => Delete(g)" disabled="@_busy">Удалить</button>
+                        <RowActions Disabled="_busy" DeleteTitle="Удалить группу" OnEdit="() => StartRename(g)" OnDelete="() => _deleting = g" />
                     }
                 }
             </div>
@@ -72,12 +72,20 @@
     }
 </div>
 
+@if (_deleting is { } deleting)
+{
+    <ConfirmDialog Title="@($"Удалить группу «{deleting.Name}»?")"
+                   Text="@($"Участники группы потеряют роли, которые группа давала им в проектах. Сами люди и их прямое участие останутся.{(deleting.IsTeam ? " У задач этой команды поле «Команда» станет пустым." : "")}")"
+                   OnConfirm="() => ConfirmDelete(deleting)" OnCancel="() => _deleting = null" />
+}
+
 @code {
     [Parameter] public bool CanManage { get; set; }
 
     private List<GroupResponse> _groups = [];
     private bool _loading = true;
     private bool _busy;
+    private GroupResponse? _deleting;
     private string _newName = "";
     private Guid? _renaming;
     private string _renameText = "";
@@ -119,11 +127,28 @@
             _renaming = null;
     }
 
+    private async Task StartRename(GroupResponse g)
+    {
+        _renaming = g.Id;
+        _renameText = g.Name;
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync("gp-rename", select: true);
+    }
+
+    /// <summary>Enter и потеря фокуса сохраняют, Esc отменяет — как переименование статуса и типа.</summary>
     private async Task Rename(GroupResponse g)
     {
-        if (await Run(() => Api.UpdateGroup(g.Id, new SaveGroupRequest(_renameText.Trim(), g.Description, g.IsTeam))) is { } updated)
-            Replace(updated);
+        if (_renaming != g.Id)
+            return;
+
         _renaming = null;
+        var name = _renameText.Trim();
+        if (name.Length == 0 || name == g.Name)
+            return;
+
+        if (await Run(() => Api.UpdateGroup(g.Id, new SaveGroupRequest(name, g.Description, g.IsTeam))) is { } updated)
+            Replace(updated);
     }
 
     /// <summary>Команду (этап 4D) указывают в задаче и раскладывают по ней дорожки канбана.</summary>
@@ -131,6 +156,12 @@
     {
         if (await Run(() => Api.UpdateGroup(g.Id, new SaveGroupRequest(g.Name, g.Description, isTeam))) is { } updated)
             Replace(updated);
+    }
+
+    private async Task ConfirmDelete(GroupResponse g)
+    {
+        _deleting = null;
+        await Delete(g);
     }
 
     private async Task Delete(GroupResponse g)

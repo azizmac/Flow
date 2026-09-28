@@ -25,13 +25,13 @@
             }
             @foreach (var t in _templates)
             {
-                <div class="tt-row" data-template="@t.Name">
-                    <div class="tt-name">
+                <div class="tpl-row hover-row" data-template="@t.Name">
+                    <div class="tpl-name">
                         <b>@t.Name</b>
                         <span class="hint">@t.TitlePattern · @Ru.Tasks(t.UsageCount) создано@(t.Checklist.Count > 0 ? $" · ☑ {t.Checklist.Count}" : "")@(t.Subtasks.Count > 0 ? $" · подзадач: {t.Subtasks.Count}" : "")</span>
                     </div>
-                    <button type="button" class="icon-lnk" @onclick="() => Edit(t)">Изменить</button>
-                    <button type="button" class="icon-lnk danger" @onclick="() => Delete(t)" disabled="@_busy">Удалить</button>
+                    <RowActions EditTitle="Изменить шаблон" DeleteTitle="Удалить шаблон" Disabled="_busy"
+                                OnEdit="() => Edit(t)" OnDelete="() => _deleting = t" />
                 </div>
             }
         }
@@ -63,7 +63,7 @@
                 }
                 @if (_draft.Subtasks.Count < 20)
                 {
-                    <button type="button" class="icon-lnk" @onclick="() => _draft.Subtasks.Add(new SubDraft())">+ Подзадача</button>
+                    <DsButton Variant="tertiary" Size="sm" Icon="plus" OnClick="() => _draft.Subtasks.Add(new SubDraft())">Подзадача</DsButton>
                 }
                 @if (_draft.CustomFields.Count > 0)
                 {
@@ -92,6 +92,12 @@
         }
     </DialogActions>
 </MudDialog>
+
+@if (_deleting is { } deleting)
+{
+    <ConfirmDialog Title="@($"Удалить шаблон «{deleting.Name}»?")" Text="Задачи, уже созданные по шаблону, останутся как есть."
+                   OnConfirm="() => ConfirmDelete(deleting)" OnCancel="() => _deleting = null" />
+}
 
 @code {
     [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
@@ -125,6 +131,7 @@
     private bool _visible = true;
     private bool _closing;
     private bool _busy;
+    private TaskTemplateResponse? _deleting;
     private bool _loading = true;
     private List<TaskTemplateResponse> _templates = [];
     private Draft? _draft;
@@ -179,6 +186,12 @@
         else _templates.Add(saved);
         _draft = null;
         Toasts.Ok($"Шаблон «{saved.Name}» сохранён");
+    }
+
+    private async Task ConfirmDelete(TaskTemplateResponse t)
+    {
+        _deleting = null;
+        await Delete(t);
     }
 
     private async Task Delete(TaskTemplateResponse t)

@@ -20,22 +20,7 @@
 </div>
 
 <div class="content profile">
-    <div class="tabs settings-tabs" role="tablist">
-        <button type="button" class="tab @(Tab == "ui" ? "on" : "")" role="tab" @onclick="@(() => SetTab("ui"))">Интерфейс</button>
-        @if (CanViewSearch)
-        {
-            <button type="button" class="tab @(Tab == "search" ? "on" : "")" role="tab" @onclick="@(() => SetTab("search"))">Поиск</button>
-        }
-        @if (CanManageIntegrations)
-        {
-            <button type="button" class="tab @(Tab == "integrations" ? "on" : "")" role="tab" @onclick="@(() => SetTab("integrations"))">Интеграции</button>
-        }
-        @if (CanManageIntegrations)
-        {
-            <button type="button" class="tab @(Tab == "permissions" ? "on" : "")" role="tab" @onclick="@(() => SetTab("permissions"))">Наборы прав</button>
-        }
-        <button type="button" class="tab @(Tab == "about" ? "on" : "")" role="tab" @onclick="@(() => SetTab("about"))">О системе</button>
-    </div>
+    <DsTabs Class="settings-tabs" Items="Tabs" Value="@Tab" ValueChanged="SetTab" AriaLabel="Разделы настроек" />
 
     @* Матрица прав — таблица на все наборы: узкая колонка настроек её обрезала бы, поэтому вкладка во всю ширину. *@
     <div class="settings-body @(Tab == "permissions" ? "wide" : "")">
@@ -335,6 +320,14 @@
     private bool CanManageIntegrations => Me?.Role >= UserRole.Admin;
 
     /// <summary>Вкладка «Поиск» без прав не показывается; прямая ссылка на неё открывает «Интерфейс».</summary>
+    private IReadOnlyList<DsTab> Tabs =>
+    [
+        new("ui", "Интерфейс"),
+        .. CanViewSearch ? [new DsTab("search", "Поиск")] : Array.Empty<DsTab>(),
+        .. CanManageIntegrations ? [new DsTab("integrations", "Интеграции"), new DsTab("permissions", "Наборы прав")] : Array.Empty<DsTab>(),
+        new("about", "О системе")
+    ];
+
     private string Tab => TabParam switch
     {
         "search" when CanViewSearch => "search",

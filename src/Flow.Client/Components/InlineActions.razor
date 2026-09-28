@@ -1,16 +1,19 @@
-@* «Сохранить / Отмена» при правке на месте (docs/TZ_ui_consistency.md): переименование группы, статуса, правка
-   названия или описания задачи, поле профиля. Раньше там стояли текстовые ссылки, а в диалогах — кнопки; теперь
-   везде маленькие кнопки: основная и вторичная. *@
+@* «Отмена / Сохранить» при правке на месте (docs/TZ_ui_consistency.md): переименование группы, описание задачи, личные
+   данные профиля, подтверждение удаления статуса. Раньше там стояли текстовые ссылки, а в диалогах — кнопки; теперь
+   везде маленькие кнопки в порядке подвала диалога: вторичная, затем основная. *@
 
 <span class="inline-actions @Class">
-    <DsButton Variant="primary" Size="sm" Busy="Busy" Disabled="@(Disabled || Busy)" OnClick="() => OnSave.InvokeAsync()">@SaveLabel</DsButton>
-    <DsButton Variant="secondary" Size="sm" Disabled="Busy" OnClick="() => OnCancel.InvokeAsync()">Отмена</DsButton>
+    <DsButton Variant="secondary" Size="sm" Disabled="Busy" OnClick="() => OnCancel.InvokeAsync()">@CancelLabel</DsButton>
+    <DsButton Variant="@SaveVariant" Size="sm" Busy="Busy" Disabled="@(Disabled || Busy)" OnClick="() => OnSave.InvokeAsync()">@SaveLabel</DsButton>
 </span>
 
 @code {
     [Parameter] public EventCallback OnSave { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
     [Parameter] public string SaveLabel { get; set; } = "Сохранить";
+    [Parameter] public string CancelLabel { get; set; } = "Отмена";
+    /// <summary>primary — сохранение; danger — подтверждение удаления.</summary>
+    [Parameter] public string SaveVariant { get; set; } = "primary";
     [Parameter] public bool Busy { get; set; }
     /// <summary>Сохранять нечего (пустое название и т. п.) — основная кнопка неактивна, «Отмена» доступна.</summary>
     [Parameter] public bool Disabled { get; set; }

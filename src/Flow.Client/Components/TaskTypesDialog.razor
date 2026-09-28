@@ -20,13 +20,12 @@
         <div class="tt-list">
             @foreach (var t in _board.TaskTypes)
             {
-                <div class="tt-row @(t.IsArchived ? "archived" : "")" @key="t.Id">
+                <div class="tt-row hover-row @(t.IsArchived ? "archived" : "")" @key="t.Id">
                     <TaskTypeIcon Kind="t.Kind" Size="15" />
                     @if (_editingId == t.Id)
                     {
-                        <input id="tt-edit" class="tt-name-input" value="@_editName" maxlength="50"
-                               @oninput="e => _editName = e.Value?.ToString() ?? string.Empty"
-                               @onkeydown="OnEditKey" @onblur="CommitRename" />
+                        <DsInput Id="tt-edit" Compact="true" Class="tt-name-input" MaxLength="50" Value="@_editName" ValueChanged="v => _editName = v"
+                                 OnKeyDown="OnEditKey" OnBlur="CommitRename" EscapeReverts="true" />
                     }
                     else
                     {
@@ -38,16 +37,24 @@
                         {
                             <span class="status-pill sm">основной</span>
                         }
-                        else if (!t.IsArchived)
-                        {
-                            <button type="button" class="icon-lnk" disabled="@_busy" @onclick="() => Update(t, new UpdateTaskTypeRequest(IsDefault: true))">Сделать основным</button>
-                            <button type="button" class="icon-lnk" disabled="@_busy" @onclick="() => Update(t, new UpdateTaskTypeRequest(IsArchived: true))">В архив</button>
-                        }
-                        else
+                        else if (t.IsArchived)
                         {
                             <span class="status-pill sm">в архиве</span>
-                            <button type="button" class="icon-lnk" disabled="@_busy" @onclick="() => Update(t, new UpdateTaskTypeRequest(IsArchived: false))">Вернуть</button>
                         }
+                        <RowActions Disabled="_busy" OnEdit="() => StartRename(t)">
+                            @if (!t.IsDefault && !t.IsArchived)
+                            {
+                                <DsIconButton Icon="star" Size="26" Title="Сделать основным" Disabled="_busy"
+                                              OnClick="() => Update(t, new UpdateTaskTypeRequest(IsDefault: true))" />
+                                <DsIconButton Icon="archive" Size="26" Title="В архив" Disabled="_busy"
+                                              OnClick="() => Update(t, new UpdateTaskTypeRequest(IsArchived: true))" />
+                            }
+                            else if (t.IsArchived)
+                            {
+                                <DsIconButton Icon="unarchive" Size="26" Title="Вернуть из архива" Disabled="_busy"
+                                              OnClick="() => Update(t, new UpdateTaskTypeRequest(IsArchived: false))" />
+                            }
+                        </RowActions>
                     </span>
                 </div>
             }
@@ -148,7 +155,8 @@
         _editName = type.Name;
         _editCancelled = false;
         StateHasChanged();
-        await Task.Yield();
+        // Содержимое MudDialog рисует провайдер следующим проходом — Yield не дождётся поля (AGENTS.md, «Диалоги»).
+        await Task.Delay(50);
         await Browser.FocusAsync("tt-edit", select: true);
     }
 

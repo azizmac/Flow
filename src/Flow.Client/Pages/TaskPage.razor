@@ -90,10 +90,7 @@ else if (_task is not null && _board is not null)
                     <div class="section-title">Описание</div>
                     @if (_editingDesc)
                     {
-                        <div class="desc-actions">
-                            <button type="button" class="icon-lnk" @onclick="() => _editingDesc = false">Отмена</button>
-                            <DsButton Variant="primary" Size="sm" OnClick="SaveDesc" Busy="_busy">Сохранить</DsButton>
-                        </div>
+                        <InlineActions Class="desc-actions" Busy="_busy" OnSave="SaveDesc" OnCancel="() => _editingDesc = false" />
                     }
                     else if (CanEdit)
                     {
@@ -203,9 +200,7 @@ else if (_task is not null && _board is not null)
             <SimilarTasks TaskId="_task.Id" />
             @if (CanEdit)
             {
-                <button type="button" class="icon-lnk danger" style="padding:0 4px;align-self:flex-start;" @onclick="() => _deleting = true">
-                    <Icon Name="trash" Size="14" />Удалить задачу
-                </button>
+                <button type="button" class="icon-lnk danger task-delete" @onclick="() => _deleting = true"><Icon Name="trash" Size="14" />Удалить задачу</button>
             }
         </div>
     </div>

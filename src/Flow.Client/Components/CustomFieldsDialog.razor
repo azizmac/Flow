@@ -24,7 +24,7 @@
             {
                 var f = fields[i];
                 var index = i;
-                <div class="tt-row cf-row @(f.IsArchived ? "archived" : "") @(_editing?.Id == f.Id ? "on" : "")" @key="f.Id">
+                <div class="tt-row cf-row hover-row @(f.IsArchived ? "archived" : "") @(_editing?.Id == f.Id ? "on" : "")" @key="f.Id">
                     <button type="button" class="tt-name" title="Изменить" disabled="@_busy" @onclick="() => Edit(f)">@f.Name</button>
                     <span class="tt-kind">@CustomFieldMeta.TypeLabel(f.Type)</span>
                     <code class="cf-key">cf.@f.Key</code>
@@ -36,12 +36,19 @@
                         @if (f.IsArchived)
                         {
                             <span class="status-pill sm">в архиве</span>
-                            <button type="button" class="icon-lnk" disabled="@_busy" @onclick="() => Update(f.Id, new UpdateCustomFieldRequest(IsArchived: false))">Вернуть</button>
                         }
-                        else
-                        {
-                            <button type="button" class="icon-lnk" disabled="@_busy" @onclick="() => Update(f.Id, new UpdateCustomFieldRequest(IsArchived: true))">В архив</button>
-                        }
+                        <RowActions Disabled="_busy" EditTitle="Изменить поле" OnEdit="() => Edit(f)">
+                            @if (f.IsArchived)
+                            {
+                                <DsIconButton Icon="unarchive" Size="26" Title="Вернуть из архива" Disabled="_busy"
+                                              OnClick="() => Update(f.Id, new UpdateCustomFieldRequest(IsArchived: false))" />
+                            }
+                            else
+                            {
+                                <DsIconButton Icon="archive" Size="26" Title="В архив" Disabled="_busy"
+                                              OnClick="() => Update(f.Id, new UpdateCustomFieldRequest(IsArchived: true))" />
+                            }
+                        </RowActions>
                         <DsIconButton Icon="chevron-down" Size="24" Title="Выше" Class="cf-up" Disabled="@(_busy || index == 0)" OnClick="() => Move(index, -1)" />
                         <DsIconButton Icon="chevron-down" Size="24" Title="Ниже" Disabled="@(_busy || index == fields.Count - 1)" OnClick="() => Move(index, 1)" />
                     </span>
@@ -87,12 +94,12 @@
                     {
                         var row = _optionRows[i];
                         <div class="cf-option" @key="row">
-                            <input class="tt-name-input" value="@row.Label" maxlength="60" placeholder="Вариант" aria-label="Вариант"
-                                   @oninput="e => row.Label = e.Value?.ToString() ?? string.Empty" />
+                            <DsInput Compact="true" Class="tt-name-input" MaxLength="60" Placeholder="Вариант" Value="@row.Label"
+                                     ValueChanged="v => row.Label = v" />
                             <DsIconButton Icon="close-simple" Size="24" Title="Убрать вариант" OnClick="() => _optionRows.Remove(row)" />
                         </div>
                     }
-                    <button type="button" class="icon-lnk" @onclick="() => _optionRows.Add(new OptionRow(null, string.Empty, null))">+ вариант</button>
+                    <DsButton Variant="tertiary" Size="sm" Icon="plus" OnClick="() => _optionRows.Add(new OptionRow(null, string.Empty, null))">Вариант</DsButton>
                 </div>
             }
             <DsCheckbox Value="_required" ValueChanged="v => _required = v" Class="cf-required" Label="Обязательное" />

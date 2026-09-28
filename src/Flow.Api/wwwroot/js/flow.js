@@ -227,6 +227,22 @@ window.flow = (function () {
         return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable === true;
     }
 
+    // Esc в поле переименования на месте (DsInput EscapeReverts) отменяет правку, а не закрывает диалог. Перехватчик
+    // MudDialog висит на контейнере диалога нативно, а Blazor разбирает события делегированием у корня документа, так
+    // что @onkeydown:stopPropagation до контейнера не дотягивается. Поэтому клавиша гасится на захвате, полю
+    // возвращается исходное значение событием input, и фокус снимается: переименование сохраняет по blur, а
+    // неизменённое имя — no-op.
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape' || !e.target || typeof e.target.closest !== 'function') return;
+        const field = e.target.closest('[data-esc-revert]');
+        if (!field || !isEditable(e.target)) return;
+        e.stopPropagation();
+        e.preventDefault();
+        e.target.value = field.getAttribute('data-esc-revert');
+        e.target.dispatchEvent(new Event('input', { bubbles: true }));
+        e.target.blur();
+    }, true);
+
     document.addEventListener('keydown', function (e) {
         // Под полем открыт список, которому принадлежат стрелки/Enter/Tab/Esc (строка поиска в
         // сайдбаре). preventDefault обязан быть синхронным — поэтому здесь, а .NET-обработчик дальше

@@ -5,6 +5,7 @@
    «Клонировать» у встроенного, но без поиска нужной колонки и переименования «… (копия)»). *@
 @inject IFlowApi Api
 @inject ToastService Toasts
+@inject BrowserInterop Browser
 
 @if (_sets is null)
 {
@@ -44,10 +45,11 @@ else
                     <th>Право</th>
                     @foreach (var set in _sets)
                     {
-                        <th class="ps-col" data-set="@set.Name">
+                        <th class="ps-col hover-row" data-set="@set.Name">
                             @if (!set.IsBuiltIn && CanEdit && _renaming == set.Id)
                             {
-                                <DsInput Value="@_renameText" ValueChanged="v => _renameText = v" MaxLength="60" OnKeyDown="e => OnRenameKey(e, set)" />
+                                <DsInput Id="ps-rename" Compact="true" Value="@_renameText" ValueChanged="v => _renameText = v" MaxLength="60"
+                                         OnKeyDown="e => OnRenameKey(e, set)" OnBlur="() => Rename(set)" EscapeReverts="true" />
                             }
                             else
                             {
@@ -56,13 +58,19 @@ else
                             <span class="ps-base">@(set.IsBuiltIn ? "встроенный" : $"основа «{Permissions.ProjectRoleLabel(set.BaseRole)}»")</span>
                             @if (CanEdit)
                             {
-                                <span class="ps-actions">
-                                    <button type="button" class="icon-lnk" disabled="@_busy" @onclick="() => Clone(set)">Клонировать</button>
-                                    @if (!set.IsBuiltIn)
-                                    {
-                                        <button type="button" class="icon-lnk danger" disabled="@_busy" @onclick="() => Delete(set)">Удалить</button>
-                                    }
-                                </span>
+                                @if (set.IsBuiltIn)
+                                {
+                                    <RowActions Class="ps-actions" Disabled="_busy">
+                                        <DsIconButton Icon="copy" Size="26" Title="Клонировать" Disabled="_busy" OnClick="() => Clone(set)" />
+                                    </RowActions>
+                                }
+                                else
+                                {
+                                    <RowActions Class="ps-actions" Disabled="_busy" DeleteTitle="Удалить набор"
+                                                OnEdit="() => StartRename(set)" OnDelete="() => _deleting = set">
+                                        <DsIconButton Icon="copy" Size="26" Title="Клонировать" Disabled="_busy" OnClick="() => Clone(set)" />
+                                    </RowActions>
+                                }
                             }
                         </th>
                     }
@@ -96,11 +104,19 @@ else
     </section>
 }
 
+@if (_deleting is { } deleting)
+{
+    <ConfirmDialog Title="@($"Удалить набор «{deleting.Name}»?")"
+                   Text="Участники и группы с этим набором останутся в проектах с правами его основы."
+                   OnConfirm="() => ConfirmDelete(deleting)" OnCancel="() => _deleting = null" />
+}
+
 @code {
     [Parameter] public bool CanEdit { get; set; }
 
     private List<PermissionSetResponse>? _sets;
     private bool _busy;
+    private PermissionSetResponse? _deleting;
     private Guid? _renaming;
     private string _renameText = "";
     private string _newName = "";
@@ -114,23 +130,35 @@ else
             Toasts.Error(result.Error ?? "Не удалось загрузить наборы прав");
     }
 
-    private void StartRename(PermissionSetResponse set)
+    private async Task StartRename(PermissionSetResponse set)
     {
         if (!CanEdit || set.IsBuiltIn)
             return;
         _renaming = set.Id;
         _renameText = set.Name;
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync("ps-rename", select: true);
     }
 
+    /// <summary>Enter и потеря фокуса сохраняют, Esc отменяет — как переименование статуса, типа и группы.</summary>
     private async Task OnRenameKey(KeyboardEventArgs e, PermissionSetResponse set)
     {
         if (e.Key == "Escape")
             _renaming = null;
         else if (e.Key == "Enter")
-        {
-            _renaming = null;
-            await Save(set, set with { Name = _renameText.Trim() });
-        }
+            await Rename(set);
+    }
+
+    private async Task Rename(PermissionSetResponse set)
+    {
+        if (_renaming != set.Id)
+            return;
+
+        _renaming = null;
+        var name = _renameText.Trim();
+        if (name.Length > 0 && name != set.Name)
+            await Save(set, set with { Name = name });
     }
 
     private Task Toggle(PermissionSetResponse set, ProjectPermission permission, bool on) =>
@@ -192,6 +220,12 @@ else
             _sets!.Add(result.Value!);
         else
             Toasts.Error(result.Error ?? "Не удалось склонировать набор");
+    }
+
+    private async Task ConfirmDelete(PermissionSetResponse set)
+    {
+        _deleting = null;
+        await Delete(set);
     }
 
     private async Task Delete(PermissionSetResponse set)

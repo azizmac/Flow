@@ -1057,6 +1057,8 @@ a.sb-me:active { transform: scale(0.98); }
 .seg-btn.needs-project { opacity: 0.4; cursor: not-allowed; }
 .seg-btn.needs-project:active { transform: none; }
 .filter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+/* Вкладки раздела в строке фильтров («Люди») — от края панели, без полосы на всю ширину, как в «Настройках». */
+.filter-row > .tabs { padding: 0; border-bottom: 0; }
 
 /* ---------- Empty states ---------- */
 .empty {
@@ -2234,10 +2236,8 @@ a.task-row { color: inherit; text-decoration: none; }
     background: none; border: 0; padding: 0; color: #fff; cursor: text; text-align: left;
     font: var(--fw-semibold) 13.5px var(--font-display); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tt-name-input {
-    background: rgba(0, 0, 0, 0.18); border: 1px solid var(--accent); border-radius: 6px; padding: 3px 8px;
-    color: #fff; font: var(--fw-semibold) 13.5px var(--font-display); outline: 0; min-width: 0; width: 180px;
-}
+/* Переименование на месте — DsInput Compact вместо своего <input>: ширина по имени, а не на всю строку. */
+.ds-field.tt-name-input { flex: 0 1 220px; min-width: 0; }
 .tt-kind { font: var(--fw-medium) 11.5px var(--font-text); color: var(--text-tertiary); }
 .tt-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; flex: none; }
 .tt-add { display: flex; flex-direction: column; gap: 10px; }
@@ -2600,6 +2600,17 @@ a.task-row { color: inherit; text-decoration: none; }
 .ds-progress-text { color: var(--text-secondary); font: var(--fw-semibold) 12px var(--font-display); white-space: nowrap; }
 /* InlineActions — «Сохранить / Отмена» при правке на месте. */
 .inline-actions { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+/* «Удалить задачу» — одинаково в подвале слайдера и внизу страницы задачи. */
+.icon-lnk.task-delete { padding: 0 4px; align-self: flex-start; }
+/* RowActions — карандаш и корзина у строки-настройки: видны при наведении на строку (.hover-row) и при фокусе внутри неё.
+   Место под них занято всегда (opacity, а не display), иначе строка прыгала бы под курсором. */
+.row-actions { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.row-actions .ds-iconbtn { color: var(--text-tertiary); }
+.row-actions .ds-iconbtn.danger:hover:not(:disabled) { color: var(--danger); }
+@media (hover: hover) and (pointer: fine) {
+    .row-actions { opacity: 0; transition: opacity 150ms var(--ease-out); }
+    .hover-row:hover .row-actions, .hover-row:focus-within .row-actions { opacity: 1; }
+}
 .ms-progress { display: flex; align-items: center; gap: 10px; }
 .ms-progress .ms-bar { flex: 1; }
 .ms-progress-text { color: var(--text-secondary); font: var(--fw-semibold) 12px var(--font-display); white-space: nowrap; }
@@ -2805,14 +2816,14 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .rec-date { padding: 2px 8px; border-radius: 999px; background: rgba(109, 151, 115, 0.18); color: var(--sage); font: var(--fw-semibold) 12px var(--font-display); }
 
 /* ---- Интеграция с Git (docs/TZ_scm_integration.md, этап 5A) ---- */
-.dev { display: flex; flex-direction: column; gap: 4px; }
-.dev .subtasks-head .icon-lnk:first-of-type { margin-left: auto; }
+.dev-block { display: flex; flex-direction: column; gap: 4px; }
+.dev-block .subtasks-head .icon-lnk:first-of-type { margin-left: auto; }
 .dev-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; color: var(--text-primary); text-decoration: none; font: var(--fw-medium) 13px var(--font-text); }
 .dev-row:hover { background: rgba(255, 255, 255, 0.04); }
 .dev-kind { color: var(--text-tertiary); font: var(--fw-semibold) 12px var(--font-display); white-space: nowrap; }
 .dev-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dev-title.gone { text-decoration: line-through; color: var(--text-tertiary); }
-.dev .mono, .dev-kind.mono { font-family: var(--font-mono); }
+.dev-block .mono, .dev-kind.mono { font-family: var(--font-mono); }
 .dev-state { padding: 1px 8px; border-radius: 999px; font: var(--fw-bold) 11px var(--font-display); background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); }
 .dev-state.open { background: rgba(255, 186, 0, 0.16); color: var(--accent); }
 .dev-state.merged { background: rgba(109, 151, 115, 0.2); color: var(--sage); }
@@ -2867,9 +2878,10 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .ac-result.fail { color: var(--danger); }
 
 /* Шаблоны задач (этап 3G) */
-.tt-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
-.tt-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; color: #fff; font: var(--fw-medium) 13.5px var(--font-text); }
-.tt-name .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Свои имена: .tt-row/.tt-name принадлежат «Типам задач», и одноимённое правило здесь перебивало их строки сеткой. */
+.tpl-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+.tpl-name { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; color: #fff; font: var(--fw-medium) 13.5px var(--font-text); }
+.tpl-name .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-form { display: flex; flex-direction: column; gap: 10px; }
 .tt-sub { display: grid; grid-template-columns: minmax(0, 1fr) 190px auto auto; gap: 10px; align-items: center; }
 .tpl-pick { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
@@ -2888,7 +2900,8 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .gp-x:hover { color: var(--danger); }
 .pa-group-ico { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; background: rgba(255,255,255,0.08); color: var(--text-secondary); }
 .gp-team { padding: 1px 8px; border-radius: 999px; background: rgba(109,151,115,0.2); color: var(--sage); font: var(--fw-semibold) 11px var(--font-display); }
-.gp-head .mud-checkbox { margin-left: auto; }
+/* Флажок и иконки строки — к правому краю; .mud-input-control — чтобы пересилить сброс margin в mud-overrides.css. */
+.gp-head .ds-check.mud-input-control { margin-left: auto; }
 
 /* Наборы прав (этап 4E) */
 .ps-hint { margin-bottom: 12px; max-width: 760px; }
@@ -2903,7 +2916,7 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .ps-col { vertical-align: top; min-width: 140px; }
 .ps-name { display: block; color: #fff; font: var(--fw-semibold) 13px var(--font-display); cursor: default; }
 .ps-base { display: block; color: var(--text-tertiary); font: var(--fw-medium) 11px var(--font-text); }
-.ps-actions { display: flex; gap: 8px; margin-top: 4px; }
+.ps-actions { margin-top: 2px; margin-left: -4px; }
 .ps-perm { color: var(--text-primary); }
 .ps-cell { text-align: center; }
 .ps-mark { color: var(--text-tertiary); }
