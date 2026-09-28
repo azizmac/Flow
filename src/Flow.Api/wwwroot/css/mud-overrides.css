@@ -142,6 +142,10 @@ a.mud-link:hover {
     color: var(--danger);
 }
 
+.mud-snackbar.toast.warn .mud-snackbar-icon {
+    color: var(--accent);
+}
+
 /* ---------- Меню ----------
    .flow-pop — слой Flow поверх MudPopover: тот же вид, что у прежнего .pop в app.css, но без
    position/opacity — позицию и появление считает библиотека. Отдельное имя нужно, пока свой

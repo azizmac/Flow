@@ -99,17 +99,17 @@
                             title="Список" @onclick="() => SetView(TaskView.List)"><Icon Name="list" Size="14" />Список</button>
                     <button type="button" class="seg-btn @(IsBoardView ? "on" : "")" role="radio" aria-checked="@IsBoardView"
                             title="Доска: колонки по статусам" @onclick="() => SetView(TaskView.Board)"><Icon Name="grid" Size="14" />Доска</button>
-                    <button type="button" class="seg-btn @(IsTreeView ? "on" : "")" role="radio" aria-checked="@IsTreeView" disabled="@(BoardId is null)"
+                    <button type="button" class="seg-btn @(IsTreeView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsTreeView" aria-disabled="@(BoardId is null)"
                             title="@(BoardId is null ? "Дерево — внутри одного проекта: выберите проект" : "Дерево: эпики, истории и подзадачи")"
-                            @onclick="() => SetView(TaskView.Tree)"><Icon Name="list-ordered" Size="14" />Дерево</button>
-                    <button type="button" class="seg-btn @(IsBacklogView ? "on" : "")" role="radio" aria-checked="@IsBacklogView" disabled="@(BoardId is null)"
+                            @onclick="() => SetProjectView(TaskView.Tree)"><Icon Name="list-ordered" Size="14" />Дерево</button>
+                    <button type="button" class="seg-btn @(IsBacklogView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsBacklogView" aria-disabled="@(BoardId is null)"
                             title="@(BoardId is null ? "Бэклог — внутри одного проекта: выберите проект" : "Бэклог и спринты")"
-                            @onclick="() => SetView(TaskView.Backlog)"><Icon Name="history" Size="14" />Бэклог</button>
+                            @onclick="() => SetProjectView(TaskView.Backlog)"><Icon Name="history" Size="14" />Бэклог</button>
                     <button type="button" class="seg-btn @(IsCalendarView ? "on" : "")" role="radio" aria-checked="@IsCalendarView"
                             title="Календарь: задачи по датам" @onclick="() => SetView(TaskView.Calendar)"><Icon Name="calendar" Size="14" />Календарь</button>
-                    <button type="button" class="seg-btn @(IsRoadmapView ? "on" : "")" role="radio" aria-checked="@IsRoadmapView" disabled="@(BoardId is null)"
+                    <button type="button" class="seg-btn @(IsRoadmapView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsRoadmapView" aria-disabled="@(BoardId is null)"
                             title="@(BoardId is null ? "Роадмап — внутри одного проекта: выберите проект" : "Роадмап: полосы от начала до срока")"
-                            @onclick="() => SetView(TaskView.Roadmap)"><Icon Name="chart" Size="14" />Роадмап</button>
+                            @onclick="() => SetProjectView(TaskView.Roadmap)"><Icon Name="chart" Size="14" />Роадмап</button>
                 </div>
                 @* В доске фильтр статуса не нужен: колонки и есть статусы. *@
                 @if (CurrentView == TaskView.List && CurrentBoard is { } board)
@@ -505,6 +505,22 @@
             ["status"] = null,
             ["type"] = null
         }));
+    }
+
+    /// <summary>
+    /// Дерево, бэклог и роадмап живут внутри одного проекта: в «Все проекты» вид не меняется, а тост объясняет почему.
+    /// Кнопка при этом не disabled — по выключенной кнопке клик не доходит, и человек не узнал бы, что делать.
+    /// </summary>
+    private void SetProjectView(TaskView view)
+    {
+        if (BoardId is null)
+        {
+            var name = view switch { TaskView.Tree => "Дерево", TaskView.Backlog => "Бэклог", _ => "Роадмап" };
+            Toasts.Warning($"{name} — внутри одного проекта: сначала выберите проект");
+            return;
+        }
+
+        SetView(view);
     }
 
     /// <summary>Карточки доски — те же _tasks, по которым ходят слайдер и ↑↓.</summary>
