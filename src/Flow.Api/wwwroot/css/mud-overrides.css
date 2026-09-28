@@ -183,8 +183,17 @@ a.mud-link:hover {
     opacity: 1;
 }
 
-.date-pill .mud-input-adornment .mud-icon-button {
+/* Material ставит кнопке у края (Edge.End) отрицательный отступ, чтобы «вынести» её к краю поля; в нашей рамке она из-за
+   этого вылезала за границу пилюли. Кнопка — обычный элемент строки, поле ввода сжимается под неё. */
+.date-pill .mud-input-adornment .mud-icon-button,
+.ds-field-row .mud-input-adornment .mud-icon-button {
     padding: 2px;
+    margin: 0;
+}
+
+.date-pill .mud-input > input.mud-input-root {
+    flex: 1;
+    min-width: 0;
 }
 
 .date-pill .mud-input-adornment .mud-icon-root,
