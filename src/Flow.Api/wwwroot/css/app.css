@@ -2825,3 +2825,16 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .tpl-pick { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
 .tpl-pick .mud-select { max-width: 280px; }
 .tpl-pick .hint { font-size: 12px; }
+
+/* Группы (этап 4C) */
+.groups-panel { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+.gp-new { display: grid; grid-template-columns: minmax(0, 360px) auto; gap: 12px; align-items: end; }
+.gp-group { padding: 12px 0; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px; }
+.gp-head { display: flex; align-items: center; gap: 12px; color: #fff; font: var(--fw-medium) 14px var(--font-text); }
+.gp-members { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gp-member { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 3px; border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--text-primary); font: var(--fw-medium) 12.5px var(--font-text); }
+.gp-x { border: 0; background: none; color: var(--text-tertiary); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+.gp-x:hover { color: var(--danger); }
+.gp-add { max-width: 240px; }
+.pa-group-ico { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; background: rgba(255,255,255,0.08); color: var(--text-secondary); }
+.pa-group-add { min-width: 200px; }

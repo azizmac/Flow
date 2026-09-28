@@ -270,6 +270,21 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
     public Task<IActionResult> RemoveMember(Guid id, Guid userId, CancellationToken cancellationToken) =>
         MemberResult(() => mediator.Send(new BoardMemberRemoveCommand(actor.Require(), id, userId), cancellationToken));
 
+    /// <summary>Роль группы в проекте (этап 4C): каждый её участник получает эту роль. 400 — группы нет.</summary>
+    [HttpPut("{id:guid}/groups/{groupId:guid}")]
+    public async Task<IActionResult> SetGroup(Guid id, Guid groupId, SetBoardMemberRequest request, CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(request.Role))
+            return BadRequest(new { Message = $"Unknown project role {request.Role}." });
+
+        return await MemberResult(() => mediator.Send(
+            new Flow.Application.Features.Groups.BoardGroupSetCommand(actor.Require(), id, groupId, request.Role.ToDomainRole()), cancellationToken));
+    }
+
+    [HttpDelete("{id:guid}/groups/{groupId:guid}")]
+    public Task<IActionResult> RemoveGroup(Guid id, Guid groupId, CancellationToken cancellationToken) =>
+        MemberResult(() => mediator.Send(new Flow.Application.Features.Groups.BoardGroupRemoveCommand(actor.Require(), id, groupId), cancellationToken));
+
     /// <summary>Open или Private (только участники и глобальные Admin/Owner). Права — ManageMembers.</summary>
     [HttpPut("{id:guid}/visibility")]
     public async Task<IActionResult> SetVisibility(Guid id, SetVisibilityRequest request, CancellationToken cancellationToken)

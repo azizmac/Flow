@@ -150,7 +150,9 @@ public static class TestMediatorFactory
 
         var services = new ServiceCollection();
         services.AddSingleton<IBoardRepository>(boards);
-        services.AddSingleton<IBoardMemberRepository>(new FakeBoardMemberRepository(boards));
+        var groups = new FakeGroupRepository();
+        services.AddSingleton<IGroupRepository>(groups);
+        services.AddSingleton<IBoardMemberRepository>(new FakeBoardMemberRepository(boards, groups));
         services.AddSingleton<ITaskItemRepository>(tasks);
         services.AddSingleton<ISprintRepository>(new FakeSprintRepository(tasks));
         services.AddSingleton<IMilestoneRepository>(new FakeMilestoneRepository(tasks));

@@ -17,6 +17,6 @@ internal sealed class BoardMembersQueryHandler(IBoardRepository boards, IBoardMe
         if (board is null || !(await projectAccess.GetAsync(actor, board.Id, cancellationToken)).CanView)
             return null;
 
-        return board.ToMembersResponse(await members.GetByBoardAsync(board.Id, cancellationToken));
+        return await members.MembersResponseAsync(board, cancellationToken);
     }
 }

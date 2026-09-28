@@ -133,6 +133,14 @@ internal sealed partial class InProcessFlowApi
     public Task<ApiResult<BoardMembersResponse>> RemoveBoardMember(Guid boardId, Guid userId, CancellationToken ct = default) =>
         Scoped(async mediator => MemberResult(await mediator.Send(new BoardMemberRemoveCommand(await ActorAsync(), boardId, userId), ct)));
 
+    public Task<ApiResult<BoardMembersResponse>> SetBoardGroup(Guid boardId, Guid groupId, SetBoardMemberRequest request, CancellationToken ct = default) =>
+        Scoped(async mediator => MemberResult(await mediator.Send(
+            new Flow.Application.Features.Groups.BoardGroupSetCommand(await ActorAsync(), boardId, groupId, request.Role.ToDomainRole()), ct)));
+
+    public Task<ApiResult<BoardMembersResponse>> RemoveBoardGroup(Guid boardId, Guid groupId, CancellationToken ct = default) =>
+        Scoped(async mediator => MemberResult(await mediator.Send(
+            new Flow.Application.Features.Groups.BoardGroupRemoveCommand(await ActorAsync(), boardId, groupId), ct)));
+
     /// <summary>Admin в роли по умолчанию — ArgumentException, Guard отдаёт 400.</summary>
     public Task<ApiResult<BoardMembersResponse>> SetBoardDefaultRole(Guid boardId, SetDefaultRoleRequest request, CancellationToken ct = default) =>
         Scoped(async mediator =>

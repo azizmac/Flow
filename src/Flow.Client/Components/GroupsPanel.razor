@@ -1,0 +1,167 @@
+@* Вкладка «Люди → Группы» (docs/TZ_project_access.md §5, этап 4C): группы людей, их состав. Группе выдают роль в
+   проекте в «Доступе» проекта — и её получает каждый участник. Читают все, меняют Admin и Owner (CanManage). *@
+@inject IFlowApi Api
+@inject UserDirectory Users
+@inject ToastService Toasts
+
+<div class="panel groups-panel">
+    @if (CanManage)
+    {
+        <div class="gp-new">
+            <DsInput Id="gp-new" Placeholder="Новая группа, например «Бэкенд»" MaxLength="80" Value="@_newName"
+                     ValueChanged="v => _newName = v" OnKeyDown="OnNewKey" />
+            <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="Create" Disabled="@(_busy || _newName.Trim().Length == 0)">Создать группу</DsButton>
+        </div>
+    }
+    @if (_loading)
+    {
+        <Skeleton Kind="rows" Count="3" />
+    }
+    else if (_groups.Count == 0)
+    {
+        <div class="empty">
+            <div class="empty-title">Групп пока нет</div>
+            <div>Группа выдаёт роль в проекте сразу всем своим людям — удобно для команд и отделов.</div>
+        </div>
+    }
+    @foreach (var g in _groups)
+    {
+        <div class="gp-group" @key="g.Id" data-group="@g.Name">
+            <div class="gp-head">
+                @if (_renaming == g.Id)
+                {
+                    <DsInput Value="@_renameText" ValueChanged="v => _renameText = v" MaxLength="80" OnKeyDown="e => OnRenameKey(e, g)" />
+                    <button type="button" class="icon-lnk" @onclick="() => Rename(g)">Сохранить</button>
+                }
+                else
+                {
+                    <b>@g.Name</b>
+                    <span class="hint">@Ru.People(g.MemberIds.Count)</span>
+                    @if (CanManage)
+                    {
+                        <button type="button" class="icon-lnk" @onclick="() => { _renaming = g.Id; _renameText = g.Name; }">Переименовать</button>
+                        <button type="button" class="icon-lnk danger" @onclick="() => Delete(g)" disabled="@_busy">Удалить</button>
+                    }
+                }
+            </div>
+            <div class="gp-members">
+                @foreach (var id in g.MemberIds)
+                {
+                    var user = Users.Find(id);
+                    <span class="gp-member">
+                        <Avatar User="user" Size="22" />
+                        <span>@(user?.FullName ?? "—")</span>
+                        @if (CanManage)
+                        {
+                            <button type="button" class="gp-x" title="Убрать из группы" disabled="@_busy" @onclick="() => SetMember(g, id, false)">×</button>
+                        }
+                    </span>
+                }
+                @if (CanManage)
+                {
+                    var candidates = Users.Active.Where(u => !g.MemberIds.Contains(u.Id)).ToList();
+                    @if (candidates.Count > 0)
+                    {
+                        <MudSelect T="Guid?" Placeholder="+ Добавить человека" Value="null" ValueChanged="id => SetMember(g, id, true)" Dense="true"
+                                   Variant="Variant.Text" PopoverClass="flow-pop" Class="gp-add" Disabled="_busy">
+                            @foreach (var u in candidates)
+                            {
+                                <MudSelectItem T="Guid?" Value="u.Id">@u.FullName · @@@u.Username</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public bool CanManage { get; set; }
+
+    private List<GroupResponse> _groups = [];
+    private bool _loading = true;
+    private bool _busy;
+    private string _newName = "";
+    private Guid? _renaming;
+    private string _renameText = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Users.EnsureLoadedAsync();
+        var result = await Api.GetGroups();
+        _loading = false;
+        if (result.Ok)
+            _groups = result.Value!.ToList();
+        else
+            Toasts.Error(result.Error ?? "Не удалось загрузить группы");
+    }
+
+    private async Task OnNewKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Create();
+    }
+
+    private async Task Create()
+    {
+        if (_newName.Trim().Length == 0)
+            return;
+        if (await Run(() => Api.CreateGroup(new SaveGroupRequest(_newName.Trim()))) is { } created)
+        {
+            _groups.Add(created);
+            _groups = _groups.OrderBy(g => g.Name).ToList();
+            _newName = "";
+        }
+    }
+
+    private async Task OnRenameKey(KeyboardEventArgs e, GroupResponse g)
+    {
+        if (e.Key == "Enter")
+            await Rename(g);
+        else if (e.Key == "Escape")
+            _renaming = null;
+    }
+
+    private async Task Rename(GroupResponse g)
+    {
+        if (await Run(() => Api.UpdateGroup(g.Id, new SaveGroupRequest(_renameText.Trim(), g.Description))) is { } updated)
+            Replace(updated);
+        _renaming = null;
+    }
+
+    private async Task Delete(GroupResponse g)
+    {
+        _busy = true;
+        var result = await Api.DeleteGroup(g.Id);
+        _busy = false;
+        if (result.Ok)
+            _groups.Remove(g);
+        else
+            Toasts.Error(result.Error ?? "Не удалось удалить группу");
+    }
+
+    private async Task SetMember(GroupResponse g, Guid? userId, bool member)
+    {
+        if (userId is { } id && await Run(() => Api.SetGroupMember(g.Id, id, member)) is { } updated)
+            Replace(updated);
+    }
+
+    private void Replace(GroupResponse updated)
+    {
+        var index = _groups.FindIndex(x => x.Id == updated.Id);
+        if (index >= 0)
+            _groups[index] = updated;
+    }
+
+    private async Task<GroupResponse?> Run(Func<Task<ApiResult<GroupResponse>>> call)
+    {
+        _busy = true;
+        var result = await call();
+        _busy = false;
+        if (result.Ok)
+            return result.Value;
+        Toasts.Error(result.Error ?? "Не удалось сохранить группу");
+        return null;
+    }
+}

@@ -29,6 +29,6 @@ internal sealed class BoardVisibilitySetCommandHandler(
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        return board.ToMembersResponse(await members.GetByBoardAsync(board.Id, cancellationToken));
+        return await members.MembersResponseAsync(board, cancellationToken);
     }
 }

@@ -61,6 +61,9 @@ public interface IPermissionService
     /// <summary>Добавлять людей — Admin и Owner.</summary>
     void EnsureCanManageUsers(User actor);
 
+    /// <summary>Создавать, править и удалять группы и их состав — глобальный Admin+ (этап 4C).</summary>
+    void EnsureCanManageGroups(User actor);
+
     /// <summary>Создать человека с ролью: не выше своей; Admin не выдаёт Admin и Owner.</summary>
     void EnsureCanCreateUser(User actor, UserRole role);
 

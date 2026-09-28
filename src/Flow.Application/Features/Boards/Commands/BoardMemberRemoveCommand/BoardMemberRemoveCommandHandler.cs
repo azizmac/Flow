@@ -32,6 +32,6 @@ internal sealed class BoardMemberRemoveCommandHandler(
         members.Remove(member);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return BoardMemberResult.Success(board.ToMembersResponse(await members.GetByBoardAsync(board.Id, cancellationToken)));
+        return BoardMemberResult.Success(await members.MembersResponseAsync(board, cancellationToken));
     }
 }

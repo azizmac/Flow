@@ -1,3 +1,4 @@
+using Flow.Application.Abstractions;
 using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Boards;
 using DomainStatusType = Flow.Domain.Entities.StatusType;
@@ -82,7 +83,11 @@ public static class BoardMappingExtensions
             ? new TransitionConditions(c.MinRole?.ToDomainRole(), c.RequireAssignee, c.RequireChildrenDone, c.RequireChecklistDone, c.RequireFields)
             : null);
 
-    public static BoardMembersResponse ToMembersResponse(this Board board, IEnumerable<BoardMember> members) => new(
+    /// <summary>Экран «Доступ» целиком: участники и группы проекта (этап 4C).</summary>
+    public static async Task<BoardMembersResponse> MembersResponseAsync(this IBoardMemberRepository repository, Board board, CancellationToken cancellationToken) =>
+        board.ToMembersResponse(await repository.GetByBoardAsync(board.Id, cancellationToken), await repository.GetGroupsByBoardAsync(board.Id, cancellationToken));
+
+    public static BoardMembersResponse ToMembersResponse(this Board board, IEnumerable<BoardMember> members, IEnumerable<BoardGroupView>? groups = null) => new(
         board.Id,
         board.DefaultRole?.ToResponseRole(),
         board.Visibility.ToResponseVisibility(),
@@ -90,6 +95,11 @@ public static class BoardMappingExtensions
             .OrderByDescending(m => m.Role)
             .ThenBy(m => m.AddedAt)
             .Select(m => new BoardMemberResponse(m.UserId, m.Role.ToResponseRole(), m.AddedById, m.AddedAt))
+            .ToList(),
+        (groups ?? [])
+            .OrderByDescending(g => g.Link.Role)
+            .ThenBy(g => g.Name)
+            .Select(g => new BoardGroupResponse(g.Link.GroupId, g.Name, g.Link.Role.ToResponseRole(), g.MemberCount, g.Link.AddedById, g.Link.AddedAt))
             .ToList());
 
     /// <summary>Только для видимого проекта: у скрытого роли нет, и в ответы он не попадает.</summary>

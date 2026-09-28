@@ -43,12 +43,12 @@ internal sealed class BoardMemberSetCommandHandler(
         {
             EnsureNotLastPrivateAdmin(board, await members.GetByBoardAsync(board.Id, cancellationToken), member, request.Role);
             if (!member.ChangeRole(request.Role))
-                return BoardMemberResult.Success(board.ToMembersResponse(await members.GetByBoardAsync(board.Id, cancellationToken)));
+                return BoardMemberResult.Success(await members.MembersResponseAsync(board, cancellationToken));
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        return BoardMemberResult.Success(board.ToMembersResponse(await members.GetByBoardAsync(board.Id, cancellationToken)));
+        return BoardMemberResult.Success(await members.MembersResponseAsync(board, cancellationToken));
     }
 
     /// <summary>

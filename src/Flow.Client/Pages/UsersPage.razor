@@ -47,16 +47,23 @@
     {
         <div class="filter-row">
             <div class="seg" role="tablist">
-                <button type="button" class="seg-btn @(!_showInactive ? "on" : "")" role="tab" @onclick="() => _showInactive = false">
+                <button type="button" class="seg-btn @(!_showInactive && !_groupsTab ? "on" : "")" role="tab" @onclick="() => { _showInactive = false; _groupsTab = false; }">
                     Активные <span class="n">@ActiveCount</span>
                 </button>
-                <button type="button" class="seg-btn @(_showInactive ? "on" : "")" role="tab" @onclick="() => _showInactive = true">
+                <button type="button" class="seg-btn @(_showInactive && !_groupsTab ? "on" : "")" role="tab" @onclick="() => { _showInactive = true; _groupsTab = false; }">
                     Все <span class="n">@Directory.All.Count</span>
                 </button>
+                <button type="button" class="seg-btn @(_groupsTab ? "on" : "")" role="tab" @onclick="() => _groupsTab = true">Группы</button>
             </div>
             <div class="meta-line">@Ru.People(Visible.Count)@(HasSearch ? " найдено" : "")</div>
         </div>
 
+        @if (_groupsTab)
+        {
+            <GroupsPanel CanManage="CanManageUsers" />
+        }
+        else
+        {
         <div class="panel">
             <div class="user-cols list-head"><div></div><div>Человек</div><div>Должность</div><div>Почта</div><div>Роль</div><div>Статус</div><div></div></div>
             <div class="panel-rows user-rows">
@@ -108,6 +115,7 @@
                 }
             </div>
         </div>
+        }
     }
 </div>
 
@@ -121,6 +129,8 @@
     private string? _loadError;
     private string _search = "";
     private bool _showInactive;
+    /// <summary>Вкладка «Группы» (этап 4C) вместо списка людей.</summary>
+    private bool _groupsTab;
     private bool _createOpen;
     private Guid? _flashId;
     private IDisposable? _hotkeys;

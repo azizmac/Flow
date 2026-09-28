@@ -197,6 +197,15 @@ public interface IFlowApi
     Task<ApiResult<BoardMembersResponse>> GetBoardMembers(Guid boardId, CancellationToken ct = default);
     Task<ApiResult<BoardMembersResponse>> SetBoardMember(Guid boardId, Guid userId, SetBoardMemberRequest request, CancellationToken ct = default);
     Task<ApiResult<BoardMembersResponse>> RemoveBoardMember(Guid boardId, Guid userId, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> SetBoardGroup(Guid boardId, Guid groupId, SetBoardMemberRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> RemoveBoardGroup(Guid boardId, Guid groupId, CancellationToken ct = default);
+
+    // Группы людей (этап 4C): читают все, меняют Admin+
+    Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Users.GroupResponse>>> GetGroups(CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Users.GroupResponse>> CreateGroup(Flow.Shared.Contracts.Users.SaveGroupRequest request, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Users.GroupResponse>> UpdateGroup(Guid groupId, Flow.Shared.Contracts.Users.SaveGroupRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteGroup(Guid groupId, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Users.GroupResponse>> SetGroupMember(Guid groupId, Guid userId, bool member, CancellationToken ct = default);
     Task<ApiResult<BoardMembersResponse>> SetBoardVisibility(Guid boardId, SetVisibilityRequest request, CancellationToken ct = default);
     Task<ApiResult<BoardMembersResponse>> SetBoardDefaultRole(Guid boardId, SetDefaultRoleRequest request, CancellationToken ct = default);
 

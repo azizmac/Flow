@@ -14,7 +14,7 @@
            TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
     <TitleContent>
         <h3>Доступ · @Board.Key</h3>
-        <div class="hint">Роль в проекте — большая из двух: роли во Flow (не выше роли по умолчанию) и роли участника.
+        <div class="hint">Роль в проекте — наибольшая из: роли во Flow (не выше роли по умолчанию), роли участника и ролей его групп.
             Admin и Owner Flow управляют любым проектом и без участия.</div>
     </TitleContent>
     <DialogContent>
@@ -94,6 +94,43 @@
                 </div>
             </div>
 
+            @* Группы (этап 4C): роль группы получает каждый её участник; итог — максимум из всех ролей человека. *@
+            <div class="pa-section">
+                <div class="meta-k">Группы · @(_members.Groups?.Count ?? 0)</div>
+                <div class="pa-list">
+                    @foreach (var g in _members.Groups ?? [])
+                    {
+                        <div class="pa-row" @key="g.GroupId" data-group="@g.Name">
+                            <span class="pa-group-ico"><Icon Name="users" Size="14" /></span>
+                            <span class="pa-user">
+                                <span class="pa-name">@g.Name</span>
+                                <span class="pa-un">@Ru.People(g.MemberCount)</span>
+                            </span>
+                            <ProjectRoleSelect Value="g.Role" Allowed="Grantable" Disabled="_busy" OnChange="role => SetGroupRole(g.GroupId, role)" />
+                            <DsIconButton Icon="trash" Size="28" Title="Убрать группу" Style="color:rgba(255,255,255,0.45)"
+                                          Disabled="_busy" OnClick="() => RemoveGroup(g.GroupId)" />
+                        </div>
+                    }
+                </div>
+                @if (GroupCandidates.Count > 0)
+                {
+                    <div class="pa-add">
+                        <MudSelect T="Guid?" Placeholder="Добавить группу" Value="null" ValueChanged="id => AddGroup(id)" Dense="true" Variant="Variant.Text"
+                                   PopoverClass="flow-pop" Class="pa-group-add" Disabled="_busy">
+                            @foreach (var g in GroupCandidates)
+                            {
+                                <MudSelectItem T="Guid?" Value="g.Id">@g.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <ProjectRoleSelect Value="_newRole" Allowed="Grantable" OnChange="r => _newRole = r" />
+                    </div>
+                }
+                else if ((_members.Groups?.Count ?? 0) == 0)
+                {
+                    <div class="hint">Групп пока нет — их заводят в «Люди → Группы».</div>
+                }
+            </div>
+
             <div class="pa-section">
                 <div class="meta-k">Добавить участника</div>
                 <div class="pa-add">
@@ -148,6 +185,10 @@
     private string _query = "";
     private ProjectRole _newRole = ProjectRole.Member;
     private string? _error;
+    private IReadOnlyList<GroupResponse> _allGroups = [];
+
+    private IReadOnlyList<GroupResponse> GroupCandidates =>
+        _allGroups.Where(g => (_members?.Groups ?? []).All(x => x.GroupId != g.Id)).ToList();
 
     private readonly DialogOptions _options = new()
     {
@@ -175,6 +216,9 @@
         if (!Users.IsLoaded)
             await Users.EnsureLoadedAsync();
 
+        var groups = await Api.GetGroups();
+        if (groups.Ok)
+            _allGroups = groups.Value!;
         var result = await Api.GetBoardMembers(Board.Id);
         if (result.Ok)
             _members = result.Value!;
@@ -219,6 +263,14 @@
         if (await Send(() => Api.SetBoardMember(Board.Id, userId, new SetBoardMemberRequest(role)), affectsMe: userId == State.CurrentUserId) && clearQuery)
             _query = "";
     }
+
+    /// <summary>Группа может содержать и самого actor'а — права перечитываем всегда.</summary>
+    private Task SetGroupRole(Guid groupId, ProjectRole role) =>
+        Send(() => Api.SetBoardGroup(Board.Id, groupId, new SetBoardMemberRequest(role)), affectsMe: true);
+
+    private Task AddGroup(Guid? groupId) => groupId is { } id ? SetGroupRole(id, _newRole) : Task.CompletedTask;
+
+    private Task RemoveGroup(Guid groupId) => Send(() => Api.RemoveBoardGroup(Board.Id, groupId), affectsMe: true);
 
     private Task Remove(Guid userId) =>
         Send(() => Api.RemoveBoardMember(Board.Id, userId), affectsMe: userId == State.CurrentUserId);
