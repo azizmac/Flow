@@ -109,6 +109,13 @@ public static class TestMediatorFactory
         return (all.Mediator, all.Boards, all.Tasks, all.UnitOfWork);
     }
 
+    /// <summary>Журнал, очередь поиска и UnitOfWork вместе — для переноса конфигурации между проектами (этап 3F).</summary>
+    public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchIndex, FakeUnitOfWork UnitOfWork) CreateWithJournal()
+    {
+        var all = Build();
+        return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Activities, all.SearchQueue, all.UnitOfWork);
+    }
+
     /// <summary>То же, плюс FakeAccountService — для тестов, которым важно, что ушло в Flow.Auth.</summary>
     public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts) CreateWithAccounts()
     {
@@ -149,6 +156,7 @@ public static class TestMediatorFactory
         services.AddSingleton<IMilestoneRepository>(new FakeMilestoneRepository(tasks));
         services.AddSingleton<ITaskLinkRepository>(links);
         services.AddSingleton<ISavedFilterRepository>(new FakeSavedFilterRepository());
+        services.AddSingleton<IBoardTemplateRepository>(new FakeBoardTemplateRepository());
         services.AddSingleton<IDashboardRepository>(new FakeDashboardRepository());
         services.AddSingleton<ITaskCodeAliasRepository>(new FakeTaskCodeAliasRepository(tasks));
         services.AddSingleton<ITaskRecurrenceRepository>(new FakeTaskRecurrenceRepository());

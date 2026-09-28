@@ -43,7 +43,7 @@ internal sealed partial class InProcessFlowApi
         {
             var actor = await ActorAsync();
 
-            var result = await mediator.Send(new BoardCreateCommand(actor, request.Name, request.Key), ct);
+            var result = await mediator.Send(new BoardCreateCommand(actor, request.Name, request.Key, request.TemplateId), ct);
 
             // Занятый ключ — не исключение, а явный результат: экран создания проекта отличает его
             // от невалидного ключа именно по 409 и показывает подсказку рядом с полем «Ключ».

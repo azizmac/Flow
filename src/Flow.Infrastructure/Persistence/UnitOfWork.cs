@@ -32,6 +32,25 @@ internal sealed class UnitOfWork(FlowDbContext db, SearchIndexQueue searchQueue)
         }
     }
 
+    public void DiscardChanges()
+    {
+        db.ChangeTracker.Clear();
+        searchQueue.Clear();
+    }
+
+    public async Task InTransactionAsync(Func<Task> action, CancellationToken cancellationToken)
+    {
+        if (db.Database.CurrentTransaction is not null)
+        {
+            await action();
+            return;
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await action();
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     private async Task SaveCoreAsync(CancellationToken cancellationToken)
     {
         if (!searchQueue.HasPending)

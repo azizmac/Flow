@@ -15,7 +15,9 @@
         <RowMenu ShowOpen="true" ShowRename="CanRename" ShowDelete="CanDelete" ShowTaskTypes="CanConfigure" ShowStatuses="CanConfigure" ShowAccess="CanManageMembers"
                  Size="26" Style="color:rgba(255,255,255,0.5)"
                  OnOpen="Open" OnRename="StartRename" OnCopy="CopyKey" OnDelete="() => OnDelete.InvokeAsync(Board)"
-                 OnTaskTypes="() => OnTaskTypes.InvokeAsync(Board)" OnStatuses="() => OnStatuses.InvokeAsync(Board)" OnWorkflow="@(() => Nav.NavigateTo($"boards/{Board.Id}/workflow"))" OnAccess="() => OnAccess.InvokeAsync(Board)" />
+                 OnTaskTypes="() => OnTaskTypes.InvokeAsync(Board)" OnStatuses="() => OnStatuses.InvokeAsync(Board)" OnWorkflow="@(() => Nav.NavigateTo($"boards/{Board.Id}/workflow"))" OnAccess="() => OnAccess.InvokeAsync(Board)"
+                 ShowApplyConfig="CanConfigure" OnApplyConfig="() => OnApplyConfig.InvokeAsync(Board)"
+                 ShowSaveTemplate="CanSaveTemplate" OnSaveTemplate="() => OnSaveTemplate.InvokeAsync(Board)" />
     </div>
     <div>
         <div class="board-card-name">
@@ -58,6 +60,9 @@
     [Parameter] public bool CanConfigure { get; set; }
     [Parameter] public bool CanManageMembers { get; set; }
     [Parameter] public EventCallback<BoardResponse> OnAccess { get; set; }
+    [Parameter] public bool CanSaveTemplate { get; set; }
+    [Parameter] public EventCallback<BoardResponse> OnSaveTemplate { get; set; }
+    [Parameter] public EventCallback<BoardResponse> OnApplyConfig { get; set; }
     [Parameter] public EventCallback<string> OnCopy { get; set; }
 
     private readonly string _inputId = "bc-" + Guid.NewGuid().ToString("N")[..8];

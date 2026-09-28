@@ -9,6 +9,12 @@ public sealed class FakeUnitOfWork : IUnitOfWork
 
     public int SaveCount { get; private set; }
 
+    public int DiscardCount { get; private set; }
+
+    public void DiscardChanges() => DiscardCount++;
+
+    public Task InTransactionAsync(Func<Task> action, CancellationToken cancellationToken) => action();
+
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         SaveCount++;

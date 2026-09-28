@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Flow.Domain.Templates;
 
 namespace Flow.Domain.Entities;
 
@@ -96,6 +97,33 @@ public sealed partial class Board
         foreach (var preset in DefaultTaskTypes.All)
             board.AddTaskType(preset.Name, preset.Kind, preset.IsDefault);
 
+        return board;
+    }
+
+    /// <summary>
+    /// Проект по чертежу шаблона (этап 3F): статусы, типы (без типов в чертеже — встроенные), поля, workflow и экраны
+    /// сразу из чертежа — без лишних статусов и архивных типов, которые остались бы от <see cref="Create(string, string)"/>.
+    /// </summary>
+    public static Board Create(string name, string key, BoardBlueprint blueprint)
+    {
+        blueprint.Validate();
+        var board = new Board(name, key);
+
+        var statusIds = new Dictionary<string, Guid>();
+        foreach (var b in blueprint.Statuses)
+        {
+            var status = board.AddStatus(b.Name, b.Type, b.IsInitial, b.IsFinal);
+            status.SetWipLimit(b.WipLimit);
+            statusIds[b.Key] = status.Id;
+        }
+
+        if (blueprint.TaskTypes.Count == 0)
+            foreach (var preset in DefaultTaskTypes.All)
+                board.AddTaskType(preset.Name, preset.Kind, preset.IsDefault);
+        var typeIds = board.ApplyBlueprintTypes(blueprint, archiveExtras: false);
+        var fieldIds = board.ApplyBlueprintFields(blueprint, typeIds);
+        board.ApplyBlueprintWorkflow(blueprint, statusIds, typeIds, fieldIds);
+        board.ApplyBlueprintScreens(blueprint, typeIds, fieldIds);
         return board;
     }
 
@@ -756,4 +784,269 @@ public sealed partial class Board
 
         return normalized;
     }
+
+    // ---- чертёж конфигурации: шаблоны проектов и перенос настроек (docs/TZ_workflow_config.md §4, этап 3F) ----
+
+    /// <summary>
+    /// Снимок конфигурации без задач: ключи статусов и типов — их Id строкой, поля — свой Key проекта (он и так
+    /// неизменяем и уникален), на экранах «custom:Id» становится «custom:Key» — чертёж переносим между проектами.
+    /// </summary>
+    public BoardBlueprint ToBlueprint()
+    {
+        static string K(Guid id) => id.ToString("N");
+        var fieldKeys = _customFields.ToDictionary(f => f.Id, f => f.Key);
+        string? FieldRef(string field) =>
+            field.StartsWith(ScreenFields.CustomPrefix, StringComparison.Ordinal) && Guid.TryParse(field[ScreenFields.CustomPrefix.Length..], out var id)
+                ? fieldKeys.TryGetValue(id, out var key) ? ScreenFields.CustomPrefix + key : null
+                : field;
+
+        return new BoardBlueprint(
+            _statuses.OrderBy(s => s.SortOrder).Select(s => new BlueprintStatus(K(s.Id), s.Name, s.Type, s.IsInitial, s.IsFinal, s.WipLimit)).ToList(),
+            WorkflowMode,
+            _transitions.Select(t => new BlueprintTransition(t.FromStatusId is { } f ? K(f) : null, K(t.ToStatusId), t.Name, t.MinRole,
+                t.RequireAssignee, t.RequireChildrenDone, t.RequireChecklistDone,
+                t.RequireFields.Where(fieldKeys.ContainsKey).Select(id => fieldKeys[id]).ToList(), t.TaskTypeId is { } tt ? K(tt) : null)).ToList(),
+            _taskTypes.OrderBy(t => t.SortOrder).Where(t => !t.IsArchived || t.IsDefault)
+                .Select(t => new BlueprintTaskType(K(t.Id), t.Name, t.Kind, t.IsDefault, t.OwnWorkflowMode)).ToList(),
+            _customFields.OrderBy(f => f.SortOrder).Where(f => !f.IsArchived)
+                .Select(f => new BlueprintField(f.Key, f.Name, f.Type, f.HasOptions ? f.Options.Select(o => o.Label).ToList() : null, f.IsRequired,
+                    f.TaskTypeIds.Select(K).ToList())).ToList(),
+            _screens.Select(sc => new BlueprintScreen(sc.TaskTypeId is { } st ? K(st) : null, sc.Context,
+                sc.Fields.Select(f => (Ref: FieldRef(f.Field), f)).Where(x => x.Ref is not null)
+                    .Select(x => new BlueprintScreenField(x.Ref!, x.f.Required, x.f.Section)).ToList())).ToList());
+    }
+
+    /// <summary>
+    /// Карта «статус проекта → статус чертежа» по умолчанию: то же имя без учёта регистра, иначе тот же вид статуса
+    /// (финальный — к финальному), иначе начальный статус чертежа. Её показывает предпросмотр, человек правит.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, string> SuggestStatusMap(BoardBlueprint blueprint)
+    {
+        var map = new Dictionary<Guid, string>();
+        var initial = blueprint.Statuses.First(s => s.IsInitial).Key;
+        foreach (var status in _statuses.OrderBy(s => s.SortOrder))
+        {
+            var match = blueprint.Statuses.FirstOrDefault(b => string.Equals(b.Name, status.Name, StringComparison.OrdinalIgnoreCase))
+                        ?? (status.Type is { } type ? blueprint.Statuses.FirstOrDefault(b => b.Type == type) : null)
+                        ?? (status.IsFinal ? blueprint.Statuses.FirstOrDefault(b => b.IsFinal) : null);
+            map[status.Id] = match?.Key ?? initial;
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// Статусы по чертежу. Статус проекта, на который в карте указывает статус чертежа, становится им (первый по
+    /// порядку — переименовывается, прочие — лишние); статус чертежа, на который не указывает никто, создаётся.
+    /// Лишние статусы не удаляются здесь: доска своих задач не держит, поэтому вызывающий переносит их задачи в
+    /// <c>MoveTo</c> (с журналом) и потом зовёт <see cref="RemoveStatus"/>. Имена меняются через временные, иначе
+    /// обмен двух имён упёрся бы в уникальность.
+    /// </summary>
+    public BlueprintStatusResult ApplyBlueprintStatuses(BoardBlueprint blueprint, IReadOnlyDictionary<Guid, string>? statusMap)
+    {
+        blueprint.Validate();
+        if (blueprint.Statuses.GroupBy(s => s.Name.Trim(), StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
+            throw new ArgumentException("Имена статусов шаблона повторяются.");
+
+        var map = new Dictionary<Guid, string>(SuggestStatusMap(blueprint));
+        foreach (var (statusId, key) in statusMap ?? new Dictionary<Guid, string>())
+        {
+            GetStatus(statusId);
+            if (blueprint.Statuses.All(b => b.Key != key))
+                throw new ArgumentException($"В шаблоне нет статуса «{key}».", nameof(statusMap));
+            map[statusId] = key;
+        }
+
+        var kept = new Dictionary<string, Status>();
+        foreach (var status in _statuses.OrderBy(s => s.SortOrder))
+            kept.TryAdd(map[status.Id], status);
+        var removed = _statuses.Where(s => !kept.ContainsValue(s)).ToList();
+
+        foreach (var status in _statuses)
+            status.Rename("~" + status.Id.ToString("N"));
+
+        var result = new Dictionary<string, Guid>();
+        foreach (var b in blueprint.Statuses)
+        {
+            if (!kept.TryGetValue(b.Key, out var status))
+            {
+                status = new Status(Id, "~new-" + Guid.NewGuid().ToString("N"), NextStatusSortOrder(), false, false, b.Type);
+                _statuses.Add(status);
+            }
+
+            status.Rename(b.Name);
+            status.SetType(b.Type);
+            status.SetWipLimit(b.WipLimit);
+            status.SetFinal(b.IsFinal);
+            status.SetInitial(b.IsInitial);
+            result[b.Key] = status.Id;
+        }
+
+        foreach (var status in removed)
+        {
+            status.SetInitial(false);
+            status.SetFinal(false);
+        }
+
+        ReorderStatuses(blueprint.Statuses.Select(b => result[b.Key]).Concat(removed.Select(s => s.Id)).ToList());
+        return new BlueprintStatusResult(result, removed.Select(s => (s.Id, result[map[s.Id]])).ToList());
+    }
+
+    /// <summary>
+    /// Временные имена всем статусам — для записи в два шага: обмен имён двух статусов (A↔B) — цикл по unique
+    /// (BoardId, Name), который одной командой UPDATE не сохранить. Вызывающий сохраняет, возвращает имена
+    /// <see cref="RestoreStatusNames"/> и сохраняет ещё раз — в одной транзакции.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, string> ParkStatusNames()
+    {
+        var names = _statuses.ToDictionary(s => s.Id, s => s.Name);
+        foreach (var status in _statuses)
+            status.Rename("~" + status.Id.ToString("N"));
+        return names;
+    }
+
+    public void RestoreStatusNames(IReadOnlyDictionary<Guid, string> names)
+    {
+        foreach (var status in _statuses)
+            if (names.TryGetValue(status.Id, out var name))
+                status.Rename(name);
+        if (_statuses.GroupBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
+            throw new InvalidOperationException("Имена статусов повторяются.");
+    }
+
+    /// <summary>Статусы проекта по ключам чертежа без изменений — по карте (или по умолчанию): для workflow без статусов.</summary>
+    public IReadOnlyDictionary<string, Guid> MapBlueprintStatuses(BoardBlueprint blueprint, IReadOnlyDictionary<Guid, string>? statusMap)
+    {
+        var map = new Dictionary<Guid, string>(SuggestStatusMap(blueprint));
+        foreach (var (statusId, key) in statusMap ?? new Dictionary<Guid, string>())
+            map[statusId] = key;
+        var result = new Dictionary<string, Guid>();
+        foreach (var status in _statuses.OrderBy(s => s.SortOrder))
+            result.TryAdd(map[status.Id], status.Id);
+        return result;
+    }
+
+    /// <summary>
+    /// Типы по чертежу: совпадение по имени без учёта регистра (вид у существующего не меняется — на нём держится
+    /// иерархия задач), недостающие создаются, тип по умолчанию — как в чертеже. archiveExtras — лишние в архив (для
+    /// нового проекта из шаблона); при переносе в живой проект лишние остаются: на них лежат задачи.
+    /// </summary>
+    public IReadOnlyDictionary<string, Guid> ApplyBlueprintTypes(BoardBlueprint blueprint, bool archiveExtras)
+    {
+        var result = new Dictionary<string, Guid>();
+        foreach (var b in blueprint.TaskTypes)
+        {
+            var type = _taskTypes.FirstOrDefault(t => string.Equals(t.Name, b.Name.Trim(), StringComparison.OrdinalIgnoreCase))
+                       ?? AddTaskType(b.Name, b.Kind);
+            if (type.IsArchived)
+                type.SetArchived(false);
+            result[b.Key] = type.Id;
+        }
+
+        if (blueprint.TaskTypes.FirstOrDefault(t => t.IsDefault) is { } preferred)
+            SetDefaultTaskType(result[preferred.Key]);
+        if (archiveExtras)
+            foreach (var type in _taskTypes.Where(t => !result.ContainsValue(t.Id) && !t.IsDefault))
+                type.SetArchived(true);
+        return result;
+    }
+
+    /// <summary>Типы проекта по ключам чертежа без изменений — по имени; не найденные в карту не попадают.</summary>
+    public IReadOnlyDictionary<string, Guid> MapBlueprintTypes(BoardBlueprint blueprint) =>
+        blueprint.TaskTypes
+            .Select(b => (b.Key, Type: _taskTypes.FirstOrDefault(t => string.Equals(t.Name, b.Name.Trim(), StringComparison.OrdinalIgnoreCase))))
+            .Where(x => x.Type is not null)
+            .ToDictionary(x => x.Key, x => x.Type!.Id);
+
+    /// <summary>
+    /// Поля по чертежу — по ключу: такое поле того же вида обновляется (имя, варианты по подписи — прежние Id
+    /// сохраняются, обязательность, типы задач), другого вида — отказ: значения задач уже записаны в своей форме.
+    /// Недостающие создаются, лишние не трогаются — в них данные задач.
+    /// </summary>
+    public IReadOnlyDictionary<string, Guid> ApplyBlueprintFields(BoardBlueprint blueprint, IReadOnlyDictionary<string, Guid> typeIds)
+    {
+        var result = new Dictionary<string, Guid>();
+        foreach (var b in blueprint.CustomFields)
+        {
+            var types = (b.TypeKeys ?? []).Where(typeIds.ContainsKey).Select(k => typeIds[k]).ToList();
+            var key = CustomFieldDefinition.ValidateKey(b.Key);
+            var field = _customFields.FirstOrDefault(f => f.Key == key);
+            if (field is null)
+            {
+                field = AddCustomField(key, b.Name, b.Type, b.Options, b.IsRequired, types);
+            }
+            else
+            {
+                if (field.Type != b.Type)
+                    throw new InvalidOperationException($"Поле «{field.Name}» ({key}) в проекте другого вида — значения задач не перенести.");
+                var options = field.HasOptions
+                    ? (b.Options ?? []).Select(label => (field.Options.FirstOrDefault(o => string.Equals(o.Label, label, StringComparison.OrdinalIgnoreCase))?.Id,
+                        label, field.Options.FirstOrDefault(o => string.Equals(o.Label, label, StringComparison.OrdinalIgnoreCase))?.Color)).ToList()
+                    : null;
+                UpdateCustomField(field.Id, b.Name, options, b.IsRequired, types, isArchived: false);
+            }
+
+            result[b.Key] = field.Id;
+        }
+
+        return result;
+    }
+
+    /// <summary>Поля проекта по ключам чертежа без изменений — по ключу поля.</summary>
+    public IReadOnlyDictionary<string, Guid> MapBlueprintFields(BoardBlueprint blueprint) =>
+        blueprint.CustomFields
+            .Select(b => (b.Key, Field: _customFields.FirstOrDefault(f => f.Key == b.Key.Trim().ToLowerInvariant())))
+            .Where(x => x.Field is not null)
+            .ToDictionary(x => x.Key, x => x.Field!.Id);
+
+    /// <summary>
+    /// Workflow по чертежу: проектный и свои у типов (этап 3E). Переходы со статусами, которых в проекте нет, и
+    /// условия с полями, которых нет, пропускаются. Свой workflow типа, которого в чертеже нет, снимается.
+    /// </summary>
+    public void ApplyBlueprintWorkflow(BoardBlueprint blueprint, IReadOnlyDictionary<string, Guid> statusIds,
+        IReadOnlyDictionary<string, Guid> typeIds, IReadOnlyDictionary<string, Guid> fieldIds)
+    {
+        List<TransitionSpec> Specs(string? typeKey) => blueprint.Transitions
+            .Where(t => t.TypeKey == typeKey && statusIds.ContainsKey(t.To) && (t.From is null || statusIds.ContainsKey(t.From)))
+            .Select(t => new TransitionSpec(t.From is null ? null : statusIds[t.From], statusIds[t.To], t.Name,
+                new TransitionConditions(t.MinRole, t.RequireAssignee, t.RequireChildrenDone, t.RequireChecklistDone,
+                    (t.RequireFieldKeys ?? []).Where(fieldIds.ContainsKey).Select(k => fieldIds[k]).ToList())))
+            .GroupBy(t => (t.FromStatusId, t.ToStatusId)).Select(g => g.First())
+            .ToList();
+
+        SetWorkflow(blueprint.WorkflowMode, Specs(null));
+        var own = new HashSet<Guid>();
+        foreach (var type in blueprint.TaskTypes.Where(t => t.OwnWorkflowMode is not null && typeIds.ContainsKey(t.Key)))
+        {
+            SetWorkflow(type.OwnWorkflowMode!.Value, Specs(type.Key), typeIds[type.Key]);
+            own.Add(typeIds[type.Key]);
+        }
+
+        foreach (var type in _taskTypes.Where(t => t.OwnWorkflowMode is not null && !own.Contains(t.Id)).ToList())
+            ResetTypeWorkflow(type.Id);
+    }
+
+    /// <summary>
+    /// Экраны по чертежу — целиком заменяют экраны проекта; поля и типы, которых нет, пропускаются. Совпадающий экран
+    /// правится на месте, а не пересоздаётся: повторное применение того же чертежа ничего не меняет в БД.
+    /// </summary>
+    public void ApplyBlueprintScreens(BoardBlueprint blueprint, IReadOnlyDictionary<string, Guid> typeIds, IReadOnlyDictionary<string, Guid> fieldIds)
+    {
+        var kept = new HashSet<TaskScreen>();
+        foreach (var screen in blueprint.Screens)
+        {
+            if (screen.TypeKey is { } typeKey && !typeIds.ContainsKey(typeKey))
+                continue;
+            var fields = screen.Fields
+                .Select(f => f.Field.StartsWith(ScreenFields.CustomPrefix, StringComparison.Ordinal)
+                    ? fieldIds.TryGetValue(f.Field[ScreenFields.CustomPrefix.Length..], out var id) ? new ScreenField(ScreenFields.CustomPrefix + id, f.Required, f.Section) : null
+                    : new ScreenField(f.Field, f.Required, f.Section))
+                .OfType<ScreenField>()
+                .ToList();
+            kept.Add(SetScreen(screen.TypeKey is null ? null : typeIds[screen.TypeKey], screen.Context, fields));
+        }
+
+        _screens.RemoveAll(s => !kept.Contains(s));
+    }
+
 }

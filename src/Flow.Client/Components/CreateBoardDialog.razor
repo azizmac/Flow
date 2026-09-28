@@ -1,6 +1,7 @@
 ﻿@* Модалка «Новый проект»: название + ключ (авто-uppercase, валидация ^[A-Z][A-Z0-9]{1,9}$),
    живая подсказка «KEY-1, KEY-2…», 409 → «Ключ уже занят». Enter — создать, Esc — закрыть.
-   Ключ подставляется из названия, пока пользователь не правил его сам.
+   Ключ подставляется из названия, пока пользователь не правил его сам. Шаблон (этап 3F) — встроенный или сохранённый:
+   под выбором видно, какие статусы, типы и поля получит проект; сохранённый можно тут же удалить.
 
    Слой — MudDialog (затемнение, захват фокуса, Esc, клик по фону), вид — класс .flow-modal
    в mud-overrides.css. Enter обрабатывают сами поля (OnFieldKey).
@@ -15,7 +16,7 @@
            TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
     <TitleContent>
         <h3>Новый проект</h3>
-        <div class="hint">Проект получит 4 стандартных статуса задач: Не начата · В работе · На проверке · Сделана — и типы: эпик, история, задача, ошибка, подзадача</div>
+        <div class="hint">Настройки берутся из шаблона — потом их можно поменять в проекте</div>
     </TitleContent>
     <DialogContent>
         <DsInput Id="cb-name" Label="Название" Placeholder="Мобильное приложение" MaxLength="200"
@@ -27,6 +28,35 @@
             <div class="hint" style="margin-top:8px;">
                 @Ru.BoardKeyRule. Задачи будут нумероваться <code>@KeyPreview-1</code>, <code>@KeyPreview-2</code>…
             </div>
+        </div>
+
+        <div>
+            <MudSelect T="Guid" Label="Шаблон" Value="_templateId" ValueChanged="v => _templateId = v" Dense="true" Variant="Variant.Text"
+                       PopoverClass="flow-pop" Class="cb-template" Disabled="_templates.Count == 0">
+                @foreach (var t in _templates)
+                {
+                    <MudSelectItem T="Guid" Value="t.Id">@t.Name@(t.IsBuiltIn ? "" : " · сохранённый")</MudSelectItem>
+                }
+            </MudSelect>
+            @if (Template is { } tpl)
+            {
+                <div class="hint cb-template-hint">
+                    @if (tpl.Description is { Length: > 0 })
+                    {
+                        <div>@tpl.Description</div>
+                    }
+                    <div>Статусы: @string.Join(" · ", tpl.Statuses)@(tpl.WorkflowMode == WorkflowMode.Restricted ? " (переходы по workflow)" : "")</div>
+                    <div>Типы: @string.Join(", ", tpl.TaskTypes)@(tpl.CustomFields.Count > 0 ? $" · поля: {string.Join(", ", tpl.CustomFields)}" : "")</div>
+                    @if (tpl.SampleTaskCount > 0)
+                    {
+                        <div>Задачи-образцы: @tpl.SampleTaskCount</div>
+                    }
+                    @if (!tpl.IsBuiltIn)
+                    {
+                        <button type="button" class="icon-lnk danger" @onclick="DeleteTemplate" disabled="@_busy">Удалить шаблон</button>
+                    }
+                </div>
+            }
         </div>
 
         @if (_serverError is not null)
@@ -57,6 +87,11 @@
     private string? _keyError;
     private string? _serverError;
     private bool _keyTouched;
+    private List<BoardTemplateResponse> _templates = [];
+    /// <summary>Выбранный шаблон; по умолчанию — «Простой» (первый встроенный), он же — прежнее поведение.</summary>
+    private Guid _templateId;
+
+    private BoardTemplateResponse? Template => _templates.FirstOrDefault(t => t.Id == _templateId);
 
     private string KeyPreview => _key.Length == 0 ? "KEY" : _key;
 
@@ -94,6 +129,31 @@
 
     /// <summary>Страховка на случай, когда компонент убрали не через «Отмена» (уход со страницы).</summary>
     public ValueTask DisposeAsync() => new(CloseDialog());
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Api.GetBoardTemplates();
+        if (result.Ok)
+        {
+            _templates = result.Value!.ToList();
+            _templateId = _templates.FirstOrDefault()?.Id ?? Guid.Empty;
+        }
+    }
+
+    private async Task DeleteTemplate()
+    {
+        if (Template is not { IsBuiltIn: false } tpl)
+            return;
+        var result = await Api.DeleteBoardTemplate(tpl.Id);
+        if (!result.Ok)
+        {
+            _serverError = result.Error;
+            return;
+        }
+
+        _templates.Remove(tpl);
+        _templateId = _templates.FirstOrDefault()?.Id ?? Guid.Empty;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -205,7 +265,7 @@
 
         _busy = true;
         _serverError = null;
-        var result = await Api.CreateBoard(new CreateBoardRequest(_name.Trim(), _key));
+        var result = await Api.CreateBoard(new CreateBoardRequest(_name.Trim(), _key, _templateId == Guid.Empty ? null : _templateId));
         _busy = false;
 
         if (result.Ok)

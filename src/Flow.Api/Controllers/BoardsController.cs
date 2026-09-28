@@ -36,7 +36,7 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
         try
         {
             var result = await mediator.Send(
-                new BoardCreateCommand(actor.Require(), request.Name, request.Key),
+                new BoardCreateCommand(actor.Require(), request.Name, request.Key, request.TemplateId),
                 cancellationToken);
 
             if (result.IsKeyTaken)

@@ -50,7 +50,9 @@
                 <BoardCard @key="b.Id" Board="b" OnOpen="Open" OnRename="Rename" OnDelete="AskDelete" OnCopy="CopyKey"
                            CanRename="Permissions.CanRenameBoard(access)" CanDelete="Permissions.CanDeleteBoard(Me, access)"
                            CanConfigure="Permissions.CanManageConfig(access)" CanManageMembers="Permissions.CanManageMembers(access)"
-                           OnTaskTypes="bb => _typesBoard = bb" OnStatuses="bb => _statusesBoard = bb" OnAccess="bb => _accessBoard = bb" />
+                           OnTaskTypes="bb => _typesBoard = bb" OnStatuses="bb => _statusesBoard = bb" OnAccess="bb => _accessBoard = bb"
+                           CanSaveTemplate="CanManage && Permissions.CanManageConfig(access)"
+                           OnSaveTemplate="bb => _templateBoard = bb" OnApplyConfig="bb => _configSource = bb" />
             }
             @if (!HasSearch && CanManage)
             {
@@ -84,6 +86,16 @@
 @if (_statusesBoard is not null)
 {
     <StatusesDialog Board="_statusesBoard" OnChanged="Replace" OnClose="() => _statusesBoard = null" />
+}
+
+@if (_templateBoard is not null)
+{
+    <SaveTemplateDialog Board="_templateBoard" OnClose="() => _templateBoard = null" />
+}
+
+@if (_configSource is not null)
+{
+    <ApplyConfigDialog Source="_configSource" Boards="_boards" OnApplied="ReloadBoards" OnClose="() => _configSource = null" />
 }
 
 @if (_accessBoard is not null)
@@ -132,6 +144,10 @@
     /// <summary>Создают проекты глобальные Admin и Owner; остальное в карточке — по правам в самом проекте.</summary>
     private bool CanManage => Permissions.CanCreateBoard(Me);
 
+    /// <summary>Проект, который сохраняют как шаблон / чьи настройки переносят в другие проекты (этап 3F).</summary>
+    private BoardResponse? _templateBoard;
+    private BoardResponse? _configSource;
+
     /// <summary>Проект, чьих участников сейчас правят в модалке «Доступ»; null — модалка закрыта.</summary>
     private BoardResponse? _accessBoard;
 
@@ -174,6 +190,14 @@
         }
         else
             _loadError = result.Error;
+    }
+
+    /// <summary>После переноса настроек — без скелетона: открытый диалог остаётся на месте.</summary>
+    private async Task ReloadBoards()
+    {
+        var result = await Api.GetBoards();
+        if (result.Ok)
+            _boards = result.Value!.ToList();
     }
 
     private void OpenCreate() => _createOpen = true;

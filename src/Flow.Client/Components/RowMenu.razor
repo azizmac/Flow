@@ -39,6 +39,14 @@
         {
             <MudMenuItem Class="pop-item" OnClick="OnTaskTypes"><Icon Name="settings" Size="15" />Типы задач</MudMenuItem>
         }
+        @if (ShowApplyConfig)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnApplyConfig"><Icon Name="copy" Size="15" />Применить настройки к проектам…</MudMenuItem>
+        }
+        @if (ShowSaveTemplate)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnSaveTemplate"><Icon Name="plus" Size="15" />Сохранить как шаблон…</MudMenuItem>
+        }
         <MudMenuItem Class="pop-item" OnClick="OnCopy"><Icon Name="copy" Size="15" />Скопировать код</MudMenuItem>
         @if (ShowRestructure)
         {
@@ -68,6 +76,12 @@
     [Parameter] public EventCallback OnStatuses { get; set; }
     /// <summary>Пункт «Workflow» — рядом со «Статусами», на тех же условиях.</summary>
     [Parameter] public EventCallback OnWorkflow { get; set; }
+    /// <summary>Перенос настроек проекта в другие проекты (этап 3F) — право настраивать проект.</summary>
+    [Parameter] public bool ShowApplyConfig { get; set; }
+    [Parameter] public EventCallback OnApplyConfig { get; set; }
+    /// <summary>«Сохранить как шаблон» — глобальный Admin+ (тот, кто создаёт проекты) с правом настраивать этот.</summary>
+    [Parameter] public bool ShowSaveTemplate { get; set; }
+    [Parameter] public EventCallback OnSaveTemplate { get; set; }
     /// <summary>Пункт «Доступ» (участники и роль по умолчанию) — для администратора проекта.</summary>
     [Parameter] public bool ShowAccess { get; set; }
     [Parameter] public EventCallback OnAccess { get; set; }

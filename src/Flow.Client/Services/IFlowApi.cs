@@ -48,6 +48,13 @@ public interface IFlowApi
     Task<ApiResult<IReadOnlyList<BoardResponse>>> GetBoards(CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> GetBoard(Guid id, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> CreateBoard(CreateBoardRequest request, CancellationToken ct = default);
+
+    // Шаблоны проектов и перенос конфигурации (этап 3F)
+    Task<ApiResult<IReadOnlyList<BoardTemplateResponse>>> GetBoardTemplates(CancellationToken ct = default);
+    Task<ApiResult<BoardTemplateResponse>> SaveBoardAsTemplate(Guid boardId, SaveBoardTemplateRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteBoardTemplate(Guid templateId, CancellationToken ct = default);
+    Task<ApiResult<ApplyConfigPreviewResponse>> PreviewApplyConfig(Guid sourceBoardId, ApplyBoardConfigRequest request, CancellationToken ct = default);
+    Task<ApiResult<ApplyBoardConfigResponse>> ApplyConfig(Guid sourceBoardId, ApplyBoardConfigRequest request, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> RenameBoard(Guid id, RenameBoardRequest request, CancellationToken ct = default);
     Task<ApiResult<bool>> DeleteBoard(Guid id, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> CreateTaskType(Guid boardId, CreateTaskTypeRequest request, CancellationToken ct = default);

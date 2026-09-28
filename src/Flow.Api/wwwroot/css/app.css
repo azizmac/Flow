@@ -2803,3 +2803,15 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .tl-source { color: var(--text-muted); }
 .tl-source a { color: inherit; text-decoration: underline dotted; }
 .scm-bind { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* Шаблоны проектов и перенос настроек (этап 3F) */
+.cb-template { margin-top: 4px; }
+.cb-template-hint { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+.cb-template-hint .icon-lnk { align-self: flex-start; margin-top: 2px; }
+.ac-parts { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.ac-target { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.ac-target-head { display: flex; align-items: baseline; gap: 8px; font: var(--fw-medium) 13.5px var(--font-text); color: var(--text-primary); }
+.ac-target-head b { font: var(--fw-bold) 13.5px var(--font-display); }
+.ac-result { margin-left: auto; font-size: 12.5px; }
+.ac-result.ok { color: var(--sage); }
+.ac-result.fail { color: var(--danger); }
