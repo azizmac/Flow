@@ -55,6 +55,7 @@ public static class FlowInfrastructureServiceCollectionExtensions
         var scm = configuration.GetSection(ScmOptions.SectionName).Get<ScmOptions>() ?? new ScmOptions();
         services.AddSingleton(scm);
         services.AddHttpClient(ScmProviderClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
+        services.AddSingleton<GitHubAppTokens>();
         services.AddScoped<IScmProviderClient, ScmProviderClient>();
         if (scm.WorkerEnabled)
             services.AddHostedService<ScmWorker>();

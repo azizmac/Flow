@@ -1,9 +1,13 @@
+using Flow.Application.Features.Scm;
 using Flow.Domain.Entities;
 
 namespace Flow.Application.Abstractions;
 
 /// <summary>Репозиторий у хостинга — для выбора при подключении.</summary>
 public sealed record ScmRemoteRepository(string ExternalId, string FullName, string WebUrl, string? DefaultBranch);
+
+/// <summary>История репозитория для дозагрузки (этап 5B): последние PR и коммиты ветки по умолчанию.</summary>
+public sealed record ScmHistory(IReadOnlyList<ScmPullRequest> PullRequests, IReadOnlyList<ScmCommit> Commits);
 
 /// <summary>
 /// API хостинга (docs/TZ_scm_integration.md §6): проверка токена, список репозиториев, создание и удаление вебхука.
@@ -23,9 +27,26 @@ public interface IScmProviderClient
     Task<string> CreateWebhookAsync(ScmConnection connection, string token, ScmRepository repository, string url, string secret, CancellationToken cancellationToken);
 
     Task DeleteWebhookAsync(ScmConnection connection, string token, ScmRepository repository, string webhookId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Последние <paramref name="maxPullRequests"/> PR (по дате изменения) и коммиты ветки по умолчанию с даты
+    /// <paramref name="commitsSince"/> — не больше <paramref name="maxCommits"/>.
+    /// </summary>
+    Task<ScmHistory> GetHistoryAsync(ScmConnection connection, string token, ScmRepository repository, DateTime commitsSince,
+        int maxPullRequests, int maxCommits, CancellationToken cancellationToken);
 }
 
-public sealed class ScmProviderException(string message, Exception? inner = null) : Exception(message, inner);
+/// <summary>
+/// «Токен» для вызова: у подключения по токену — он сам, у GitHub App — закрытый ключ PEM, из которого клиент сам
+/// получает токен установки (JWT → POST /app/installations/{id}/access_tokens) и держит его до истечения.
+/// </summary>
+public class ScmProviderException(string message, Exception? inner = null) : Exception(message, inner);
+
+/// <summary>Хостинг исчерпал лимит запросов — не сбой, а пауза до <see cref="ResetAt"/> (UTC).</summary>
+public sealed class ScmRateLimitException(DateTime resetAt) : ScmProviderException($"Хостинг исчерпал лимит запросов; продолжим после {resetAt:HH:mm} UTC.")
+{
+    public DateTime ResetAt { get; } = resetAt;
+}
 
 /// <summary>
 /// Шифрование токенов и секретов вебхуков (IDataProtector, purpose «Flow.Scm»). Ключи DataProtection должны жить на

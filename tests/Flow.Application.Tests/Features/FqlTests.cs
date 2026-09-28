@@ -280,6 +280,19 @@ public class FqlTests
     }
 
     [Fact]
+    public async Task Development_Binds_Pull_Request_States()
+    {
+        var (lookup, _) = World();
+
+        Assert.Equal(new TaskFilterPullRequest(TaskFilterPullRequestState.Open), (await Bind("development = openPR", lookup)).Filter);
+        var either = Assert.IsType<TaskFilterOr>((await Bind("development IN (mergedPR, noPR)", lookup)).Filter);
+        Assert.Equal([TaskFilterPullRequestState.Merged, TaskFilterPullRequestState.None], either.Items.Cast<TaskFilterPullRequest>().Select(i => i.State));
+        Assert.IsType<TaskFilterNot>((await Bind("development != noPR", lookup)).Filter);
+        var error = await Assert.ThrowsAsync<FqlException>(() => Bind("development = closedPR", lookup));
+        Assert.Contains("openPR", error.Message);
+    }
+
+    [Fact]
     public async Task Order_By_Maps_To_Sort_Fields()
     {
         var (lookup, _) = World();

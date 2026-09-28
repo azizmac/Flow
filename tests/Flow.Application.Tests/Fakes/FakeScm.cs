@@ -46,6 +46,13 @@ public sealed class FakeScmStore : IScmStore
     public Task<bool> DeliveryExistsAsync(Guid repositoryId, string deliveryId, CancellationToken cancellationToken) =>
         Task.FromResult(Deliveries.Any(d => d.RepositoryId == repositoryId && d.DeliveryId == deliveryId));
 
+    public Task<bool> HasPendingDeliveryAsync(Guid repositoryId, string eventName, CancellationToken cancellationToken) =>
+        Task.FromResult(Deliveries.Any(d => d.RepositoryId == repositoryId && d.Event == eventName && d.Status == ScmDeliveryStatus.Pending));
+
+    public Task<IReadOnlyDictionary<Guid, int>> GetFailedDeliveryCountsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, int>>(Deliveries.Where(d => d.Status == ScmDeliveryStatus.Failed)
+            .GroupBy(d => d.RepositoryId).ToDictionary(g => g.Key, g => g.Count()));
+
     public Task<ScmDelivery?> GetDeliveryAsync(Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Deliveries.SingleOrDefault(d => d.Id == id));
 
@@ -97,6 +104,25 @@ public sealed class FakeScmProviderClient : IScmProviderClient
     {
         DeletedHooks.Add(webhookId);
         return Task.CompletedTask;
+    }
+
+    /// <summary>История для дозагрузки; RateLimitUntil — ответить «лимит исчерпан» один раз.</summary>
+    public ScmHistory History { get; set; } = new([], []);
+    public DateTime? RateLimitUntil { get; set; }
+    public List<(DateTime Since, int MaxPullRequests, int MaxCommits)> HistoryCalls { get; } = [];
+
+    public Task<ScmHistory> GetHistoryAsync(ScmConnection connection, string token, ScmRepository repository, DateTime commitsSince,
+        int maxPullRequests, int maxCommits, CancellationToken cancellationToken)
+    {
+        HistoryCalls.Add((commitsSince, maxPullRequests, maxCommits));
+        if (RateLimitUntil is { } until)
+        {
+            RateLimitUntil = null;
+            throw new ScmRateLimitException(until);
+        }
+        if (Failure is { } f)
+            throw new ScmProviderException(f);
+        return Task.FromResult(History);
     }
 }
 

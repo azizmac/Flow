@@ -77,8 +77,18 @@ internal sealed class ScmWebhookReceiveCommandHandler(IScmStore store, IScmSecre
 /// молча пропускаются. Коммиты без кода в ветке с кодом связываются с задачей ветки (кроме ветки по умолчанию).
 /// Удалённая ветка закрывает свои связи, но не удаляет их. Связь уникальна — повтор обновляет, не плодит.
 /// Автор — по e-mail коммита или по логину из ссылок профиля (GitHub, GitLab, Gitea).
+/// Дозагрузка истории (этап 5B) — та же очередь: задание <see cref="ScmDelivery.BackfillEvent"/> тянет PR и коммиты
+/// ветки по умолчанию через API и прогоняет их тем же разбором, что вебхуки. Исчерпанный лимит запросов — пауза до
+/// сброса без траты попытки.
 /// </summary>
-internal sealed class ScmDeliveryHandlers(IScmStore store, ITaskItemRepository tasks, IUserRepository users, IUnitOfWork unitOfWork) :
+internal sealed class ScmDeliveryHandlers(
+    IScmStore store,
+    ITaskItemRepository tasks,
+    IUserRepository users,
+    IScmProviderClient client,
+    IScmSecretProtector protector,
+    ScmOptions options,
+    IUnitOfWork unitOfWork) :
     IRequestHandler<ScmDueDeliveriesQuery, IReadOnlyList<Guid>>,
     IRequestHandler<ScmDeliveryProcessCommand, bool>,
     IRequestHandler<ScmDeliveryFailCommand>,
@@ -107,7 +117,36 @@ internal sealed class ScmDeliveryHandlers(IScmStore store, ITaskItemRepository t
         var repository = await store.GetRepositoryAsync(delivery.RepositoryId, cancellationToken);
         var connection = repository is null ? null : await store.GetConnectionAsync(repository.ConnectionId, cancellationToken);
         if (repository is not null && connection is not null)
-            await new Processor(store, tasks, users, repository, connection.Provider, cancellationToken).RunAsync(ScmEvent.Deserialize(delivery.Payload));
+        {
+            var processor = new Processor(store, tasks, users, repository, connection.Provider, cancellationToken);
+            if (!delivery.IsBackfill)
+            {
+                await processor.RunAsync(ScmEvent.Deserialize(delivery.Payload));
+            }
+            else if (repository.IsActive)
+            {
+                var token = protector.TryUnprotect(connection.SecretProtected)
+                            ?? throw new InvalidOperationException("Токен подключения не расшифровывается — введите его заново.");
+                ScmHistory history;
+                try
+                {
+                    history = await client.GetHistoryAsync(connection, token, repository, delivery.ReceivedAt.AddDays(-options.BackfillCommitDays),
+                        options.BackfillPullRequests, options.BackfillMaxCommits, cancellationToken);
+                }
+                catch (ScmRateLimitException ex)
+                {
+                    delivery.Postpone(ex.ResetAt, ex.Message);
+                    await unitOfWork.SaveChangesAsync(cancellationToken);
+                    return true;
+                }
+
+                // Старые события первыми: PR, обновлённый позже, должен оставить своё состояние последним.
+                foreach (var pr in history.PullRequests.OrderBy(p => p.UpdatedAt))
+                    await processor.RunAsync(new ScmEvent(ScmEventKind.PullRequest, PullRequest: pr));
+                if (history.Commits.Count > 0)
+                    await processor.RunAsync(new ScmEvent(ScmEventKind.Push, repository.DefaultBranch, history.Commits, history.Commits.Count));
+            }
+        }
 
         delivery.MarkDone();
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -122,7 +161,7 @@ internal sealed class ScmDeliveryHandlers(IScmStore store, ITaskItemRepository t
 
         public async Task RunAsync(ScmEvent ev)
         {
-            _boards = (await store.GetBindingsAsync(null, repository.Id, ct)).Select(b => b.BoardId).ToHashSet();
+            _boards ??= (await store.GetBindingsAsync(null, repository.Id, ct)).Select(b => b.BoardId).ToHashSet();
             if (_boards.Count == 0)
                 return;
 

@@ -47,6 +47,14 @@ public sealed record TaskFilterText(string Text) : TaskFilterNode;
 /// <summary>Есть незакрытая задача, которая блокирует эту (то же, что TaskResponse.BlockedByCount &gt; 0).</summary>
 public sealed record TaskFilterBlocked : TaskFilterNode;
 
+public enum TaskFilterPullRequestState { Open, Merged, None }
+
+/// <summary>
+/// Pull request'ы задачи (FQL development, docs/TZ_scm_integration.md §7): Open — есть открытый или черновой PR,
+/// Merged — есть смёрженный, None — ни одного PR.
+/// </summary>
+public sealed record TaskFilterPullRequest(TaskFilterPullRequestState State) : TaskFilterNode;
+
 /// <summary>Операция над пользовательским полем: сравнение, подстрока (~), «одно из» (Id вариантов и людей), пусто.</summary>
 public enum TaskFilterCustomOp { Eq, Gt, Gte, Lt, Lte, Contains, Any, IsEmpty }
 

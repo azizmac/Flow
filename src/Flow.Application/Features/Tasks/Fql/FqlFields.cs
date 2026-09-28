@@ -1,3 +1,5 @@
+using Flow.Application.Abstractions;
+
 namespace Flow.Application.Features.Tasks.Fql;
 
 /// <summary>
@@ -29,7 +31,8 @@ public static class FqlFields
         new("text", "подстрока в названии, описании, коде: text ~ \"слово\""),
         new("linked", "linkedTo(КОД), blockedBy(КОД), isBlocked(), EMPTY"),
         new("sprint", "имя спринта, openSprints(), closedSprints(), EMPTY — бэклог"),
-        new("milestone", "имя вехи, openMilestones(), closedMilestones(), EMPTY")
+        new("milestone", "имя вехи, openMilestones(), closedMilestones(), EMPTY"),
+        new("development", "openPR, mergedPR, noPR — pull request'ы задачи")
     ];
 
     /// <summary>Поля, которые появятся с будущими этапами: биндер отвечает понятной ошибкой, а не «неизвестное поле».</summary>
@@ -57,6 +60,12 @@ public static class FqlFields
         (Domain.Entities.TaskPriority.Medium, ["medium", "средний"]),
         (Domain.Entities.TaskPriority.High, ["high", "высокий"]),
         (Domain.Entities.TaskPriority.Critical, ["critical", "критический"]));
+
+    /// <summary>development = … (docs/TZ_scm_integration.md §7): открытый (или черновой) PR, смёрженный PR, ни одного PR.</summary>
+    public static readonly IReadOnlyDictionary<string, TaskFilterPullRequestState> Development = Map(
+        (TaskFilterPullRequestState.Open, ["openPR", "открытый"]),
+        (TaskFilterPullRequestState.Merged, ["mergedPR", "смёржен"]),
+        (TaskFilterPullRequestState.None, ["noPR", "без PR"]));
 
     public static readonly IReadOnlyList<string> DateFunctions = ["today()", "startOfWeek()", "startOfMonth()", "startOfYear()"];
 

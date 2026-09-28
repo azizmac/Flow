@@ -55,4 +55,23 @@ public sealed class ScmWebhookApiTests(ApiFixture api)
     }
 
     private const int ScmWebhookControllerLimit = 5 * 1024 * 1024;
+
+    /// <summary>Этап 5B: дозагрузка истории — 202, неизвестный репозиторий — 404; повтор неизвестной доставки — 404.</summary>
+    [Fact]
+    public async Task Backfill_Is_Accepted_And_Unknown_Ids_Are_404()
+    {
+        using var owner = api.CreateClientAs();
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(ScmProvider.GitHub, "GitHub 5B", "token"));
+        var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
+        api.Scm.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("205", "acme/backfill", "https://github.com/acme/backfill", "main"));
+        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "205"));
+        var repository = (await repositoryResponse.Content.ReadFromJsonAsync<ScmRepositoryResponse>())!;
+
+        using var accepted = await owner.PostAsync($"/api/scm/repositories/{repository.Id}/backfill", null);
+        Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);
+        using var missing = await owner.PostAsync($"/api/scm/repositories/{Guid.NewGuid()}/backfill", null);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        using var retry = await owner.PostAsync($"/api/scm/deliveries/{Guid.NewGuid()}/retry", null);
+        Assert.Equal(HttpStatusCode.NotFound, retry.StatusCode);
+    }
 }

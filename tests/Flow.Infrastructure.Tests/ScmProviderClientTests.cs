@@ -81,4 +81,94 @@ public class ScmProviderClientTests
         var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmProviderException>(() => client.CheckAsync(connection, "x", CancellationToken.None));
         Assert.Contains("Токен", error.Message);
     }
+
+    [Fact]
+    public async Task History_Pages_Until_Limit_And_Stops_At_Old_Commits()
+    {
+        var old = "2026-08-01T00:00:00Z";
+        var recorder = new Recorder(r =>
+        {
+            var query = r.RequestUri!.Query;
+            if (r.RequestUri.AbsolutePath.EndsWith("/pulls"))
+                return Json("[" + string.Join(",", Enumerable.Range(1, 3).Select(n =>
+                    """{"number":N,"title":"WEB-N","state":"open","html_url":"u","user":{"login":"o"},"head":{"ref":"h"},"base":{"ref":"main"}}""".Replace("N", n.ToString()))) + "]");
+            // Первая страница коммитов полная (50 у Gitea), на второй — один свежий и один старше даты: на нём остановка.
+            var fresh = """{"sha":"s","html_url":"u","commit":{"message":"m","author":{"email":"a@b.c","date":"2026-09-20T00:00:00Z"}}}""";
+            return query.Contains("page=1&") || query.EndsWith("page=1")
+                ? Json("[" + string.Join(",", Enumerable.Repeat(fresh, 50)) + "]")
+                : Json("[" + fresh + "," + fresh.Replace("2026-09-20T00:00:00Z", old) + "]");
+        });
+        var client = new ScmProviderClient(new Factory(recorder));
+        var connection = ScmConnection.Create(ScmProvider.Gitea, "Gitea", "https://git.example.com", "p", Guid.NewGuid());
+        var repository = ScmRepository.Create(connection.Id, "9", "acme/web", "https://git.example.com/acme/web", "dev", "p");
+
+        var history = await client.GetHistoryAsync(connection, "tok", repository, new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), 2, 500, CancellationToken.None);
+
+        Assert.Equal(["1", "2"], history.PullRequests.Select(p => p.Number));
+        Assert.Equal(51, history.Commits.Count);
+        var commitCalls = recorder.Requests.Select(x => x.Request.RequestUri!.ToString()).Where(u => u.Contains("/commits")).ToList();
+        Assert.Equal(2, commitCalls.Count);
+        Assert.Contains("sha=dev&since=2026-09-01T00%3A00%3A00Z&limit=50&page=1", commitCalls[0]);
+    }
+
+    [Fact]
+    public async Task Exhausted_Rate_Limit_Carries_The_Reset_Time()
+    {
+        var reset = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds();
+        var client = new ScmProviderClient(new Factory(new Recorder(_ =>
+        {
+            var response = Json("""{"message":"API rate limit exceeded"}""", HttpStatusCode.Forbidden);
+            response.Headers.Add("X-RateLimit-Remaining", "0");
+            response.Headers.Add("X-RateLimit-Reset", reset.ToString());
+            return response;
+        })));
+        var connection = ScmConnection.Create(ScmProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
+        var repository = ScmRepository.Create(connection.Id, "1", "acme/web", "https://github.com/acme/web", "main", "p");
+
+        var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmRateLimitException>(() =>
+            client.GetHistoryAsync(connection, "tok", repository, DateTime.UtcNow.AddDays(-30), 100, 100, CancellationToken.None));
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(reset).UtcDateTime, error.ResetAt);
+
+        // Обычный 403 без нулевого остатка — это права, а не лимит.
+        var plain = new ScmProviderClient(new Factory(new Recorder(_ => Json("{}", HttpStatusCode.Forbidden))));
+        var forbidden = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmProviderException>(() => plain.CheckAsync(connection, "tok", CancellationToken.None));
+        Assert.IsNotType<Flow.Application.Abstractions.ScmRateLimitException>(forbidden);
+    }
+
+    [Fact]
+    public async Task GitHub_App_Exchanges_A_Signed_Jwt_For_A_Cached_Installation_Token()
+    {
+        using var rsa = System.Security.Cryptography.RSA.Create(2048);
+        var pem = rsa.ExportRSAPrivateKeyPem();
+        var recorder = new Recorder(r => r.RequestUri!.AbsolutePath switch
+        {
+            "/app/installations/678/access_tokens" => Json($$"""{"token":"ghs_install","expires_at":"{{DateTime.UtcNow.AddHours(1):O}}"}""", HttpStatusCode.Created),
+            "/app" => Json("""{"slug":"flow-tracker"}"""),
+            _ => Json("""{"total_count":1,"repositories":[{"id":5,"full_name":"org/repo","html_url":"https://github.com/org/repo","default_branch":"main"}]}""")
+        });
+        var client = new ScmProviderClient(new Factory(recorder), new GitHubAppTokens());
+        var connection = ScmConnection.Create(ScmProvider.GitHub, "App", null, "p", Guid.NewGuid(), ScmAuthKind.GitHubApp, 12345, 678);
+
+        Assert.Equal("flow-tracker[bot]", await client.CheckAsync(connection, pem, CancellationToken.None));
+        Assert.Equal(["org/repo"], (await client.ListRepositoriesAsync(connection, pem, null, CancellationToken.None)).Select(r => r.FullName));
+        Assert.Equal(["org/repo"], (await client.ListRepositoriesAsync(connection, pem, null, CancellationToken.None)).Select(r => r.FullName));
+
+        // Токен установки выписан один раз и дальше берётся из кэша.
+        var paths = recorder.Requests.Select(x => x.Request.RequestUri!.AbsolutePath).ToList();
+        Assert.Equal(1, paths.Count(p => p.EndsWith("access_tokens")));
+        Assert.Equal("Bearer ghs_install", recorder.Requests.Last().Request.Headers.Authorization!.ToString());
+
+        // JWT: RS256, iss — Id приложения, подпись проверяется открытым ключом.
+        var jwt = recorder.Requests.First(x => x.Request.RequestUri!.AbsolutePath.EndsWith("access_tokens")).Request.Headers.Authorization!.Parameter!;
+        var parts = jwt.Split('.');
+        static byte[] Decode(string s) => Convert.FromBase64String(s.Replace('-', '+').Replace('_', '/').PadRight(s.Length + (4 - s.Length % 4) % 4, '='));
+        Assert.Contains("\"iss\":\"12345\"", Encoding.UTF8.GetString(Decode(parts[1])));
+        Assert.True(rsa.VerifyData(Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}"), Decode(parts[2]),
+            System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1));
+
+        // Не PEM — понятная ошибка, а не исключение криптографии.
+        var broken = ScmConnection.Create(ScmProvider.GitHub, "App", null, "p", Guid.NewGuid(), ScmAuthKind.GitHubApp, 1, 2);
+        var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmProviderException>(() => client.CheckAsync(broken, "not a key", CancellationToken.None));
+        Assert.Contains("PEM", error.Message);
+    }
 }

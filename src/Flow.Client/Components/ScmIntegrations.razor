@@ -1,7 +1,8 @@
 @* Интеграции (docs/TZ_scm_integration.md §6): подключения к GitHub, GitLab, Gitea и Forgejo — токен хранится
    зашифрованным и наружу не отдаётся; проверка показывает логин владельца токена или причину отказа. Под каждым
    подключением — его репозитории: вебхук создан или нужна ручная настройка, к каким проектам привязан, когда пришла
-   последняя доставка. Привязка к проектам — в самих проектах (значок «Репозитории» в топбаре «Задач»). *@
+   последняя доставка; ссылка «доставки» (или «N ошибок») открывает диагностику с повтором и дозагрузкой истории (этап 5B).
+   Привязка к проектам — в самих проектах (значок «Репозитории» в топбаре «Задач»). *@
 @inject IFlowApi Api
 @inject ToastService Toasts
 @inject UserDirectory Users
@@ -28,11 +29,11 @@
             <div class="scm-conn">
                 <div class="scm-conn-head">
                     <b>@c.Name</b>
-                    <span class="hint">@ScmMeta.Name(c.Provider)@(c.BaseUrl is { } url ? $" · {url}" : "")</span>
+                    <span class="hint">@ScmMeta.Name(c.Provider)@(c.AuthKind == ScmAuthKind.GitHubApp ? " App" : "")@(c.BaseUrl is { } url ? $" · {url}" : "")</span>
                     <span class="scm-check">
                         @if (c.NeedsReconnect)
                         {
-                            <OnOff On="false" Problem="true" Label="нужно ввести токен заново" />
+                            <OnOff On="false" Problem="true" Label="@(c.AuthKind == ScmAuthKind.GitHubApp ? "нужно ввести ключ заново" : "нужно ввести токен заново")" />
                         }
                         else if (c.LastError is { } error)
                         {
@@ -40,10 +41,10 @@
                         }
                         else if (c.CheckedLogin is { } login)
                         {
-                            <OnOff On="true" Label="@($"токен {login}")" />
+                            <OnOff On="true" Label="@(c.AuthKind == ScmAuthKind.GitHubApp ? $"приложение {login}" : $"токен {login}")" />
                         }
                     </span>
-                    <DsIconButton Icon="history" Size="26" Title="Проверить токен" OnClick="() => Check(c)" />
+                    <DsIconButton Icon="check-circle" Size="26" Title="Проверить подключение" OnClick="() => Check(c)" />
                     <DsIconButton Icon="edit" Size="26" Title="Изменить" OnClick="() => _editing = c" />
                     <DsIconButton Icon="trash" Size="26" Title="Удалить подключение" OnClick="() => _deleting = c" />
                 </div>
@@ -56,6 +57,12 @@
                                 <td class="hint">@(r.IsActive ? r.WebhookCreated ? "вебхук создан" : "вебхук вручную" : "отключён")</td>
                                 <td class="hint">@BoardsText(r)</td>
                                 <td class="hint">@(r.LastDeliveryAt is { } at ? $"событие {Ru.DateShort(at)}" : "событий не было")</td>
+                                <td>
+                                    <button type="button" class="icon-lnk @(r.FailedDeliveries > 0 ? "danger" : "")" @onclick="() => _deliveries = r"
+                                            title="Доставки вебхуков и дозагрузка истории">
+                                        @(r.FailedDeliveries > 0 ? $"{r.FailedDeliveries} {Ru.Plural(r.FailedDeliveries, "ошибка", "ошибки", "ошибок")}" : "доставки")
+                                    </button>
+                                </td>
                                 <td>
                                     @if (r.IsActive)
                                     {
@@ -82,6 +89,11 @@
     <ScmRepositoryDialog Connection="_adding" OnAdded="_ => Reload()" OnClose="() => _adding = null" />
 }
 
+@if (_deliveries is not null)
+{
+    <ScmDeliveriesDialog Repository="_deliveries" OnChanged="Reload" OnClose="() => _deliveries = null" />
+}
+
 @if (_deleting is not null)
 {
     <ConfirmDialog Title="@($"Удалить подключение «{_deleting.Name}»?")"
@@ -96,6 +108,7 @@
     private ScmConnectionResponse? _editing;
     private ScmConnectionResponse? _adding;
     private ScmConnectionResponse? _deleting;
+    private ScmRepositoryResponse? _deliveries;
 
     protected override Task OnInitializedAsync() => Reload();
 
@@ -115,7 +128,7 @@
         _editing = null;
         await Reload();
         if (connection.LastError is { } error)
-            Toasts.Error($"Подключение сохранено, но токен не прошёл проверку: {error}");
+            Toasts.Error($"Подключение сохранено, но не прошло проверку: {error}");
     }
 
     private async Task Check(ScmConnectionResponse connection)
@@ -123,7 +136,7 @@
         var result = await Api.CheckScmConnection(connection.Id);
         await Reload();
         if (result.Ok && result.Value!.LastError is null)
-            Toasts.Ok($"Токен работает: {result.Value.CheckedLogin}");
+            Toasts.Ok($"Подключение работает: {result.Value.CheckedLogin}");
         else
             Toasts.Error(result.Value?.LastError ?? result.Error ?? "Проверка не прошла");
     }

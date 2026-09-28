@@ -32,6 +32,28 @@ public static class ScmMeta
         _ => "muted"
     };
 
+    public static string AuthName(ScmAuthKind kind) => kind == ScmAuthKind.GitHubApp ? "GitHub App" : "Токен";
+
+    public static string DeliveryStatusName(ScmDeliveryStatus status) => status switch
+    {
+        ScmDeliveryStatus.Pending => "в очереди",
+        ScmDeliveryStatus.Done => "разобрана",
+        ScmDeliveryStatus.Failed => "ошибка",
+        _ => "пропущена"
+    };
+
+    /// <summary>Событие доставки по-русски: имена хостингов (push, Merge Request Hook…) и задание дозагрузки истории.</summary>
+    public static string EventName(ScmDeliveryResponse delivery) => delivery.IsBackfill
+        ? "дозагрузка истории"
+        : delivery.Event switch
+        {
+            "push" or "Push Hook" => "push",
+            "pull_request" or "Merge Request Hook" => "pull request",
+            "create" => "ветка создана",
+            "delete" => "ветка удалена",
+            var other => other
+        };
+
     public static string TokenHint(ScmProvider provider) => provider switch
     {
         ScmProvider.GitHub => "Fine-grained токен: Metadata и Contents — чтение, Pull requests — чтение, Webhooks — запись. Или классический с правом repo.",

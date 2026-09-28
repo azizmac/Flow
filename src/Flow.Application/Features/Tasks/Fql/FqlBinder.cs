@@ -81,6 +81,8 @@ public sealed partial class FqlBinder(IFqlLookup lookup, Guid actorId, DateOnly 
             "linked" => await LinkedAsync(c, ct),
             "sprint" => await SprintAsync(c, ct),
             "milestone" => await MilestoneAsync(c, ct),
+            "development" => Enums(c, v => Lookup(FqlFields.Development, v, "признак разработки"),
+                states => states.Count == 1 ? new TaskFilterPullRequest(states[0]) : new TaskFilterOr(states.Select(s => (TaskFilterNode)new TaskFilterPullRequest(s)).ToList())),
             _ => throw Error($"Неизвестное поле «{name}». Поля: {string.Join(", ", FqlFields.All.Select(f => f.Name))}", c.Field)
         };
     }

@@ -156,7 +156,9 @@ public interface IFlowApi
     Task<ApiResult<IReadOnlyList<ScmRemoteRepositoryResponse>>> GetAvailableRepositories(Guid connectionId, string? query, CancellationToken ct = default);
     Task<ApiResult<ScmRepositoryResponse>> AddScmRepository(AddScmRepositoryRequest request, CancellationToken ct = default);
     Task<ApiResult<bool>> DisableScmRepository(Guid repositoryId, CancellationToken ct = default);
-    Task<ApiResult<IReadOnlyList<ScmDeliveryResponse>>> GetScmDeliveries(Guid repositoryId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<ScmDeliveryResponse>>> GetScmDeliveries(Guid repositoryId, ScmDeliveryStatus? status = null, CancellationToken ct = default);
+    Task<ApiResult<ScmDeliveryResponse>> RetryScmDelivery(Guid deliveryId, CancellationToken ct = default);
+    Task<ApiResult<bool>> BackfillScmRepository(Guid repositoryId, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> GetBoardRepositories(Guid boardId, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> SetBoardRepository(Guid boardId, Guid repositoryId, bool bound, CancellationToken ct = default);
     Task<ApiResult<TaskDevelopmentResponse>> GetTaskDevelopment(Guid taskId, CancellationToken ct = default);

@@ -10,6 +10,7 @@ using DomainState = Flow.Domain.Entities.ScmLinkState;
 using DomainKind = Flow.Domain.Entities.ScmLinkKind;
 using DomainDeliveryStatus = Flow.Domain.Entities.ScmDeliveryStatus;
 using SharedProvider = Flow.Shared.Contracts.Scm.ScmProvider;
+using SharedAuthKind = Flow.Shared.Contracts.Scm.ScmAuthKind;
 
 namespace Flow.Application.Features.Scm;
 
@@ -18,9 +19,12 @@ namespace Flow.Application.Features.Scm;
 
 public sealed record ScmConnectionListQuery(Guid ActorId) : IRequest<IReadOnlyList<ScmConnectionResponse>>;
 
-public sealed record ScmConnectionCreateCommand(Guid ActorId, SharedProvider Provider, string Name, string Token, string? BaseUrl) : IRequest<ScmConnectionResponse>;
+/// <summary>Token — токен доступа, у GitHub App — закрытый ключ приложения (PEM); AppId/InstallationId — только у него.</summary>
+public sealed record ScmConnectionCreateCommand(Guid ActorId, SharedProvider Provider, string Name, string Token, string? BaseUrl,
+    SharedAuthKind AuthKind = SharedAuthKind.Token, long? AppId = null, long? InstallationId = null) : IRequest<ScmConnectionResponse>;
 
-public sealed record ScmConnectionUpdateCommand(Guid ActorId, Guid ConnectionId, string Name, string? BaseUrl, string? Token) : IRequest<ScmConnectionResponse?>;
+public sealed record ScmConnectionUpdateCommand(Guid ActorId, Guid ConnectionId, string Name, string? BaseUrl, string? Token,
+    long? AppId = null, long? InstallationId = null) : IRequest<ScmConnectionResponse?>;
 
 /// <summary>Удаляет подключение и его репозитории (вебхуки у хостинга — best-effort); связи задач уходят каскадом.</summary>
 public sealed record ScmConnectionDeleteCommand(Guid ActorId, Guid ConnectionId) : IRequest<bool>;
@@ -43,15 +47,35 @@ public sealed record TaskDevelopmentQuery(Guid ActorId, Guid TaskId) : IRequest<
 
 public sealed record ScmDeliveriesQuery(Guid ActorId, Guid RepositoryId, Flow.Shared.Contracts.Scm.ScmDeliveryStatus? Status) : IRequest<IReadOnlyList<ScmDeliveryResponse>?>;
 
+/// <summary>Повторить доставку с ошибкой (диагностика, этап 5B): снова в очередь, попытки с нуля. null — нет такой.</summary>
+public sealed record ScmDeliveryRetryCommand(Guid ActorId, Guid DeliveryId) : IRequest<ScmDeliveryResponse?>;
+
+/// <summary>
+/// Дозагрузить историю репозитория вручную (этап 5B). Задание ставится в очередь доставок; уже стоящее — не дублируется.
+/// false — репозитория нет.
+/// </summary>
+public sealed record ScmBackfillCommand(Guid ActorId, Guid RepositoryId) : IRequest<bool>;
+
 internal static class ScmMapping
 {
     public const int CommitPreview = 5;
 
     public static SharedProvider ToShared(this DomainProvider provider) => (SharedProvider)(int)provider;
 
-    public static ScmRepositoryResponse ToResponse(this ScmRepository r, IEnumerable<ScmRepositoryBoard> bindings) =>
+    public static ScmRepositoryResponse ToResponse(this ScmRepository r, IEnumerable<ScmRepositoryBoard> bindings, IReadOnlyDictionary<Guid, int>? failed = null) =>
         new(r.Id, r.ConnectionId, r.FullName, r.WebUrl, r.DefaultBranch, r.IsActive, r.WebhookId is not null, r.LastDeliveryAt,
-            bindings.Where(b => b.RepositoryId == r.Id).Select(b => b.BoardId).ToList());
+            bindings.Where(b => b.RepositoryId == r.Id).Select(b => b.BoardId).ToList(), FailedDeliveries: failed?.GetValueOrDefault(r.Id) ?? 0);
+
+    public static ScmDeliveryResponse ToResponse(this ScmDelivery d) =>
+        new(d.Id, d.DeliveryId, d.Event, d.ReceivedAt, (Flow.Shared.Contracts.Scm.ScmDeliveryStatus)(int)d.Status, d.Attempts, d.LastError,
+            d.Status == DomainDeliveryStatus.Pending ? d.NextAttemptAt : null, d.IsBackfill);
+
+    /// <summary>Поставить дозагрузку истории, если такой ещё нет в очереди.</summary>
+    public static async Task EnqueueBackfillAsync(this IScmStore store, Guid repositoryId, CancellationToken cancellationToken)
+    {
+        if (!await store.HasPendingDeliveryAsync(repositoryId, ScmDelivery.BackfillEvent, cancellationToken))
+            store.Add(ScmDelivery.CreateBackfill(repositoryId));
+    }
 
     public static ScmLinkResponse ToResponse(this ScmLink l, ScmRepository? repository, DomainProvider provider) =>
         new(l.Id, l.RepositoryId, repository?.FullName ?? "", provider.ToShared(), (Flow.Shared.Contracts.Scm.ScmLinkKind)(int)l.Kind,
@@ -75,7 +99,9 @@ internal sealed class ScmAdminHandlers(
     IRequestHandler<ScmAvailableRepositoriesQuery, IReadOnlyList<ScmRemoteRepositoryResponse>?>,
     IRequestHandler<ScmRepositoryAddCommand, ScmRepositoryResponse?>,
     IRequestHandler<ScmRepositoryDisableCommand, bool>,
-    IRequestHandler<ScmDeliveriesQuery, IReadOnlyList<ScmDeliveryResponse>?>
+    IRequestHandler<ScmDeliveriesQuery, IReadOnlyList<ScmDeliveryResponse>?>,
+    IRequestHandler<ScmDeliveryRetryCommand, ScmDeliveryResponse?>,
+    IRequestHandler<ScmBackfillCommand, bool>
 {
     private async Task<User> AdminAsync(Guid actorId, CancellationToken cancellationToken)
     {
@@ -89,7 +115,8 @@ internal sealed class ScmAdminHandlers(
         await AdminAsync(request.ActorId, cancellationToken);
         var repositories = await store.GetRepositoriesAsync(null, cancellationToken);
         var bindings = await store.GetBindingsAsync(null, null, cancellationToken);
-        return (await store.GetConnectionsAsync(cancellationToken)).Select(c => Response(c, repositories, bindings)).ToList();
+        var failed = await store.GetFailedDeliveryCountsAsync(cancellationToken);
+        return (await store.GetConnectionsAsync(cancellationToken)).Select(c => Response(c, repositories, bindings, failed)).ToList();
     }
 
     public async Task<ScmConnectionResponse> Handle(ScmConnectionCreateCommand request, CancellationToken cancellationToken)
@@ -98,11 +125,13 @@ internal sealed class ScmAdminHandlers(
         if (string.IsNullOrWhiteSpace(request.Token))
             throw new ArgumentException("Нужен токен доступа.", nameof(request.Token));
 
-        var connection = ScmConnection.Create((DomainProvider)(int)request.Provider, request.Name, request.BaseUrl, protector.Protect(request.Token.Trim()), actor.Id);
-        await CheckAsync(connection, request.Token.Trim(), cancellationToken);
+        var secret = Secret(request.Token);
+        var connection = ScmConnection.Create((DomainProvider)(int)request.Provider, request.Name, request.BaseUrl, protector.Protect(secret), actor.Id,
+            (Flow.Domain.Entities.ScmAuthKind)(int)request.AuthKind, request.AppId, request.InstallationId);
+        await CheckAsync(connection, secret, cancellationToken);
         store.Add(connection);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Response(connection, [], []);
+        return Response(connection, [], [], new Dictionary<Guid, int>());
     }
 
     public async Task<ScmConnectionResponse?> Handle(ScmConnectionUpdateCommand request, CancellationToken cancellationToken)
@@ -112,10 +141,14 @@ internal sealed class ScmAdminHandlers(
         if (connection is null)
             return null;
 
-        var token = string.IsNullOrWhiteSpace(request.Token) ? null : request.Token.Trim();
+        var token = string.IsNullOrWhiteSpace(request.Token) ? null : Secret(request.Token);
+        var appChanged = connection.AuthKind == Flow.Domain.Entities.ScmAuthKind.GitHubApp && (request.AppId is not null || request.InstallationId is not null)
+                         && (request.AppId ?? connection.AppId, request.InstallationId ?? connection.InstallationId) != (connection.AppId, connection.InstallationId);
         connection.Update(request.Name, request.BaseUrl, token is null ? null : protector.Protect(token));
-        if (token is not null)
-            await CheckAsync(connection, token, cancellationToken);
+        if (appChanged)
+            connection.SetApp(request.AppId ?? connection.AppId, request.InstallationId ?? connection.InstallationId);
+        if (token is not null || appChanged)
+            await CheckAsync(connection, token ?? protector.TryUnprotect(connection.SecretProtected), cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return await ResponseAsync(connection, cancellationToken);
     }
@@ -237,9 +270,37 @@ internal sealed class ScmAdminHandlers(
             return null;
 
         return (await store.GetDeliveriesAsync(request.RepositoryId, request.Status is { } s ? (DomainDeliveryStatus)(int)s : null, 100, cancellationToken))
-            .Select(d => new ScmDeliveryResponse(d.Id, d.DeliveryId, d.Event, d.ReceivedAt, (Flow.Shared.Contracts.Scm.ScmDeliveryStatus)(int)d.Status, d.Attempts, d.LastError))
+            .Select(d => d.ToResponse())
             .ToList();
     }
+
+    public async Task<ScmDeliveryResponse?> Handle(ScmDeliveryRetryCommand request, CancellationToken cancellationToken)
+    {
+        await AdminAsync(request.ActorId, cancellationToken);
+        if (await store.GetDeliveryAsync(request.DeliveryId, cancellationToken) is not { } delivery)
+            return null;
+
+        delivery.Retry(DateTime.UtcNow);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return delivery.ToResponse();
+    }
+
+    public async Task<bool> Handle(ScmBackfillCommand request, CancellationToken cancellationToken)
+    {
+        await AdminAsync(request.ActorId, cancellationToken);
+        if (await store.GetRepositoryAsync(request.RepositoryId, cancellationToken) is not { } repository)
+            return false;
+        if (!repository.IsActive)
+            throw new InvalidOperationException("Репозиторий отключён — сначала подключите его заново.");
+
+        await store.EnqueueBackfillAsync(repository.Id, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    /// <summary>Токен — без пробелов по краям; закрытый ключ PEM — тоже, но переводы строк внутри него нужны.</summary>
+    private static string Secret(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Нужен токен доступа или закрытый ключ приложения.", nameof(value)) : value.Trim();
 
     private string Token(ScmConnection connection) =>
         protector.TryUnprotect(connection.SecretProtected)
@@ -290,12 +351,15 @@ internal sealed class ScmAdminHandlers(
     }
 
     private async Task<ScmConnectionResponse> ResponseAsync(ScmConnection connection, CancellationToken cancellationToken) =>
-        Response(connection, await store.GetRepositoriesAsync(connection.Id, cancellationToken), await store.GetBindingsAsync(null, null, cancellationToken));
+        Response(connection, await store.GetRepositoriesAsync(connection.Id, cancellationToken), await store.GetBindingsAsync(null, null, cancellationToken),
+            await store.GetFailedDeliveryCountsAsync(cancellationToken));
 
-    private ScmConnectionResponse Response(ScmConnection c, IEnumerable<ScmRepository> repositories, IReadOnlyList<ScmRepositoryBoard> bindings) =>
+    private ScmConnectionResponse Response(ScmConnection c, IEnumerable<ScmRepository> repositories, IReadOnlyList<ScmRepositoryBoard> bindings,
+        IReadOnlyDictionary<Guid, int> failed) =>
         new(c.Id, c.Provider.ToShared(), c.Name, c.BaseUrl, c.CreatedAt, c.LastCheckAt, c.CheckedLogin, c.LastError,
             protector.TryUnprotect(c.SecretProtected) is null,
-            repositories.Where(r => r.ConnectionId == c.Id).OrderBy(r => r.FullName).Select(r => r.ToResponse(bindings)).ToList());
+            repositories.Where(r => r.ConnectionId == c.Id).OrderBy(r => r.FullName).Select(r => r.ToResponse(bindings, failed)).ToList(),
+            (SharedAuthKind)(int)c.AuthKind, c.AppId, c.InstallationId);
 }
 
 internal sealed class ScmProjectHandlers(
@@ -330,6 +394,8 @@ internal sealed class ScmProjectHandlers(
             if (!repository.IsActive)
                 throw new InvalidOperationException("Репозиторий отключён — сначала подключите его заново в интеграциях.");
             store.Add(ScmRepositoryBoard.Create(repository.Id, request.BoardId, actor.Id));
+            // Задачи проекта уже упоминались в PR и коммитах до привязки — их подтянет дозагрузка истории (этап 5B).
+            await store.EnqueueBackfillAsync(repository.Id, cancellationToken);
         }
         else if (!request.Bound && existing is not null)
         {

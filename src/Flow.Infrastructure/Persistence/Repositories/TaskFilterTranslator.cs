@@ -26,6 +26,7 @@ internal static class TaskFilterTranslator
         TaskFilterCompare compare => Compare(compare),
         TaskFilterText text => Text(text.Text, db),
         TaskFilterBlocked => Blocked(db),
+        TaskFilterPullRequest pr => PullRequest(pr.State, db),
         TaskFilterCustomField custom => Combine(custom.FieldIds.Select(id => CustomField(id.ToString(), custom)), Expression.OrElse, false),
         _ => throw new NotSupportedException($"Filter node {node.GetType().Name} is not supported.")
     };
@@ -153,6 +154,15 @@ internal static class TaskFilterTranslator
     private static Expression<Func<TaskItem, bool>> Blocked(FlowDbContext db) =>
         t => db.TaskLinks.Any(l => l.Type == TaskLinkType.Blocks && l.TargetTaskId == t.Id
                                    && db.TaskItems.Any(s => s.Id == l.SourceTaskId && db.Statuses.Any(st => st.Id == s.StatusId && !st.IsFinal)));
+
+    /// <summary>Открытый — Open или Draft; нет PR — ни одной связи вида PullRequest, в каком бы состоянии она ни была.</summary>
+    private static Expression<Func<TaskItem, bool>> PullRequest(TaskFilterPullRequestState state, FlowDbContext db) => state switch
+    {
+        TaskFilterPullRequestState.Open => t => db.ScmLinks.Any(l => l.TaskId == t.Id && l.Kind == ScmLinkKind.PullRequest
+                                                                    && (l.State == ScmLinkState.Open || l.State == ScmLinkState.Draft)),
+        TaskFilterPullRequestState.Merged => t => db.ScmLinks.Any(l => l.TaskId == t.Id && l.Kind == ScmLinkKind.PullRequest && l.State == ScmLinkState.Merged),
+        _ => t => !db.ScmLinks.Any(l => l.TaskId == t.Id && l.Kind == ScmLinkKind.PullRequest)
+    };
 
     private static Expression<Func<TaskItem, bool>> Not(Expression<Func<TaskItem, bool>> inner) =>
         Expression.Lambda<Func<TaskItem, bool>>(Expression.Not(inner.Body), inner.Parameters);

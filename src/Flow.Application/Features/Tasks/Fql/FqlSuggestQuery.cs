@@ -96,6 +96,8 @@ internal sealed class FqlSuggestQueryHandler(
                     .Concat(found.Select(u => new FqlSuggestion("@" + u.Username, "@" + u.Username, $"{u.FirstName} {u.LastName}".Trim(), "value")));
             case "parent":
                 return [Function("childrenOf()", "всё поддерево задачи"), Function("EMPTY", "верхний уровень")];
+            case "development":
+                return FqlFields.Development.Keys.Where(k => k.All(char.IsAscii)).Select(k => Value(k));
             case "linked":
                 return FqlFields.LinkFunctions.Select(f => Function(f)).Append(Function("EMPTY", "без связей"));
             case "created" or "updated" or "start" or "due":

@@ -50,6 +50,14 @@ public sealed class ScmStore(FlowDbContext db) : IScmStore
     public Task<bool> DeliveryExistsAsync(Guid repositoryId, string deliveryId, CancellationToken cancellationToken) =>
         db.ScmDeliveries.AnyAsync(d => d.RepositoryId == repositoryId && d.DeliveryId == deliveryId, cancellationToken);
 
+    public Task<bool> HasPendingDeliveryAsync(Guid repositoryId, string eventName, CancellationToken cancellationToken) =>
+        db.ScmDeliveries.AnyAsync(d => d.RepositoryId == repositoryId && d.Event == eventName && d.Status == ScmDeliveryStatus.Pending, cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, int>> GetFailedDeliveryCountsAsync(CancellationToken cancellationToken) =>
+        await db.ScmDeliveries.Where(d => d.Status == ScmDeliveryStatus.Failed)
+            .GroupBy(d => d.RepositoryId).Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(r => r.Key, r => r.Count, cancellationToken);
+
     public Task<ScmDelivery?> GetDeliveryAsync(Guid id, CancellationToken cancellationToken) =>
         db.ScmDeliveries.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
 

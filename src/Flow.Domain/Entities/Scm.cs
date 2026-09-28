@@ -12,6 +12,13 @@ public enum ScmProvider
     Forgejo = 3
 }
 
+/// <summary>Чем подключение входит в API: личный/сервисный токен или GitHub App (закрытый ключ + установка, этап 5B).</summary>
+public enum ScmAuthKind
+{
+    Token = 0,
+    GitHubApp = 1
+}
+
 public enum ScmLinkKind
 {
     Branch = 0,
@@ -51,8 +58,18 @@ public sealed class ScmConnection
     /// <summary>Адрес self-hosted экземпляра; для GitHub.com — null.</summary>
     public string? BaseUrl { get; private set; }
 
-    /// <summary>Токен, зашифрованный IDataProtector: в БД и в логах открытого текста нет.</summary>
+    public ScmAuthKind AuthKind { get; private set; }
+
+    /// <summary>
+    /// Токен (или закрытый ключ GitHub App в PEM), зашифрованный IDataProtector: в БД и в логах открытого текста нет.
+    /// </summary>
     public string SecretProtected { get; private set; } = string.Empty;
+
+    /// <summary>Id приложения GitHub App — издатель JWT.</summary>
+    public long? AppId { get; private set; }
+
+    /// <summary>Id установки приложения в организации или аккаунте — у неё берётся токен на час.</summary>
+    public long? InstallationId { get; private set; }
 
     public Guid CreatedById { get; private set; }
 
@@ -70,7 +87,8 @@ public sealed class ScmConnection
         // EF Core
     }
 
-    public static ScmConnection Create(ScmProvider provider, string name, string? baseUrl, string secretProtected, Guid createdById)
+    public static ScmConnection Create(ScmProvider provider, string name, string? baseUrl, string secretProtected, Guid createdById,
+        ScmAuthKind authKind = ScmAuthKind.Token, long? appId = null, long? installationId = null)
     {
         if (!Enum.IsDefined(provider))
             throw new ArgumentException($"Unknown provider {provider}.", nameof(provider));
@@ -79,9 +97,35 @@ public sealed class ScmConnection
         if (provider != ScmProvider.GitHub && string.IsNullOrWhiteSpace(baseUrl))
             throw new ArgumentException("Для self-hosted хостинга нужен адрес.", nameof(baseUrl));
 
-        var connection = new ScmConnection { Id = Guid.NewGuid(), Provider = provider, CreatedById = createdById, CreatedAt = DateTime.UtcNow };
+        if (!Enum.IsDefined(authKind))
+            throw new ArgumentException($"Unknown auth kind {authKind}.", nameof(authKind));
+        if (authKind == ScmAuthKind.GitHubApp && provider != ScmProvider.GitHub)
+            throw new ArgumentException("GitHub App — только для GitHub.", nameof(authKind));
+
+        var connection = new ScmConnection
+        {
+            Id = Guid.NewGuid(), Provider = provider, AuthKind = authKind, CreatedById = createdById, CreatedAt = DateTime.UtcNow
+        };
         connection.Update(name, baseUrl, secretProtected);
+        if (authKind == ScmAuthKind.GitHubApp)
+            connection.SetApp(appId, installationId);
         return connection;
+    }
+
+    /// <summary>Id приложения и установки GitHub App. Смена сбрасывает результат проверки: токен выдаст уже другая установка.</summary>
+    public void SetApp(long? appId, long? installationId)
+    {
+        if (AuthKind != ScmAuthKind.GitHubApp)
+            throw new InvalidOperationException("Подключение входит по токену, а не как GitHub App.");
+        if (appId is not > 0 || installationId is not > 0)
+            throw new ArgumentException("Для GitHub App нужны Id приложения и Id установки — положительные числа.", nameof(appId));
+        if (AppId == appId && InstallationId == installationId)
+            return;
+        AppId = appId;
+        InstallationId = installationId;
+        LastCheckAt = null;
+        CheckedLogin = null;
+        LastError = null;
     }
 
     /// <summary>Имя, адрес и (если передан) новый токен. Смена токена сбрасывает результат проверки.</summary>
@@ -315,6 +359,12 @@ public sealed class ScmLink
 /// </summary>
 public sealed class ScmDelivery
 {
+    /// <summary>
+    /// Не вебхук, а задание дозагрузки истории (этап 5B): последние PR и коммиты ветки по умолчанию через API. Живёт в
+    /// той же очереди — тот же воркер, повторы, диагностика и срок хранения.
+    /// </summary>
+    public const string BackfillEvent = "flow:backfill";
+
     public const int MaxAttempts = 8;
     public const int ErrorMaxLength = 1000;
     public const int DeliveryIdMaxLength = 100;
@@ -359,6 +409,34 @@ public sealed class ScmDelivery
             Status = payload is null ? ScmDeliveryStatus.Ignored : ScmDeliveryStatus.Pending,
             Payload = payload ?? "{}"
         };
+    }
+
+    public bool IsBackfill => Event == BackfillEvent;
+
+    /// <summary>Задание дозагрузки истории репозитория — Pending сразу.</summary>
+    public static ScmDelivery CreateBackfill(Guid repositoryId) =>
+        Create(repositoryId, $"backfill-{Guid.NewGuid():N}", BackfillEvent, "{}");
+
+    /// <summary>
+    /// Отложить без траты попытки: хостинг исчерпал лимит запросов — это не сбой, а пауза до сброса лимита.
+    /// </summary>
+    public void Postpone(DateTime until, string reason)
+    {
+        if (Status != ScmDeliveryStatus.Pending)
+            throw new InvalidOperationException("Отложить можно только доставку в очереди.");
+        NextAttemptAt = DateTime.SpecifyKind(until, DateTimeKind.Utc);
+        LastError = reason.Length <= ErrorMaxLength ? reason : reason[..ErrorMaxLength];
+    }
+
+    /// <summary>Повтор вручную (диагностика доставок): Failed снова в очередь, попытки с нуля.</summary>
+    public void Retry(DateTime utcNow)
+    {
+        if (Status != ScmDeliveryStatus.Failed)
+            throw new InvalidOperationException("Повторить можно только доставку с ошибкой.");
+        Status = ScmDeliveryStatus.Pending;
+        Attempts = 0;
+        NextAttemptAt = utcNow;
+        LastError = null;
     }
 
     public void MarkDone()

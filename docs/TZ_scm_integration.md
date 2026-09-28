@@ -1,6 +1,6 @@
 # ТЗ: интеграция с Git-хостингами — GitHub, GitLab, Gitea, Forgejo
 
-Статус: **этап 5A сделан** (подключения по токену, репозитории, вебхуки, разбор push/PR/веток, блок «Разработка»), 5B–5E — не начаты. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 5). Образец — Windshift
+Статус: **этапы 5A и 5B сделаны** (подключения по токену и GitHub App, репозитории, вебхуки, разбор push/PR/веток, блок «Разработка», дозагрузка истории, диагностика доставок, FQL `development`), 5C–5E — не начаты. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 5). Образец — Windshift
 (`internal/scm/*`, `internal/database/schema/scm_postgres.sql`).
 
 ## Исходное требование
@@ -181,6 +181,36 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
   слайдере (`Components/TaskDevelopment`: PR с состоянием, ветки, последние 5 коммитов, «Ветка» копирует
   `git checkout -b`), значок PR в строке списка и на карточке канбана (`TaskResponse.PullRequestState`).
 
+## Как сделано (этап 5B)
+
+- **Дозагрузка истории** живёт в той же очереди, что вебхуки: задание — `ScmDelivery` с событием `flow:backfill`
+  (`ScmDelivery.CreateBackfill`). Отдельной таблицы и воркера нет — повторы, backoff, диагностика и срок хранения общие.
+  Ставится при каждой новой привязке репозитория к проекту (задачи проекта уже упоминались в PR до привязки) и вручную —
+  `POST /scm/repositories/{id}/backfill`; второе задание поверх стоящего в очереди не ставится (`HasPendingDeliveryAsync`).
+  Разбор: `IScmProviderClient.GetHistoryAsync` → PR по возрастанию даты изменения (последнее состояние пишется
+  последним) и коммиты ветки по умолчанию одним push-событием — тем же `Processor`, что вебхуки. Объём —
+  `Scm:BackfillPullRequests` (100), `BackfillCommitDays` (30, от момента постановки), `BackfillMaxCommits` (1000).
+- Постранично: GitHub и GitLab — по 100, Gitea/Forgejo — по 50 (их `MAX_RESPONSE_ITEMS`, иначе короткая страница ложно
+  значила бы конец). Старые Gitea параметр `since` не знают — клиент останавливается на первом коммите старше даты сам.
+- **Лимит запросов**: 429 всегда, 403 — если `X-RateLimit-Remaining`/`RateLimit-Remaining` = 0 или есть `Retry-After`
+  (вторичный лимит GitHub). Клиент бросает `ScmRateLimitException(ResetAt)` — `Retry-After`, иначе `*-RateLimit-Reset`
+  (unix-время), иначе минута. Задание откладывается `ScmDelivery.Postpone` **без траты попытки** — это пауза, а не сбой.
+  Обычный 403 без нулевого остатка — по-прежнему «не хватает прав».
+- **GitHub App**: `ScmConnection.AuthKind` (Token | GitHubApp), `AppId`, `InstallationId` (миграция `AddScmGitHubApp`),
+  в `SecretProtected` — закрытый ключ PEM (переводы строк сохраняются). Клиент подписывает JWT RS256
+  (`GitHubAppJwt`: iat на минуту в прошлом, exp через 9 минут, iss — App ID), меняет его на токен установки
+  (`POST /app/installations/{id}/access_tokens`) и держит в singleton-кэше `GitHubAppTokens` до истечения минус 5 минут;
+  ключ кэша включает хеш PEM и оба Id. Проверка — токен установки плюс `GET /app` (логин `slug[bot]`), список
+  репозиториев — `GET /installation/repositories`. Вебхуки — по-прежнему на репозиторий (право приложения Webhooks: write),
+  а не общий вебхук приложения: секрет остаётся свой у каждого репозитория. Способ входа после создания не меняется.
+- **Диагностика доставок**: `ScmRepositoryResponse.FailedDeliveries` (один GROUP BY), `ScmDeliveryResponse.NextAttemptAt`
+  (у Pending — когда воркер возьмёт снова) и `IsBackfill`; повтор — `POST /scm/deliveries/{id}/retry` (`ScmDelivery.Retry`:
+  только из Failed, попытки с нуля). Клиент: в «Настройки → Интеграции» у репозитория ссылка «доставки» (или «N ошибок»
+  красным) → `Components/ScmDeliveriesDialog` — фильтр по состоянию, текст ошибки, «Повторить», «Дозагрузить историю».
+- **FQL `development`**: `openPR` (есть PR в состоянии Open или Draft), `mergedPR`, `noPR` (ни одной связи вида
+  PullRequest) — узел `TaskFilterPullRequest`, в SQL — `EXISTS` по `ScmLinks`; `!=`, `IN`, `NOT IN` как у прочих
+  перечислений. Подсказки значений — из `FqlFields.Development`.
+
 ## API
 
 | Метод | Путь | Кто |
@@ -191,6 +221,8 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 | PUT/DELETE | `/boards/{id}/repositories/{repoId}` `{ autoTransitions, smartCommits }` | `ManageScm` |
 | GET | `/tasks/{id}/development` — `ScmLink` задачи, сгруппированные по типу | `ViewProject` |
 | GET | `/scm/repositories/{id}/deliveries?status=` — диагностика доставок | Admin+ |
+| POST | `/scm/deliveries/{id}/retry` — повторить доставку с ошибкой (не Failed — 400) | Admin+ |
+| POST | `/scm/repositories/{id}/backfill` — дозагрузить историю, 202 | Admin+ |
 | POST | `/hooks/scm/{repositoryId}` — приём вебхука | аноним + подпись |
 
 ## Тесты

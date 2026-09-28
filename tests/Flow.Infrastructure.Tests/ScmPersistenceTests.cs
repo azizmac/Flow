@@ -3,6 +3,7 @@ using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Scm;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 using Flow.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -47,5 +48,55 @@ public class ScmPersistenceTests(PostgresFixture db)
 
         await db.SendAsync(new TaskDeleteCommand(Owner, task.Id));
         Assert.False(await db.QueryAsync(ctx => ctx.ScmLinks.AnyAsync(l => l.TaskId == task.Id)));
+    }
+
+    /// <summary>FQL development (этап 5B): открытый — Open или Draft, смёрженный, ни одного PR; очередь — «есть ли дозагрузка» и счётчик ошибок.</summary>
+    [Fact]
+    public async Task Development_Filter_And_Delivery_Diagnostics()
+    {
+        var board = (await db.SendAsync(new BoardCreateCommand(Owner, "Разработка", "SCMD"))).Response!;
+        var draft = (await db.SendAsync(new TaskCreateCommand(Owner, board.Id, "Черновик", null, null)))!;
+        var merged = (await db.SendAsync(new TaskCreateCommand(Owner, board.Id, "Смёржена", null, null)))!;
+        var none = (await db.SendAsync(new TaskCreateCommand(Owner, board.Id, "Без PR", null, null)))!;
+        var branchOnly = (await db.SendAsync(new TaskCreateCommand(Owner, board.Id, "Только ветка", null, null)))!;
+        var connection = ScmConnection.Create(ScmProvider.GitHub, "GitHub", null, "p:tok", Owner);
+        var repository = ScmRepository.Create(connection.Id, "77", "acme/scmd", "https://github.com/acme/scmd", "main", "p:s");
+
+        ScmLink Pr(Guid taskId, string number, ScmLinkState state)
+        {
+            var link = ScmLink.Create(taskId, repository.Id, ScmLinkKind.PullRequest, number);
+            link.Apply("https://github.com/acme/scmd/pull/" + number, "PR", state, "octocat", null, "b", "main", DateTime.UtcNow);
+            return link;
+        }
+
+        var failed = ScmDelivery.Create(repository.Id, "f-1", "push", "{}");
+        for (var i = 0; i < ScmDelivery.MaxAttempts; i++)
+            failed.MarkFailed("сбой", DateTime.UtcNow);
+        await db.QueryAsync(async ctx =>
+        {
+            ctx.ScmConnections.Add(connection);
+            ctx.ScmRepositories.Add(repository);
+            ctx.ScmLinks.AddRange(Pr(draft.Id, "1", ScmLinkState.Draft), Pr(merged.Id, "2", ScmLinkState.Merged), Pr(merged.Id, "3", ScmLinkState.Closed),
+                ScmLink.Create(branchOnly.Id, repository.Id, ScmLinkKind.Branch, "scmd-4"));
+            ctx.ScmDeliveries.AddRange(failed, ScmDelivery.CreateBackfill(repository.Id));
+            return await ctx.SaveChangesAsync();
+        });
+
+        async Task<Guid[]> Find(string fql) =>
+            (await db.SendAsync(new TaskSearchQuery(Owner, board.Id, Fql: fql))).Items.Select(t => t.Id).Order().ToArray();
+
+        Assert.Equal([draft.Id], await Find("development = openPR"));
+        Assert.Equal([merged.Id], await Find("development = mergedPR"));
+        Assert.Equal(new[] { none.Id, branchOnly.Id }.Order().ToArray(), await Find("development = noPR"));
+        Assert.Equal(new[] { draft.Id, none.Id, branchOnly.Id }.Order().ToArray(), await Find("development != mergedPR"));
+
+        await db.QueryAsync(async ctx =>
+        {
+            var store = new Flow.Infrastructure.Persistence.Repositories.ScmStore(ctx);
+            Assert.True(await store.HasPendingDeliveryAsync(repository.Id, ScmDelivery.BackfillEvent, CancellationToken.None));
+            Assert.False(await store.HasPendingDeliveryAsync(repository.Id, "push", CancellationToken.None));
+            Assert.Equal(1, (await store.GetFailedDeliveryCountsAsync(CancellationToken.None))[repository.Id]);
+            return 0;
+        });
     }
 }

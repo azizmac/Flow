@@ -30,6 +30,12 @@ public interface IScmStore
 
     Task<bool> DeliveryExistsAsync(Guid repositoryId, string deliveryId, CancellationToken cancellationToken);
 
+    /// <summary>Есть ли в очереди доставка этого события — чтобы не ставить вторую дозагрузку истории поверх первой.</summary>
+    Task<bool> HasPendingDeliveryAsync(Guid repositoryId, string eventName, CancellationToken cancellationToken);
+
+    /// <summary>Сколько доставок с ошибкой у каждого репозитория — значок в интеграциях. Без ошибок — репозитория в словаре нет.</summary>
+    Task<IReadOnlyDictionary<Guid, int>> GetFailedDeliveryCountsAsync(CancellationToken cancellationToken);
+
     Task<ScmDelivery?> GetDeliveryAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>Id доставок, которые пора обработать (Pending, NextAttemptAt ≤ now), старые первыми.</summary>

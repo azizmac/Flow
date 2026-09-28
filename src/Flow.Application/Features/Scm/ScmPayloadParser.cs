@@ -61,17 +61,7 @@ public static class ScmPayloadParser
             case "pull_request":
             {
                 var pr = Obj(root, "pull_request");
-                if (pr.ValueKind != JsonValueKind.Object)
-                    return null;
-                var merged = Bool(pr, "merged");
-                var state = merged ? ScmLinkState.Merged
-                    : Str(pr, "state") == "closed" ? ScmLinkState.Closed
-                    : Bool(pr, "draft") ? ScmLinkState.Draft
-                    : ScmLinkState.Open;
-                return new ScmEvent(ScmEventKind.PullRequest, PullRequest: new ScmPullRequest(
-                    Num(pr, "number"), Str(pr, "title") ?? "", Str(pr, "body"), state, Str(pr, "html_url") ?? "",
-                    Str(Obj(pr, "user"), "login"), Str(Obj(pr, "head"), "ref"), Str(Obj(pr, "base"), "ref"),
-                    Date(Str(pr, "updated_at") ?? Str(pr, "created_at"))));
+                return pr.ValueKind != JsonValueKind.Object ? null : new ScmEvent(ScmEventKind.PullRequest, PullRequest: GitHubPullRequest(pr));
             }
             default:
                 return null;
@@ -104,20 +94,62 @@ public static class ScmPayloadParser
                 var mr = Obj(root, "object_attributes");
                 if (mr.ValueKind != JsonValueKind.Object)
                     return null;
-                var state = Str(mr, "state") switch
-                {
-                    "merged" => ScmLinkState.Merged,
-                    "closed" or "locked" => ScmLinkState.Closed,
-                    _ => Bool(mr, "draft") || Bool(mr, "work_in_progress") ? ScmLinkState.Draft : ScmLinkState.Open
-                };
                 return new ScmEvent(ScmEventKind.PullRequest, PullRequest: new ScmPullRequest(
-                    Num(mr, "iid"), Str(mr, "title") ?? "", Str(mr, "description"), state, Str(mr, "url") ?? "",
+                    Num(mr, "iid"), Str(mr, "title") ?? "", Str(mr, "description"), GitLabState(mr), Str(mr, "url") ?? "",
                     Str(Obj(root, "user"), "username"), Str(mr, "source_branch"), Str(mr, "target_branch"),
                     Date(Str(mr, "updated_at") ?? Str(mr, "created_at"))));
             }
             default:
                 return null;
         }
+    }
+
+    /// <summary>PR GitHub/Gitea — одна форма у вебхука и у REST. В списке REST GitHub нет поля merged — смотрим merged_at.</summary>
+    private static ScmPullRequest GitHubPullRequest(JsonElement pr)
+    {
+        var state = Bool(pr, "merged") || Str(pr, "merged_at") is not null ? ScmLinkState.Merged
+            : Str(pr, "state") == "closed" ? ScmLinkState.Closed
+            : Bool(pr, "draft") ? ScmLinkState.Draft
+            : ScmLinkState.Open;
+        return new ScmPullRequest(
+            Num(pr, "number"), Str(pr, "title") ?? "", Str(pr, "body"), state, Str(pr, "html_url") ?? "",
+            Str(Obj(pr, "user"), "login"), Str(Obj(pr, "head"), "ref"), Str(Obj(pr, "base"), "ref"),
+            Date(Str(pr, "updated_at") ?? Str(pr, "created_at")));
+    }
+
+    private static ScmLinkState GitLabState(JsonElement mr) => Str(mr, "state") switch
+    {
+        "merged" => ScmLinkState.Merged,
+        "closed" or "locked" => ScmLinkState.Closed,
+        _ => Bool(mr, "draft") || Bool(mr, "work_in_progress") ? ScmLinkState.Draft : ScmLinkState.Open
+    };
+
+    /// <summary>Список PR/MR из REST API (дозагрузка истории, этап 5B). У GitLab форма MR в REST своя, не как в вебхуке.</summary>
+    public static IReadOnlyList<ScmPullRequest> ParsePullRequests(ScmProvider provider, JsonElement array)
+    {
+        if (array.ValueKind != JsonValueKind.Array)
+            return [];
+        return provider == ScmProvider.GitLab
+            ? array.EnumerateArray().Select(mr => new ScmPullRequest(
+                Num(mr, "iid"), Str(mr, "title") ?? "", Str(mr, "description"), GitLabState(mr), Str(mr, "web_url") ?? "",
+                Str(Obj(mr, "author"), "username"), Str(mr, "source_branch"), Str(mr, "target_branch"),
+                Date(Str(mr, "updated_at") ?? Str(mr, "created_at")))).ToList()
+            : array.EnumerateArray().Select(GitHubPullRequest).ToList();
+    }
+
+    /// <summary>Список коммитов из REST API. GitHub и Gitea: sha + commit.{message, author}; GitLab: плоский объект.</summary>
+    public static IReadOnlyList<ScmCommit> ParseCommits(ScmProvider provider, JsonElement array)
+    {
+        if (array.ValueKind != JsonValueKind.Array)
+            return [];
+        return provider == ScmProvider.GitLab
+            ? array.EnumerateArray().Select(c => new ScmCommit(
+                Str(c, "id") ?? "", Str(c, "message") ?? "", Str(c, "web_url") ?? "", Str(c, "author_email"), null,
+                Date(Str(c, "committed_date") ?? Str(c, "authored_date")))).ToList()
+            : array.EnumerateArray().Select(c => new ScmCommit(
+                Str(c, "sha") ?? "", Str(Obj(c, "commit"), "message") ?? "", Str(c, "html_url") ?? "",
+                Str(Obj(Obj(c, "commit"), "author"), "email"), Str(Obj(c, "author"), "login"),
+                Date(Str(Obj(Obj(c, "commit"), "author"), "date")))).ToList();
     }
 
     private static string? BranchOf(string? gitRef) =>

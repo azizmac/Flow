@@ -19,11 +19,13 @@ public class ScmController(IMediator mediator, IActorAccessor actor) : Controlle
 
     [HttpPost("scm/connections")]
     public Task<IActionResult> Create(CreateScmConnectionRequest request, CancellationToken cancellationToken) =>
-        Send(async () => (object?)await mediator.Send(new ScmConnectionCreateCommand(actor.Require(), request.Provider, request.Name, request.Token, request.BaseUrl), cancellationToken));
+        Send(async () => (object?)await mediator.Send(new ScmConnectionCreateCommand(actor.Require(), request.Provider, request.Name, request.Token, request.BaseUrl,
+            request.AuthKind, request.AppId, request.InstallationId), cancellationToken));
 
     [HttpPatch("scm/connections/{id:guid}")]
     public Task<IActionResult> Update(Guid id, UpdateScmConnectionRequest request, CancellationToken cancellationToken) =>
-        Send(async () => (object?)await mediator.Send(new ScmConnectionUpdateCommand(actor.Require(), id, request.Name, request.BaseUrl, request.Token), cancellationToken));
+        Send(async () => (object?)await mediator.Send(new ScmConnectionUpdateCommand(actor.Require(), id, request.Name, request.BaseUrl, request.Token,
+            request.AppId, request.InstallationId), cancellationToken));
 
     [HttpDelete("scm/connections/{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken) =>
@@ -60,6 +62,25 @@ public class ScmController(IMediator mediator, IActorAccessor actor) : Controlle
     [HttpGet("scm/repositories/{id:guid}/deliveries")]
     public async Task<IActionResult> Deliveries(Guid id, [FromQuery] ScmDeliveryStatus? status, CancellationToken cancellationToken) =>
         await mediator.Send(new ScmDeliveriesQuery(actor.Require(), id, status), cancellationToken) is { } list ? Ok(list) : NotFound();
+
+    /// <summary>Повторить доставку с ошибкой; не Failed — 400.</summary>
+    [HttpPost("scm/deliveries/{id:guid}/retry")]
+    public Task<IActionResult> RetryDelivery(Guid id, CancellationToken cancellationToken) =>
+        Send(async () => (object?)await mediator.Send(new ScmDeliveryRetryCommand(actor.Require(), id), cancellationToken));
+
+    /// <summary>Дозагрузить историю (последние PR и коммиты ветки по умолчанию) — фоном, 202; отключённый — 400.</summary>
+    [HttpPost("scm/repositories/{id:guid}/backfill")]
+    public async Task<IActionResult> Backfill(Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await mediator.Send(new ScmBackfillCommand(actor.Require(), id), cancellationToken) ? Accepted() : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { ex.Message });
+        }
+    }
 
     [HttpGet("boards/{boardId:guid}/repositories")]
     public async Task<IActionResult> BoardRepositories(Guid boardId, CancellationToken cancellationToken) =>
