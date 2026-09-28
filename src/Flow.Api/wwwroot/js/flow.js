@@ -24,6 +24,50 @@ window.flow = (function () {
         e.preventDefault();
     }, true);
 
+    // Морф «кнопка → полоса» (FQL): полоса стоит в раскладке целиком, а в начале анимации обрезана clip-path ровно
+    // по кнопке и сдвинута к ней transform'ом — так кажется, что вытягивается сама кнопка. Ни ширина, ни высота не
+    // анимируются: раскладка не пересчитывается ни разу, соседи под полосой едут тоже transform'ом.
+    function reducedMotion() {
+        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function easeOut() {
+        return getComputedStyle(document.documentElement).getPropertyValue('--ease-out').trim() || 'ease-out';
+    }
+
+    function morphGeometry(from, to) {
+        const f = from.getBoundingClientRect();
+        const t = to.getBoundingClientRect();
+        const bar = to.parentElement;
+        const next = bar && bar.nextElementSibling;
+        const radius = parseFloat(getComputedStyle(to).borderTopLeftRadius) || 0;
+        const inset = [0, Math.max(0, t.right - f.right), Math.max(0, t.height - f.height), Math.max(0, f.left - t.left)];
+        return {
+            pill: {
+                transform: 'translate(0, ' + (f.top - t.top) + 'px)',
+                clipPath: 'inset(' + inset.map(function (v) { return v + 'px'; }).join(' ') + ' round ' + (f.height / 2) + 'px)'
+            },
+            full: { transform: 'none', clipPath: 'inset(0px 0px 0px 0px round ' + radius + 'px)' },
+            next: next,
+            // На сколько полоса сдвинула то, что под ней: верх соседа минус верх полосы (с её отступом).
+            shift: next ? next.getBoundingClientRect().top - bar.getBoundingClientRect().top : 0
+        };
+    }
+
+    // Ответную перерисовку .NET ждём по факту: как только полоса ушла из документа, соседа отпускаем — иначе он
+    // на кадр съехал бы вверх дважды (и полосы уже нет, и transform ещё держит сдвиг). Таймер — если .NET передумал.
+    function releaseWhenGone(el, animations) {
+        let timer = 0;
+        const observer = new MutationObserver(function () { if (!el.isConnected) done(); });
+        function done() {
+            observer.disconnect();
+            clearTimeout(timer);
+            animations.forEach(function (a) { if (a) a.cancel(); });
+        }
+        observer.observe(document.body, { childList: true, subtree: true });
+        timer = setTimeout(done, 1500);
+    }
+
     // Общий каркас: pointerdown на корне выбирает, что тянуть (pick → состояние или null), движение и отпускание — на
     // window, чтобы курсор мог уйти за край. Порог 4px отличает перетаскивание от клика. Во время движения элемент
     // меняет только свой inline-стиль; при отпускании стиль возвращается как был, а итог уходит в .NET одним вызовом —
@@ -279,6 +323,48 @@ window.flow = (function () {
             if (!el) return;
             el.focus();
             if (select && typeof el.select === 'function') el.select();
+        },
+
+        // Полоса вырастает из кнопки. Класс morphing прячет её с первого кадра (рендер приходит раньше этого вызова),
+        // снимаем его в той же задаче, что запускаем анимацию, — полной полосы без анимации не видно ни кадра.
+        morphIn: function (fromId, toId) {
+            const from = document.getElementById(fromId);
+            const to = document.getElementById(toId);
+            if (!to) return false;
+            if (from && !reducedMotion()) {
+                const g = morphGeometry(from, to);
+                const ease = easeOut();
+                to.animate([g.pill, g.full], { duration: 280, easing: ease });
+                // Содержимое проявляется, когда форма уже почти раскрылась: иначе текст мелькал бы в узкой пилюле.
+                Array.prototype.forEach.call(to.children, function (child) {
+                    child.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay: 90, easing: ease, fill: 'backwards' });
+                });
+                if (g.next && g.shift > 0)
+                    g.next.animate([{ transform: 'translateY(' + -g.shift + 'px)' }, { transform: 'none' }], { duration: 280, easing: ease });
+            }
+            to.classList.remove('morphing');
+            return true;
+        },
+
+        // Обратно в кнопку — быстрее, чем раскрытие: закрытие человек уже решил, ждать его незачем.
+        // Промис завершается, когда анимация доиграла; убирать полосу из разметки — дело .NET.
+        morphOut: function (fromId, toId) {
+            const from = document.getElementById(fromId);
+            const to = document.getElementById(toId);
+            if (!from || !to || reducedMotion()) return Promise.resolve();
+            const g = morphGeometry(from, to);
+            const ease = easeOut();
+            const opts = { duration: 200, easing: ease, fill: 'forwards' };
+            const parts = [];
+            Array.prototype.forEach.call(to.children, function (child) {
+                parts.push(child.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 90, easing: ease, fill: 'forwards' }));
+            });
+            const pill = Object.assign({ opacity: 0 }, g.pill);
+            const shape = to.animate([Object.assign({ opacity: 1 }, g.full), Object.assign({ opacity: 1, offset: 0.75 }, g.pill), pill], opts);
+            parts.push(shape);
+            if (g.next && g.shift > 0)
+                parts.push(g.next.animate([{ transform: 'none' }, { transform: 'translateY(' + -g.shift + 'px)' }], opts));
+            return shape.finished.then(function () { releaseWhenGone(to, parts); }, function () { });
         },
 
         scrollIntoView: function (id) {

@@ -10,7 +10,7 @@
 @inject BrowserInterop Browser
 
 <div class="fql-bar">
-    <div class="fql-line @(Error is not null ? "error" : "")">
+    <div id="@LineId" class="fql-line @(Error is not null ? "error" : "") @(_morphing ? "morphing" : "")">
         <span class="fql-tag">FQL</span>
         <div class="fql-input-wrap">
             <input id="@InputId" class="fql-input" value="@_text" autocomplete="off" spellcheck="false"
@@ -55,6 +55,7 @@
 
 @code {
     public const string InputId = "fql-input";
+    public const string LineId = "fql-line";
 
     /// <summary>Применённый запрос (из адреса): при его смене поле показывает его.</summary>
     [Parameter] public string? Value { get; set; }
@@ -63,6 +64,12 @@
     [Parameter] public EventCallback<string> OnApply { get; set; }
     [Parameter] public EventCallback<string> OnSave { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>
+    /// Id кнопки, из которой строка вырастает при появлении (морф в flow.js); null — строка просто стоит на месте
+    /// (открыли по ссылке с ?fql=). Читается один раз: анимация — только у первого рендера.
+    /// </summary>
+    [Parameter] public string? MorphFrom { get; set; }
 
     private const int DebounceMs = 150;
 
@@ -73,6 +80,26 @@
     private int _replaceFrom;
     private int _replaceLength;
     private CancellationTokenSource? _cts;
+    private bool _morphing;
+
+    protected override void OnInitialized() => _morphing = MorphFrom is not null;
+
+    /// <summary>
+    /// Строка отрисована скрытой (класс morphing), JS запускает морф и снимает класс сам. Флаг сбрасываем и здесь:
+    /// иначе следующий рендер (ошибка, подсказки) снова вписал бы morphing в class и спрятал строку.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !_morphing)
+            return;
+
+        var ok = await Browser.MorphInAsync(MorphFrom!, LineId);
+        _morphing = false;
+        if (!ok)
+            StateHasChanged();
+
+        await Browser.FocusAsync(InputId);
+    }
 
     protected override void OnParametersSet()
     {

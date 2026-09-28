@@ -70,6 +70,35 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
+    /// <summary>
+    /// Элемент toId вырастает из fromId (морф в flow.js). false — JS не достал элемент или circuit отвалился:
+    /// тогда вызывающий сам снимает класс morphing, иначе элемент так и остался бы невидимым.
+    /// </summary>
+    public async Task<bool> MorphInAsync(string fromId, string toId)
+    {
+        try
+        {
+            return await js.InvokeAsync<bool>("flow.morphIn", fromId, toId);
+        }
+        catch (JSException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Обратный морф: элемент toId сворачивается в fromId; возвращается, когда анимация доиграла.</summary>
+    public async Task MorphOutAsync(string fromId, string toId)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flow.morphOut", fromId, toId);
+        }
+        catch (JSException)
+        {
+            // без анимации закроется и так
+        }
+    }
+
     /// <summary>Запоминает текущий фокус перед открытием модального слоя.</summary>
     public async Task PushFocusAsync()
     {

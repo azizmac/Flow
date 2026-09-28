@@ -2323,6 +2323,8 @@ a.task-row { color: inherit; text-decoration: none; }
     background: rgba(0, 0, 0, 0.16); border: 1px solid rgba(255, 255, 255, 0.08);
 }
 .fql-line:focus-within { border-color: var(--accent); }
+/* До запуска морфа из кнопки FQL: рендер приходит раньше вызова JS, полная строка не должна мелькнуть (flow.morphIn). */
+.fql-line.morphing { opacity: 0; }
 .fql-line.error { border-color: var(--danger); }
 .fql-tag { font: var(--fw-bold) 10.5px var(--font-display); color: var(--accent); letter-spacing: 0.06em; flex: none; }
 .fql-input-wrap { position: relative; flex: 1 1 auto; min-width: 0; }
