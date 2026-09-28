@@ -384,11 +384,13 @@ public class SearchQueryTests(SearchFixture fixture)
 
         Assert.NotNull(similar);
         // Похожие ищутся по всей базе, а не внутри проекта: дубль обычно и заводят в соседнем.
-        // Поэтому проверяется не место в списке, а порядок «близкая выше далёкой».
+        // Поэтому проверяется не место в списке, а порядок «близкая выше далёкой». База общая для всех тестов, и
+        // соседние классы кладут свои задачи про накладные: далёкая в окно из MaxLimit (10) может и не попасть —
+        // тогда она дальше всего окна, куда вошла близкая, и порядок тоже соблюдён.
         Assert.DoesNotContain(similar!, item => item.SourceId == source.Id);
         var nearHit = Assert.Single(similar!, item => item.SourceId == near!.Id);
-        var farHit = Assert.Single(similar!, item => item.SourceId == far!.Id);
-        Assert.True(nearHit.Score > farHit.Score, $"близкая {nearHit.Score:F3} должна быть выше далёкой {farHit.Score:F3}");
+        if (similar!.SingleOrDefault(item => item.SourceId == far!.Id) is { } farHit)
+            Assert.True(nearHit.Score > farHit.Score, $"близкая {nearHit.Score:F3} должна быть выше далёкой {farHit.Score:F3}");
     }
 
     [Fact]

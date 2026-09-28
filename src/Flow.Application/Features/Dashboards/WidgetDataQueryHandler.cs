@@ -172,7 +172,9 @@ internal sealed class WidgetDataQueryHandler(
             label = key => key is null ? "Не назначена" : people.TryGetValue(key, out var n) ? n : "—";
         }
 
-        var ordered = groups.OrderByDescending(g => g.Count).ThenBy(g => label(g.Key), StringComparer.CurrentCulture).ToList();
+        // Равные группы — по подписи порядком кодов, а не культурой процесса: иначе порядок зависел бы от машины
+        // (ru-RU ставит кириллицу раньше латиницы, инвариантная — наоборот), и дашборд на сервере и тест в CI расходились.
+        var ordered = groups.OrderByDescending(g => g.Count).ThenBy(g => label(g.Key), StringComparer.Ordinal).ToList();
         var result = ordered.Take(DashboardLimits.MaxGroups).Select(g => new WidgetGroup(g.Key, label(g.Key), g.Count)).ToList();
         if (ordered.Count > DashboardLimits.MaxGroups)
             result.Add(new WidgetGroup("other", "Другие", ordered.Skip(DashboardLimits.MaxGroups).Sum(g => g.Count)));
