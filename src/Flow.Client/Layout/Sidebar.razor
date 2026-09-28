@@ -45,6 +45,7 @@
     <a class="sb-item @(IsBoards ? "active" : "")" href="boards" title="Проекты"><Icon Name="grid" Size="18" /><span>Проекты</span></a>
     <a class="sb-item @(IsTasks ? "active" : "")" href="@TasksHref" title="Задачи"><Icon Name="check" Size="18" /><span>Задачи</span></a>
     <a class="sb-item @(IsUsers ? "active" : "")" href="users" title="Люди"><Icon Name="users" Size="18" /><span>Люди</span></a>
+    <a class="sb-item @(IsAgentTest ? "active" : "")" href="agents/test" title="Проверка агента"><Icon Name="send" Size="18" /><span>Проверка агента</span></a>
     <a class="sb-item @(IsDashboards ? "active" : "")" href="dashboards" title="Дашборды"><Icon Name="chart" Size="18" /><span>Дашборды</span></a>
     <a class="sb-item @(IsSettings ? "active" : "")" href="settings" title="Настройки"><Icon Name="settings" Size="18" /><span>Настройки</span></a>
 
@@ -110,6 +111,7 @@
 
     private bool IsSettings => Path is "settings";
     private bool IsDashboards => Path is "dashboards" || Path.StartsWith("dashboards/", StringComparison.OrdinalIgnoreCase);
+    private bool IsAgentTest => Path is "agents/test";
 
     // Раньше пункт вёл в последний открытый проект; теперь это отдельный экран со всеми задачами,
     // а проект выбирается селектором в его топбаре.

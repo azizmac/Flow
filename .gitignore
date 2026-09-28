@@ -19,3 +19,6 @@ riderModule.iml
 
 # Зависимости сборки Markdown-редактора: ставятся из package-lock.json (src/Flow.Client/editor/README.md).
 node_modules/
+
+# Локальные checkout'ы репозиториев при запуске API вне Docker.
+/repository-workspaces/

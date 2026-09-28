@@ -9,6 +9,7 @@ using Flow.Application.Features.Attachments;
 using Flow.Infrastructure.Persistence;
 using Flow.Infrastructure.Persistence.Repositories;
 using Flow.Infrastructure.OpenCode;
+using Flow.Infrastructure.Repositories;
 using Flow.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -80,6 +81,10 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddScoped<ICodeRepositoryRepository, CodeRepositoryRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        services.Configure<RepositoryWorkspaceOptions>(configuration.GetSection(RepositoryWorkspaceOptions.SectionName));
+        services.AddSingleton(provider => provider.GetRequiredService<IOptions<RepositoryWorkspaceOptions>>().Value);
+        services.AddSingleton<IRepositoryWorkspaceService, GitRepositoryWorkspaceService>();
 
         AddOpenCode(services, configuration);
         AddAttachments(services, configuration);

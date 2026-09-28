@@ -133,6 +133,16 @@ public sealed partial class Board
 
     public void Rename(string name) => Name = ValidateName(name);
 
+    public CodeRepository AddCodeRepository(RepositoryProvider provider, string name, string remoteUrl, string branch)
+    {
+        var repository = new CodeRepository(Id, provider, name, remoteUrl, branch);
+        if (_codeRepositories.Any(existing => existing.RemoteUrl == repository.RemoteUrl))
+            throw new InvalidOperationException("Repository is already connected to this board.");
+
+        _codeRepositories.Add(repository);
+        return repository;
+    }
+
     public void SetVisibility(BoardVisibility visibility) =>
         Visibility = Enum.IsDefined(visibility)
             ? visibility

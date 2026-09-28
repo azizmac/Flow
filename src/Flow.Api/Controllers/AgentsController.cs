@@ -11,14 +11,14 @@ namespace Flow.Api.Controllers;
 [Route("agents")]
 public class AgentsController(IMediator mediator, IActorAccessor actor) : ControllerBase
 {
-    /// <summary>Отправляет вопрос в OpenCode для указанного каталога общего workspace.</summary>
+    /// <summary>Отправляет вопрос в OpenCode для готовой ревизии подключённого репозитория.</summary>
     [HttpPost("test")]
     public async Task<IActionResult> Test(AgentTestRequest request, CancellationToken cancellationToken)
     {
         try
         {
             var response = await mediator.Send(
-                new AgentTestAskCommand(actor.Require(), request.WorkspaceDirectory, request.Question),
+                new AgentTestAskCommand(actor.Require(), request.RepositoryId, request.Question),
                 cancellationToken);
 
             return Ok(response);

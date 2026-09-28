@@ -38,6 +38,7 @@ public sealed class CodeRepositoryConfiguration : IEntityTypeConfiguration<CodeR
 
         builder.Property(repository => repository.SyncState)
             .IsRequired()
+            .IsConcurrencyToken()
             .HasComment("Текущее состояние синхронизации локальной копии репозитория.");
 
         builder.Property(repository => repository.LastSyncedCommit)

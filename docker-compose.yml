@@ -74,6 +74,8 @@ services:
       OpenCode__ProviderId: ${OPENCODE_PROVIDER_ID:-lmstudio}
       OpenCode__ModelId: ${OPENCODE_MODEL_ID:-qwen3.6-35b-a3b}
       OpenCode__TimeoutSeconds: ${OPENCODE_TIMEOUT_SECONDS:-300}
+      Repositories__WorkspaceRoot: /var/lib/flow/repositories
+      Repositories__AgentWorkspaceRoot: /workspaces
       # Поиск включён по умолчанию: без модели он деградирует в полнотекстовый (GET /search
       # отвечает degraded: true), а очередь индексации копится до её появления. SEARCH_ENABLED=false
       # отключает и эндпоинты, и воркер — поведение приложения становится в точности прежним.

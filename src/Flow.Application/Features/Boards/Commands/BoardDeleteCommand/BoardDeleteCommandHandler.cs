@@ -6,7 +6,7 @@ using MediatR;
 
 namespace Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
 
-internal sealed class BoardDeleteCommandHandler(IBoardRepository boards, IFileStorage storage, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
+internal sealed class BoardDeleteCommandHandler(IBoardRepository boards, IFileStorage storage, IRepositoryWorkspaceService workspaces, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<BoardDeleteCommand, bool>
 {
     public async Task<bool> Handle(BoardDeleteCommand request, CancellationToken cancellationToken)
@@ -39,4 +39,14 @@ internal sealed class BoardDeleteCommandHandler(IBoardRepository boards, IFileSt
 
         return true;
     }
+
+        try
+        {
+            await workspaces.DeleteBoardAsync(board.Id, cancellationToken);
+        }
+        catch
+        {
+            // Checkout удаляется после коммита; сбой очистки не отменяет удаление проекта.
+        }
+
 }

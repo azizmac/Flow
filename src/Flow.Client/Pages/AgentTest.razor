@@ -36,17 +36,37 @@
                     </span>
                 </div>
 
-                <DsInput Id="agent-workspace" Label="Рабочий каталог" Icon="code" Value="@_workspaceDirectory"
-                         ValueChanged="v => _workspaceDirectory = v" MaxLength="500" />
+                <div class="agent-test-source">
+                    <label>Проект
+                        <select value="@_boardId" @onchange="SelectBoard">
+                            @foreach (var board in _boards)
+                            {
+                                <option value="@board.Id">@board.Name</option>
+                            }
+                        </select>
+                    </label>
+                    <label>Репозиторий
+                        <select value="@_repositoryId" @onchange="SelectRepository">
+                            @foreach (var repository in _repositories)
+                            {
+                                <option value="@repository.Id">@repository.Name · @repository.Branch (@repository.SyncState)</option>
+                            }
+                        </select>
+                    </label>
+                </div>
+                @if (_boardId != Guid.Empty && _repositories.Count == 0)
+                {
+                    <div class="hint">У проекта нет репозиториев. <a href="@($"boards/{_boardId}/repositories")">Подключить репозиторий</a>.</div>
+                }
 
                 <label class="agent-test-question-label" for="agent-question">Что нужно узнать?</label>
                 <textarea id="agent-question" class="agent-test-question" rows="7" maxlength="10000"
-                          placeholder="Например: что хранится в этом репозитории?" @bind="_question"
+                          placeholder="Например: что хранится в этом репозитории?" @bind="_question" @bind:event="oninput"
                           @onkeydown="OnQuestionKeyDown"></textarea>
 
                 <div class="agent-test-composer-foot">
                     <span class="hint">Ответ будет получен в отдельной сессии OpenCode.</span>
-                    <DsButton Variant="primary" Size="md" Icon="send" OnClick="Ask" Busy="_sending" Disabled="@string.IsNullOrWhiteSpace(_question)">
+                    <DsButton Variant="primary" Size="md" Icon="send" OnClick="Ask" Busy="_sending" Disabled="@(!CanAsk)">
                         Отправить вопрос
                     </DsButton>
                 </div>
@@ -54,9 +74,9 @@
 
             <aside class="panel agent-test-info">
                 <div class="agent-test-info-icon"><Icon Name="code" Size="19" /></div>
-                <h3>Рабочий каталог</h3>
-                <p>Flow передаёт агенту только каталог внутри общего тома репозиториев.</p>
-                <div class="agent-test-path"><span>/workspaces</span></div>
+                <h3>Выбранная ревизия</h3>
+                <p>Агент читает код подключённого репозитория из общего тома.</p>
+                <div class="agent-test-path"><span>@(SelectedRepository?.LastSyncedCommit?[..Math.Min(12, SelectedRepository.LastSyncedCommit.Length)] ?? "Нет готового commit")</span></div>
                 <div class="agent-test-info-rule"></div>
                 <div class="agent-test-info-note">
                     <Icon Name="message" Size="15" />
@@ -105,22 +125,75 @@
 </div>
 
 @code {
-    private string _workspaceDirectory = "/workspaces";
+    [SupplyParameterFromQuery(Name = "boardId")] public Guid? BoardIdParam { get; set; }
+    [SupplyParameterFromQuery(Name = "repositoryId")] public Guid? RepositoryIdParam { get; set; }
+
+    private IReadOnlyList<BoardResponse> _boards = [];
+    private IReadOnlyList<CodeRepositoryResponse> _repositories = [];
+    private Guid _boardId;
+    private Guid _repositoryId;
     private string _question = "Что хранится в этом репозитории?";
     private AgentTestResponse? _answer;
     private string? _error;
     private bool _sending;
 
+    private CodeRepositoryResponse? SelectedRepository => _repositories.FirstOrDefault(repository => repository.Id == _repositoryId);
+
+    private bool CanAsk => !_sending && !string.IsNullOrWhiteSpace(_question) &&
+        SelectedRepository is { LastSyncedCommit: not null, SyncState: "Ready" or "Failed" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var boards = await Api.GetBoards();
+        if (!boards.Ok)
+        {
+            _error = boards.Error;
+            return;
+        }
+
+        _boards = boards.Value!;
+        _boardId = BoardIdParam is { } id && _boards.Any(board => board.Id == id) ? id : _boards.FirstOrDefault()?.Id ?? Guid.Empty;
+        await LoadRepositories();
+        if (RepositoryIdParam is { } repositoryId && _repositories.Any(repository => repository.Id == repositoryId))
+            _repositoryId = repositoryId;
+    }
+
+    private async Task SelectBoard(ChangeEventArgs e)
+    {
+        _boardId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : Guid.Empty;
+        await LoadRepositories();
+    }
+
+    private void SelectRepository(ChangeEventArgs e) =>
+        _repositoryId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : Guid.Empty;
+
+    private async Task LoadRepositories()
+    {
+        _repositories = [];
+        _repositoryId = Guid.Empty;
+        if (_boardId == Guid.Empty) return;
+
+        var result = await Api.GetCodeRepositories(_boardId);
+        if (result.Ok)
+        {
+            _repositories = result.Value!;
+            _repositoryId = _repositories.FirstOrDefault(repository => repository.LastSyncedCommit is not null && repository.SyncState is "Ready" or "Failed")?.Id ?? Guid.Empty;
+            _error = null;
+        }
+        else
+            _error = result.Error;
+    }
+
     private async Task Ask()
     {
-        if (_sending || string.IsNullOrWhiteSpace(_question))
+        if (!CanAsk)
             return;
 
         _sending = true;
         _error = null;
         _answer = null;
 
-        var result = await Api.AskAgent(new AgentTestRequest(_question, _workspaceDirectory));
+        var result = await Api.AskAgent(new AgentTestRequest(_question, _repositoryId));
         _sending = false;
 
         if (result.Ok)

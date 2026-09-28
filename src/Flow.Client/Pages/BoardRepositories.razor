@@ -1,0 +1,196 @@
+@page "/boards/{BoardId:guid}/repositories"
+@inject FlowApi Api
+
+<PageTitle>Репозитории — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        <a class="topbar-back" href="@($"tasks?board={BoardId}")" title="К задачам проекта"><Icon Name="arrow-left" Size="18" /></a>
+        <h2>Репозитории @(_board is null ? "" : $"· {_board.Key}")</h2>
+    </div>
+</div>
+
+<div class="content">
+    <div class="repo-page">
+        @if (_loading)
+        {
+            <Skeleton Kind="cards" Count="2" />
+        }
+        else if (_error is not null)
+        {
+            <div class="empty"><div class="empty-title">Не удалось загрузить репозитории</div><div>@_error</div><DsButton Variant="secondary" Size="sm" OnClick="Load">Повторить</DsButton></div>
+        }
+        else
+        {
+            <div class="repo-intro">
+                <div><h1>Исходный код проекта</h1><p>Подключённые репозитории доступны локальному агенту после синхронизации.</p></div>
+                <span class="repo-count">@_repositories.Count репозиториев</span>
+            </div>
+
+            @if (_canManage)
+            {
+                <section class="panel repo-create">
+                    <div class="repo-section-title"><Icon Name="plus" Size="17" /><h3>Подключить репозиторий</h3></div>
+                    <div class="repo-create-grid">
+                        <label class="repo-field">Провайдер
+                            <select @bind="_provider"><option value="GitHub">GitHub</option><option value="GitLab">GitLab</option></select>
+                        </label>
+                        <DsInput Label="Название" Value="@_name" ValueChanged="v => _name = v" Placeholder="Backend" MaxLength="200" Class="repo-name" />
+                        <DsInput Label="HTTPS-адрес" Value="@_remoteUrl" ValueChanged="v => _remoteUrl = v" Placeholder="https://github.com/org/repo" MaxLength="500" Class="repo-url" />
+                        <DsInput Label="Ветка" Value="@_branch" ValueChanged="v => _branch = v" Placeholder="main" MaxLength="255" />
+                    </div>
+                    @if (_createError is not null)
+                    {
+                        <div class="repo-error" role="alert">@_createError</div>
+                    }
+                    <div class="repo-create-foot">
+                        <span class="hint">Поддерживаются публичные репозитории GitHub и GitLab.</span>
+                        <DsButton Variant="primary" Size="sm" Icon="plus" Busy="_creating" Disabled="@(!CanCreate)" OnClick="Create">Подключить</DsButton>
+                    </div>
+                </section>
+            }
+
+            <section class="repo-list">
+                <div class="repo-section-title"><Icon Name="code" Size="17" /><h3>Подключённые репозитории</h3></div>
+                @if (_syncError is not null)
+                {
+                    <div class="repo-error" role="alert">@_syncError</div>
+                }
+                @if (_repositories.Count == 0)
+                {
+                    <div class="panel repo-empty">Репозиториев пока нет.</div>
+                }
+                @foreach (var repository in _repositories)
+                {
+                    <article class="panel repo-card" @key="repository.Id">
+                        <div class="repo-card-main">
+                            <div class="repo-card-head">
+                                <div><h4>@repository.Name</h4><span>@repository.Provider · @repository.Branch</span></div>
+                                <span class="repo-state @repository.SyncState.ToLowerInvariant()">@StatusLabel(repository.SyncState)</span>
+                            </div>
+                            <div class="repo-remote">@repository.RemoteUrl</div>
+                            @if (repository.LastSyncedCommit is not null)
+                            {
+                                <div class="repo-revision">Commit <code>@repository.LastSyncedCommit[..Math.Min(12, repository.LastSyncedCommit.Length)]</code>
+                                    @if (repository.LastSyncedAt is { } syncedAt)
+                                    {
+                                        <span>· @syncedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                                    }
+                                </div>
+                            }
+                            @if (repository.LastSyncError is not null)
+                            {
+                                <div class="repo-error">@repository.LastSyncError</div>
+                            }
+                        </div>
+                        <div class="repo-card-actions">
+                            @if (repository.LastSyncedCommit is not null && repository.SyncState is "Ready" or "Failed")
+                            {
+                                <a class="ds-btn secondary sm" href="@($"agents/test?boardId={BoardId}&repositoryId={repository.Id}")">Спросить агента</a>
+                            }
+                            @if (_canManage)
+                            {
+                                <DsButton Variant="secondary" Size="sm" Icon="history" Busy="@(_syncingId == repository.Id)"
+                                          Disabled="@(repository.SyncState is "Syncing" or "Disabled" || _syncingId is not null)"
+                                          OnClick="() => Sync(repository)">Синхронизировать</DsButton>
+                            }
+                        </div>
+                    </article>
+                }
+            </section>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid BoardId { get; set; }
+
+    private BoardResponse? _board;
+    private List<CodeRepositoryResponse> _repositories = [];
+    private string _provider = "GitHub";
+    private string _name = "";
+    private string _remoteUrl = "";
+    private string _branch = "main";
+    private string? _error;
+    private string? _createError;
+    private string? _syncError;
+    private bool _loading = true;
+    private bool _creating;
+    private bool _canManage;
+    private Guid? _syncingId;
+
+    private bool CanCreate => !string.IsNullOrWhiteSpace(_name) && !string.IsNullOrWhiteSpace(_remoteUrl) && !string.IsNullOrWhiteSpace(_branch);
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        _error = null;
+        var board = await Api.GetBoard(BoardId);
+        if (!board.Ok)
+        {
+            _error = board.Error;
+            _loading = false;
+            return;
+        }
+
+        _board = board.Value;
+        var repositories = await Api.GetCodeRepositories(BoardId);
+        if (repositories.Ok)
+            _repositories = repositories.Value!.ToList();
+        else
+            _error = repositories.Error;
+
+        var me = await Api.GetMe();
+        _canManage = me.Ok && Permissions.CanManageBoards(me.Value);
+        _loading = false;
+    }
+
+    private async Task Create()
+    {
+        if (_creating || !CanCreate) return;
+        _creating = true;
+        _createError = null;
+        var result = await Api.AddCodeRepository(BoardId, new CreateCodeRepositoryRequest(_provider, _name, _remoteUrl.Trim(), _branch.Trim()));
+        _creating = false;
+        if (!result.Ok)
+        {
+            _createError = result.Error;
+            return;
+        }
+
+        _repositories.Add(result.Value!);
+        _name = "";
+        _remoteUrl = "";
+    }
+
+    private async Task Sync(CodeRepositoryResponse repository)
+    {
+        if (_syncingId is not null) return;
+        _syncingId = repository.Id;
+        _syncError = null;
+        var result = await Api.SynchronizeCodeRepository(BoardId, repository.Id);
+        _syncingId = null;
+
+        if (!result.Ok)
+        {
+            _syncError = result.Error;
+            return;
+        }
+
+        var index = _repositories.FindIndex(item => item.Id == repository.Id);
+        if (index >= 0)
+            _repositories[index] = result.Value!;
+    }
+
+    private static string StatusLabel(string state) => state switch
+    {
+        "Pending" => "Ожидает синхронизации",
+        "Syncing" => "Синхронизируется",
+        "Ready" => "Готов",
+        "Failed" => "Ошибка",
+        "Disabled" => "Отключён",
+        _ => state
+    };
+}

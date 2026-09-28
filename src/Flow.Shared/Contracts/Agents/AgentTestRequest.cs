@@ -1,3 +1,3 @@
 namespace Flow.Shared.Contracts.Agents;
 
-public sealed record AgentTestRequest(string Question, string WorkspaceDirectory = "/workspaces");
+public sealed record AgentTestRequest(string Question, Guid RepositoryId);

@@ -79,8 +79,14 @@ public sealed partial class CodeRepository
     /// <summary>Смена ветки требует новой синхронизации, поэтому готовая ревизия больше не считается актуальной.</summary>
     public void ChangeBranch(string branch)
     {
-        Branch = ValidateBranch(branch);
+        var normalized = ValidateBranch(branch);
+        if (Branch == normalized)
+            return;
+
+        Branch = normalized;
         SyncState = RepositorySyncState.Pending;
+        LastSyncedCommit = null;
+        LastSyncedAt = null;
         LastSyncError = null;
     }
 
@@ -88,6 +94,9 @@ public sealed partial class CodeRepository
     {
         if (SyncState == RepositorySyncState.Disabled)
             throw new InvalidOperationException("Disabled repository cannot be synchronized.");
+
+        if (SyncState == RepositorySyncState.Syncing)
+            throw new InvalidOperationException("Repository is already synchronizing.");
 
         SyncState = RepositorySyncState.Syncing;
         LastSyncError = null;
@@ -141,6 +150,7 @@ public sealed partial class CodeRepository
         if (!Uri.TryCreate(remoteUrl?.Trim(), UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(uri.UserInfo) ||
+            !uri.IsDefaultPort ||
             !string.IsNullOrEmpty(uri.Query) ||
             !string.IsNullOrEmpty(uri.Fragment))
         {
