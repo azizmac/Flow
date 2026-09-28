@@ -48,4 +48,22 @@ public class MilestoneTests
         inside.SetMilestone(null);
         Assert.Null(inside.MilestoneId);
     }
+
+    [Fact]
+    public void Shared_Milestone_Accepts_Tasks_Of_Its_Projects_Only()
+    {
+        var front = Board.Create("Фронт", "FRONT");
+        var back = Board.Create("Бэк", "BACK");
+        var milestone = Milestone.Create(front.Id, "2.0", null, null, 0);
+        var backTask = back.CreateTask("API");
+        Assert.Throws<InvalidOperationException>(() => backTask.SetMilestone(milestone));
+
+        milestone.ShareWith([back.Id, front.Id, back.Id, Guid.Empty]);
+        Assert.Equal([back.Id], milestone.SharedBoardIds);
+        Assert.True(milestone.IsAvailableIn(front.Id) && milestone.IsAvailableIn(back.Id));
+        backTask.SetMilestone(milestone);
+        Assert.Equal(milestone.Id, backTask.MilestoneId);
+
+        Assert.Throws<ArgumentException>(() => milestone.ShareWith(Enumerable.Range(0, Milestone.MaxSharedBoards + 1).Select(_ => Guid.NewGuid())));
+    }
 }

@@ -32,7 +32,13 @@ public sealed record MilestoneUpdateCommand(
 /// <summary>Удаление вехи: задачи теряют веху с записью MilestoneChanged в журнале. false — вехи нет. Права — ManageMilestones.</summary>
 public sealed record MilestoneDeleteCommand(Guid ActorId, Guid MilestoneId) : IRequest<bool>;
 
-/// <summary>Поле «Веха» в карточке: веха своего проекта или null. Это правка задачи (EnsureCanEditTask); закрытая или чужая — 400.</summary>
+/// <summary>
+/// Общая веха (этап 2H): весь список проектов, где она доступна. Права — ManageMilestones в проекте-владельце и в каждом
+/// добавляемом проекте. Из убранного проекта задачи выходят из вехи с записью в журнале. null — вехи нет.
+/// </summary>
+public sealed record MilestoneShareCommand(Guid ActorId, Guid MilestoneId, IReadOnlyList<Guid> BoardIds) : IRequest<MilestoneResponse?>;
+
+/// <summary>Поле «Веха» в карточке: веха своего проекта (или общая с ним) или null. Это правка задачи (EnsureCanEditTask); закрытая или чужая — 400.</summary>
 public sealed record TaskSetMilestoneCommand(Guid ActorId, Guid TaskId, Guid? MilestoneId) : IRequest<TaskUpdateResult>;
 
 internal sealed class MilestoneListQueryHandler(
@@ -57,10 +63,14 @@ internal sealed class MilestoneGetQueryHandler(
     {
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
         var milestone = await milestones.GetByIdAsync(request.MilestoneId, cancellationToken);
-        if (milestone is null || !(await projectAccess.GetAsync(actor, milestone.BoardId, cancellationToken)).CanView)
+        if (milestone is null)
             return null;
 
-        return await progress.ToResponseAsync(milestone, cancellationToken);
+        // Общую веху видно из любого её проекта, который видит actor.
+        foreach (var boardId in milestone.SharedBoardIds.Prepend(milestone.BoardId))
+            if ((await projectAccess.GetAsync(actor, boardId, cancellationToken)).CanView)
+                return await progress.ToResponseAsync(milestone, cancellationToken);
+        return null;
     }
 }
 
@@ -177,6 +187,52 @@ internal sealed class TaskSetMilestoneCommandHandler(
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return TaskUpdateResult.Success(task.ToResponse());
+    }
+}
+
+internal sealed class MilestoneShareCommandHandler(
+    IBoardRepository boards,
+    IMilestoneRepository milestones,
+    ITaskItemRepository tasks,
+    ITaskActivityRepository activities,
+    MilestoneProgressCalculator progress,
+    ActorResolver actors,
+    IPermissionService permissions,
+    IProjectAccess projectAccess,
+    IUnitOfWork unitOfWork) : IRequestHandler<MilestoneShareCommand, MilestoneResponse?>
+{
+    public async Task<MilestoneResponse?> Handle(MilestoneShareCommand request, CancellationToken cancellationToken)
+    {
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
+        var milestone = await milestones.GetByIdAsync(request.MilestoneId, cancellationToken);
+        if (milestone is null)
+            return null;
+
+        permissions.EnsureCanManageMilestones(await projectAccess.GetAsync(actor, milestone.BoardId, cancellationToken));
+
+        var wanted = request.BoardIds.Where(id => id != milestone.BoardId).Distinct().ToList();
+        foreach (var boardId in wanted.Except(milestone.SharedBoardIds))
+        {
+            permissions.EnsureCanManageMilestones(await projectAccess.GetAsync(actor, boardId, cancellationToken));
+            var board = await boards.GetByIdAsync(boardId, cancellationToken)
+                        ?? throw new InvalidOperationException("Проект не найден.");
+            // По имени вехи ищет FQL: в одном проекте двух вех с одним именем быть не должно.
+            if ((await milestones.GetByBoardAsync(boardId, cancellationToken)).Any(m => m.Id != milestone.Id
+                    && string.Equals(m.Name, milestone.Name, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"В проекте {board.Key} уже есть веха «{milestone.Name}».");
+        }
+
+        var removed = milestone.SharedBoardIds.Except(wanted).ToHashSet();
+        if (removed.Count > 0)
+            foreach (var task in (await tasks.GetByMilestoneIdAsync(milestone.Id, cancellationToken)).Where(t => removed.Contains(t.BoardId)))
+            {
+                task.SetMilestone(null);
+                activities.Add(TaskActivity.MilestoneChanged(task.Id, actor.Id, milestone.Id, null));
+            }
+
+        milestone.ShareWith(wanted);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return await progress.ToResponseAsync(milestone, cancellationToken);
     }
 }
 

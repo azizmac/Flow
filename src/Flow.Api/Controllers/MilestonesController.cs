@@ -31,6 +31,11 @@ public class MilestonesController(IMediator mediator, IActorAccessor actor) : Co
         Send(new MilestoneUpdateCommand(actor.Require(), id, request.Name, request.Description, request.ClearDescription,
             request.TargetDate, request.ClearTargetDate, request.Closed), cancellationToken);
 
+    /// <summary>Общая веха: весь список других проектов, где она доступна; 400 — такое имя в проекте уже есть.</summary>
+    [HttpPut("milestones/{id:guid}/boards")]
+    public Task<IActionResult> Share(Guid id, ShareMilestoneRequest request, CancellationToken cancellationToken) =>
+        Send(new MilestoneShareCommand(actor.Require(), id, request.BoardIds), cancellationToken);
+
     /// <summary>Задачи вехи теряют её с записью в журнале.</summary>
     [HttpDelete("milestones/{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken) =>

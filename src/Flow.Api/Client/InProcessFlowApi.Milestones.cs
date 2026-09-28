@@ -22,6 +22,9 @@ internal sealed partial class InProcessFlowApi
         SendMilestone(actor => new MilestoneUpdateCommand(actor, milestoneId, request.Name, request.Description, request.ClearDescription,
             request.TargetDate, request.ClearTargetDate, request.Closed), ct);
 
+    public Task<ApiResult<MilestoneResponse>> ShareMilestone(Guid milestoneId, ShareMilestoneRequest request, CancellationToken ct = default) =>
+        SendMilestone(actor => new MilestoneShareCommand(actor, milestoneId, request.BoardIds), ct);
+
     public Task<ApiResult<bool>> DeleteMilestone(Guid milestoneId, CancellationToken ct = default) =>
         Scoped(async mediator => await mediator.Send(new MilestoneDeleteCommand(await ActorAsync(), milestoneId), ct) ? Ok(true) : NotFound<bool>());
 

@@ -323,12 +323,12 @@ public sealed class TaskItem
     }
 
     /// <summary>
-    /// Веха того же проекта или null. В закрытую веху новые задачи не добавляют: её состав — итог релиза;
+    /// Веха своего проекта (или общая с ним, этап 2H) или null. В закрытую веху новые задачи не добавляют: её состав — итог релиза;
     /// задачи, уже бывшие в ней к закрытию, остаются.
     /// </summary>
     public void SetMilestone(Milestone? milestone)
     {
-        if (milestone is not null && milestone.BoardId != BoardId)
+        if (milestone is not null && !milestone.IsAvailableIn(BoardId))
             throw new InvalidOperationException("A task can be put only into a milestone of its own project.");
         if (milestone is { IsClosed: true } && milestone.Id != MilestoneId)
             throw new InvalidOperationException("A closed milestone cannot take new tasks.");

@@ -131,6 +131,7 @@ public interface IFlowApi
     Task<ApiResult<MilestoneResponse>> GetMilestone(Guid milestoneId, CancellationToken ct = default);
     Task<ApiResult<MilestoneResponse>> CreateMilestone(Guid boardId, CreateMilestoneRequest request, CancellationToken ct = default);
     Task<ApiResult<MilestoneResponse>> UpdateMilestone(Guid milestoneId, UpdateMilestoneRequest request, CancellationToken ct = default);
+    Task<ApiResult<MilestoneResponse>> ShareMilestone(Guid milestoneId, ShareMilestoneRequest request, CancellationToken ct = default);
     Task<ApiResult<bool>> DeleteMilestone(Guid milestoneId, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> SetTaskMilestone(Guid taskId, SetTaskMilestoneRequest request, CancellationToken ct = default);
 
@@ -229,6 +230,7 @@ public interface IFlowApi
     Task<ApiResult<TaskResponse>> RankTask(Guid id, RankTaskRequest request, CancellationToken ct = default);
     // Связи (docs/TZ_task_model.md §5) и чек-лист (§8)
     Task<ApiResult<IReadOnlyList<TaskLinkResponse>>> GetLinks(Guid taskId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskBlockEdge>>> GetBoardBlocks(Guid boardId, CancellationToken ct = default);
     Task<ApiResult<TaskLinkCreatedResponse>> CreateLink(Guid taskId, CreateTaskLinkRequest request, CancellationToken ct = default);
     Task<ApiResult<bool>> DeleteLink(Guid linkId, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> GetChecklist(Guid taskId, CancellationToken ct = default);

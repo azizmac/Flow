@@ -6,6 +6,7 @@ using Flow.Application.Features.Tasks.Commands.TaskLinkCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskLinkDeleteCommand;
 using Flow.Application.Features.Tasks.Queries.TaskChecklistQuery;
 using Flow.Application.Features.Tasks.Queries.TaskLinkListQuery;
+using Flow.Application.Features.Tasks.Queries.BoardBlockLinksQuery;
 using Flow.Application.Features.Tasks.Commands.TaskRankCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetParentCommand;
 using Flow.Application.Features.Tasks;
@@ -182,6 +183,10 @@ internal sealed partial class InProcessFlowApi
                 ct);
             return tree is null ? NotFound<IReadOnlyList<TaskTreeNode>>() : Ok(tree);
         });
+
+    public Task<ApiResult<IReadOnlyList<TaskBlockEdge>>> GetBoardBlocks(Guid boardId, CancellationToken ct = default) =>
+        Scoped(async mediator => await mediator.Send(new BoardBlockLinksQuery(await ActorAsync(), boardId), ct) is { } edges
+            ? Ok(edges) : NotFound<IReadOnlyList<TaskBlockEdge>>());
 
     public Task<ApiResult<IReadOnlyList<TaskLinkResponse>>> GetLinks(Guid taskId, CancellationToken ct = default) =>
         Scoped(async mediator =>

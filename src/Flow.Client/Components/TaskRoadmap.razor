@@ -3,10 +3,16 @@
    одна дата — ромб. У задачи без своих дат полоса выводится из поддерева (самое раннее начало, самый поздний срок) и
    рисуется пунктиром «по подзадачам». Масштаб — неделя / месяц / квартал, линия «сегодня», вехи — вертикальными
    отметками по целевой дате. Задачи без дат (и без дат в поддереве) — списком «Без дат» справа. Клик — слайдер.
-   Перетаскивание полос и стрелки связей — этап 2H. *@
+   Этап 2H: полосу можно тащить (обе даты), за края (начало или срок), ромб — единственную дату; задачу из «Без дат» —
+   на день шкалы (неделя от этого дня). Движение считает flow.roadmapAttach в браузере, сюда приходит только итог в днях,
+   и уходит PATCH /tasks/{id}/schedule; выведенные полосы («по подзадачам») не тянутся — своих дат у задачи нет.
+   Связи Blocks проекта — стрелками от конца блокирующей к началу блокируемой; красная — блокируемая начинается раньше. *@
+@implements IAsyncDisposable
 @inject IFlowApi Api
+@inject BrowserInterop Browser
+@inject ToastService Toasts
 
-<div class="rm">
+<div class="rm" id="@_rootId" data-px="@PxPerDay">
     <div class="kb-toolbar">
         <div class="seg" role="radiogroup" aria-label="Масштаб">
             @foreach (var (scale, label) in Scales)
@@ -83,9 +89,24 @@
                             {
                                 <div class="rm-ms" style="left:@((m.TargetDate!.Value.DayNumber - _start.DayNumber) * px + px / 2)px"></div>
                             }
+                            @if (Arrows(px).ToList() is { Count: > 0 } arrows)
+                            {
+                                <svg class="rm-arrows" width="@width" height="@(VisibleRows.Count() * RowHeight)" aria-hidden="true">
+                                    <defs>
+                                        <marker id="rm-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                                            <path d="M0,0 L8,4 L0,8 z" fill="context-stroke" />
+                                        </marker>
+                                    </defs>
+                                    @foreach (var a in arrows)
+                                    {
+                                        <path d="@a.Path" class="@(a.Conflict ? "conflict" : "")" marker-end="url(#rm-arrow)"><title>@a.Title</title></path>
+                                    }
+                                </svg>
+                            }
                             @foreach (var row in VisibleRows)
                             {
                                 var task = row.Node.Task;
+                                var editable = !row.Derived && CanEdit?.Invoke(task) == true;
                                 <div class="rm-lane @(task.Id == SelectedId ? "sel" : "")">
                                     @if (row.Span is { } span)
                                     {
@@ -93,13 +114,19 @@
                                         var w = (span.End.DayNumber - span.Start.DayNumber + 1) * px;
                                         @if (span.Start == span.End && !row.Derived)
                                         {
-                                            <button type="button" class="rm-diamond @BarClass(task)" style="left:@(left + px / 2 - 7)px"
+                                            <button type="button" class="rm-diamond @BarClass(task) @(editable ? "editable" : "")" style="left:@(left + px / 2 - 7)px"
+                                                    data-rm-drag="@(editable ? "1" : null)" data-task="@task.Id"
                                                     title="@BarTitle(row)" @onclick="() => OnOpen.InvokeAsync(task)"></button>
                                         }
                                         else
                                         {
-                                            <button type="button" class="rm-bar @BarClass(task) @(row.Derived ? "derived" : "")" style="left:@(left)px;width:@(Math.Max(w, 6))px"
+                                            <button type="button" class="rm-bar @BarClass(task) @(row.Derived ? "derived" : "") @(editable ? "editable" : "")"
+                                                    style="left:@(left)px;width:@(Math.Max(w, 6))px" data-rm-drag="@(editable ? "1" : null)" data-task="@task.Id"
                                                     title="@BarTitle(row)" @onclick="() => OnOpen.InvokeAsync(task)">
+                                                @if (editable)
+                                                {
+                                                    <span class="rm-edge-l"></span><span class="rm-edge-r"></span>
+                                                }
                                                 @if (w > 90)
                                                 {
                                                     <span>@(row.Derived ? "по подзадачам" : task.Title)</span>
@@ -117,10 +144,11 @@
             {
                 <aside class="rm-undated panel">
                     <div class="section-title">Без дат</div>
-                    <div class="hint">Даты ставятся в карточке задачи.</div>
+                    <div class="hint">Перетащите задачу на шкалу — начнётся с этого дня и займёт неделю.</div>
                     @foreach (var task in Undated)
                     {
-                        <button type="button" class="rm-undated-item" @onclick="() => OnOpen.InvokeAsync(task)">
+                        <button type="button" class="rm-undated-item @(CanEdit?.Invoke(task) == true ? "editable" : "")" @onclick="() => OnOpen.InvokeAsync(task)"
+                                data-rm-undated="@(CanEdit?.Invoke(task) == true ? "1" : null)" data-task="@task.Id">
                             <span class="code">@task.Code</span> <span>@task.Title</span>
                         </button>
                     }
@@ -145,6 +173,15 @@
     [Parameter] public EventCallback<TaskResponse> OnOpen { get; set; }
     [Parameter] public EventCallback<IReadOnlyList<TaskResponse>> OnLoaded { get; set; }
     [Parameter] public EventCallback<FqlErrorResponse?> OnFqlError { get; set; }
+    /// <summary>Можно ли тянуть полосу задачи (право правки); null — только чтение.</summary>
+    [Parameter] public Func<TaskResponse, bool>? CanEdit { get; set; }
+
+    private const int RowHeight = 32;
+
+    private readonly string _rootId = $"rm-{Guid.NewGuid():N}";
+    private DotNetObjectReference<TaskRoadmap>? _ref;
+    private bool _attached;
+    private IReadOnlyList<TaskBlockEdge> _blocks = [];
 
     private readonly record struct Span(DateOnly Start, DateOnly End);
 
@@ -185,7 +222,9 @@
         _error = null;
         var tree = Api.GetTree(BoardId, null, AssigneeId, Unassigned, Query, fql: Fql);
         var milestones = Api.GetMilestones(BoardId);
-        await Task.WhenAll(tree, milestones);
+        var blocks = Api.GetBoardBlocks(BoardId);
+        await Task.WhenAll(tree, milestones, blocks);
+        _blocks = blocks.Result.Ok ? blocks.Result.Value! : [];
         _loading = false;
 
         await OnFqlError.InvokeAsync(tree.Result.FqlError);
@@ -324,4 +363,104 @@
     }
 
     private void CollapseAll() => _expanded.Clear();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Корень есть всегда, но пересоздаётся вместе с компонентом — вешаем один раз на экземпляр.
+        if (_attached)
+            return;
+        _ref ??= DotNetObjectReference.Create(this);
+        _attached = await Browser.RoadmapAttachAsync(_rootId, _ref);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Browser.DragDetachAsync(_rootId);
+        _ref?.Dispose();
+    }
+
+    /// <summary>Итог перетаскивания полосы: move — обе даты, start/end — один край (не дальше другого).</summary>
+    [JSInvokable]
+    public async Task OnBarDragged(string taskId, string mode, int days)
+    {
+        if (!Guid.TryParse(taskId, out var id) || _rows.FirstOrDefault(r => r.Node.Task.Id == id) is not { } row || days == 0)
+            return;
+
+        var task = row.Node.Task;
+        DateOnly? start = task.StartDate, due = task.DueDate;
+        switch (mode)
+        {
+            case "start" when start is { } from:
+                start = due is { } until && from.AddDays(days) > until ? until : from.AddDays(days);
+                break;
+            case "end" when due is { } to:
+                due = start is { } begin && to.AddDays(days) < begin ? begin : to.AddDays(days);
+                break;
+            default:
+                start = start?.AddDays(days);
+                due = due?.AddDays(days);
+                break;
+        }
+
+        await SaveAsync(task, start, due);
+    }
+
+    /// <summary>Задача из «Без дат» брошена на день шкалы: неделя с этого дня.</summary>
+    [JSInvokable]
+    public async Task OnUndatedDropped(string taskId, int dayIndex)
+    {
+        if (!Guid.TryParse(taskId, out var id) || _rows.FirstOrDefault(r => r.Node.Task.Id == id) is not { } row)
+            return;
+        var day = _start.AddDays(Math.Max(0, dayIndex));
+        await SaveAsync(row.Node.Task, day, day.AddDays(6));
+    }
+
+    private async Task SaveAsync(TaskResponse task, DateOnly? start, DateOnly? due)
+    {
+        if (start == task.StartDate && due == task.DueDate)
+            return;
+
+        var result = await Api.SetSchedule(task.Id, new SetTaskScheduleRequest(start, due));
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось изменить даты");
+            return;
+        }
+
+        Replace(task with { StartDate = result.Value!.StartDate, DueDate = result.Value.DueDate, UpdatedAt = result.Value.UpdatedAt });
+        await OnChanged.InvokeAsync(result.Value);
+    }
+
+    [Parameter] public EventCallback<TaskResponse> OnChanged { get; set; }
+
+    private sealed record Arrow(string Path, bool Conflict, string Title);
+
+    /// <summary>
+    /// Стрелки Blocks между видимыми строками со своими или выведенными отрезками: от конца блокирующей полосы к началу
+    /// блокируемой, кривой Безье. Конфликт — блокируемая начинается раньше, чем кончается блокирующая.
+    /// </summary>
+    private IEnumerable<Arrow> Arrows(int px)
+    {
+        if (_blocks.Count == 0)
+            yield break;
+
+        var visible = VisibleRows.Select((r, i) => (Row: r, Index: i)).Where(x => x.Row.Span is not null)
+            .ToDictionary(x => x.Row.Node.Task.Id, x => x);
+        foreach (var edge in _blocks)
+        {
+            if (!visible.TryGetValue(edge.SourceId, out var from) || !visible.TryGetValue(edge.TargetId, out var to))
+                continue;
+
+            var a = from.Row.Span!.Value;
+            var b = to.Row.Span!.Value;
+            var sx = (a.End.DayNumber - _start.DayNumber + 1) * px;
+            var tx = (b.Start.DayNumber - _start.DayNumber) * px;
+            var sy = from.Index * RowHeight + RowHeight / 2;
+            var ty = to.Index * RowHeight + RowHeight / 2;
+            var bend = Math.Max(24, Math.Abs(tx - sx) / 3);
+            var path = FormattableString.Invariant($"M{sx},{sy} C{sx + bend},{sy} {tx - bend},{ty} {tx},{ty}");
+            yield return new Arrow(path, b.Start <= a.End,
+                $"{from.Row.Node.Task.Code} блокирует {to.Row.Node.Task.Code}{(b.Start <= a.End ? " — начинается раньше, чем закончится блокирующая" : "")}");
+        }
+    }
 }

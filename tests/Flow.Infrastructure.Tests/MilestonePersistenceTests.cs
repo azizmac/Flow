@@ -75,4 +75,21 @@ public class MilestonePersistenceTests(PostgresFixture db)
         Assert.True(await db.SendAsync(new BoardDeleteCommand(Owner, board)));
         Assert.False(await db.QueryAsync(ctx => ctx.Milestones.AnyAsync(m => m.BoardId == board)));
     }
+
+    /// <summary>Общая веха (этап 2H): uuid[] SharedBoardIds находит её в списке второго проекта, FQL `milestone` — задачи обоих.</summary>
+    [Fact]
+    public async Task Shared_Milestone_Is_Listed_And_Queried_Across_Projects()
+    {
+        var (front, milestone, frontTask) = await ArrangeAsync("SHF");
+        var back = (await db.SendAsync(new BoardCreateCommand(Owner, "Бэк", "SHB"))).Response!;
+        var backTask = (await db.SendAsync(new TaskCreateCommand(Owner, back.Id, "API", null, null)))!.Id;
+
+        await db.SendAsync(new MilestoneShareCommand(Owner, milestone, [back.Id]));
+        Assert.NotNull((await db.SendAsync(new TaskSetMilestoneCommand(Owner, backTask, milestone))).Response);
+
+        var listed = Assert.Single((await db.SendAsync(new MilestoneListQuery(Owner, back.Id)))!);
+        Assert.Equal((milestone, 2), (listed.Id, listed.Progress.Total));
+        var found = await db.SendAsync(new TaskSearchQuery(Owner, Offset: 0, Limit: 50, Fql: "milestone = \"Релиз-SHF\""));
+        Assert.Equal(new[] { frontTask, backTask }.Order(), found.Items.Select(t => t.Id).Order());
+    }
 }

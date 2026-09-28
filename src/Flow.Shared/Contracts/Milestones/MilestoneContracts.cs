@@ -22,7 +22,10 @@ public sealed record MilestoneProgress(
     int ClosedRecently,
     DateOnly? Forecast);
 
-/// <summary>Веха проекта с прогрессом.</summary>
+/// <summary>
+/// Веха проекта с прогрессом. BoardId — проект-владелец; SharedBoardIds — другие проекты, где веха тоже доступна
+/// (общая веха, этап 2H); прогресс считается по задачам всех этих проектов.
+/// </summary>
 public sealed record MilestoneResponse(
     Guid Id,
     Guid BoardId,
@@ -32,7 +35,11 @@ public sealed record MilestoneResponse(
     MilestoneState State,
     DateTime? ClosedAt,
     int SortOrder,
-    MilestoneProgress Progress);
+    MilestoneProgress Progress,
+    IReadOnlyList<Guid>? SharedBoardIds = null);
+
+/// <summary>PUT /milestones/{id}/boards: проекты, с которыми веха общая (весь список; владелец не указывается).</summary>
+public sealed record ShareMilestoneRequest(IReadOnlyList<Guid> BoardIds);
 
 /// <summary>POST /boards/{id}/milestones.</summary>
 public sealed record CreateMilestoneRequest(string Name, string? Description = null, DateOnly? TargetDate = null);

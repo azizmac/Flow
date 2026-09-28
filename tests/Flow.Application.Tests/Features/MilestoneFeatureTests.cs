@@ -107,4 +107,34 @@ public class MilestoneFeatureTests
         Assert.Equal([(null, milestone.ToString()), (milestone.ToString(), null)], entries.Select(a => (a.OldValue, a.NewValue)));
         Assert.Null(await mediator.Send(new MilestoneGetQuery(Owner, milestone), CancellationToken.None));
     }
+
+    /// <summary>Общая веха (этап 2H): доступна в проектах-участниках, прогресс общий, из убранного проекта задачи выходят с журналом.</summary>
+    [Fact]
+    public async Task Shared_Milestone_Takes_Tasks_Of_Other_Projects()
+    {
+        var (mediator, _, tasks, _) = TestMediatorFactory.Create();
+        var front = await BoardAsync(mediator, "FRONT");
+        var back = await BoardAsync(mediator, "BACK");
+        var release = await MilestoneAsync(mediator, front, "Релиз 2.0");
+        var backTask = await TaskAsync(mediator, back, "API");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Put(mediator, backTask, release));
+
+        var shared = (await mediator.Send(new MilestoneShareCommand(Owner, release, [back.Id, front.Id, back.Id]), CancellationToken.None))!;
+        Assert.Equal([back.Id], shared.SharedBoardIds);
+        Assert.NotNull((await Put(mediator, backTask, release)).Response);
+        await Put(mediator, await TaskAsync(mediator, front, "Экран"), release);
+
+        var inBack = Assert.Single((await mediator.Send(new MilestoneListQuery(Owner, back.Id), CancellationToken.None))!);
+        Assert.Equal((release, front.Id, 2), (inBack.Id, inBack.BoardId, inBack.Progress.Total));
+
+        // В проекте уже есть веха с тем же именем — общей её там не сделать: FQL ищет вехи по имени.
+        var ops = await BoardAsync(mediator, "OPS");
+        await MilestoneAsync(mediator, ops, "релиз 2.0");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => mediator.Send(new MilestoneShareCommand(Owner, release, [back.Id, ops.Id]), CancellationToken.None));
+
+        await mediator.Send(new MilestoneShareCommand(Owner, release, []), CancellationToken.None);
+        Assert.Null((await tasks.GetByIdAsync(backTask, CancellationToken.None))!.MilestoneId);
+        Assert.Empty((await mediator.Send(new MilestoneListQuery(Owner, back.Id), CancellationToken.None))!);
+    }
 }

@@ -8,6 +8,7 @@ using Flow.Application.Features.Tasks.Commands.TaskLinkDeleteCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Queries.TaskLinkListQuery;
+using Flow.Application.Features.Tasks.Queries.BoardBlockLinksQuery;
 using Flow.Application.Tests.Fakes;
 using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Boards;
@@ -184,5 +185,23 @@ public class TaskLinkChecklistFeatureTests
         var task = await CreateTaskAsync(mediator, board);
 
         await Assert.ThrowsAsync<ForbiddenException>(() => mediator.Send(new TaskChecklistAddCommand(reader, task, "x"), CancellationToken.None));
+    }
+
+    /// <summary>Стрелки роадмапа (этап 2H): только Blocks и только внутри проекта.</summary>
+    [Fact]
+    public async Task Board_Blocks_Are_Blocks_Within_The_Project()
+    {
+        var (mediator, _, _, _) = TestMediatorFactory.Create();
+        var board = await CreateBoardAsync(mediator);
+        var other = await CreateBoardAsync(mediator, "OTH");
+        var a = await CreateTaskAsync(mediator, board, "A");
+        var b = await CreateTaskAsync(mediator, board, "B");
+        var c = await CreateTaskAsync(mediator, other, "C");
+        await mediator.Send(new TaskLinkCreateCommand(Owner, a, TaskLinkType.Blocks, b), CancellationToken.None);
+        await mediator.Send(new TaskLinkCreateCommand(Owner, a, TaskLinkType.Blocks, c), CancellationToken.None);
+        await mediator.Send(new TaskLinkCreateCommand(Owner, b, TaskLinkType.RelatesTo, a), CancellationToken.None);
+
+        var edge = Assert.Single((await mediator.Send(new BoardBlockLinksQuery(Owner, board.Id), CancellationToken.None))!);
+        Assert.Equal((a, b), (edge.SourceId, edge.TargetId));
     }
 }

@@ -14,3 +14,6 @@ public sealed record TaskLinkPeer(Guid Id, bool Restricted, string? Code = null,
 
 /// <summary>Ответ на создание: CycleWarning — новая Blocks-связь замкнула цикл блокировок (не отказ, а предупреждение).</summary>
 public sealed record TaskLinkCreatedResponse(TaskLinkResponse Link, bool CycleWarning);
+
+/// <summary>Стрелка роадмапа: SourceId блокирует TargetId (обе задачи — в одном проекте).</summary>
+public sealed record TaskBlockEdge(Guid SourceId, Guid TargetId);

@@ -21,6 +21,9 @@ public interface ITaskLinkRepository
     /// <summary>Кого блокируют задачи <paramref name="sourceTaskIds"/> (исходящие Blocks) — шаг обхода для предупреждения о цикле.</summary>
     Task<IReadOnlyList<Guid>> GetBlockedTargetsAsync(IReadOnlyCollection<Guid> sourceTaskIds, CancellationToken cancellationToken);
 
+    /// <summary>Пары (блокирующая, блокируемая) связей Blocks, у которых обе задачи в этом проекте — стрелки роадмапа.</summary>
+    Task<IReadOnlyList<(Guid SourceId, Guid TargetId)>> GetBlocksWithinBoardAsync(Guid boardId, CancellationToken cancellationToken);
+
     void Add(TaskLink link);
 
     void Remove(TaskLink link);

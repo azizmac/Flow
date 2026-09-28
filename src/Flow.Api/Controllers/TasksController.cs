@@ -6,6 +6,7 @@ using Flow.Application.Features.Tasks.Commands.TaskLinkCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskLinkDeleteCommand;
 using Flow.Application.Features.Tasks.Queries.TaskChecklistQuery;
 using Flow.Application.Features.Tasks.Queries.TaskLinkListQuery;
+using Flow.Application.Features.Tasks.Queries.BoardBlockLinksQuery;
 using Flow.Application.Features.Tasks.Commands.TaskRankCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetParentCommand;
 using Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
@@ -303,6 +304,11 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         var links = await mediator.Send(new TaskLinkListQuery(actor.Require(), id), cancellationToken);
         return links is null ? NotFound() : Ok(links);
     }
+
+    /// <summary>Связи Blocks внутри проекта — стрелки роадмапа.</summary>
+    [HttpGet("boards/{boardId:guid}/blocks")]
+    public async Task<IActionResult> GetBoardBlocks(Guid boardId, CancellationToken cancellationToken) =>
+        await mediator.Send(new BoardBlockLinksQuery(actor.Require(), boardId), cancellationToken) is { } edges ? Ok(edges) : NotFound();
 
     /// <summary>201 — связь создана (cycleWarning — цикл блокировок); 400 — вторая задача не найдена или скрыта, на себя; 409 — такая уже есть.</summary>
     [HttpPost("tasks/{id:guid}/links")]

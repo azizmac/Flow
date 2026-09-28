@@ -1,5 +1,6 @@
 @* Вехи проекта (docs/TZ_task_views.md §6, этап 2E): открытые по порядку, потом закрытые; у каждой — целевая дата,
-   полоса прогресса, просроченные и прогноз. Создают и правят разработчики и администраторы проекта (ManageMilestones). *@
+   полоса прогресса, просроченные и прогноз. Создают и правят разработчики и администраторы проекта (ManageMilestones).
+   Общие вехи (этап 2H) видны во всех своих проектах: у чужой — «из KEY», у своей общей — «общая: KEY, KEY». *@
 @page "/boards/{Id:guid}/milestones"
 @inject IFlowApi Api
 @inject ProjectAccessState Access
@@ -52,6 +53,14 @@
                             <span class="ms-state">закрыта</span>
                         }
                         <span class="hint">@TargetText(m)</span>
+                        @if (m.BoardId != Id)
+                        {
+                            <span class="ms-shared">из @KeyOf(m.BoardId)</span>
+                        }
+                        else if (m.SharedBoardIds is { Count: > 0 } shared)
+                        {
+                            <span class="ms-shared">общая: @string.Join(", ", shared.Select(KeyOf))</span>
+                        }
                     </div>
                     <MilestoneProgressBar Progress="m.Progress" />
                     <div class="ms-facts">
@@ -82,6 +91,9 @@
     private List<MilestoneResponse>? _milestones;
     private string? _error;
     private bool _creating;
+    private IReadOnlyList<BoardResponse> _boards = [];
+
+    private string KeyOf(Guid boardId) => _boards.FirstOrDefault(b => b.Id == boardId)?.Key ?? "…";
 
     private bool CanManage => Permissions.CanManageMilestones(Access.For(Id));
 
@@ -90,7 +102,9 @@
         await Access.EnsureLoadedAsync();
         var board = Api.GetBoard(Id);
         var milestones = Api.GetMilestones(Id);
-        await Task.WhenAll(board, milestones);
+        var boards = Api.GetBoards();
+        await Task.WhenAll(board, milestones, boards);
+        _boards = boards.Result.Ok ? boards.Result.Value! : [];
         if (!board.Result.Ok || !milestones.Result.Ok)
         {
             _error = board.Result.NotFound || milestones.Result.NotFound ? "Проект не найден" : board.Result.Error ?? milestones.Result.Error;

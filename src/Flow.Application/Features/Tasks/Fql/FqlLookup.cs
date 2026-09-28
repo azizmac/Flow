@@ -58,7 +58,8 @@ internal sealed class FqlLookup(
         var result = new List<Milestone>();
         foreach (var board in await VisibleBoardsAsync(cancellationToken))
             result.AddRange(await milestones.GetByBoardAsync(board.Id, cancellationToken));
-        return result;
+        // Общая веха приходит от каждого проекта, где она видна.
+        return result.DistinctBy(m => m.Id).ToList();
     }
 
     public Task<IReadOnlyList<Guid>> BlockedByAsync(Guid taskId, CancellationToken cancellationToken) =>

@@ -1,8 +1,10 @@
-@* Диалог вехи (docs/TZ_task_views.md §6): создание и правка — имя, описание, целевая дата. Каркас и жизненный цикл —
-   как у SprintDialog: MudDialog, фокус на имя, ошибка сервера под полями. *@
+@* Диалог вехи (docs/TZ_task_views.md §6): создание и правка — имя, описание, целевая дата и (этап 2H) проекты, с которыми
+   веха общая: в их задачи тоже можно положить эту веху. Предлагаются проекты, где у человека есть право ManageMilestones —
+   его же требует сервер. Каркас и жизненный цикл — как у SprintDialog: MudDialog, фокус на имя, ошибка сервера под полями. *@
 @implements IAsyncDisposable
 @inject IFlowApi Api
 @inject BrowserInterop Browser
+@inject ProjectAccessState Access
 
 <MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
            TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
@@ -16,6 +18,18 @@
             <MudDatePicker Label="Целевая дата" Date="_target" DateChanged="d => _target = d" Culture="Ru.PickerCulture" DateFormat="dd.MM.yyyy"
                            Clearable="true" PickerVariant="PickerVariant.Inline" Variant="Variant.Text" Class="sd-date" PopoverClass="flow-pop" />
         </div>
+        @if (_shareable.Count > 0)
+        {
+            <MudSelect T="Guid" MultiSelection="true" Label="Общая с проектами" SelectedValues="_shared" SelectedValuesChanged="v => _shared = v.ToHashSet()"
+                       Dense="true" Variant="Variant.Text" PopoverClass="flow-pop" Class="md-shared"
+                       MultiSelectionTextFunc="@(ids => ids.Count == 0 ? "только этот проект" : string.Join(", ", ids.Select(KeyOf)))">
+                @foreach (var b in _shareable)
+                {
+                    <MudSelectItem T="Guid" Value="b.Id">@b.Key · @b.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <div class="hint">В общую веху кладут задачи всех отмеченных проектов, прогресс считается по всем.</div>
+        }
         @if (_error is not null)
         {
             <div class="ds-field-error">@_error</div>
@@ -42,6 +56,8 @@
     private string _description = "";
     private DateTime? _target;
     private string? _error;
+    private List<BoardResponse> _shareable = [];
+    private HashSet<Guid> _shared = [];
 
     private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
 
@@ -50,6 +66,13 @@
         _name = Milestone?.Name ?? "";
         _description = Milestone?.Description ?? "";
         _target = Milestone?.TargetDate?.ToDateTime(TimeOnly.MinValue);
+        _shared = (Milestone?.SharedBoardIds ?? []).ToHashSet();
+        await Access.EnsureLoadedAsync();
+        if (await Api.GetBoards() is { Ok: true } boards)
+            // Уже отмеченный проект остаётся в списке, даже если права в нём у человека нет: иначе он молча пропал бы из вехи.
+            _shareable = boards.Value!.Where(b => b.Id != BoardId
+                    && (Permissions.CanManageMilestones(Access.For(b.Id)) || _shared.Contains(b.Id)))
+                .OrderBy(b => b.Key).ToList();
         await Task.Delay(50);
         await Browser.FocusAsync("md-name", select: true);
     }
@@ -70,6 +93,8 @@
             ? await Api.CreateMilestone(BoardId, new CreateMilestoneRequest(_name.Trim(), description, target))
             : await Api.UpdateMilestone(Milestone.Id, new UpdateMilestoneRequest(_name.Trim(), description, ClearDescription: description is null,
                 TargetDate: target, ClearTargetDate: target is null));
+        if (result.Ok && !_shared.SetEquals(result.Value!.SharedBoardIds ?? []))
+            result = await Api.ShareMilestone(result.Value!.Id, new ShareMilestoneRequest(_shared.ToList()));
         _busy = false;
 
         if (!result.Ok)
@@ -81,6 +106,8 @@
         await CloseDialog();
         await OnSaved.InvokeAsync(result.Value!);
     }
+
+    private string KeyOf(string id) => Guid.TryParse(id, out var g) ? _shareable.FirstOrDefault(b => b.Id == g)?.Key ?? "?" : id;
 
     private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
 

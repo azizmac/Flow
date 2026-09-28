@@ -19,7 +19,7 @@ internal sealed class TaskMilestones(IMilestoneRepository milestones, ITaskActiv
         if (milestoneId is { } id)
         {
             milestone = await milestones.GetByIdAsync(id, cancellationToken);
-            if (milestone is null || milestone.BoardId != task.BoardId)
+            if (milestone is null || !milestone.IsAvailableIn(task.BoardId))
                 throw new InvalidOperationException($"Milestone {id} is not found in the task's project.");
         }
 

@@ -11,9 +11,13 @@ public sealed class MilestoneRepository(FlowDbContext db) : IMilestoneRepository
 
     public async Task<IReadOnlyList<Milestone>> GetByBoardAsync(Guid boardId, CancellationToken cancellationToken)
     {
-        var milestones = await db.Milestones.Where(m => m.BoardId == boardId).ToListAsync(cancellationToken);
+        var milestones = await db.Milestones
+            .Where(m => m.BoardId == boardId || EF.Property<List<Guid>>(m, "_sharedBoardIds").Contains(boardId))
+            .ToListAsync(cancellationToken);
+        // Свои вехи — перед общими, внутри — открытые по порядку, затем закрытые от недавних.
         return milestones
             .OrderBy(m => m.IsClosed)
+            .ThenBy(m => m.BoardId != boardId)
             .ThenBy(m => m.IsClosed ? 0 : m.SortOrder)
             .ThenByDescending(m => m.ClosedAt)
             .ToList();

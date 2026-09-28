@@ -43,5 +43,6 @@ internal sealed class MilestoneProgressCalculator(ITaskItemRepository tasks)
         (SharedState)(int)m.State,
         m.ClosedAt,
         m.SortOrder,
-        Progress(counts, today));
+        Progress(counts, today),
+        m.SharedBoardIds);
 }

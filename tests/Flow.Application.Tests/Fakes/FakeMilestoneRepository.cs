@@ -13,8 +13,9 @@ public sealed class FakeMilestoneRepository(FakeTaskItemRepository tasks) : IMil
 
     public Task<IReadOnlyList<Milestone>> GetByBoardAsync(Guid boardId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Milestone>>(_milestones
-            .Where(m => m.BoardId == boardId)
+            .Where(m => m.IsAvailableIn(boardId))
             .OrderBy(m => m.IsClosed)
+            .ThenBy(m => m.BoardId != boardId)
             .ThenBy(m => m.IsClosed ? 0 : m.SortOrder)
             .ThenByDescending(m => m.ClosedAt)
             .ToList());

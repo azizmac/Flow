@@ -94,6 +94,43 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
+    /// <summary>Перетаскивание на роадмапе: полосы, края, ромбы и «Без дат» (flow.roadmapAttach).</summary>
+    public async Task<bool> RoadmapAttachAsync<T>(string rootId, DotNetObjectReference<T> dotNetRef) where T : class
+    {
+        try
+        {
+            return await js.InvokeAsync<bool>("flow.roadmapAttach", rootId, dotNetRef);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Перенос и размер виджетов дашборда (flow.gridAttach).</summary>
+    public async Task<bool> GridAttachAsync<T>(string rootId, DotNetObjectReference<T> dotNetRef) where T : class
+    {
+        try
+        {
+            return await js.InvokeAsync<bool>("flow.gridAttach", rootId, dotNetRef);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    public async Task DragDetachAsync(string rootId)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flow.dragDetach", rootId);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException)
+        {
+        }
+    }
+
     public async Task<bool> EnsureEditorLoadedAsync()
     {
         try

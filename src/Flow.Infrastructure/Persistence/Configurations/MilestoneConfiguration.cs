@@ -14,6 +14,10 @@ public sealed class MilestoneConfiguration : IEntityTypeConfiguration<Milestone>
         builder.Property(m => m.Name).IsRequired().HasMaxLength(Milestone.NameMaxLength);
         builder.Property(m => m.Description).HasMaxLength(Milestone.DescriptionMaxLength);
         builder.Property(m => m.State).IsRequired();
+        // Общая веха (этап 2H) — массивом, как TaskTypeIds у пользовательских полей: связь нужна только «в каких проектах
+        // видна», а удалённый проект из массива просто перестаёт что-либо значить.
+        builder.PrimitiveCollection<List<Guid>>("_sharedBoardIds").HasColumnName("SharedBoardIds").IsRequired();
+        builder.Ignore(m => m.SharedBoardIds);
 
         builder.HasOne<Board>()
             .WithMany()

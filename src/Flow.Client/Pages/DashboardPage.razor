@@ -1,8 +1,11 @@
 @* Дашборд (docs/TZ_task_views.md §8, этап 2G): виджеты сеткой из 12 колонок, строка — 90px. Каждый виджет грузит
    данные сам (правами смотрящего) и падает сам. Править может только автор; удалить общий — ещё Admin и Owner.
-   Место и размер задаются в диалоге виджета: перетаскивания в сетке нет, зато раскладка одинакова у всех смотрящих. *@
+   Место и размер (этап 2H) автор меняет перетаскиванием: шапка виджета — перенос, уголок — размер; шаг — клетка сетки,
+   движение считает flow.gridAttach, сюда приходит сдвиг в клетках, и уходит PATCH виджета. Раскладка одна у всех смотрящих. *@
 @page "/dashboards/{Id:guid}"
+@implements IAsyncDisposable
 @inject IFlowApi Api
+@inject BrowserInterop Browser
 @inject NavigationManager Nav
 @inject ToastService Toasts
 @inject UserDirectory Users
@@ -77,7 +80,7 @@
     }
     else
     {
-        <div class="dash-grid" @key="_version">
+        <div class="dash-grid" @key="_version" id="@_gridId">
             @foreach (var widget in _dashboard.Widgets.OrderBy(w => w.Y).ThenBy(w => w.X))
             {
                 <DashboardWidgetView @key="widget.Id" DashboardId="_dashboard.Id" Widget="widget" CanEdit="_dashboard.IsOwn"
@@ -125,6 +128,9 @@
     private DashboardWidgetResponse? _editingWidget;
     private DashboardWidgetResponse? _removing;
     private int _version;
+    private readonly string _gridId = $"dash-{Guid.NewGuid():N}";
+    private DotNetObjectReference<DashboardPage>? _ref;
+    private int _attachedVersion = -1;
 
     /// <summary>Общий чужой дашборд удаляют Admin и Owner — как общий сохранённый фильтр; сервер проверит ещё раз.</summary>
     private bool CanDelete => _dashboard is { Shared: true } && Users.Find(State.CurrentUserId)?.Role >= UserRole.Admin;
@@ -176,6 +182,51 @@
             _dashboard = result.Value!;
         else
             Toasts.Error(result.Error ?? "Не удалось убрать виджет");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Сетку пересоздаёт @key при «Обновить» — тогда и обработчики вешаем заново.
+        if (_dashboard is not { IsOwn: true, Widgets.Count: > 0 } || _attachedVersion == _version)
+            return;
+        _ref ??= DotNetObjectReference.Create(this);
+        if (await Browser.GridAttachAsync(_gridId, _ref))
+            _attachedVersion = _version;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Browser.DragDetachAsync(_gridId);
+        _ref?.Dispose();
+    }
+
+    /// <summary>Итог перетаскивания: move — сдвиг места, resize — размера; в границах сетки (12 колонок, высота 1…8).</summary>
+    [JSInvokable]
+    public async Task OnWidgetDragged(string widgetId, string mode, int cols, int rows)
+    {
+        if (_dashboard is null || !Guid.TryParse(widgetId, out var id) || _dashboard.Widgets.FirstOrDefault(w => w.Id == id) is not { } widget)
+            return;
+
+        var (x, y, w, h) = (widget.X, widget.Y, widget.W, widget.H);
+        if (mode == "resize")
+        {
+            w = Math.Clamp(w + cols, 1, 12 - x);
+            h = Math.Clamp(h + rows, 1, 8);
+        }
+        else
+        {
+            x = Math.Clamp(x + cols, 0, 12 - w);
+            y = Math.Max(0, y + rows);
+        }
+        if ((x, y, w, h) == (widget.X, widget.Y, widget.W, widget.H))
+            return;
+
+        var result = await Api.UpdateWidget(_dashboard.Id, widget.Id, new UpdateWidgetRequest(widget.Title, widget.Config, x, y, w, h));
+        if (result.Ok)
+            _dashboard = result.Value!;
+        else
+            Toasts.Error(result.Error ?? "Не удалось переставить виджет");
+        StateHasChanged();
     }
 
     private async Task Delete()

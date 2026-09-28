@@ -41,4 +41,30 @@ public sealed class MilestoneApiTests(ApiFixture api)
         using var missing = await owner.GetAsync($"/api/milestones/{milestone.Id}");
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
+
+    /// <summary>Этап 2H: PUT /milestones/{id}/boards и стрелки роадмапа GET /boards/{id}/blocks.</summary>
+    [Fact]
+    public async Task Share_And_Board_Blocks_Routes()
+    {
+        using var owner = api.CreateClientAs();
+        async Task<BoardResponse> Board(string key)
+        {
+            using var response = await owner.PostAsJsonAsync("/api/boards", new CreateBoardRequest("Проект " + key, key));
+            return (await response.Content.ReadFromJsonAsync<BoardResponse>())!;
+        }
+
+        var front = await Board("SHAF");
+        var back = await Board("SHAB");
+        using var milestoneResponse = await owner.PostAsJsonAsync($"/api/boards/{front.Id}/milestones", new CreateMilestoneRequest("Общий релиз"));
+        var milestone = (await milestoneResponse.Content.ReadFromJsonAsync<MilestoneResponse>())!;
+
+        using var shared = await owner.PutAsJsonAsync($"/api/milestones/{milestone.Id}/boards", new ShareMilestoneRequest([back.Id]));
+        Assert.Equal([back.Id], (await shared.Content.ReadFromJsonAsync<MilestoneResponse>())!.SharedBoardIds);
+        using var missing = await owner.PutAsJsonAsync($"/api/milestones/{Guid.NewGuid()}/boards", new ShareMilestoneRequest([]));
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+
+        Assert.Empty(await owner.GetFromJsonAsync<List<TaskBlockEdge>>($"/api/boards/{front.Id}/blocks") ?? [null!]);
+        using var hidden = await owner.GetAsync($"/api/boards/{Guid.NewGuid()}/blocks");
+        Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+    }
 }

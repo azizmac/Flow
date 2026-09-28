@@ -6,8 +6,8 @@
 @inject IFlowApi Api
 @inject UserDirectory Users
 
-<section class="panel dw" style="@GridStyle" aria-label="@Title">
-    <header class="dw-head">
+<section class="panel dw" style="@GridStyle" aria-label="@Title" data-widget="@Widget.Id">
+    <header class="dw-head @(CanEdit ? "movable" : "")" data-dw-move="@(CanEdit ? "1" : null)" title="@(CanEdit ? "Перетащите, чтобы переставить" : null)">
         <span class="dw-title">@Title</span>
         @if (_data?.Fql is { } fql && Widget.Type is WidgetType.TaskList or WidgetType.Counter or WidgetType.Breakdown or WidgetType.CreatedVsClosed)
         {
@@ -148,6 +148,10 @@
             }
         }
     </div>
+    @if (CanEdit)
+    {
+        <span class="dw-resize" data-dw-resize="1" title="Потяните, чтобы изменить размер"></span>
+    }
 </section>
 
 @code {

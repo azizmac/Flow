@@ -42,6 +42,15 @@ public sealed class TaskLinkRepository(FlowDbContext db) : ITaskLinkRepository
             .Distinct()
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<(Guid SourceId, Guid TargetId)>> GetBlocksWithinBoardAsync(Guid boardId, CancellationToken cancellationToken) =>
+        (await db.TaskLinks
+            .Where(l => l.Type == TaskLinkType.Blocks
+                        && db.TaskItems.Any(t => t.Id == l.SourceTaskId && t.BoardId == boardId)
+                        && db.TaskItems.Any(t => t.Id == l.TargetTaskId && t.BoardId == boardId))
+            .Select(l => new { l.SourceTaskId, l.TargetTaskId })
+            .ToListAsync(cancellationToken))
+        .Select(l => (l.SourceTaskId, l.TargetTaskId)).ToList();
+
     public void Add(TaskLink link) => db.TaskLinks.Add(link);
 
     public void Remove(TaskLink link) => db.TaskLinks.Remove(link);

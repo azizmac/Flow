@@ -148,7 +148,7 @@
         else if (IsRoadmapView && BoardId is { } roadmapBoardId)
         {
             <TaskRoadmap @ref="_roadmap" Boards="_boards" BoardId="roadmapBoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
-                         Query="@_search" Fql="@EffectiveFql" SelectedId="TaskId"
+                         Query="@_search" Fql="@EffectiveFql" SelectedId="TaskId" CanEdit="t => Permissions.CanEditTask(Me, AccessFor(t), t)"
                          OnOpen="OpenTask" OnLoaded="OnKanbanLoaded" OnFqlError="e => _fqlError = e" />
         }
         else if (IsBacklogView && BoardId is { } backlogBoardId)

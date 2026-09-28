@@ -16,6 +16,7 @@ public sealed class Milestone
 {
     public const int NameMaxLength = 80;
     public const int DescriptionMaxLength = 2000;
+    public const int MaxSharedBoards = 20;
 
     public Guid Id { get; private set; }
 
@@ -35,6 +36,14 @@ public sealed class Milestone
     public int SortOrder { get; private set; }
 
     public DateTime CreatedAt { get; private set; }
+
+    private List<Guid> _sharedBoardIds = [];
+
+    /// <summary>
+    /// Другие проекты, где эта веха тоже доступна (этап 2H, «общая веха»: один релиз на фронт и бэк). Проект-владелец
+    /// (<see cref="BoardId"/>) сюда не входит; им управляют вехой, остальные только кладут в неё свои задачи.
+    /// </summary>
+    public IReadOnlyList<Guid> SharedBoardIds => _sharedBoardIds;
 
     private Milestone()
     {
@@ -57,6 +66,18 @@ public sealed class Milestone
         new(boardId, name, description, targetDate, sortOrder);
 
     public bool IsClosed => State == MilestoneState.Closed;
+
+    /// <summary>Задачу этого проекта можно положить в веху: проект — владелец или веха с ним разделена.</summary>
+    public bool IsAvailableIn(Guid boardId) => boardId == BoardId || _sharedBoardIds.Contains(boardId);
+
+    /// <summary>Заменить список проектов, с которыми веха общая. Владелец и дубли отбрасываются; не больше 20.</summary>
+    public void ShareWith(IEnumerable<Guid> boardIds)
+    {
+        var ids = boardIds.Where(id => id != Guid.Empty && id != BoardId).Distinct().ToList();
+        if (ids.Count > MaxSharedBoards)
+            throw new ArgumentException($"Общей веха бывает не больше чем для {MaxSharedBoards} проектов.", nameof(boardIds));
+        _sharedBoardIds = ids;
+    }
 
     public void Rename(string name) => Name = ValidateName(name);
 

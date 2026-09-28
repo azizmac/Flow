@@ -38,6 +38,16 @@ public sealed class FakeTaskLinkRepository(FakeBoardRepository boards, FakeTaskI
             .Where(l => l.Type == TaskLinkType.Blocks && sourceTaskIds.Contains(l.SourceTaskId))
             .Select(l => l.TargetTaskId).Distinct().ToList());
 
+    public async Task<IReadOnlyList<(Guid SourceId, Guid TargetId)>> GetBlocksWithinBoardAsync(Guid boardId, CancellationToken cancellationToken)
+    {
+        var result = new List<(Guid, Guid)>();
+        foreach (var link in _links.Where(l => l.Type == TaskLinkType.Blocks))
+            if ((await tasks.GetByIdAsync(link.SourceTaskId, cancellationToken))?.BoardId == boardId
+                && (await tasks.GetByIdAsync(link.TargetTaskId, cancellationToken))?.BoardId == boardId)
+                result.Add((link.SourceTaskId, link.TargetTaskId));
+        return result;
+    }
+
     public void Add(TaskLink link) => _links.Add(link);
 
     public void Remove(TaskLink link) => _links.Remove(link);

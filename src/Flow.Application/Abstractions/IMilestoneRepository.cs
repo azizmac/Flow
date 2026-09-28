@@ -8,7 +8,7 @@ public interface IMilestoneRepository
     /// <summary>Веха, отслеживаемая.</summary>
     Task<Milestone?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
 
-    /// <summary>Вехи проекта: открытые по SortOrder, затем закрытые от недавних к старым.</summary>
+    /// <summary>Вехи проекта — свои и общие с ним (этап 2H): открытые (свои первыми) по SortOrder, затем закрытые от недавних.</summary>
     Task<IReadOnlyList<Milestone>> GetByBoardAsync(Guid boardId, CancellationToken cancellationToken);
 
     Task<int> NextSortOrderAsync(Guid boardId, CancellationToken cancellationToken);
