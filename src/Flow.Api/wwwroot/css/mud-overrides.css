@@ -448,6 +448,26 @@ a.mud-link:hover {
     width: 260px;
 }
 
+/* Меню, чей триггер — поле формы (TaskPicker с FieldLabel): обёртки MudMenu по умолчанию ужимаются по содержимому,
+   а поле в диалоге должно быть во всю ширину, как DsInput рядом. */
+.mud-menu.menu-block,
+.mud-menu.menu-block > * {
+    display: block;
+    width: 100%;
+}
+
+/* TaskPicker: код и название задачи длиннее имени человека — слой шире, название обрезается многоточием. */
+.mud-popover.flow-pop-tasks {
+    width: 400px;
+}
+
+.flow-pop-tasks .pop-task {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .mud-popover.flow-pop-boards {
     width: 300px;
 }

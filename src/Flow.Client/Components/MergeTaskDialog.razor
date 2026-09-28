@@ -1,7 +1,7 @@
 @* Слияние (docs/TZ_task_model.md §6): эта задача вливается в выбранную. Комментарии (с пометкой «из КОДА»),
    вложения без повторов, связи и подзадачи переходят к основной; эта закрывается финальным статусом со связью
-   «дубликат». Описание и поля не сливаются. Выбор основной — MudAutocomplete с серверным поиском по коду и названию
-   среди видимых проектов. *@
+   «дубликат». Описание и поля не сливаются. Выбор основной — TaskPicker в виде поля формы: серверный поиск по коду и
+   названию среди видимых проектов, строки с иконкой типа, как у родителя и связей. *@
 @implements IAsyncDisposable
 @inject IFlowApi Api
 
@@ -12,14 +12,9 @@
         <div class="hint">«@Task.Title» станет дубликатом и закроется. К основной задаче перейдут комментарии, вложения, связи и подзадачи.</div>
     </TitleContent>
     <DialogContent>
-        <MudAutocomplete T="TaskResponse" Label="Основная задача" Value="_target" ValueChanged="v => { _target = v; _error = null; }"
-                         SearchFunc="SearchAsync" ToStringFunc="@(t => t is null ? "" : $"{t.Code} · {t.Title}")" DebounceInterval="250"
-                         MinCharacters="1" ResetValueOnEmptyText="true" Variant="Variant.Text" Dense="true" PopoverClass="flow-pop"
-                         Placeholder="Код или название" AutoFocus="true" Class="rs-autocomplete">
-            <ItemTemplate Context="t">
-                <span class="pop-task"><span class="code">@t.Code</span>@t.Title</span>
-            </ItemTemplate>
-        </MudAutocomplete>
+        <TaskPicker FieldLabel="Основная задача" Placeholder="Код или название" Value="_target" Disabled="_busy"
+                    Where="@(t => t.Id != Task.Id)" AriaLabel="Выбрать основную задачу"
+                    OnChange="@(t => { _target = t; _error = null; })" />
         <ul class="rs-notes">
             <li>Описание и пользовательские поля основной задачи не меняются.</li>
             <li>Повторяющиеся по содержимому файлы останутся у дубликата.</li>
@@ -48,12 +43,6 @@
     private string? _error;
 
     private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
-
-    private async Task<IEnumerable<TaskResponse>> SearchAsync(string? query, CancellationToken token)
-    {
-        var result = await Api.SearchTasks(query: query, limit: 10, ct: token);
-        return result.Ok ? result.Value!.Items.Where(t => t.Id != Task.Id) : [];
-    }
 
     private async Task Save()
     {

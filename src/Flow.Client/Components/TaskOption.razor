@@ -1,0 +1,14 @@
+@* Строка «задача» в любом списке выбора (docs/TZ_ui_consistency.md, этап 5): иконка типа, код, название. Одна разметка
+   на родителя, связи и слияние — раньше у связей не было иконки типа, а у слияния строку рисовал MudAutocomplete. *@
+
+@if (Type is not null)
+{
+    <TaskTypeIcon Kind="Type.Kind" Name="@Type.Name" Size="14" />
+}
+<span class="pop-task"><span class="code">@Item.Code</span>@Item.Title</span>
+
+@code {
+    [Parameter, EditorRequired] public TaskResponse Item { get; set; } = default!;
+    /// <summary>Тип задачи (из её проекта); null — без иконки.</summary>
+    [Parameter] public TaskTypeResponse? Type { get; set; }
+}

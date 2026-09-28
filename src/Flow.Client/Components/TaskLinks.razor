@@ -4,7 +4,6 @@
    поиском по коду или названию во всех видимых проектах (GET /tasks), Enter — первый результат. Цикл блокировок —
    не отказ, а предупреждение тостом. Число незакрытых блокеров уходит наверх (OnBlockedChanged) — для чипа
    «заблокирована» в строке списка. *@
-@implements IDisposable
 @inject IFlowApi Api
 @inject ToastService Toasts
 
@@ -56,28 +55,13 @@
                                 @onclick="() => _kind = kind">@TaskMeta.LinkLabel(kind.Type, kind.Outward)</button>
                     }
                 </div>
-                <label class="pop-search link-search">
-                    <Icon Name="search" Size="14" />
-                    <input id="@_inputId" placeholder="Код или название задачи" value="@_query" autocomplete="off" spellcheck="false"
-                           @oninput="OnInput" @onkeydown="OnKey" />
-                </label>
-                @if (_results is { Count: > 0 } found)
-                {
-                    <div class="pa-results">
-                        @foreach (var t in found)
-                        {
-                            <button type="button" class="pop-item" disabled="@_busy" @onclick="() => Add(t)">
-                                <span class="pop-task"><span class="code">@t.Code</span>@t.Title</span>
-                            </button>
-                        }
-                    </div>
-                }
-                else if (_results is not null && _query.Trim().Length > 0)
-                {
-                    <div class="pop-empty">Задач не найдено</div>
-                }
+                @* Вторая задача — тот же TaskPicker, что у родителя и слияния; выбор сразу создаёт связь выбранного вида,
+                   можно выбрать следующую. Уже связанные с этой задачей не предлагаются. *@
                 <div class="link-add-actions">
-                    <button type="button" class="icon-lnk" @onclick="() => _adding = false">Готово</button>
+                    <TaskPicker ButtonLabel="Выбрать задачу" Disabled="_busy" AriaLabel="Связать с задачей"
+                                Where="@(t => t.Id != TaskId && _links!.All(l => l.Other.Id != t.Id))"
+                                OnChange="@(t => t is null ? Task.CompletedTask : Add(t))" />
+                    <DsButton Variant="secondary" Size="sm" OnClick="() => _adding = false">Готово</DsButton>
                 </div>
             </div>
         }
@@ -91,17 +75,11 @@
     /// <summary>Запись для ленты этой задачи: (тип, OldValue, NewValue) — как их пишет сервер.</summary>
     [Parameter] public EventCallback<(TaskActivityType Type, string? Old, string? New)> OnJournal { get; set; }
 
-    private const int DebounceMs = 250;
-
-    private readonly string _inputId = "lnk-" + Guid.NewGuid().ToString("N")[..8];
     private List<TaskLinkResponse>? _links;
     private Guid _loadedFor;
     private bool _adding;
     private bool _busy;
     private (TaskLinkType Type, bool Outward) _kind = TaskMeta.ManualLinkKinds[0];
-    private string _query = "";
-    private List<TaskResponse>? _results;
-    private CancellationTokenSource? _cts;
 
     /// <summary>Незакрытые задачи, которые блокируют эту, — то же, что TaskResponse.BlockedByCount.</summary>
     private int BlockedBy => _links?.Count(l => l.Type == TaskLinkType.Blocks && !l.Outward && !l.Other.IsDone && !l.Other.Restricted) ?? 0;
@@ -120,55 +98,7 @@
             _links = result.Ok ? result.Value!.ToList() : [];
     }
 
-    private async Task StartAdd()
-    {
-        _adding = true;
-        _query = "";
-        _results = null;
-        StateHasChanged();
-        await Task.Yield();
-    }
-
-    private void OnInput(ChangeEventArgs e)
-    {
-        _query = e.Value?.ToString() ?? string.Empty;
-        _ = SearchAsync(_query);
-    }
-
-    private async Task SearchAsync(string query)
-    {
-        _cts?.Cancel();
-        var cts = _cts = new CancellationTokenSource();
-        try
-        {
-            await Task.Delay(DebounceMs, cts.Token);
-            if (query.Trim().Length == 0)
-            {
-                _results = null;
-                await InvokeAsync(StateHasChanged);
-                return;
-            }
-
-            var result = await Api.SearchTasks(query: query, limit: 8, ct: cts.Token);
-            if (cts.IsCancellationRequested)
-                return;
-
-            _results = result.Ok ? result.Value!.Items.Where(t => t.Id != TaskId).ToList() : [];
-            await InvokeAsync(StateHasChanged);
-        }
-        catch (OperationCanceledException)
-        {
-            // Печатают дальше — старый ответ не нужен.
-        }
-    }
-
-    private async Task OnKey(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter" && _results is { Count: > 0 } list)
-            await Add(list[0]);
-        else if (e.Key == "Escape")
-            _adding = false;
-    }
+    private void StartAdd() => _adding = true;
 
     private async Task Add(TaskResponse target)
     {
@@ -183,8 +113,6 @@
 
         var before = BlockedBy;
         _links!.Add(result.Value!.Link);
-        _query = "";
-        _results = null;
         await OnJournal.InvokeAsync((TaskActivityType.LinkAdded, Side(result.Value.Link), target.Id.ToString()));
         if (result.Value.CycleWarning)
             Toasts.Error($"Связь добавлена, но замкнула цикл блокировок: {target.Code} уже ждёт эту задачу");
@@ -213,6 +141,4 @@
     /// <summary>Сторона связи в формате журнала: «Blocks» или «Blocks:in» (см. TaskActivity.LinkAdded в домене).</summary>
     private static string Side(TaskLinkResponse link) =>
         link.Outward || link.Type == TaskLinkType.RelatesTo ? link.Type.ToString() : $"{link.Type}:in";
-
-    public void Dispose() => _cts?.Cancel();
 }
