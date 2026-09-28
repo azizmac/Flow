@@ -347,12 +347,12 @@ public class PermissionTests
         var member = AddUser(users, UserRole.Member, "member");
         var admin = AddUser(users, UserRole.Admin, "admin");
 
-        var self = await mediator.Send(new UserUpdateProfileCommand(reader, reader, "Новое", null, null, null, null, null), CancellationToken.None);
+        var self = await mediator.Send(new UserUpdateProfileCommand(reader, reader, "Новое", null, null, null, null), CancellationToken.None);
         Assert.Equal("Новое", self.Response!.FirstName);
 
-        await Forbidden(() => mediator.Send(new UserUpdateProfileCommand(member, reader, "X", null, null, null, null, null), CancellationToken.None));
+        await Forbidden(() => mediator.Send(new UserUpdateProfileCommand(member, reader, "X", null, null, null, null), CancellationToken.None));
 
-        var byAdmin = await mediator.Send(new UserUpdateProfileCommand(admin, reader, "Админ", null, null, null, null, null), CancellationToken.None);
+        var byAdmin = await mediator.Send(new UserUpdateProfileCommand(admin, reader, "Админ", null, null, null, null), CancellationToken.None);
         Assert.Equal("Админ", byAdmin.Response!.FirstName);
     }
 

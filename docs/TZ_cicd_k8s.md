@@ -1,5 +1,8 @@
 # ТЗ: CI/CD для своего Kubernetes (1 master + 1 worker)
 
+> **Историческое.** От Kubernetes отказались: выкатка идёт docker compose на хост self-hosted раннера,
+> манифестов `k8s/**` в репозитории больше нет. Актуальная схема — `docs/TZ_cicd_host.md`.
+
 Документ отвечает на три вопроса: **что нужно передать**, чтобы CI/CD можно было написать; **как он устроен** —
 каждый модуль отдельной джобой, видимой в списке запуска; **что положить в GitHub Variables и Secrets**.
 
@@ -245,7 +248,7 @@ Role деплойера выдаётся на каждый отдельно. Э�
 |-------|----------|----------|
 | `build` | Сборка .NET (Release) | всех трёх образов. Для `flow-client` это **единственная** проверка: тестового проекта у Blazor-клиента нет |
 | `test-unit` | Тесты · unit (Domain + Application) | всех трёх образов. Docker не нужен, секунды |
-| `test-infra` | Тесты · Infrastructure (pgvector + MinIO) | `flow-api`. Testcontainers, `--filter "Category!=Model&Category!=Golden"` |
+| `test-infra` | Тесты · Infrastructure (pgvector + MinIO) | `flow-api`. Testcontainers, `--filter "Category!=Model&Category!=Golden&Category!=S3"` (S3 — временно, пока нет доступного образа MinIO) |
 | `test-auth` | Тесты · Auth | `flow-api` (Auth-модуль компилируется внутрь этого образа, поэтому его тесты — гейт образа api) |
 | `test-api` | Тесты · Api | `flow-api` |
 

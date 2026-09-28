@@ -158,17 +158,41 @@ public class UserTests
     }
 
     [Fact]
-    public void ChangeAvatar_Should_ValidateUrl_And_AllowNull()
+    public void SetAvatar_Should_BuildOwnPath_And_ExposeFileName()
     {
         var user = CreateUser();
 
-        user.ChangeAvatar("https://cdn.example.com/a.png");
-        Assert.Equal("https://cdn.example.com/a.png", user.AvatarUrl);
+        user.SetAvatar("0123456789abcdef.png");
 
-        user.ChangeAvatar(null);
+        Assert.Equal($"/avatars/{user.Id}/0123456789abcdef.png", user.AvatarUrl);
+        Assert.Equal("0123456789abcdef.png", user.UploadedAvatarFileName());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("../evil.png")]
+    [InlineData("0123456789abcdef.svg")]
+    [InlineData("0123456789ABCDEF.png")]
+    [InlineData("short.png")]
+    public void SetAvatar_Should_RejectForeignFileNames(string fileName)
+    {
+        var user = CreateUser();
+
+        Assert.Throws<ArgumentException>(() => user.SetAvatar(fileName));
         Assert.Null(user.AvatarUrl);
+    }
 
-        Assert.Throws<ArgumentException>(() => user.ChangeAvatar("not a url"));
+    [Fact]
+    public void RemoveAvatar_Should_ClearAvatar_And_ReportNoop()
+    {
+        var user = CreateUser();
+        Assert.False(user.RemoveAvatar());
+
+        user.SetAvatar("0123456789abcdef.webp");
+
+        Assert.True(user.RemoveAvatar());
+        Assert.Null(user.AvatarUrl);
+        Assert.Null(user.UploadedAvatarFileName());
     }
 
     [Fact]

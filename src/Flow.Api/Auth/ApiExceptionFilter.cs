@@ -1,3 +1,4 @@
+using Flow.Api.Controllers;
 using Flow.Application.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -24,7 +25,7 @@ public sealed class ApiExceptionFilter : IExceptionFilter
         if (status == 0)
             return;
 
-        context.Result = new ObjectResult(new { Message = message }) { StatusCode = status };
+        context.Result = new ObjectResult(new ApiError(message)) { StatusCode = status };
         context.ExceptionHandled = true;
     }
 }

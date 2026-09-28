@@ -204,7 +204,7 @@ public class SearchIndexQueueFeatureTests
     {
         var (mediator, _, _, _, _, searchIndex) = TestMediatorFactory.CreateWithSearchIndex();
 
-        await mediator.Send(new UserUpdateProfileCommand(Owner, Owner, "Илья", null, null, null, null, null), CancellationToken.None);
+        await mediator.Send(new UserUpdateProfileCommand(Owner, Owner, "Илья", null, null, null, null), CancellationToken.None);
 
         var request = Assert.Single(searchIndex.For(SearchSourceType.User, Owner));
         Assert.Equal(SearchIndexOperation.Upsert, request.Operation);

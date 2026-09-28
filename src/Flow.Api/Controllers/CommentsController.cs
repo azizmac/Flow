@@ -18,6 +18,8 @@ namespace Flow.Api.Controllers;
 public class CommentsController(IMediator mediator, IActorAccessor actor) : ControllerBase
 {
     [HttpGet("tasks/{taskId:guid}/comments")]
+    [ProducesResponseType<IReadOnlyList<TaskCommentResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetComments(Guid taskId, CancellationToken cancellationToken)
     {
         var comments = await mediator.Send(new TaskCommentListQuery(actor.Require(), taskId), cancellationToken);
@@ -25,6 +27,10 @@ public class CommentsController(IMediator mediator, IActorAccessor actor) : Cont
     }
 
     [HttpPost("tasks/{taskId:guid}/comments")]
+    [ProducesResponseType<TaskCommentResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> AddComment(Guid taskId, CreateTaskCommentRequest request, CancellationToken cancellationToken)
     {
         try
@@ -36,11 +42,15 @@ public class CommentsController(IMediator mediator, IActorAccessor actor) : Cont
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     [HttpPatch("comments/{id:guid}")]
+    [ProducesResponseType<TaskCommentResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateComment(Guid id, UpdateTaskCommentRequest request, CancellationToken cancellationToken)
     {
         try
@@ -50,11 +60,14 @@ public class CommentsController(IMediator mediator, IActorAccessor actor) : Cont
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     [HttpDelete("comments/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteComment(Guid id, CancellationToken cancellationToken)
     {
         var deleted = await mediator.Send(new TaskCommentDeleteCommand(actor.Require(), id), cancellationToken);
@@ -62,6 +75,8 @@ public class CommentsController(IMediator mediator, IActorAccessor actor) : Cont
     }
 
     [HttpGet("tasks/{taskId:guid}/activity")]
+    [ProducesResponseType<IReadOnlyList<TaskActivityResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetActivity(Guid taskId, CancellationToken cancellationToken)
     {
         var activity = await mediator.Send(new TaskActivityListQuery(actor.Require(), taskId), cancellationToken);

@@ -3,6 +3,7 @@ using Flow.Application.Features.Attachments.Commands.AttachmentDeleteCommand;
 using Flow.Application.Features.Attachments.Commands.AttachmentUploadCommand;
 using Flow.Application.Features.Attachments.Queries.AttachmentContentQuery;
 using Flow.Application.Features.Attachments.Queries.AttachmentListQuery;
+using Flow.Shared.Contracts.Attachments;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,6 +24,8 @@ public class AttachmentsController(IMediator mediator, IActorAccessor actor) : C
     private const long RequestCeilingBytes = 64L * 1024 * 1024;
 
     [HttpGet("tasks/{taskId:guid}/attachments")]
+    [ProducesResponseType<IReadOnlyList<AttachmentResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetAttachments(Guid taskId, CancellationToken cancellationToken)
     {
         var attachments = await mediator.Send(new AttachmentListQuery(actor.Require(), taskId), cancellationToken);
@@ -35,10 +38,15 @@ public class AttachmentsController(IMediator mediator, IActorAccessor actor) : C
     /// </summary>
     [HttpPost("tasks/{taskId:guid}/attachments")]
     [RequestSizeLimit(RequestCeilingBytes)]
+    [ProducesResponseType<AttachmentResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<DuplicateAttachmentError>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Upload(Guid taskId, IFormFile file, CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
-            return BadRequest(new { Message = "Файл не передан." });
+            return BadRequest(new ApiError("Файл не передан."));
 
         // OpenReadStream даёт перематываемый поток (в памяти или во временном файле) — хендлеру
         // нужно прочитать его дважды: сначала хеш и сигнатура, потом отправка в хранилище.
@@ -52,10 +60,10 @@ public class AttachmentsController(IMediator mediator, IActorAccessor actor) : C
             return NotFound();
 
         if (result.IsDuplicate)
-            return Conflict(new { Message = result.Error, AttachmentId = result.DuplicateId });
+            return Conflict(new DuplicateAttachmentError(result.Error!, result.DuplicateId));
 
         if (result.IsInvalid)
-            return BadRequest(new { Message = result.Error });
+            return BadRequest(new ApiError(result.Error!));
 
         var response = result.Response!;
         return CreatedAtAction(nameof(GetContent), new { id = response.Id }, response);
@@ -70,6 +78,8 @@ public class AttachmentsController(IMediator mediator, IActorAccessor actor) : C
     /// работает только «inline=true».
     /// </summary>
     [HttpGet("attachments/{id:guid}/content")]
+    [ProducesResponseType<Stream>(StatusCodes.Status200OK, "application/octet-stream")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetContent(Guid id, CancellationToken cancellationToken, [FromQuery] bool inline = false)
     {
         var content = await mediator.Send(new AttachmentContentQuery(actor.Require(), id), cancellationToken);
@@ -84,6 +94,9 @@ public class AttachmentsController(IMediator mediator, IActorAccessor actor) : C
     }
 
     [HttpDelete("attachments/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var deleted = await mediator.Send(new AttachmentDeleteCommand(actor.Require(), id), cancellationToken);

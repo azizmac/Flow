@@ -181,13 +181,17 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             sql.Append("\n    ) both_halves GROUP BY id\n)");
         }
 
+        // Лучший чанк из визуального пространства — картинку нашли по кадру, а текста у неё нет: это
+        // признак для реранкера (SearchHit.IsVisual). Без визуальной половины таких чанков в merged не бывает.
+        var isVisual = useVision ? "b.\"ModelVersion\" = @visionModel" : "false";
+
         // Свёртка чанков в источники: у источника остаётся его лучший чанк, он же идёт в подсветку.
         sql.Append(
-            """
+            $"""
             ,
             best AS (
                 SELECT DISTINCT ON (c."SourceType", c."SourceId")
-                       c."SourceType", c."SourceId", c."BoardId", c."Content", c."SourceUpdatedAt", c."IsClosed", m.score
+                       c."SourceType", c."SourceId", c."BoardId", c."Content", c."SourceUpdatedAt", c."IsClosed", c."ModelVersion", m.score
                 FROM merged m JOIN "SearchChunks" c ON c."Id" = m.id
                 ORDER BY c."SourceType", c."SourceId", m.score DESC
             )
@@ -205,6 +209,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                    COALESCE(cm."TaskId", at."TaskId", sl."TaskId") AS "ParentId",
                    b."Content" AS "Content",
                    b."IsClosed" AS "IsClosed",
+                   {isVisual} AS "IsVisual",
                    count(*) OVER () AS "Total"
             FROM best b
             LEFT JOIN "TaskItems" ti ON b."SourceType" = 1 AND ti."Id" = b."SourceId"
@@ -235,7 +240,8 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             row.UpdatedAt,
             row.ParentId,
             row.Content,
-            row.IsClosed);
+            row.IsClosed,
+            row.IsVisual);
 
     private NpgsqlParameter[] BuildParameters(SearchCriteria criteria)
     {
@@ -344,6 +350,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                    NULL::uuid AS "ParentId",
                    b."Content" AS "Content",
                    false AS "IsClosed",
+                   false AS "IsVisual",
                    count(*) OVER () AS "Total"
             FROM best b JOIN "TaskItems" ti ON ti."Id" = b."SourceId"
             ORDER BY b.distance
@@ -383,6 +390,9 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
 
         /// <summary>Задача (или задача-владелец) в финальном статусе — пометка «архив» в выдаче.</summary>
         public bool IsClosed { get; init; }
+
+        /// <summary>Лучший чанк — визуальный: в реранкер такая находка не идёт.</summary>
+        public bool IsVisual { get; init; }
 
         /// <summary>Одинаковый во всех строках: count(*) OVER () до LIMIT.</summary>
         public long Total { get; init; }

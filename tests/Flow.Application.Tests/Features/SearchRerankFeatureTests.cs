@@ -156,4 +156,48 @@ public class SearchRerankFeatureTests
         // В модель уходит текст запроса без распознанных фильтров — они стоят ноль и только шумят.
         Assert.Equal("падает экспорт", context.Reranker.LastQuery);
     }
+
+    private static SearchHit Hit(string code, bool visual = false) =>
+        new(visual ? SearchSourceType.Attachment : SearchSourceType.Task,
+            Guid.NewGuid(),
+            null,
+            visual ? $"{code}.png" : $"Задача {code}",
+            "фрагмент",
+            Score: 1,
+            TaskCode: code,
+            UpdatedAt: DateTime.UtcNow,
+            ParentId: null,
+            Content: visual ? $"{code}.png" : $"текст {code}",
+            IsVisual: visual);
+
+    [Fact]
+    public async Task Visual_Hits_Keep_Their_Places_And_Do_Not_Reach_The_Model()
+    {
+        var context = Ready();
+        context.Index.Page = new SearchPage(
+            [Hit("T0"), Hit("V1", visual: true), Hit("T2"), Hit("T3"), Hit("V4", visual: true)],
+            5);
+
+        var response = await context.Mediator.Send(Query(rerank: true), CancellationToken.None);
+
+        // Реранкер текстовый: у картинки, найденной по кадру, для него есть только имя файла. Её место
+        // задала визуальная половина, а текстовые находки пересортированы между собой — фейк их переворачивает.
+        Assert.True(response!.Reranked);
+        Assert.Equal(["T3", "V1", "T2", "T0", "V4"], response.Items.Select(item => item.TaskCode).ToArray());
+        Assert.Equal(3, context.Reranker.LastDocuments.Count);
+        Assert.DoesNotContain(context.Reranker.LastDocuments, document => document.Contains(".png"));
+    }
+
+    [Fact]
+    public async Task Nothing_To_Rerank_When_Only_One_Hit_Is_Textual()
+    {
+        var context = Ready();
+        context.Index.Page = new SearchPage([Hit("V0", visual: true), Hit("T1"), Hit("V2", visual: true)], 3);
+
+        var response = await context.Mediator.Send(Query(rerank: true), CancellationToken.None);
+
+        Assert.Equal(0, context.Reranker.Calls);
+        Assert.False(response!.Reranked);
+        Assert.Equal(["V0", "T1", "V2"], response.Items.Select(item => item.TaskCode).ToArray());
+    }
 }

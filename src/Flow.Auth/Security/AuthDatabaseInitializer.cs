@@ -20,8 +20,8 @@ public sealed class AuthDatabaseInitializer(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        // Startup:RunMigrations=false — миграции уже прогнал кто-то другой (в кластере это Job перед
-        // выкаткой, см. k8s/base/api/migrate-job.yaml). Тогда веб-хосту здесь делать нечего: он не
+        // Startup:RunMigrations=false — миграции уже прогнал кто-то другой (например, отдельный запуск
+        // `--migrate` перед заменой контейнера, см. джобу выкатки в ci.yml). Тогда веб-хосту здесь делать нечего: он не
         // мигрирует, не сеет и не ждёт БД — готовность проверяет проба.
         if (!configuration.GetValue("Startup:RunMigrations", true))
         {

@@ -24,6 +24,9 @@ x-bootstrap: &bootstrap
 
 services:
   api:
+    # Локально образ собирается (`up -d --build`) под именем flow-api:local. На сервере выкатка из CI
+    # задаёт FLOW_API_IMAGE — образ из реестра по digest'у — и поднимает сервис с --no-build.
+    image: ${FLOW_API_IMAGE:-flow-api:local}
     build:
       context: .
       dockerfile: src/Flow.Api/Dockerfile
@@ -43,6 +46,9 @@ services:
       # браузерного OIDC и без кросс-доменных запросов. Снять вместе с ClientSeeder, когда SSR
       # отработает в проде (docs/TZ_client_ssr.md).
       Auth__Client__RedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/login-callback
+      # Возврат кнопки Authorize в Swagger UI (/swagger) — тем же клиентом flow-client, но уже не ради отката:
+      # без этого адреса Swagger не получит токен. Хост — тот, что видит браузер, как и у issuer.
+      Auth__Client__RedirectUris__1: ${AUTH_ISSUER:-http://localhost:8080}/swagger/oauth2-redirect.html
       Auth__Client__PostLogoutRedirectUris__0: http://localhost:${CLIENT_PORT:-5016}/authentication/logout-callback
       # Локальный compose ходит по http; за TLS-терминатором оставить false.
       Auth__AllowInsecureHttp: ${AUTH_ALLOW_INSECURE_HTTP:-true}
@@ -87,11 +93,41 @@ services:
       Search__Embeddings__Vision__Endpoint: ${VISION_ENDPOINT:-http://ai:8081/v1}
       Search__Embeddings__Vision__Model: ${VISION_MODEL:-Qwen3-VL-Embedding-2B}
       Search__Embeddings__Vision__ModelFile: ${VISION_MODEL_FILE:-Qwen3-VL-Embedding-2B.Q4_K_M.gguf}
+      # За Caddy (PROXY_ENABLED=true) api узнаёт исходную схему и адрес клиента из X-Forwarded-*: без этого
+      # OpenIddict видит внутренний http и при AUTH_ALLOW_INSECURE_HTTP=false отказывает в токенах, а
+      # редиректы и cookie уходят без https. Встроенный переключатель ASP.NET доверяет заголовкам от любого
+      # источника — поэтому вместе с ним api публикуется только на 127.0.0.1 (API_BIND), и подделать
+      # заголовок может лишь тот, кто уже на сервере.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: ${PROXY_ENABLED:-false}
     volumes:
       - auth-certs:/certs
       - auth-keys:/keys
     ports:
-      - "${API_PORT:-8080}:8080"
+      # API_BIND=127.0.0.1 за реверс-прокси: снаружи Flow доступен только через него, а проба выкатки
+      # на самом сервере продолжает ходить на порт напрямую.
+      - "${API_BIND:-0.0.0.0}:${API_PORT:-8080}:8080"
+    networks:
+      - flow-network
+
+  # TLS-терминатор (docker/caddy/Caddyfile). Профиль: локально и на установках без домена не поднимается;
+  # в CI его включает PROXY_ENABLED=true. Порты 80 и 443 фиксированы — на них Let's Encrypt проверяет
+  # владение доменом, и роутер должен пробрасывать оба.
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2.10-alpine}
+    profiles: [proxy]
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      AUTH_ISSUER: ${AUTH_ISSUER:-http://localhost:8080}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
     networks:
       - flow-network
 
@@ -106,3 +142,7 @@ volumes:
   # просто входят заново. Поэтому тома обычные и `down -v` их уносит.
   auth-keys:
   auth-certs:
+  # Сертификаты и ACME-аккаунт Caddy. Тоже пересоздаются сами, но не бесплатно: у Let's Encrypt лимит
+  # 5 одинаковых сертификатов в неделю, так что `down -v` по кругу однажды оставит сайт без https на неделю.
+  caddy-data:
+  caddy-config:

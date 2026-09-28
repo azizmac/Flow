@@ -30,6 +30,9 @@ public class SearchController(IMediator mediator, IActorAccessor actor) : Contro
     /// <param name="rerank">Вторая ступень («Точнее»): точнее верхушка ценой примерно секунды.
     /// Работает по первой странице и только если она включена настройкой Search:Rerank:Enabled.</param>
     [HttpGet]
+    [ProducesResponseType<SearchResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Search(
         CancellationToken cancellationToken,
         [FromQuery] string? q = null,
@@ -51,7 +54,7 @@ public class SearchController(IMediator mediator, IActorAccessor actor) : Contro
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
@@ -78,6 +81,8 @@ public class SearchController(IMediator mediator, IActorAccessor actor) : Contro
 
     /// <summary>Состояние индекса: очередь, застрявшие записи, чанки по типам, версия модели. Admin и Owner.</summary>
     [HttpGet("status")]
+    [ProducesResponseType<SearchStatusResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetStatus(CancellationToken cancellationToken)
     {
         var status = await mediator.Send(new SearchStatusQuery(actor.Require()), cancellationToken);
@@ -89,6 +94,9 @@ public class SearchController(IMediator mediator, IActorAccessor actor) : Contro
     /// Только Owner. 400 — поиск выключен.
     /// </summary>
     [HttpPost("reindex")]
+    [ProducesResponseType<ReindexAccepted>(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Reindex(ReindexRequest? request, CancellationToken cancellationToken)
     {
         try
@@ -97,11 +105,11 @@ public class SearchController(IMediator mediator, IActorAccessor actor) : Contro
                 new ReindexCommand(actor.Require(), request?.Types, request?.BoardId),
                 cancellationToken);
 
-            return Accepted(new { Enqueued = enqueued });
+            return Accepted(new ReindexAccepted(enqueued));
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 }

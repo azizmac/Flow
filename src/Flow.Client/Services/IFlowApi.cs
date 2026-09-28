@@ -325,6 +325,9 @@ public interface IFlowApi
     Task<ApiResult<UserResponse>> UpdateUserProfile(Guid id, UpdateUserProfileRequest request, CancellationToken ct = default);
     Task<ApiResult<UserResponse>> ChangeUsername(Guid id, ChangeUsernameRequest request, CancellationToken ct = default);
     Task<ApiResult<UserResponse>> ChangeEmail(Guid id, ChangeEmailRequest request, CancellationToken ct = default);
+    /// <summary>Свой аватар картинкой (PUT /users/me/avatar); чужой не меняет никто.</summary>
+    Task<ApiResult<UserResponse>> SetMyAvatar(IBrowserFile file, CancellationToken ct = default);
+    Task<ApiResult<UserResponse>> RemoveMyAvatar(CancellationToken ct = default);
     Task<ApiResult<UserResponse>> ChangeUserRole(Guid id, ChangeUserRoleRequest request, CancellationToken ct = default);
     Task<ApiResult<bool>> ChangePassword(Guid id, ChangePasswordRequest request, CancellationToken ct = default);
     Task<ApiResult<UserResponse>> SetUserLink(Guid id, UserLinkType type, SetUserLinkRequest request, CancellationToken ct = default);

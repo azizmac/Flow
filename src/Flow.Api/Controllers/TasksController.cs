@@ -1,4 +1,4 @@
-﻿using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
+using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskChecklistCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
@@ -28,6 +28,7 @@ using Flow.Application.Abstractions;
 using Flow.Application.Features.Boards;
 using Flow.Application.Features.Tasks;
 using Flow.Shared.Contracts.Tasks;
+using Flow.Shared.Contracts.Search;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -42,6 +43,10 @@ namespace Flow.Api.Controllers;
 public class TasksController(IMediator mediator, IActorAccessor actor) : ControllerBase
 {
     [HttpPost("boards/{boardId:guid}/tasks")]
+    [ProducesResponseType<TaskResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CreateTask(Guid boardId, CreateTaskRequest request, CancellationToken cancellationToken)
     {
         try
@@ -57,11 +62,12 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     [HttpGet("boards/{boardId:guid}/tasks")]
+    [ProducesResponseType<IReadOnlyList<TaskResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetBoardTasks(Guid boardId, [FromQuery] Guid? assigneeId, CancellationToken cancellationToken)
     {
         var tasks = await mediator.Send(new TaskListQuery(actor.Require(), boardId, assigneeId), cancellationToken);
@@ -76,6 +82,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     /// порядок по умолчанию (новые сверху).
     /// </summary>
     [HttpGet("tasks")]
+    [ProducesResponseType<TaskListResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> SearchTasks(
         [FromQuery] Guid? boardId,
         [FromQuery] Guid? assigneeId,
@@ -123,6 +130,8 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     }
 
     [HttpGet("tasks/{id:guid}")]
+    [ProducesResponseType<TaskResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTask(Guid id, CancellationToken cancellationToken)
     {
         var task = await mediator.Send(new TaskGetQuery(actor.Require(), id), cancellationToken);
@@ -130,6 +139,10 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     }
 
     [HttpPatch("tasks/{id:guid}")]
+    [ProducesResponseType<TaskResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateTask(Guid id, UpdateTaskRequest request, CancellationToken cancellationToken)
     {
         try
@@ -147,19 +160,23 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
                 return BadRequest(new { Message = result.ValidationError, Reasons = reasons });
 
             if (result.ValidationError is not null)
-                return BadRequest(new { Message = result.ValidationError });
+                return BadRequest(new ApiError(result.ValidationError));
 
             return Ok(result.Response);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             // InvalidOperationException — архивный тип задачи (TaskItem.ChangeType).
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     /// <summary>UserId = null в теле — снять исполнителя. Неизвестный или деактивированный пользователь → 400.</summary>
     [HttpPatch("tasks/{id:guid}/assignee")]
+    [ProducesResponseType<TaskResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> AssignTask(Guid id, AssignTaskRequest request, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new TaskAssignCommand(actor.Require(), id, request.UserId), cancellationToken);
@@ -168,13 +185,17 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
             return NotFound();
 
         if (result.ValidationError is not null)
-            return BadRequest(new { Message = result.ValidationError });
+            return BadRequest(new ApiError(result.ValidationError));
 
         return Ok(result.Response);
     }
 
     /// <summary>DueDate = null в теле — снять срок. Срок раньше даты начала → 400.</summary>
     [HttpPatch("tasks/{id:guid}/due-date")]
+    [ProducesResponseType<TaskResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public Task<IActionResult> SetDueDate(Guid id, SetTaskDueDateRequest request, CancellationToken cancellationToken) =>
         SendUpdate(new TaskSetDueDateCommand(actor.Require(), id, request.DueDate), cancellationToken);
 
@@ -237,7 +258,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
@@ -279,7 +300,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
@@ -329,7 +350,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
@@ -368,7 +389,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
@@ -426,12 +447,16 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
     /// <summary>Задача с подзадачами без cascade=true → 400; с флагом удаляется всё поддерево.</summary>
     [HttpDelete("tasks/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteTask(Guid id, [FromQuery] bool? cascade, CancellationToken cancellationToken)
     {
         try
@@ -441,7 +466,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { ex.Message });
+            return BadRequest(new ApiError(ex.Message));
         }
     }
 
@@ -450,6 +475,8 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
     /// Читать может любая роль. 404 — задачи нет или поиск выключен.
     /// </summary>
     [HttpGet("tasks/{id:guid}/similar")]
+    [ProducesResponseType<IReadOnlyList<SearchResultItem>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSimilar(Guid id, CancellationToken cancellationToken, [FromQuery] int limit = 5)
     {
         var similar = await mediator.Send(new SimilarTasksQuery(actor.Require(), id, limit), cancellationToken);

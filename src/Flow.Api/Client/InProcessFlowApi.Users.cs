@@ -7,7 +7,9 @@ using Flow.Application.Features.Users.Commands.UserChangeRoleCommand;
 using Flow.Application.Features.Users.Commands.UserChangeUsernameCommand;
 using Flow.Application.Features.Users.Commands.UserCreateCommand;
 using Flow.Application.Features.Users.Commands.UserDeactivateCommand;
+using Flow.Application.Features.Users.Commands.UserRemoveAvatarCommand;
 using Flow.Application.Features.Users.Commands.UserRemoveLinkCommand;
+using Flow.Application.Features.Users.Commands.UserSetAvatarCommand;
 using Flow.Application.Features.Users.Commands.UserSetLinkCommand;
 using Flow.Application.Features.Users.Commands.UserUpdatePreferencesCommand;
 using Flow.Application.Features.Users.Commands.UserUpdateProfileCommand;
@@ -20,6 +22,7 @@ using Flow.Application.Features.Users.Queries.UserSearchQuery;
 using Flow.Client.Services;
 using Flow.Shared.Contracts.Users;
 using MediatR;
+using Microsoft.AspNetCore.Components.Forms;
 
 namespace Flow.Api.Client;
 
@@ -98,8 +101,7 @@ internal sealed partial class InProcessFlowApi
                     request.LastName,
                     request.JobTitle,
                     request.Bio,
-                    request.PhoneNumber,
-                    request.AvatarUrl),
+                    request.PhoneNumber),
                 ct));
         });
 
@@ -193,6 +195,43 @@ internal sealed partial class InProcessFlowApi
             return Ok(await mediator.Send(
                 new UserUpdatePreferencesCommand(actor, request.SidebarMode, request.StartPage, request.TasksPageSize, request.TasksView),
                 ct));
+        });
+
+    /// <summary>
+    /// Свой аватар. Поток в circuit'е односторонний, а хендлеру нужно перемотать его после проверки
+    /// сигнатуры — поэтому буфер в памяти, как у вложений; его потолок — AvatarLimits.MaxBytes.
+    /// </summary>
+    public Task<ApiResult<UserResponse>> SetMyAvatar(IBrowserFile file, CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            if (file is null || file.Size == 0)
+                return Invalid<UserResponse>("Файл не передан.");
+
+            if (file.Size > AvatarLimits.MaxBytes)
+                return Invalid<UserResponse>($"Аватар не больше {AvatarLimits.MaxBytes / (1024 * 1024)} МБ.");
+
+            var actor = await ActorAsync();
+            using var content = new MemoryStream((int)file.Size);
+
+            try
+            {
+                await using var source = file.OpenReadStream(AvatarLimits.MaxBytes, ct);
+                await source.CopyToAsync(content, ct);
+            }
+            catch (IOException)
+            {
+                return Invalid<UserResponse>("Не удалось прочитать файл.");
+            }
+
+            content.Position = 0;
+            return Ok(await mediator.Send(new UserSetAvatarCommand(actor, file.Name, file.Size, content), ct));
+        });
+
+    public Task<ApiResult<UserResponse>> RemoveMyAvatar(CancellationToken ct = default) =>
+        Scoped(async mediator =>
+        {
+            var actor = await ActorAsync();
+            return Ok(await mediator.Send(new UserRemoveAvatarCommand(actor), ct));
         });
 
     /// <summary>Три исхода UserUpdateResult — те же, что раскладывал ToActionResult контроллера.</summary>

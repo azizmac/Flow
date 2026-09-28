@@ -65,7 +65,7 @@
         {
             <a class="sb-me" href="@($"users/{me.Id}")" title="Мой профиль">
                 <Avatar User="me" Size="32" />
-                <div style="flex:1;min-width:0;">
+                <div class="sb-me-text">
                     <div class="sb-un">@me.FullName</div>
                     <div class="sb-ur">@(string.IsNullOrEmpty(me.JobTitle) ? "@" + me.Username : me.JobTitle)</div>
                 </div>
@@ -75,7 +75,7 @@
         {
             <div class="sb-me">
                 <span class="sb-av ghost"><Icon Name="user" Size="16" /></span>
-                <div style="flex:1;min-width:0;">
+                <div class="sb-me-text">
                     <div class="sb-un">@(_meError ?? "Загрузка…")</div>
                     <div class="sb-ur">@_name</div>
                 </div>

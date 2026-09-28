@@ -450,15 +450,14 @@ input, textarea { font-family: inherit; }
     .sb:not(.expanded) .sb-search-wrap,
     .sb:not(.expanded) .sb-soon,
     .sb:not(.expanded) .sb-item span:not(.ds-icon),
-    .sb:not(.expanded) .sb-un,
-    .sb:not(.expanded) .sb-ur { display: none; }
+    .sb:not(.expanded) .sb-me-text { display: none; }
     .sb:not(.expanded) .sb-search-icon { display: flex; }
     .sb:not(.expanded) .sb-toggle.sb-toggle-collapse { display: none; }
     .sb:not(.expanded) .sb-toggle.sb-toggle-expand { display: inline-flex; }
     .sb:not(.expanded) .sb-top { flex-direction: column; gap: 10px; padding: 0 0 18px; }
     .sb:not(.expanded) .sb-item { justify-content: center; padding: 10px 0; margin: 0 10px 4px; }
     .sb:not(.expanded) .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px; }
-    .sb:not(.expanded) .sb-me { justify-content: center; }
+    .sb:not(.expanded) .sb-me { justify-content: center; flex: none; align-self: stretch; padding: 6px 0; }
 }
 
 .sb.collapsed { width: 68px; }
@@ -468,15 +467,14 @@ input, textarea { font-family: inherit; }
 .sb.collapsed .sb-search-wrap,
 .sb.collapsed .sb-soon,
 .sb.collapsed .sb-item span:not(.ds-icon),
-.sb.collapsed .sb-un,
-.sb.collapsed .sb-ur { display: none; }
+.sb.collapsed .sb-me-text { display: none; }
 .sb.collapsed .sb-search-icon { display: flex; }
 .sb.collapsed .sb-toggle.sb-toggle-collapse { display: none; }
 .sb.collapsed .sb-toggle.sb-toggle-expand { display: inline-flex; }
 .sb.collapsed .sb-top { flex-direction: column; gap: 10px; padding: 0 0 18px; }
 .sb.collapsed .sb-item { justify-content: center; padding: 10px 0; margin: 0 10px 4px; }
 .sb.collapsed .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px; }
-.sb.collapsed .sb-me { justify-content: center; }
+.sb.collapsed .sb-me { justify-content: center; flex: none; align-self: stretch; padding: 6px 0; }
 
 /* ---------- Поиск: строка в сайдбаре ---------- */
 /* Обёртка — якорь дропдауна. Он шире сайдбара и ложится поверх контента, поэтому позиционируется
@@ -754,6 +752,9 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px;
     transition: background-color 150ms ease, transform 160ms var(--ease-out);
 }
 a.sb-me:active { transform: scale(0.98); }
+/* Имя и должность. В иконочном режиме прячется весь блок, а не только строки: пустой блок с flex:1
+   оставался в строке и вместе с gap сдвигал аватар влево от оси иконок навигации. */
+.sb-me-text { flex: 1; min-width: 0; }
 /* Кнопка выхода: скруглённый прямоугольник, как у строки профиля рядом и у кнопки режима в шапке.
    Круглая подсветка от .ds-iconbtn в подвале сайдбара читалась как элемент из другого набора.
    Цвет — классом, а не инлайновым style: инлайн перебил бы и наведение, и фокус. */
@@ -1580,6 +1581,45 @@ a.sb-me:active { transform: scale(0.98); }
     padding: 30px 40px 22px;
 }
 .profile-head .avatar { font-size: 22px; }
+/* Свой аватар в шапке профиля: клик открывает выбор файла (скрытый InputFile перед label), крестик — убрать. */
+.avatar-edit { position: relative; flex: none; }
+.avatar-edit-pick { display: block; position: relative; border-radius: 50%; cursor: pointer; }
+.avatar-edit-cover {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    opacity: 0;
+    transition: opacity 150ms var(--ease-out);
+}
+.avatar-edit.busy .avatar-edit-pick { cursor: progress; }
+.avatar-edit.busy .avatar-edit-cover { opacity: 1; }
+.att-file:focus-visible + .avatar-edit-pick { outline: 2px solid var(--accent); outline-offset: 2px; }
+.att-file:focus-visible + .avatar-edit-pick .avatar-edit-cover { opacity: 1; }
+.avatar-edit-remove {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 2px solid var(--bg-content);
+    background: var(--surface-raised);
+    color: var(--text-secondary);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 150ms var(--ease-out);
+}
+.avatar-edit:focus-within .avatar-edit-remove { opacity: 1; }
+.avatar-edit-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .profile-head-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .profile-name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .profile-name { margin: 0; font: var(--fw-black) 24px/1.15 var(--font-display); letter-spacing: -0.5px; color: #fff; word-break: break-word; }
@@ -1759,8 +1799,7 @@ a.task-row { color: inherit; text-decoration: none; }
     .sb .sb-search-wrap,
     .sb .sb-soon,
     .sb .sb-item span:not(.ds-icon),
-    .sb .sb-un,
-    .sb .sb-ur { display: none; }
+    .sb .sb-me-text { display: none; }
     /* Обе кнопки режима. Селекторы повторяют форму правил .collapsed / :not(.expanded) выше в файле:
        у тех такой же вес, и без этого повтора кнопка «развернуть» пережила бы скрытие. */
     .sb .sb-toggle,
@@ -1770,7 +1809,7 @@ a.task-row { color: inherit; text-decoration: none; }
     .sb .sb-top { flex-direction: column; gap: 10px; padding: 0 0 18px; }
     .sb .sb-item { justify-content: center; padding: 10px 0; margin: 0 10px 4px; }
     .sb .sb-foot { flex-direction: column; gap: 10px; padding: 14px 10px; }
-    .sb .sb-me { justify-content: center; }
+    .sb .sb-me { justify-content: center; flex: none; align-self: stretch; padding: 6px 0; }
 
     /* Топбар перестаёт быть строкой фиксированной высоты: правая группа переносится под левую,
        когда перестаёт помещаться, а не выдавливает её за край. */
@@ -1874,6 +1913,8 @@ a.task-row { color: inherit; text-decoration: none; }
     .role-pick:hover { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22); }
     .role-pick:hover .role-pick-chev { opacity: 1; }
     a.sb-me:hover { background: rgba(255, 255, 255, 0.06); }
+    .avatar-edit:hover .avatar-edit-cover, .avatar-edit:hover .avatar-edit-remove { opacity: 1; }
+    .avatar-edit-remove:hover:not(:disabled) { color: #fff; }
     .sb-foot .ds-iconbtn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); color: #fff; }
     .ucard-row.lnk:hover { color: #fff; }
     .ucard-link:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
