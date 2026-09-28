@@ -1061,20 +1061,45 @@ a.sb-me:active { transform: scale(0.98); }
 .seg-btn.needs-project { opacity: 0.4; cursor: not-allowed; }
 .seg-btn.needs-project:active { transform: none; }
 /* Свёрнутый сегмент (SegCollapse): видна выбранная кнопка, остальные выезжают вправо по клику.
-   Подложка ловит клик мимо; группа над ней, иначе клик по варианту закрыл бы её без выбора. */
-.seg-collapse { flex-wrap: nowrap; position: relative; }
+   Подложка ловит клик мимо; группа над ней, иначе клик по варианту закрыл бы её без выбора.
+   Ширина раскрывается через grid 0fr → 1fr — единственное место, где анимируем не transform/opacity:
+   без этого соседние кнопки строки фильтров перепрыгивали бы на новое место рывком. Сами варианты
+   выезжают пружиной (--ease-spring) каскадом по --i, а сворачиваются быстрее и без каскада. */
+.seg-collapse { flex-wrap: nowrap; position: relative; gap: 0; flex-shrink: 0; }
 .seg-collapse.open { z-index: 31; }
 .seg-scrim { position: fixed; inset: 0; z-index: 30; }
-.seg-collapse .seg-cur { animation: none; }
-.seg-caret { display: inline-flex; margin-left: -1px; color: var(--text-tertiary); transform: rotate(-90deg); transition: transform 200ms var(--ease-out), color 150ms ease; }
+.seg-collapse .seg-cur { animation: none; transition: background-color 200ms ease, color 200ms ease, transform 320ms var(--ease-spring); }
+.seg-collapse.open .seg-cur { transform: scale(1.03); }
+.seg-caret { display: inline-flex; margin-left: -1px; color: var(--text-tertiary); transform: rotate(-90deg); transition: transform 420ms var(--ease-spring), color 200ms ease; }
 .seg-collapse.open .seg-caret { transform: rotate(90deg); color: var(--accent); }
-.seg-collapse .seg-opt { animation: seg-slide 200ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 25ms); }
-@keyframes seg-slide { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
-.seg-collapse .seg-opt.muted { opacity: 0.7; animation-name: seg-slide-muted; }
-@keyframes seg-slide-muted { from { opacity: 0; transform: translateX(-8px); } to { opacity: 0.7; transform: none; } }
-.seg-collapse .seg-opt.needs-project { animation-name: seg-slide-dim; }
-@keyframes seg-slide-dim { from { opacity: 0; transform: translateX(-8px); } to { opacity: 0.4; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .seg-collapse .seg-opt { animation: none; } .seg-caret { transition: none; } }
+/* flex-shrink: 0 у обёртки и у группы: обрезка (overflow) обнуляет минимальную ширину, и в тесной строке
+   фильтров раскрытые варианты сжимались бы до обрывка — пусть лучше строка переносится. */
+.seg-opts { display: grid; grid-template-columns: 0fr; flex-shrink: 0; transition: grid-template-columns 300ms var(--ease-drawer); }
+.seg-collapse.open .seg-opts { grid-template-columns: 1fr; transition-duration: 420ms; }
+.seg-opts-in { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+/* Отступ от выбранной кнопки — полем первого варианта, а не padding обёртки: padding не дал бы колонке 0fr
+   схлопнуться до нуля, и в свёрнутом виде после выбранной кнопки оставался бы зазор. */
+.seg-opts-in > :first-child { margin-left: 4px; }
+.seg-collapse .seg-opt {
+    opacity: 0;
+    transform: translateX(-16px) scale(0.92);
+    transition: opacity 180ms ease, transform 240ms var(--ease-out), background-color 150ms ease, color 150ms ease;
+}
+.seg-collapse.open .seg-opt {
+    opacity: 1;
+    transform: none;
+    transition: opacity 280ms ease, transform 460ms var(--ease-spring), background-color 150ms ease, color 150ms ease;
+    transition-delay: calc(var(--i, 0) * 40ms + 40ms), calc(var(--i, 0) * 40ms + 40ms), 0ms, 0ms;
+}
+.seg-collapse.open .seg-opt.muted { opacity: 0.7; }
+.seg-collapse.open .seg-opt.needs-project { opacity: 0.4; }
+.seg-collapse.open .seg-opt:active { transform: scale(0.97); transition-delay: 0ms; }
+@media (prefers-reduced-motion: reduce) {
+    .seg-collapse .seg-opt, .seg-collapse.open .seg-opt { transform: none; transition: opacity 150ms ease; transition-delay: 0ms; }
+    .seg-collapse.open .seg-cur, .seg-caret { transition: none; }
+    .seg-collapse.open .seg-cur { transform: none; }
+    .seg-opts, .seg-collapse.open .seg-opts { transition: none; }
+}
 .filter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 /* Вкладки раздела в строке фильтров («Люди») — от края панели, без полосы на всю ширину, как в «Настройках». */
 .filter-row > .tabs { padding: 0; border-bottom: 0; }

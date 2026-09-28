@@ -2,7 +2,10 @@
    варианты вправо, выбор любого сворачивает группу обратно к нему. Esc и клик мимо — свернуть без выбора.
    Вид кнопки рисует вызывающий (ItemTemplate): у переключателя вида — иконка и подпись, у фильтра статусов — точка
    и счётчик. Мимо-клик ловит прозрачная подложка во весь экран, а не JS: слушатель на document пришлось бы снимать
-   на каждом сворачивании. *@
+   на каждом сворачивании.
+   Варианты лежат в разметке и в свёрнутом виде: так CSS плавно разводит ширину и в обе стороны, и при
+   сворачивании, а соседние кнопки строки фильтров едут следом, а не прыгают. inert убирает скрытые варианты из
+   Tab-обхода и от кликов. *@
 @typeparam TItem
 
 @if (_open)
@@ -15,19 +18,20 @@
             aria-haspopup="true" title="@(_open ? "Свернуть" : ItemTitle?.Invoke(Selected!))" @onclick="Toggle">
         @ItemTemplate(Selected!)<span class="seg-caret"><Icon Name="chevron-down" Size="11" /></span>
     </button>
-    @if (_open)
-    {
-        var i = 0;
-        @foreach (var item in Items)
-        {
-            if (Equals(item, Selected))
-                continue;
-            var captured = item;
-            <button type="button" class="seg-btn seg-opt @ItemClass?.Invoke(item)" style="--i:@(i++)"
-                    title="@ItemTitle?.Invoke(item)" @onclick="() => Pick(captured)">@ItemTemplate(item)</button>
-        }
-        @Extra
-    }
+    <div class="seg-opts" inert="@(!_open)">
+        <div class="seg-opts-in">
+            @{ var i = 0; }
+            @foreach (var item in Items)
+            {
+                if (Equals(item, Selected))
+                    continue;
+                var captured = item;
+                <button type="button" class="seg-btn seg-opt @ItemClass?.Invoke(item)" style="--i:@(i++)"
+                        title="@ItemTitle?.Invoke(item)" @onclick="() => Pick(captured)">@ItemTemplate(item)</button>
+            }
+            @Extra
+        </div>
+    </div>
 </div>
 
 @code {
