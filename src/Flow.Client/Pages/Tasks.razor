@@ -35,30 +35,11 @@
             @if (CurrentBoard is not null)
             {
                 var boardAccess = Access.For(CurrentBoard.Id);
+                @* У названия — только «Переименовать»: она правит само название. Остальные настройки проекта
+                   стоят в ряду фильтров (ProjectTools): в топбаре их ряд наезжал на широкую строку FQL. *@
                 @if (Permissions.CanRenameBoard(boardAccess))
                 {
-                    <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Class="topbar-tool" OnClick="StartRename" />
-                }
-                @if (Permissions.CanManageConfig(boardAccess))
-                {
-                    <DsIconButton Icon="list" Size="30" Title="Статусы проекта" Class="topbar-tool" OnClick="() => _statusesOpen = true" />
-                    <DsIconButton Icon="link" Size="30" Title="Workflow проекта" Class="topbar-tool" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/workflow"))" />
-                    <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Class="topbar-tool" OnClick="() => _typesOpen = true" />
-                    <DsIconButton Icon="check-square" Size="30" Title="Поля проекта" Class="topbar-tool" OnClick="() => _fieldsOpen = true" />
-                    <DsIconButton Icon="view" Size="30" Title="Экраны задач" Class="topbar-tool" OnClick="() => _screensOpen = true" />
-                }
-                @if (Permissions.CanManageTaskTemplates(boardAccess))
-                {
-                    <DsIconButton Icon="copy" Size="30" Title="Шаблоны задач" Class="topbar-tool" OnClick="() => _templatesOpen = true" />
-                }
-                <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Class="topbar-tool" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/milestones"))" />
-                @if (Permissions.CanManageScm(boardAccess))
-                {
-                    <DsIconButton Icon="code" Size="30" Title="Репозитории проекта" Class="topbar-tool" OnClick="() => _reposOpen = true" />
-                }
-                @if (Permissions.CanManageMembers(boardAccess))
-                {
-                    <DsIconButton Icon="users" Size="30" Title="Доступ к проекту" Class="topbar-tool" OnClick="() => _accessOpen = true" />
+                    <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Class="project-tool" OnClick="StartRename" />
                 }
             }
         }
@@ -129,11 +110,17 @@
                 }
                 <FilterMenu Current="CurrentFilter" />
             </div>
-            <div class="meta-line">
-                @if (CurrentView == TaskView.List)
+            <div class="filter-row-end">
+                <div class="meta-line">
+                    @if (CurrentView == TaskView.List)
+                    {
+                        @Ru.Tasks(_total)@(" · ")
+                    }@(CurrentBoard is { } b ? $"создан {Ru.Date(b.CreatedAt)}" : Ru.Projects(_boards.Count))
+                </div>
+                @if (CurrentBoard is { } toolsBoard)
                 {
-                    @Ru.Tasks(_total)@(" · ")
-                }@(CurrentBoard is { } b ? $"создан {Ru.Date(b.CreatedAt)}" : Ru.Projects(_boards.Count))
+                    @ProjectTools(toolsBoard)
+                }
             </div>
         </div>
 
@@ -471,6 +458,38 @@
             };
             return view is TaskView.Tree or TaskView.Backlog or TaskView.Roadmap && BoardId is null ? TaskView.List : view;
         }
+    }
+
+    /// <summary>
+    /// Настройки открытого проекта — ряд иконок на подложках в конце строки фильтров. Раньше стояли в топбаре
+    /// рядом с названием, и широкая строка FQL на них наезжала.
+    /// </summary>
+    private RenderFragment ProjectTools(BoardResponse board)
+    {
+        var access = Access.For(board.Id);
+        return @<div class="project-tools" role="toolbar" aria-label="Настройки проекта">
+            @if (Permissions.CanManageConfig(access))
+            {
+                <DsIconButton Icon="list" Size="30" Title="Статусы проекта" Class="project-tool" OnClick="() => _statusesOpen = true" />
+                <DsIconButton Icon="link" Size="30" Title="Workflow проекта" Class="project-tool" OnClick="@(() => Nav.NavigateTo($"boards/{board.Id}/workflow"))" />
+                <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Class="project-tool" OnClick="() => _typesOpen = true" />
+                <DsIconButton Icon="check-square" Size="30" Title="Поля проекта" Class="project-tool" OnClick="() => _fieldsOpen = true" />
+                <DsIconButton Icon="view" Size="30" Title="Экраны задач" Class="project-tool" OnClick="() => _screensOpen = true" />
+            }
+            @if (Permissions.CanManageTaskTemplates(access))
+            {
+                <DsIconButton Icon="copy" Size="30" Title="Шаблоны задач" Class="project-tool" OnClick="() => _templatesOpen = true" />
+            }
+            <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Class="project-tool" OnClick="@(() => Nav.NavigateTo($"boards/{board.Id}/milestones"))" />
+            @if (Permissions.CanManageScm(access))
+            {
+                <DsIconButton Icon="code" Size="30" Title="Репозитории проекта" Class="project-tool" OnClick="() => _reposOpen = true" />
+            }
+            @if (Permissions.CanManageMembers(access))
+            {
+                <DsIconButton Icon="users" Size="30" Title="Доступ к проекту" Class="project-tool" OnClick="() => _accessOpen = true" />
+            }
+        </div>;
     }
 
     /// <summary>Вариант переключателя вида. ProjectOnly — вид живёт внутри одного проекта (дерево, бэклог, роадмап).</summary>

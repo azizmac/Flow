@@ -771,10 +771,11 @@ a.sb-me:active { transform: scale(0.98); }
    Круглая подсветка от .ds-iconbtn в подвале сайдбара читалась как элемент из другого набора.
    Цвет — классом, а не инлайновым style: инлайн перебил бы и наведение, и фокус. */
 .sb-foot .ds-iconbtn { border-radius: var(--r-md); }
-/* Инструменты проекта в топбаре «Задач» (статусы, workflow, типы, поля…): у каждой кнопки своя подложка,
-   иначе ряд из десяти голых глифов сливается в одну полосу и не читается как набор кнопок. */
-.topbar-tool.ds-iconbtn { background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); border-radius: var(--r-md); color: var(--text-secondary); }
-.topbar-tool + .topbar-tool { margin-left: -6px; }
+/* Настройки проекта на экране «Задачи» (статусы, workflow, типы, поля…): у каждой кнопки своя подложка,
+   иначе ряд из десяти голых глифов сливается в одну полосу и не читается как набор кнопок. Ряд стоит в конце
+   строки фильтров (.project-tools), у названия проекта в топбаре — только «Переименовать». */
+.project-tool.ds-iconbtn { background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); border-radius: var(--r-md); color: var(--text-secondary); }
+.project-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .sb-logout { color: rgba(255, 255, 255, 0.45); }
 
 /* ---------- Auth screen (вход/выход через Flow.Auth, «нет доступа») ---------- */
@@ -1113,6 +1114,7 @@ a.sb-me:active { transform: scale(0.98); }
     .seg-opts, .seg-collapse.open .seg-opts { transition: none; }
 }
 .filter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.filter-row-end { display: flex; align-items: center; gap: 16px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 /* Вкладки раздела в строке фильтров («Люди») — от края панели, без полосы на всю ширину, как в «Настройках». */
 .filter-row > .tabs { padding: 0; border-bottom: 0; }
 
@@ -1972,7 +1974,7 @@ a.task-row { color: inherit; text-decoration: none; }
     .avatar-edit:hover .avatar-edit-cover, .avatar-edit:hover .avatar-edit-remove { opacity: 1; }
     .avatar-edit-remove:hover:not(:disabled) { color: #fff; }
     .sb-foot .ds-iconbtn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); color: #fff; }
-    .topbar-tool.ds-iconbtn:hover:not(:disabled) { background: var(--surface-raised); color: #fff; }
+    .project-tool.ds-iconbtn:hover:not(:disabled) { background: var(--surface-raised); color: #fff; }
     .ucard-row.lnk:hover { color: #fff; }
     .ucard-link:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
     .ucard-open:hover { color: var(--accent); }
@@ -2293,6 +2295,14 @@ a.task-row { color: inherit; text-decoration: none; }
 .tt-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
 .tt-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: 8px; min-height: 36px; }
 .tt-row.archived .tt-name, .tt-row.archived .type-ico { opacity: 0.5; }
+/* Подложки блоков в модалках настроек проекта (статусы, типы, поля, экраны): каждая строка — своя карточка,
+   блок «Новый …» — тоже, иначе список и форма добавления сливались в один сплошной текст. */
+.tt-list { gap: 6px; }
+.tt-row { padding: 6px 12px; background: rgba(0, 0, 0, 0.14); border: 1px solid var(--border-subtle); border-radius: var(--r-md); transition: background-color 150ms ease, border-color 150ms ease; }
+.tt-add, .cf-form { padding: 14px 16px; background: rgba(0, 0, 0, 0.14); border: 1px solid var(--border-subtle); border-radius: var(--r-md); }
+@media (hover: hover) and (pointer: fine) {
+    .tt-row.hover-row:hover { background: rgba(0, 0, 0, 0.22); border-color: var(--border); }
+}
 .tt-name {
     background: none; border: 0; padding: 0; color: #fff; cursor: text; text-align: left;
     font: var(--fw-semibold) 13.5px var(--font-display); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -2471,9 +2481,13 @@ a.task-row { color: inherit; text-decoration: none; }
 @media (hover: hover) and (pointer: fine) { .wf-gear:hover { color: #fff; } }
 
 /* Модалка «Статусы» проекта (docs/TZ_workflow_config.md §1) */
-.st-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
-.st-row { border-radius: 8px; padding: 4px; }
-.st-row.deleting { background: rgba(0, 0, 0, 0.16); }
+.st-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+/* Строка статуса — карточка, как .tt-row у типов и полей (см. «Подложки блоков в модалках»). */
+.st-row { border-radius: var(--r-md); padding: 6px 10px; background: rgba(0, 0, 0, 0.14); border: 1px solid var(--border-subtle); transition: background-color 150ms ease, border-color 150ms ease; }
+.st-row.deleting { background: rgba(0, 0, 0, 0.26); border-color: var(--border); }
+@media (hover: hover) and (pointer: fine) {
+    .st-row.hover-row:hover { background: rgba(0, 0, 0, 0.22); border-color: var(--border); }
+}
 .st-main { display: flex; align-items: center; gap: 8px; min-height: 34px; }
 .st-main .tt-name, .st-main .tt-name-input { flex: 1 1 auto; min-width: 60px; }
 .st-main .tt-name { display: block; text-align: left; }
@@ -2693,7 +2707,7 @@ a.task-row { color: inherit; text-decoration: none; }
 /* ---- Пользовательские поля (docs/TZ_task_model.md §4, этап 1D) ---- */
 .cf-row.on { background: rgba(255, 186, 0, 0.08); }
 .cf-key { font: var(--fw-semibold) 11.5px var(--font-mono); color: var(--text-tertiary); }
-.cf-form { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.cf-form { display: flex; flex-direction: column; gap: 12px; }
 .cf-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: end; }
 .cf-key-fixed { display: flex; flex-direction: column; gap: 6px; padding-bottom: 6px; }
 .cf-options { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
