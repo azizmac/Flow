@@ -29,5 +29,8 @@ public enum ProjectPermission
     ManageMilestones = 14,
 
     /// <summary>Привязывать репозитории Git-хостинга к проекту (docs/TZ_scm_integration.md §6): администратор проекта.</summary>
-    ManageScm = 15
+    ManageScm = 15,
+
+    /// <summary>Создавать, править и удалять шаблоны задач проекта (docs/TZ_workflow_config.md §5): Developer и выше.</summary>
+    ManageTaskTemplates = 16
 }

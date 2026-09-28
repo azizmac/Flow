@@ -31,6 +31,7 @@ public static class Permissions
     public static bool CanManageSprints(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageSprints);
 
     public static bool CanManageMilestones(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageMilestones);
+    public static bool CanManageTaskTemplates(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageTaskTemplates);
 
     public static bool CanManageScm(ProjectAccessResponse? access) => Has(access, ProjectPermission.ManageScm);
 

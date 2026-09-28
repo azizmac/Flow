@@ -11,7 +11,7 @@ using MediatR;
 namespace Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 
 /// <summary>Бросает ArgumentException/InvalidOperationException при невалидных данных (см. Board.CreateTask).</summary>
-internal sealed class TaskCreateCommandHandler(IBoardRepository boards, IUserRepository users, TaskCustomFields customFields, ITaskItemRepository tasks, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
+internal sealed class TaskCreateCommandHandler(IBoardRepository boards, IUserRepository users, ITaskTemplateRepository templates, TaskCustomFields customFields, ITaskItemRepository tasks, ITaskActivityRepository activities, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskCreateCommand, TaskResponse?>
 {
     public async Task<TaskResponse?> Handle(TaskCreateCommand request, CancellationToken cancellationToken)
@@ -59,6 +59,18 @@ internal sealed class TaskCreateCommandHandler(IBoardRepository boards, IUserRep
             task.Assign(assignee.Id);
         }
 
+        // Шаблон (этап 3G): название, тип, поля и описание форма уже подставила из него сама — человек мог их поправить;
+        // здесь добавляется то, чего в форме нет: чек-лист и подзадачи.
+        TaskTemplate? template = null;
+        if (request.TemplateId is { } templateId)
+        {
+            template = await templates.GetByIdAsync(templateId, cancellationToken);
+            if (template is null || template.BoardId != board.Id)
+                throw new InvalidOperationException("Шаблон задачи в этом проекте не найден.");
+            foreach (var text in template.Checklist)
+                task.AddChecklistItem(text);
+        }
+
         // Экран создания (docs/TZ_workflow_config.md §3): его «обязательные» проверяет сервер, а не только форма.
         var missing = board.MissingOnCreateScreen(task);
         if (missing.Count > 0)
@@ -72,9 +84,58 @@ internal sealed class TaskCreateCommandHandler(IBoardRepository boards, IUserRep
             activities.Add(TaskActivity.ChildAdded(parent.Id, actor.Id, task.Id));
         searchIndex.Enqueue(SearchSourceType.Task, task.Id, board.Id, SearchIndexOperation.Upsert);
 
+        // Подзадачи шаблона — той же транзакцией, сразу за родителем в ручном порядке.
+        var subtasks = template is null ? [] : SpawnSubtasks(board, task, template, actor.Id);
+        template?.MarkUsed();
+        void RankSubtasks()
+        {
+            var ranks = FractionalIndex.Sequence(task.Rank, subtasks.Count);
+            for (var i = 0; i < subtasks.Count; i++)
+                subtasks[i].SetRank(ranks[i]);
+        }
+
+        RankSubtasks();
         await TaskRanks.SaveAsync(unitOfWork, async () =>
-            task.SetRank(FractionalIndex.Between(await tasks.GetMaxRankAsync(board.Id, task.Id, cancellationToken), null)), cancellationToken);
+        {
+            task.SetRank(FractionalIndex.Between(await tasks.GetMaxRankAsync(board.Id, task.Id, cancellationToken), null));
+            RankSubtasks();
+        }, cancellationToken);
 
         return task.ToResponse();
+    }
+
+    /// <summary>
+    /// Подзадачи из шаблона: тип шаблона, если он ниже родителя, иначе ближайший уровнем ниже (при равных — по
+    /// умолчанию). Статус начальный, исполнителя нет; обязательные поля берут значение родителя.
+    /// </summary>
+    private List<TaskItem> SpawnSubtasks(Board board, TaskItem parent, TaskTemplate template, Guid actorId)
+    {
+        var parentType = board.GetTaskType(parent.TypeId);
+        var created = new List<TaskItem>();
+        foreach (var spec in template.Subtasks)
+        {
+            var type = spec.TypeId is { } typeId && board.TaskTypes.FirstOrDefault(t => t.Id == typeId) is { IsArchived: false } own && own.Level > parentType.Level
+                ? own
+                : board.TaskTypes.Where(t => !t.IsArchived && t.Level > parentType.Level)
+                      .OrderBy(t => t.Level).ThenByDescending(t => t.IsDefault).ThenBy(t => t.SortOrder).FirstOrDefault()
+                  ?? throw new InvalidOperationException($"У задачи типа «{parentType.Name}» не бывает подзадач — выберите тип выше.");
+
+            var sub = board.CreateTask(spec.Title, createdById: actorId, typeId: type.Id);
+            sub.SetParent(parent, type, parentType);
+            foreach (var text in spec.Checklist)
+                sub.AddChecklistItem(text);
+            foreach (var field in board.MissingRequiredFields(sub, type.Id))
+                if (parent.GetCustomField(field.Id) is { } value)
+                    sub.SetCustomField(field, value);
+            TaskCustomFields.EnsureRequired(board, sub, type.Id);
+
+            tasks.Add(sub);
+            activities.Add(TaskActivity.Created(sub.Id, actorId));
+            activities.Add(TaskActivity.ChildAdded(parent.Id, actorId, sub.Id));
+            searchIndex.Enqueue(SearchSourceType.Task, sub.Id, board.Id, SearchIndexOperation.Upsert);
+            created.Add(sub);
+        }
+
+        return created;
     }
 }

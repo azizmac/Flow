@@ -72,6 +72,7 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<ITaskLinkRepository, TaskLinkRepository>();
         services.AddScoped<ISavedFilterRepository, SavedFilterRepository>();
         services.AddScoped<IBoardTemplateRepository, BoardTemplateRepository>();
+        services.AddScoped<ITaskTemplateRepository, TaskTemplateRepository>();
         services.AddScoped<ITaskActivityRepository, TaskActivityRepository>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();

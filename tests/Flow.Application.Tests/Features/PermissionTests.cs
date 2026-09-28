@@ -158,6 +158,27 @@ public class PermissionTests
         Assert.Equal("Спринт 1", (await mediator.Send(new SprintCreateCommand(actor, boardId), CancellationToken.None))!.Name);
     }
 
+    // ---- шаблоны задач (docs/TZ_workflow_config.md §5): ManageTaskTemplates — Developer и выше ----
+
+    [Theory]
+    [InlineData(UserRole.Reader, false)]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Developer, true)]
+    [InlineData(UserRole.Admin, true)]
+    public async Task Developer_And_Above_Manage_Task_Templates(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "user");
+        var boardId = await CreateBoardAsync(mediator);
+        var create = new Flow.Application.Features.TaskTemplates.TaskTemplateCreateCommand(actor, boardId,
+            new Flow.Shared.Contracts.Tasks.SaveTaskTemplateRequest("Релиз", "Релиз {n}"));
+
+        if (allowed)
+            Assert.Equal("Релиз", (await mediator.Send(create, CancellationToken.None))!.Name);
+        else
+            await Forbidden(() => mediator.Send(create, CancellationToken.None));
+    }
+
     // ---- вехи (docs/TZ_task_views.md §6): ManageMilestones — Developer и выше ----
 
     [Theory]

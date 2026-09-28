@@ -157,6 +157,7 @@ public static class TestMediatorFactory
         services.AddSingleton<ITaskLinkRepository>(links);
         services.AddSingleton<ISavedFilterRepository>(new FakeSavedFilterRepository());
         services.AddSingleton<IBoardTemplateRepository>(new FakeBoardTemplateRepository());
+        services.AddSingleton<ITaskTemplateRepository>(new FakeTaskTemplateRepository());
         services.AddSingleton<IDashboardRepository>(new FakeDashboardRepository());
         services.AddSingleton<ITaskCodeAliasRepository>(new FakeTaskCodeAliasRepository(tasks));
         services.AddSingleton<ITaskRecurrenceRepository>(new FakeTaskRecurrenceRepository());

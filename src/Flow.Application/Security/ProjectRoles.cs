@@ -22,7 +22,8 @@ public static class ProjectRoles
             {
                 ProjectPermission.ViewProject, ProjectPermission.CreateTask, ProjectPermission.EditOwnTask,
                 ProjectPermission.EditAnyTask, ProjectPermission.AssignAnyone, ProjectPermission.Comment,
-                ProjectPermission.Attach, ProjectPermission.ManageSprints, ProjectPermission.ManageMilestones
+                ProjectPermission.Attach, ProjectPermission.ManageSprints, ProjectPermission.ManageMilestones,
+                ProjectPermission.ManageTaskTemplates
             },
             [ProjectRole.Admin] = Enum.GetValues<ProjectPermission>().ToHashSet()
         };

@@ -2815,3 +2815,13 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .ac-result { margin-left: auto; font-size: 12.5px; }
 .ac-result.ok { color: var(--sage); }
 .ac-result.fail { color: var(--danger); }
+
+/* Шаблоны задач (этап 3G) */
+.tt-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+.tt-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; color: #fff; font: var(--fw-medium) 13.5px var(--font-text); }
+.tt-name .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-form { display: flex; flex-direction: column; gap: 10px; }
+.tt-sub { display: grid; grid-template-columns: minmax(0, 1fr) 190px auto auto; gap: 10px; align-items: center; }
+.tpl-pick { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.tpl-pick .mud-select { max-width: 280px; }
+.tpl-pick .hint { font-size: 12px; }

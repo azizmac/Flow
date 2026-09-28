@@ -20,6 +20,24 @@
         <DsIconButton Icon="close" Size="30" Title="Закрыть (Esc)" OnClick="Close" />
     </div>
     <div class="drawer-body" @onkeydown="OnBodyKey">
+        @if (_templates.Count > 0)
+        {
+            @* Шаблон задачи (этап 3G) заполняет форму — поля можно поправить; чек-лист и подзадачи создаст сервер. *@
+            <div class="tpl-pick">
+                <MudSelect T="Guid?" Label="Шаблон" Value="_templateId" ValueChanged="ApplyTemplate" Dense="true" Variant="Variant.Text"
+                           PopoverClass="flow-pop" Disabled="_busy">
+                    <MudSelectItem T="Guid?" Value="null">Без шаблона</MudSelectItem>
+                    @foreach (var t in _templates)
+                    {
+                        <MudSelectItem T="Guid?" Value="t.Id">@t.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (_templates.FirstOrDefault(t => t.Id == _templateId) is { } picked && (picked.Checklist.Count > 0 || picked.Subtasks.Count > 0))
+                {
+                    <span class="hint">вместе с задачей: @(picked.Checklist.Count > 0 ? $"чек-лист ({picked.Checklist.Count})" : "")@(picked.Checklist.Count > 0 && picked.Subtasks.Count > 0 ? ", " : "")@(picked.Subtasks.Count > 0 ? $"подзадачи ({picked.Subtasks.Count})" : "")</span>
+                }
+            </div>
+        }
         <input id="td-title" class="title-input" placeholder="Название задачи" value="@_title" maxlength="500"
                @oninput="e => _title = e.Value?.ToString() ?? string.Empty" />
         @* Дубль дешевле не создать, чем потом склеивать: похожие показываются прямо по ходу набора. *@
@@ -111,7 +129,8 @@ else if (Item is not null)
             <RowMenu ShowOpen="false" ShowRename="CanEdit" ShowDelete="CanEdit" Size="30" Style="color:rgba(255,255,255,0.5)"
                      OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => OnDelete.InvokeAsync(Item)" ShowRestructure="CanEdit"
                      OnSplit="() => _restructure = TaskRestructureMode.Split" OnMerge="() => _restructure = TaskRestructureMode.Merge"
-                     OnMove="() => _restructure = TaskRestructureMode.Move" />
+                     OnMove="() => _restructure = TaskRestructureMode.Move"
+                     ShowSaveTemplate="Permissions.CanManageTaskTemplates(Access.For(Board.Id))" OnSaveTemplate="() => _saveTemplateOpen = true" />
             <DsIconButton Icon="close" Size="30" Title="Закрыть (Esc)" OnClick="Close" />
         </div>
     </div>
@@ -232,6 +251,11 @@ else if (Item is not null)
     <TaskRestructure Task="Item" @bind-Mode="_restructure" OnDone="AfterRestructure" />
 }
 
+@if (_saveTemplateOpen && Item is not null)
+{
+    <SaveTaskTemplateDialog Task="Item" OnClose="() => _saveTemplateOpen = false" />
+}
+
 @code {
     /// <summary>Раскладка карточки для типа задачи (экран типа → «для всех типов» → встроенный).</summary>
     private IReadOnlyList<ScreenFieldDto> DetailLayout => ScreenLayout.Resolve(Board, Current.TypeId, ScreenContext.Detail, Current.CustomFields);
@@ -331,6 +355,11 @@ else if (Item is not null)
     /// <summary>Значения пользовательских полей в форме создания — уходят в CreateTaskRequest.</summary>
     private Dictionary<Guid, System.Text.Json.JsonElement> _newCustomFields = [];
     private Guid? _assigneeId;
+    /// <summary>Шаблоны задач проекта для формы создания (этап 3G) и выбранный; перечитываются при смене проекта.</summary>
+    private List<TaskTemplateResponse> _templates = [];
+    private Guid? _templateId;
+    private Guid _templatesBoardId;
+    private bool _saveTemplateOpen;
     private bool _busy;
     private bool _whoOpen;
     private readonly string _whoId = "who-" + Guid.NewGuid().ToString("N")[..8];
@@ -384,6 +413,7 @@ else if (Item is not null)
                 _statusId = InitialStatusId();
                 _typeId = DefaultTypeId();
                 _newCustomFields = [];
+                _templateId = null;
                 _focusTitle = true;
             }
             else if (_boardId != Board.Id)
@@ -394,8 +424,10 @@ else if (Item is not null)
                 _statusId = InitialStatusId();
                 _typeId = DefaultTypeId();
                 _newCustomFields = []; // поля — у каждого проекта свои
+                _templateId = null;
             }
 
+            await LoadTemplatesAsync();
             return;
         }
 
@@ -474,6 +506,30 @@ else if (Item is not null)
         }
     }
 
+    private async Task LoadTemplatesAsync()
+    {
+        if (_templatesBoardId == Board.Id)
+            return;
+        _templatesBoardId = Board.Id;
+        _templates = [];
+        var result = await Api.GetTaskTemplates(Board.Id);
+        if (result.Ok && _templatesBoardId == Board.Id)
+            _templates = result.Value!.ToList();
+    }
+
+    /// <summary>Шаблон заполняет форму заново; «Без шаблона» оставляет введённое как есть.</summary>
+    private void ApplyTemplate(Guid? templateId)
+    {
+        _templateId = templateId;
+        if (_templates.FirstOrDefault(t => t.Id == templateId) is not { } t)
+            return;
+        _title = t.RenderedTitle;
+        _description = t.Description ?? "";
+        _typeId = t.TypeId is { } typeId && Board.TaskTypes.Any(x => x.Id == typeId && !x.IsArchived) ? typeId : DefaultTypeId();
+        _priority = t.Priority;
+        _newCustomFields = new(t.CustomFields);
+    }
+
     private async Task Create()
     {
         var title = _title.Trim();
@@ -485,7 +541,7 @@ else if (Item is not null)
         var result = await Api.CreateTask(Board.Id, new CreateTaskRequest(title, NullIfEmpty(_description), _statusId,
             _typeId == Guid.Empty ? null : _typeId, _priority,
             CustomFields: _newCustomFields.Count == 0 ? null : _newCustomFields.ToDictionary(p => p.Key, p => (System.Text.Json.JsonElement?)p.Value),
-            AssigneeId: _assigneeId));
+            AssigneeId: _assigneeId, TemplateId: _templateId));
         _busy = false;
 
         if (!result.Ok)

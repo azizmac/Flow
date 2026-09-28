@@ -48,7 +48,7 @@ public class TasksController(IMediator mediator, IActorAccessor actor) : Control
         {
             var response = await mediator.Send(
                 new TaskCreateCommand(actor.Require(), boardId, request.Title, request.Description, request.StatusId,
-                    request.TypeId, request.Priority?.ToDomainPriority(), request.ParentId, request.CustomFields, request.AssigneeId),
+                    request.TypeId, request.Priority?.ToDomainPriority(), request.ParentId, request.CustomFields, request.AssigneeId, request.TemplateId),
                 cancellationToken);
 
             return response is null

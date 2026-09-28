@@ -25,6 +25,9 @@ public interface IPermissionService
     /// <summary>Создавать, запускать, завершать и править спринты проекта — ManageSprints (Developer+).</summary>
     void EnsureCanManageSprints(ProjectAccessInfo access);
 
+    /// <summary>Создавать, править и удалять шаблоны задач проекта — ManageTaskTemplates (Developer+, этап 3G).</summary>
+    void EnsureCanManageTaskTemplates(ProjectAccessInfo access);
+
     /// <summary>Создавать, править, закрывать и удалять вехи проекта — ManageMilestones (Developer+).</summary>
     void EnsureCanManageMilestones(ProjectAccessInfo access);
 

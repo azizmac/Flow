@@ -47,6 +47,10 @@
                     <DsIconButton Icon="check-square" Size="30" Title="Поля проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _fieldsOpen = true" />
                     <DsIconButton Icon="view" Size="30" Title="Экраны задач" Style="color:rgba(255,255,255,0.45)" OnClick="() => _screensOpen = true" />
                 }
+                @if (Permissions.CanManageTaskTemplates(boardAccess))
+                {
+                    <DsIconButton Icon="copy" Size="30" Title="Шаблоны задач" Style="color:rgba(255,255,255,0.45)" OnClick="() => _templatesOpen = true" />
+                }
                 <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/milestones"))" />
                 @if (Permissions.CanManageScm(boardAccess))
                 {
@@ -374,6 +378,11 @@
     <StatusesDialog Board="statusesBoard" OnChanged="OnStatusesChanged" OnClose="() => _statusesOpen = false" />
 }
 
+@if (_templatesOpen && CurrentBoard is { } templatesBoard)
+{
+    <TaskTemplatesDialog Board="templatesBoard" OnClose="() => _templatesOpen = false" />
+}
+
 @if (_screensOpen && CurrentBoard is { } screensBoard)
 {
     <ScreensDialog Board="screensBoard" OnChanged="ReplaceBoard" OnClose="() => _screensOpen = false" />
@@ -545,6 +554,7 @@
     private bool _typesOpen;
     private bool _fieldsOpen;
     private bool _screensOpen;
+    private bool _templatesOpen;
 
     /// <summary>Открыта модалка статусов текущего проекта.</summary>
     private bool _statusesOpen;

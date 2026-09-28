@@ -26,6 +26,7 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
 
     public DbSet<SavedFilter> SavedFilters => Set<SavedFilter>();
     public DbSet<BoardTemplate> BoardTemplates => Set<BoardTemplate>();
+    public DbSet<TaskTemplate> TaskTemplates => Set<TaskTemplate>();
 
     public DbSet<SavedFilterStar> SavedFilterStars => Set<SavedFilterStar>();
 

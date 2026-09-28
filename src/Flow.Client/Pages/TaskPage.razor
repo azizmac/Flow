@@ -32,7 +32,8 @@
             <RowMenu ShowOpen="false" ShowRename="CanEdit" ShowDelete="CanEdit" Size="30" Style="color:rgba(255,255,255,0.5)"
                      OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => _deleting = true" ShowRestructure="CanEdit"
                      OnSplit="() => _restructure = TaskRestructureMode.Split" OnMerge="() => _restructure = TaskRestructureMode.Merge"
-                     OnMove="() => _restructure = TaskRestructureMode.Move" />
+                     OnMove="() => _restructure = TaskRestructureMode.Move"
+                     ShowSaveTemplate="Permissions.CanManageTaskTemplates(Access.For(_task!.BoardId))" OnSaveTemplate="() => _saveTemplateOpen = true" />
         }
     </div>
 </div>
@@ -214,6 +215,11 @@ else if (_task is not null && _board is not null)
     <TaskRestructure Task="_task" @bind-Mode="_restructure" OnDone="AfterRestructure" />
 }
 
+@if (_saveTemplateOpen && _task is not null)
+{
+    <SaveTaskTemplateDialog Task="_task" OnClose="() => _saveTemplateOpen = false" />
+}
+
 @if (_deleting && _task is not null)
 {
     <ConfirmDialog Title="@($"Удалить задачу {_task.Code}?")"
@@ -272,6 +278,7 @@ else if (_task is not null && _board is not null)
     private CancellationTokenSource? _savedCts;
     private bool _deleting;
     private TaskRestructureMode _restructure;
+    private bool _saveTemplateOpen;
 
     // Права в проекте задачи (docs/TZ_project_access.md) — только показ; Flow.Api ответит 403, если что.
     private UserResponse? Me => Users.Find(State.CurrentUserId);

@@ -49,6 +49,13 @@ public interface IFlowApi
     Task<ApiResult<BoardResponse>> GetBoard(Guid id, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> CreateBoard(CreateBoardRequest request, CancellationToken ct = default);
 
+    // Шаблоны задач (этап 3G)
+    Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Tasks.TaskTemplateResponse>>> GetTaskTemplates(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Tasks.TaskTemplateResponse>> CreateTaskTemplate(Guid boardId, Flow.Shared.Contracts.Tasks.SaveTaskTemplateRequest request, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Tasks.TaskTemplateResponse>> UpdateTaskTemplate(Guid templateId, Flow.Shared.Contracts.Tasks.SaveTaskTemplateRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteTaskTemplate(Guid templateId, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Tasks.TaskTemplateResponse>> SaveTaskAsTemplate(Guid taskId, string name, CancellationToken ct = default);
+
     // Шаблоны проектов и перенос конфигурации (этап 3F)
     Task<ApiResult<IReadOnlyList<BoardTemplateResponse>>> GetBoardTemplates(CancellationToken ct = default);
     Task<ApiResult<BoardTemplateResponse>> SaveBoardAsTemplate(Guid boardId, SaveBoardTemplateRequest request, CancellationToken ct = default);
