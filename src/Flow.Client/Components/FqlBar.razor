@@ -1,8 +1,10 @@
 @* Строка FQL на экране «Задачи» (docs/TZ_task_views.md §7): запрос складывается с панелью фильтров через AND.
+   Живёт в топбаре на месте поля поиска — это второй режим того же поиска (чип «FQL» в SearchBox), а не отдельная
+   полоса под фильтрами: два поиска на экране дублировали друг друга. Крестик возвращает обычный поиск.
    Enter применяет (запрос уходит в адрес ?fql=, ссылкой можно поделиться), подсказки у курсора — с сервера
    (GET /tasks/query/suggest): поля, операторы, значения поля, связки. Пока список подсказок открыт, ↑↓ Enter Tab Esc
    принадлежат ему — preventDefault делает flow.js по data-listnav (declarative preventDefault опоздал бы на клавишу).
-   Ошибка сервера показывается под строкой, её место в запросе подчёркнуто.
+   Ошибку сервера строка только подсвечивает рамкой, текст ошибки — FqlErrorLine под рядом фильтров.
    Отклонение от ТЗ: поле — обычный input, а не однострочный CodeMirror: подсветку синтаксиса отложили, подсказки
    и подчёркивание ошибки работают и так. *@
 @implements IDisposable
@@ -10,11 +12,12 @@
 @inject BrowserInterop Browser
 
 <div class="fql-bar">
-    <div id="@LineId" class="fql-line @(Error is not null ? "error" : "") @(_morphing ? "morphing" : "")">
+    <div class="fql-line @(Error is not null ? "error" : "")">
         <span class="fql-tag">FQL</span>
         <div class="fql-input-wrap">
             <input id="@InputId" class="fql-input" value="@_text" autocomplete="off" spellcheck="false"
-                   placeholder="project = WEB AND assignee = me() AND statusCategory != done ORDER BY priority DESC"
+                   placeholder="assignee = me() AND statusCategory != done"
+                   title="Например: project = WEB AND assignee = me() AND statusCategory != done ORDER BY priority DESC"
                    data-listnav="@(_items.Count > 0 ? "1" : null)"
                    @oninput="OnInput" @onkeydown="OnKey" @onclick="Suggest" @onblur="OnBlur" />
             @if (_items.Count > 0)
@@ -37,25 +40,17 @@
                 </div>
             }
         </div>
-        <DsButton Variant="primary" Size="sm" OnClick="Apply">Найти</DsButton>
+        <DsIconButton Icon="search" Size="26" Class="fql-act" Title="Найти (Enter)" OnClick="Apply" />
         @if (CanSave)
         {
-            <DsButton Variant="secondary" Size="sm" OnClick="() => OnSave.InvokeAsync(_text.Trim())">Сохранить…</DsButton>
+            <DsIconButton Icon="star" Size="26" Class="fql-act" Title="Сохранить фильтр…" OnClick="() => OnSave.InvokeAsync(_text.Trim())" />
         }
-        <DsIconButton Icon="close-simple" Size="28" Title="Закрыть строку запроса" Style="color:rgba(255,255,255,0.45)" OnClick="() => OnClose.InvokeAsync()" />
+        <DsIconButton Icon="close-simple" Size="26" Class="fql-act" Title="Обычный поиск (сбросить запрос)" OnClick="() => OnClose.InvokeAsync()" />
     </div>
-    @if (Error is { } error)
-    {
-        <div class="fql-error">
-            <code class="fql-echo">@Before(error)<mark>@At(error)</mark>@After(error)</code>
-            <span>@error.Message</span>
-        </div>
-    }
 </div>
 
 @code {
     public const string InputId = "fql-input";
-    public const string LineId = "fql-line";
 
     /// <summary>Применённый запрос (из адреса): при его смене поле показывает его.</summary>
     [Parameter] public string? Value { get; set; }
@@ -65,11 +60,8 @@
     [Parameter] public EventCallback<string> OnSave { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
-    /// <summary>
-    /// Id кнопки, из которой строка вырастает при появлении (морф в flow.js); null — строка просто стоит на месте
-    /// (открыли по ссылке с ?fql=). Читается один раз: анимация — только у первого рендера.
-    /// </summary>
-    [Parameter] public string? MorphFrom { get; set; }
+    /// <summary>Поставить курсор в поле при появлении — строку открыли чипом «FQL», а не пришли по ссылке с ?fql=.</summary>
+    [Parameter] public bool Autofocus { get; set; }
 
     private const int DebounceMs = 150;
 
@@ -80,25 +72,11 @@
     private int _replaceFrom;
     private int _replaceLength;
     private CancellationTokenSource? _cts;
-    private bool _morphing;
 
-    protected override void OnInitialized() => _morphing = MorphFrom is not null;
-
-    /// <summary>
-    /// Строка отрисована скрытой (класс morphing), JS запускает морф и снимает класс сам. Флаг сбрасываем и здесь:
-    /// иначе следующий рендер (ошибка, подсказки) снова вписал бы morphing в class и спрятал строку.
-    /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || !_morphing)
-            return;
-
-        var ok = await Browser.MorphInAsync(MorphFrom!, LineId);
-        _morphing = false;
-        if (!ok)
-            StateHasChanged();
-
-        await Browser.FocusAsync(InputId);
+        if (firstRender && Autofocus)
+            await Browser.FocusAsync(InputId);
     }
 
     protected override void OnParametersSet()
@@ -109,19 +87,6 @@
         _shownValue = Value;
         _text = Value ?? "";
         _items = [];
-    }
-
-    private string Before(FqlErrorResponse e) => Slice(0, e.Position);
-    private string At(FqlErrorResponse e) => e.Position >= _shownText.Length ? "␣" : Slice(e.Position, e.Length);
-    private string After(FqlErrorResponse e) => Slice(e.Position + e.Length, _shownText.Length);
-
-    /// <summary>Ошибка относится к применённому запросу, а не к тому, что человек уже успел допечатать.</summary>
-    private string _shownText => Value ?? "";
-
-    private string Slice(int from, int length)
-    {
-        from = Math.Clamp(from, 0, _shownText.Length);
-        return _shownText.Substring(from, Math.Clamp(length, 0, _shownText.Length - from));
     }
 
     private static string KindGlyph(string kind) => kind switch

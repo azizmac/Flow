@@ -64,7 +64,17 @@
         }
     </div>
     <div class="topbar-right">
-        <SearchBox Placeholder="Найти задачу или код..." Value="@_search" ValueChanged="OnSearchChanged" />
+        @* Поиск один, в двух режимах: подстрока (по названию и коду) или запрос FQL — чип «FQL» в поле
+           меняет его на строку запроса на том же месте, крестик строки возвращает обычный поиск. *@
+        @if (FqlVisible)
+        {
+            <FqlBar Value="@EffectiveFql" Error="_fqlError" Autofocus="_fqlFocus"
+                    OnApply="ApplyFql" OnSave="OpenSave" OnClose="CloseFql" />
+        }
+        else
+        {
+            <SearchBox Placeholder="Найти задачу или код..." Value="@_search" ValueChanged="OnSearchChanged" OnFql="OpenFql" />
+        }
         @if (CanCreateTask)
         {
             <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate" Disabled="_boards.Count == 0">Создать задачу</DsButton>
@@ -118,8 +128,6 @@
                             title="Задачи, где я исполнитель" @onclick="ToggleMine">Мои задачи</button>
                 }
                 <FilterMenu Current="CurrentFilter" />
-                <button type="button" id="@FqlToggleId" class="seg-btn solo @(FqlVisible ? "on" : "")" @onclick="OpenFql"
-                        title="@(HasPanelFilters && !FqlVisible ? "Показать фильтры строкой FQL" : "Строка запроса FQL")">FQL</button>
             </div>
             <div class="meta-line">
                 @if (CurrentView == TaskView.List)
@@ -129,10 +137,9 @@
             </div>
         </div>
 
-        @if (FqlVisible)
+        @if (FqlVisible && _fqlError is { } fqlError)
         {
-            <FqlBar Value="@EffectiveFql" Error="_fqlError" MorphFrom="@(_fqlMorph ? FqlToggleId : null)"
-                    OnApply="ApplyFql" OnSave="OpenSave" OnClose="CloseFql" />
+            <FqlErrorLine Error="fqlError" Query="@EffectiveFql" />
         }
 
         @if (IsCalendarView)
@@ -640,9 +647,8 @@
     private string? EffectiveFql => Fql ?? CurrentFilter?.Query;
 
     private bool _fqlOpen;
-    /// <summary>Строку открыли кнопкой — она вырастает из кнопки; по ссылке с ?fql= появляется без анимации.</summary>
-    private bool _fqlMorph;
-    private const string FqlToggleId = "fql-toggle";
+    /// <summary>Строку открыли чипом «FQL» — курсор сразу в неё; по ссылке с ?fql= фокус не трогаем.</summary>
+    private bool _fqlFocus;
     private FqlErrorResponse? _fqlError;
     private string? _saveQuery;
 
@@ -1040,22 +1046,13 @@
     // ---- FQL и сохранённые фильтры ----
 
     /// <summary>
-    /// Кнопка «FQL»: при пустой строке и включённой панели — «Показать как FQL»: фильтры панели переезжают в строку
-    /// (проект остаётся в селекторе), дальше их можно править текстом. Иначе просто открывает строку.
+    /// Чип «FQL» в поле поиска: поле становится строкой запроса. При включённой панели — «Показать как FQL»:
+    /// фильтры панели и набранный текст переезжают в строку (проект остаётся в селекторе), дальше их можно
+    /// править текстом — так два поиска не действуют одновременно.
     /// </summary>
-    private async Task OpenFql()
+    private void OpenFql()
     {
-        if (FqlVisible && string.IsNullOrWhiteSpace(EffectiveFql))
-        {
-            await Browser.MorphOutAsync(FqlToggleId, FqlBar.LineId);
-            _fqlOpen = false;
-            _fqlMorph = false;
-            return;
-        }
-
-        // Появляется — вырастет из кнопки и сама возьмёт фокус после морфа; уже открытую только фокусируем.
-        var appearing = !FqlVisible;
-        _fqlMorph = appearing;
+        _fqlFocus = true;
         _fqlOpen = true;
         if (string.IsNullOrWhiteSpace(EffectiveFql) && HasPanelFilters)
         {
@@ -1069,12 +1066,6 @@
                 ["fql"] = fql
             }), replace: true);
         }
-
-        if (appearing)
-            return;
-
-        await Task.Delay(50);
-        await Browser.FocusAsync(FqlBar.InputId);
     }
 
     /// <summary>Панель фильтров строкой FQL — то же условие, что сервер строит из query-параметров.</summary>
@@ -1111,11 +1102,11 @@
         Nav.NavigateTo(Nav.GetUriWithQueryParameter("fql", fql), replace: true);
     }
 
-    private async Task CloseFql()
+    /// <summary>Крестик строки: обратно к обычному поиску — запрос и открытый сохранённый фильтр снимаются.</summary>
+    private void CloseFql()
     {
-        await Browser.MorphOutAsync(FqlToggleId, FqlBar.LineId);
         _fqlOpen = false;
-        _fqlMorph = false;
+        _fqlFocus = false;
         _fqlError = null;
         Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["fql"] = null, ["filter"] = null }), replace: true);
     }

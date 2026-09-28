@@ -1,5 +1,7 @@
 @* Поле поиска в шапке: иконка, инпут, крестик очистки. Esc в поле очищает запрос
-   (и не всплывает — иначе глобальный хоткей закрыл бы дровер вместо очистки). *@
+   (и не всплывает — иначе глобальный хоткей закрыл бы дровер вместо очистки).
+   OnFql — экран «Задачи»: чип «FQL» в конце поля переключает его в строку запроса (FqlBar на том же месте),
+   чтобы у экрана был один поиск, а не два. *@
 
 <label class="search @(HasValue ? "filled" : "")">
     <Icon Name="search" Size="16" />
@@ -11,6 +13,10 @@
             <Icon Name="close-simple" Size="12" />
         </button>
     }
+    @if (OnFql.HasDelegate)
+    {
+        <button type="button" class="search-mode" title="Искать запросом FQL" @onclick="() => OnFql.InvokeAsync()">FQL</button>
+    }
 </label>
 
 @code {
@@ -18,6 +24,7 @@
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
     [Parameter] public string? Placeholder { get; set; }
     [Parameter] public string? Id { get; set; }
+    [Parameter] public EventCallback OnFql { get; set; }
 
     private bool HasValue => Value.Length > 0;
 
