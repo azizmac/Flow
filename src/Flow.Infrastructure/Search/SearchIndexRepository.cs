@@ -19,7 +19,7 @@ internal sealed class SearchIndexRepository(FlowDbContext db) : ISearchIndexRepo
     private const int ReindexPriority = 1;
 
     private static readonly SearchSourceType[] AllTypes =
-        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User, SearchSourceType.Attachment];
+        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User, SearchSourceType.Attachment, SearchSourceType.Development];
 
     public async Task<SearchIndexStatistics> GetStatisticsAsync(string modelVersion, int maxAttempts, CancellationToken cancellationToken)
     {
@@ -210,6 +210,14 @@ internal sealed class SearchIndexRepository(FlowDbContext db) : ISearchIndexRepo
             """
             SELECT a."Id" AS "SourceId", a."BoardId" AS "BoardId" FROM "Attachments" a
             WHERE @boardId::uuid IS NULL OR a."BoardId" = @boardId
+            """,
+
+        // PR и коммиты (этап 5E): ветки не индексируются — их имя и так код и название задачи.
+        SearchSourceType.Development =>
+            """
+            SELECT l."Id" AS "SourceId", t."BoardId" AS "BoardId"
+            FROM "ScmLinks" l JOIN "TaskItems" t ON t."Id" = l."TaskId"
+            WHERE l."Kind" <> 0 AND (@boardId::uuid IS NULL OR t."BoardId" = @boardId)
             """,
 
         // Люди к проекту не привязаны: при фильтре по проекту их не переиндексируют.

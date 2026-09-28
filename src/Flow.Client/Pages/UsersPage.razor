@@ -19,10 +19,7 @@
 <div class="topbar">
     <div class="topbar-left"><h2>Люди</h2></div>
     <div class="topbar-right">
-        <label class="search">
-            <Icon Name="search" Size="16" />
-            <input placeholder="Имя, @@username или почта..." value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
-        </label>
+        <SearchBox Placeholder="Имя, @@username или почта..." Value="@_search" ValueChanged="v => _search = v" />
         @if (CanManageUsers)
         {
             <DsButton Variant="primary" Size="md" Icon="user-plus" OnClick="OpenCreate">Добавить</DsButton>
@@ -46,17 +43,19 @@
     else
     {
         <div class="filter-row">
-            <div class="seg" role="tablist">
-                <button type="button" class="seg-btn @(!_showInactive ? "on" : "")" role="tab" @onclick="() => _showInactive = false">
-                    Активные <span class="n">@ActiveCount</span>
-                </button>
-                <button type="button" class="seg-btn @(_showInactive ? "on" : "")" role="tab" @onclick="() => _showInactive = true">
-                    Все <span class="n">@Directory.All.Count</span>
-                </button>
-            </div>
-            <div class="meta-line">@Ru.People(Visible.Count)@(HasSearch ? " найдено" : "")</div>
+            <DsTabs Items="Tabs" Value="@TabKey" ValueChanged="SelectTab" AriaLabel="Разделы «Людей»" />
+            @if (!_groupsTab)
+            {
+                <div class="meta-line">@Ru.People(Visible.Count)@(HasSearch ? " найдено" : "")</div>
+            }
         </div>
 
+        @if (_groupsTab)
+        {
+            <GroupsPanel CanManage="CanManageUsers" />
+        }
+        else
+        {
         <div class="panel">
             <div class="user-cols list-head"><div></div><div>Человек</div><div>Должность</div><div>Почта</div><div>Роль</div><div>Статус</div><div></div></div>
             <div class="panel-rows user-rows">
@@ -108,6 +107,7 @@
                 }
             </div>
         </div>
+        }
     }
 </div>
 
@@ -121,6 +121,8 @@
     private string? _loadError;
     private string _search = "";
     private bool _showInactive;
+    /// <summary>Вкладка «Группы» (этап 4C) вместо списка людей.</summary>
+    private bool _groupsTab;
     private bool _createOpen;
     private Guid? _flashId;
     private IDisposable? _hotkeys;
@@ -132,6 +134,18 @@
     private bool CanManageUsers => Permissions.CanManageUsers(Me);
 
     private int ActiveCount => Directory.All.Count(u => u.IsActive);
+
+    /// <summary>Разделы экрана — вкладки (DsTabs), как в «Настройках» и профиле; сегменты .seg — для фильтров внутри экрана.</summary>
+    private IReadOnlyList<DsTab> Tabs => [new("active", "Активные", ActiveCount), new("all", "Все", Directory.All.Count), new("groups", "Группы")];
+
+    private string TabKey => _groupsTab ? "groups" : _showInactive ? "all" : "active";
+
+    private void SelectTab(string key)
+    {
+        _groupsTab = key == "groups";
+        if (!_groupsTab)
+            _showInactive = key == "all";
+    }
 
     private List<UserResponse> Visible
     {

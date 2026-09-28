@@ -112,9 +112,9 @@
                                         <span class="code accent">@taskCode</span>
                                     }
                                     <span class="sr-name">@item.Title</span>
-                                    @if (item.SourceType is SearchSourceType.Comment or SearchSourceType.Attachment)
+                                    @if (item.SourceType is SearchSourceType.Comment or SearchSourceType.Attachment or SearchSourceType.Development)
                                     {
-                                        <span class="sr-kind">@SearchPresentation.TypeLabel(item.SourceType).ToLowerInvariant()</span>
+                                        <span class="sr-kind">@SearchPresentation.KindLabel(item.SourceType)</span>
                                     }
                                     @if (item.IsClosed)
                                     {
@@ -157,7 +157,8 @@
         (SearchSourceType.Comment, "Комментарии"),
         (SearchSourceType.Board, "Проекты"),
         (SearchSourceType.User, "Люди"),
-        (SearchSourceType.Attachment, "Файлы")
+        (SearchSourceType.Attachment, "Файлы"),
+        (SearchSourceType.Development, "Разработка")
     ];
 
     [SupplyParameterFromQuery(Name = "q")] public string? QueryParam { get; set; }

@@ -1,0 +1,167 @@
+@* Подключение к Git-хостингу (docs/TZ_scm_integration.md §6): хостинг, название, адрес (для self-hosted; у GitHub.com
+   его нет), токен. Токен уходит на сервер один раз, там шифруется и сразу проверяется; при правке пустое поле — не
+   менять. Подсказка — какие права нужны токену и где его создать. У GitHub можно войти как GitHub App (этап 5B):
+   Id приложения, Id установки и закрытый ключ PEM — ключ многострочный, поэтому поле — MudTextField с Lines.
+   Способ входа после создания не меняется. Жизненный цикл MudDialog — как у MilestoneDialog. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject BrowserInterop Browser
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>@(Connection is null ? "Подключить Git-хостинг" : "Подключение")</h3>
+    </TitleContent>
+    <DialogContent>
+        <div class="wd-row">
+            <DsSelect T="ScmProvider" Label="Хостинг" Value="_provider" ValueChanged="SetProvider" Disabled="@(Connection is not null)" Class="wd-field">
+                @foreach (var p in ScmMeta.Providers)
+                {
+                    <MudSelectItem T="ScmProvider" Value="p">@ScmMeta.Name(p)</MudSelectItem>
+                }
+            </DsSelect>
+            <DsInput Id="scm-name" Label="Название" MaxLength="80" Value="@_name" ValueChanged="v => _name = v" />
+        </div>
+        <DsInput Label="@(_provider == ScmProvider.GitHub ? "Адрес GitHub Enterprise (пусто — github.com)" : "Адрес сервера")"
+                 Placeholder="https://git.example.com" MaxLength="500" Value="@_baseUrl" ValueChanged="v => _baseUrl = v" />
+        @if (_provider == ScmProvider.GitHub)
+        {
+            <div class="seg scm-auth" role="radiogroup" aria-label="Способ входа">
+                @foreach (var kind in new[] { ScmAuthKind.Token, ScmAuthKind.GitHubApp })
+                {
+                    var k = kind;
+                    <button type="button" class="seg-btn @(_auth == k ? "on" : "")" role="radio" aria-checked="@(_auth == k)"
+                            disabled="@(Connection is not null && _auth != k)" @onclick="() => _auth = k">@ScmMeta.AuthName(k)</button>
+                }
+            </div>
+        }
+        @if (IsApp)
+        {
+            <div class="wd-row">
+                <DsNumber T="long?" Label="App ID" Value="_appId" ValueChanged="v => _appId = v" Min="1" Class="wd-field" />
+                <DsNumber T="long?" Label="Installation ID" Value="_installationId" ValueChanged="v => _installationId = v" Min="1" Class="wd-field" />
+            </div>
+            <DsInput Label="@(Connection is null ? "Закрытый ключ (.pem)" : "Новый закрытый ключ (пусто — не менять)")" Value="@_token"
+                     ValueChanged="v => _token = v" Lines="4" Class="scm-pem" Placeholder="-----BEGIN RSA PRIVATE KEY-----" />
+            <div class="hint scm-hint">
+                Права приложения: Metadata и Contents — чтение, Pull requests — чтение, Webhooks — запись. Installation ID — число в адресе
+                страницы установки (…/settings/installations/<b>12345</b>).
+                <a href="https://github.com/settings/apps/new" target="_blank" rel="noopener noreferrer">Создать приложение</a>
+            </div>
+        }
+        else
+        {
+            <DsInput Label="@(Connection is null ? "Токен доступа" : "Новый токен (пусто — не менять)")" Type="password" MaxLength="500"
+                     Value="@_token" ValueChanged="v => _token = v" />
+            <div class="hint scm-hint">
+                @ScmMeta.TokenHint(_provider)
+                @if (ScmMeta.TokenUrl(_provider, string.IsNullOrWhiteSpace(_baseUrl) ? null : _baseUrl) is { } url)
+                {
+                    <a href="@url" target="_blank" rel="noopener noreferrer">Создать токен</a>
+                }
+            </div>
+        }
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Отмена</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="_busy" Busy="_busy">@(Connection is null ? "Подключить" : "Сохранить")</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter] public ScmConnectionResponse? Connection { get; set; }
+    [Parameter] public EventCallback<ScmConnectionResponse> OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private string? _error;
+    private ScmProvider _provider = ScmProvider.GitHub;
+    private string _name = "GitHub";
+    private string _baseUrl = "";
+    private string _token = "";
+    private ScmAuthKind _auth = ScmAuthKind.Token;
+    private long? _appId;
+    private long? _installationId;
+
+    private bool IsApp => _provider == ScmProvider.GitHub && _auth == ScmAuthKind.GitHubApp;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Connection is { } c)
+            (_provider, _name, _baseUrl, _auth, _appId, _installationId) = (c.Provider, c.Name, c.BaseUrl ?? "", c.AuthKind, c.AppId, c.InstallationId);
+        await Task.Delay(50);
+        await Browser.FocusAsync("scm-name", select: true);
+    }
+
+    private void SetProvider(ScmProvider provider)
+    {
+        if (provider != ScmProvider.GitHub)
+            _auth = ScmAuthKind.Token;
+        if (_name == ScmMeta.Name(_provider))
+            _name = ScmMeta.Name(provider);
+        _provider = provider;
+    }
+
+    private async Task Save()
+    {
+        _error = null;
+        var baseUrl = string.IsNullOrWhiteSpace(_baseUrl) ? null : _baseUrl.Trim();
+        if (Connection is null && string.IsNullOrWhiteSpace(_token))
+        {
+            _error = IsApp ? "Нужен закрытый ключ приложения." : "Нужен токен доступа.";
+            return;
+        }
+        if (IsApp && (_appId is not > 0 || _installationId is not > 0))
+        {
+            _error = "Укажите Id приложения и Id установки.";
+            return;
+        }
+
+        var auth = IsApp ? ScmAuthKind.GitHubApp : ScmAuthKind.Token;
+        var secret = string.IsNullOrWhiteSpace(_token) ? null : _token.Trim();
+        _busy = true;
+        var result = Connection is null
+            ? await Api.CreateScmConnection(new CreateScmConnectionRequest(_provider, _name.Trim(), secret!, baseUrl, auth,
+                IsApp ? _appId : null, IsApp ? _installationId : null))
+            : await Api.UpdateScmConnection(Connection.Id, new UpdateScmConnectionRequest(_name.Trim(), baseUrl, secret,
+                IsApp ? _appId : null, IsApp ? _installationId : null));
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить подключение";
+            return;
+        }
+
+        await CloseDialog();
+        await OnSaved.InvokeAsync(result.Value!);
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

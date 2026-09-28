@@ -1,3 +1,7 @@
+using Flow.Application.Features.Scm;
+using Flow.Infrastructure.Scm;
+using Flow.Application.Features.Tasks.Recurrence;
+using Flow.Infrastructure.Recurrence;
 using Amazon.Runtime;
 using Amazon.S3;
 using Flow.Application.Abstractions;
@@ -40,9 +44,37 @@ public static class FlowInfrastructureServiceCollectionExtensions
             .UseNpgsql(dataSource, o => o.UseVector()));
 
         services.AddScoped<IBoardRepository, BoardRepository>();
+        services.AddScoped<ISprintRepository, SprintRepository>();
+        services.AddScoped<IMilestoneRepository, MilestoneRepository>();
+        services.AddScoped<IDashboardRepository, DashboardRepository>();
+        services.AddScoped<ITaskCodeAliasRepository, TaskCodeAliasRepository>();
+        services.AddScoped<ITaskRecurrenceRepository, TaskRecurrenceRepository>();
+        services.AddScoped<IScmStore, ScmStore>();
+
+        // Git-хостинги (docs/TZ_scm_integration.md): клиенты API, настройки секции Scm и разбор доставок вебхуков.
+        var scm = configuration.GetSection(ScmOptions.SectionName).Get<ScmOptions>() ?? new ScmOptions();
+        services.AddSingleton(scm);
+        services.AddHttpClient(ScmProviderClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
+        services.AddSingleton<GitHubAppTokens>();
+        services.AddScoped<IScmProviderClient, ScmProviderClient>();
+        if (scm.WorkerEnabled)
+            services.AddHostedService<ScmWorker>();
+
+        // Повторяющиеся задачи (docs/TZ_task_model.md §9): настройки секции Recurrence и фоновый генератор.
+        var recurrence = configuration.GetSection(RecurrenceOptions.SectionName).Get<RecurrenceOptions>() ?? new RecurrenceOptions();
+        services.AddSingleton(recurrence);
+        if (recurrence.Enabled)
+            services.AddHostedService<RecurrenceWorker>();
+        services.AddScoped<IBoardMemberRepository, BoardMemberRepository>();
+        services.AddScoped<IGroupRepository, GroupRepository>();
+        services.AddScoped<IPermissionSetRepository, PermissionSetRepository>();
         services.AddScoped<ITaskItemRepository, TaskItemRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();
+        services.AddScoped<ITaskLinkRepository, TaskLinkRepository>();
+        services.AddScoped<ISavedFilterRepository, SavedFilterRepository>();
+        services.AddScoped<IBoardTemplateRepository, BoardTemplateRepository>();
+        services.AddScoped<ITaskTemplateRepository, TaskTemplateRepository>();
         services.AddScoped<ITaskActivityRepository, TaskActivityRepository>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();

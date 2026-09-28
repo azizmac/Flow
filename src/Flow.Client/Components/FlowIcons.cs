@@ -62,5 +62,23 @@ public static class FlowIcons
         ["history"] = @"<path d=""M 3.5 12 C 3.5 7.3 7.3 3.5 12 3.5 C 16.7 3.5 20.5 7.3 20.5 12 C 20.5 16.7 16.7 20.5 12 20.5 C 9.2 20.5 6.8 19.2 5.2 17.1 M 3.5 12 L 1.5 10 M 3.5 12 L 5.5 10 M 12 7.5 L 12 12 L 15 14"" fill=""none"" stroke=""currentColor"" stroke-width=""2"" stroke-linecap=""round"" stroke-linejoin=""round""/>",
         ["calendar"] = @"<rect x=""3.5"" y=""5"" width=""17"" height=""15.5"" rx=""2.5"" fill=""none"" stroke=""currentColor"" stroke-width=""2""/><path d=""M 3.5 9.5 L 20.5 9.5 M 8 3 L 8 7 M 16 3 L 16 7"" fill=""none"" stroke=""currentColor"" stroke-width=""2"" stroke-linecap=""round""/>",
         ["send"] = @"<path d=""M 4 12 L 20 4 L 16 20 L 12 13 Z M 12 13 L 20 4"" fill=""none"" stroke=""currentColor"" stroke-width=""2"" stroke-linejoin=""round"" stroke-linecap=""round""/>",
+        // Типы задач и приоритеты (docs/TZ_task_model.md, этап 1A) — простые геометрические глифы, нарисованы
+        // вручную в той же сетке 24×24: в исходном наборе подходящих не нашлось.
+        ["t-epic"] = @"<path d=""M13.5 2 L4.5 13.5 H11 L10 22 L19.5 10 H13 Z"" fill=""currentColor""/>",
+        ["t-story"] = @"<path d=""M6 3 H18 V21 L12 16.8 L6 21 Z"" fill=""currentColor""/>",
+        ["t-task"] = @"<path d=""M5 3 H19 C20.1 3 21 3.9 21 5 V19 C21 20.1 20.1 21 19 21 H5 C3.9 21 3 20.1 3 19 V5 C3 3.9 3.9 3 5 3 Z M10.2 16.6 L17.7 9.1 L16.3 7.7 L10.2 13.8 L7.7 11.3 L6.3 12.7 Z"" fill=""currentColor"" fill-rule=""evenodd""/>",
+        ["t-bug"] = @"<path d=""M5 3 H19 C20.1 3 21 3.9 21 5 V19 C21 20.1 20.1 21 19 21 H5 C3.9 21 3 20.1 3 19 V5 C3 3.9 3.9 3 5 3 Z M12 7.5 A4.5 4.5 0 1 0 12 16.5 A4.5 4.5 0 1 0 12 7.5 Z"" fill=""currentColor"" fill-rule=""evenodd""/>",
+        ["t-subtask"] = @"<path d=""M3 3 H13 V13 H3 Z M11 11 H21 V21 H11 Z M13 13 V19 H19 V13 Z"" fill=""currentColor"" fill-rule=""evenodd""/>",
+        ["p-critical"] = @"<path d=""M12 3.5 L19.5 11 L17.9 12.6 L12 6.7 L6.1 12.6 L4.5 11 Z M12 10.5 L19.5 18 L17.9 19.6 L12 13.7 L6.1 19.6 L4.5 18 Z"" fill=""currentColor""/>",
+        ["p-high"] = @"<path d=""M12 7 L19.5 14.5 L17.9 16.1 L12 10.2 L6.1 16.1 L4.5 14.5 Z"" fill=""currentColor""/>",
+        ["p-medium"] = @"<path d=""M5 8 H19 V10.2 H5 Z M5 13.8 H19 V16 H5 Z"" fill=""currentColor""/>",
+        ["p-low"] = @"<path d=""M12 17 L4.5 9.5 L6.1 7.9 L12 13.8 L17.9 7.9 L19.5 9.5 Z"" fill=""currentColor""/>",
+        // Действия со строкой-настройкой (docs/TZ_ui_consistency.md): в архив, вернуть из архива, сделать основным —
+        // контуром в той же сетке, как history.
+        ["archive"] = @"<path d=""M3.5 4.5 H20.5 V8.5 H3.5 Z M5 8.5 V18.5 A1.5 1.5 0 0 0 6.5 20 H17.5 A1.5 1.5 0 0 0 19 18.5 V8.5 M10 12.5 H14"" fill=""none"" stroke=""currentColor"" stroke-width=""2"" stroke-linecap=""round"" stroke-linejoin=""round""/>",
+        ["unarchive"] = @"<path d=""M3.5 4.5 H20.5 V8.5 H3.5 Z M5 8.5 V18.5 A1.5 1.5 0 0 0 6.5 20 H17.5 A1.5 1.5 0 0 0 19 18.5 V8.5 M12 17 V11.5 M9.5 14 L12 11.5 L14.5 14"" fill=""none"" stroke=""currentColor"" stroke-width=""2"" stroke-linecap=""round"" stroke-linejoin=""round""/>",
+        ["star"] = @"<path d=""M12 3.5 L14.6 8.8 L20.4 9.6 L16.2 13.7 L17.2 19.5 L12 16.8 L6.8 19.5 L7.8 13.7 L3.6 9.6 L9.4 8.8 Z"" fill=""none"" stroke=""currentColor"" stroke-width=""2"" stroke-linejoin=""round""/>",
+        // Приватный проект (docs/TZ_project_access.md, этап 4B) — замок, нарисован вручную в той же сетке.
+        ["lock"] = @"<path d=""M7 10 V7.5 A5 5 0 0 1 17 7.5 V10 H18 A2 2 0 0 1 20 12 V20 A2 2 0 0 1 18 22 H6 A2 2 0 0 1 4 20 V12 A2 2 0 0 1 6 10 Z M9 10 H15 V7.5 A3 3 0 0 0 9 7.5 Z"" fill=""currentColor"" fill-rule=""evenodd""/>",
     };
 }

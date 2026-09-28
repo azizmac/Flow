@@ -44,6 +44,24 @@ public static partial class Ru
         return UsernamePattern().IsMatch(s) ? s : "";
     }
 
+    /// <summary>Ключ пользовательского поля из названия: «Уровень SLA» → «uroven_sla». Пустая строка, если не вышло.</summary>
+    public static string SuggestFieldKey(string name)
+    {
+        var s = Slug(name).Replace('-', '_').Replace('.', '_');
+        while (s.Contains("__")) s = s.Replace("__", "_");
+        if (s.Length > 30) s = s[..30].TrimEnd('_');
+        return s.Length >= 2 && s[0] is >= 'a' and <= 'z' ? s : "";
+    }
+
+    /// <summary>Имя ветки для задачи: «WEB-12-forma-vhoda» — код и транслит названия, не длиннее 60 символов.</summary>
+    public static string BranchName(string code, string title)
+    {
+        var slug = Slug(title).Replace('.', '-').Replace('_', '-');
+        while (slug.Contains("--")) slug = slug.Replace("--", "-");
+        var name = slug.Trim('-').Length > 0 ? $"{code}-{slug.Trim('-')}" : code;
+        return name.Length <= 60 ? name : name[..60].TrimEnd('-');
+    }
+
     private static string Slug(string value)
     {
         var sb = new System.Text.StringBuilder();
@@ -70,6 +88,8 @@ public static partial class Ru
 
     public static string Tasks(int n) => $"{n} {Plural(n, "задача", "задачи", "задач")}";
 
+    public static string Days(int n) => $"{n} {Plural(n, "день", "дня", "дней")}";
+
     public static string Projects(int n) => $"{n} {Plural(n, "проект", "проекта", "проектов")}";
 
     /// <summary>«6 сен» — для строк списка (год добавляется, если отличается от текущего).</summary>
@@ -94,6 +114,20 @@ public static partial class Ru
         return d.Year == DateTime.Now.Year ? s : $"{s} {d.Year}";
     }
 
+    private static readonly string[] MonthsNominative =
+        ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+
+    /// <summary>«Сентябрь 2026» — заголовок месяца календаря.</summary>
+    public static string MonthTitle(DateOnly d) => $"{char.ToUpperInvariant(MonthsNominative[d.Month - 1][0])}{MonthsNominative[d.Month - 1][1..]} {d.Year}";
+
+    /// <summary>«сен» / «сен 2027» — подпись месяца на шкале.</summary>
+    public static string MonthShort(DateOnly d) => d.Year == DateTime.Now.Year ? MonthsShort[d.Month - 1] : $"{MonthsShort[d.Month - 1]} {d.Year}";
+
+    public static readonly IReadOnlyList<string> WeekdaysShort = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+
+    /// <summary>Понедельник недели, в которую попадает дата.</summary>
+    public static DateOnly WeekStart(DateOnly d) => d.AddDays(-(((int)d.DayOfWeek + 6) % 7));
+
     /// <summary>Разбор yyyy-MM-dd из журнала активности; null — «без срока» или мусор.</summary>
     public static DateOnly? ParseDateOnly(string? iso) =>
         iso is not null && DateOnly.TryParseExact(iso, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
@@ -110,6 +144,73 @@ public static partial class Ru
         if (d.Date == DateTime.Today.AddDays(-1)) return $"вчера в {d.Hour:00}:{d.Minute:00}";
         return DateShort(utc);
     }
+
+    /// <summary>Рабочий день в оценке — 8 часов, как в Jira; «1д» в поле оценки — это 480 минут.</summary>
+    public const int MinutesPerWorkDay = 8 * 60;
+
+    /// <summary>Оценка в минутах → «1д 2ч 30м» (нулевые части опускаются); 0 → «0м».</summary>
+    public static string Duration(int minutes)
+    {
+        if (minutes <= 0)
+            return "0м";
+
+        var days = minutes / MinutesPerWorkDay;
+        var hours = minutes % MinutesPerWorkDay / 60;
+        var rest = minutes % 60;
+        var parts = new List<string>(3);
+        if (days > 0) parts.Add($"{days}д");
+        if (hours > 0) parts.Add($"{hours}ч");
+        if (rest > 0) parts.Add($"{rest}м");
+        return string.Join(' ', parts);
+    }
+
+    [GeneratedRegex(@"^\s*(?:(\d+(?:[.,]\d+)?)\s*(д|d|ч|h|м|m)\s*)+$", RegexOptions.IgnoreCase)]
+    private static partial Regex DurationPattern();
+
+    [GeneratedRegex(@"(\d+(?:[.,]\d+)?)\s*(д|d|ч|h|м|m)", RegexOptions.IgnoreCase)]
+    private static partial Regex DurationPart();
+
+    /// <summary>
+    /// «1д 2ч 30м», «1d 2h», «1.5ч», просто «3» (часы). Пустая строка — null и true: поле очистили.
+    /// Нераспознанное — false: поле подсветит ошибку, а не отправит на сервер что-то случайное.
+    /// </summary>
+    public static bool TryParseDuration(string? text, out int? minutes)
+    {
+        minutes = null;
+        if (string.IsNullOrWhiteSpace(text))
+            return true;
+
+        var trimmed = text.Trim();
+        if (decimal.TryParse(trimmed.Replace(',', '.'), System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture, out var bareHours))
+        {
+            if (bareHours < 0) return false;
+            minutes = (int)Math.Round(bareHours * 60);
+            return true;
+        }
+
+        if (!DurationPattern().IsMatch(trimmed))
+            return false;
+
+        decimal total = 0;
+        foreach (Match part in DurationPart().Matches(trimmed))
+        {
+            var value = decimal.Parse(part.Groups[1].Value.Replace(',', '.'), System.Globalization.CultureInfo.InvariantCulture);
+            total += char.ToLowerInvariant(part.Groups[2].Value[0]) switch
+            {
+                'д' or 'd' => value * MinutesPerWorkDay,
+                'ч' or 'h' => value * 60,
+                _ => value
+            };
+        }
+
+        minutes = (int)Math.Round(total);
+        return true;
+    }
+
+    /// <summary>Story points без лишних нулей: 3, 0.5, 13.</summary>
+    public static string Points(decimal points) =>
+        points.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
 
     public static string Comments(int n) => $"{n} {Plural(n, "комментарий", "комментария", "комментариев")}";
 
@@ -169,4 +270,26 @@ public static partial class Ru
         value.Kind == DateTimeKind.Utc
             ? value.ToLocalTime()
             : DateTime.SpecifyKind(value, DateTimeKind.Utc).ToLocalTime();
+
+    /// <summary>
+    /// Культура для MudDatePicker: русские месяцы и дни недели, неделя с понедельника, «дд.ММ.гггг». Собрана поверх
+    /// инвариантной, а не new CultureInfo("ru-RU") — рендер серверный, и ICU в образе может не оказаться.
+    /// </summary>
+    public static readonly System.Globalization.CultureInfo PickerCulture = BuildPickerCulture();
+
+    private static System.Globalization.CultureInfo BuildPickerCulture()
+    {
+        var culture = (System.Globalization.CultureInfo)System.Globalization.CultureInfo.InvariantCulture.Clone();
+        var f = culture.DateTimeFormat;
+        f.MonthNames = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь", ""];
+        f.MonthGenitiveNames = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря", ""];
+        f.AbbreviatedMonthNames = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек", ""];
+        f.AbbreviatedMonthGenitiveNames = f.AbbreviatedMonthNames;
+        f.DayNames = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+        f.AbbreviatedDayNames = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+        f.ShortestDayNames = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+        f.FirstDayOfWeek = DayOfWeek.Monday;
+        f.ShortDatePattern = "dd.MM.yyyy";
+        return culture;
+    }
 }

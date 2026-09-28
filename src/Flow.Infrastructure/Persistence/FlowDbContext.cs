@@ -12,13 +12,53 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
 
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
 
+    public DbSet<TaskType> TaskTypes => Set<TaskType>();
+
+    public DbSet<BoardMember> BoardMembers => Set<BoardMember>();
+    public DbSet<Group> Groups => Set<Group>();
+    public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
+    public DbSet<BoardGroup> BoardGroups => Set<BoardGroup>();
+    public DbSet<PermissionSet> PermissionSets => Set<PermissionSet>();
+
     public DbSet<User> Users => Set<User>();
 
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
 
     public DbSet<TaskActivity> TaskActivities => Set<TaskActivity>();
 
+    public DbSet<TaskLink> TaskLinks => Set<TaskLink>();
+
+    public DbSet<SavedFilter> SavedFilters => Set<SavedFilter>();
+    public DbSet<BoardTemplate> BoardTemplates => Set<BoardTemplate>();
+    public DbSet<TaskTemplate> TaskTemplates => Set<TaskTemplate>();
+
+    public DbSet<SavedFilterStar> SavedFilterStars => Set<SavedFilterStar>();
+
     public DbSet<Attachment> Attachments => Set<Attachment>();
+
+    public DbSet<Sprint> Sprints => Set<Sprint>();
+
+    public DbSet<Milestone> Milestones => Set<Milestone>();
+
+    public DbSet<CustomFieldDefinition> CustomFields => Set<CustomFieldDefinition>();
+
+    public DbSet<Dashboard> Dashboards => Set<Dashboard>();
+
+    public DbSet<TaskCodeAlias> TaskCodeAliases => Set<TaskCodeAlias>();
+
+    public DbSet<TaskRecurrence> TaskRecurrences => Set<TaskRecurrence>();
+
+    public DbSet<TaskRecurrenceOccurrence> TaskRecurrenceOccurrences => Set<TaskRecurrenceOccurrence>();
+
+    public DbSet<ScmConnection> ScmConnections => Set<ScmConnection>();
+
+    public DbSet<ScmRepository> ScmRepositories => Set<ScmRepository>();
+
+    public DbSet<ScmRepositoryBoard> ScmRepositoryBoards => Set<ScmRepositoryBoard>();
+
+    public DbSet<ScmLink> ScmLinks => Set<ScmLink>();
+
+    public DbSet<ScmDelivery> ScmDeliveries => Set<ScmDelivery>();
 
     /// <summary>
     /// Поисковый индекс — проекция, а не домен: наружу из сборки не торчит, Application работает
@@ -31,5 +71,6 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlowDbContext).Assembly);
+        CustomFieldSql.Register(modelBuilder);
     }
 }

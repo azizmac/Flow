@@ -1,3 +1,4 @@
+using Flow.Application.Abstractions;
 using Flow.Application.Features.Attachments.Queries.AttachmentContentQuery;
 using Flow.Application.Features.Attachments.Queries.AttachmentMetaQuery;
 using MediatR;
@@ -26,7 +27,7 @@ namespace Flow.Api.Controllers;
 /// (см. AttachmentContentQueryHandler), id легально приходит клиенту в списке вложений задачи.
 /// Что действительно меняется — у файла появляется копируемый адрес: см. docs/TZ_attachments.md.
 /// </summary>
-public sealed class FilesController(IMediator mediator) : ControllerBase
+public sealed class FilesController(IMediator mediator, IActorAccessor actor) : ControllerBase
 {
     /// <summary>
     /// Содержимое вложения. Тип отдачи выбирает сервер: картинки из белого списка показываются
@@ -41,7 +42,7 @@ public sealed class FilesController(IMediator mediator) : ControllerBase
         // Сначала строка, потом объект в хранилище. Порядок принципиален: строка стоит микросекунды
         // и отвечает на вопрос «файл ещё существует», а поход в S3 — самое дорогое здесь, и при
         // попадании в кэш браузера его надо избежать.
-        var meta = await mediator.Send(new AttachmentMetaQuery(id), cancellationToken);
+        var meta = await mediator.Send(new AttachmentMetaQuery(actor.Require(), id), cancellationToken);
         if (meta is null)
             return NotFound();
 
@@ -51,7 +52,7 @@ public sealed class FilesController(IMediator mediator) : ControllerBase
         if (AttachmentDelivery.Matches(this, etag))
             return StatusCode(StatusCodes.Status304NotModified);
 
-        var content = await mediator.Send(new AttachmentContentQuery(id), cancellationToken);
+        var content = await mediator.Send(new AttachmentContentQuery(actor.Require(), id), cancellationToken);
         if (content is null)
             return NotFound();
 

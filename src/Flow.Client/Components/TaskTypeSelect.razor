@@ -1,0 +1,22 @@
+@* Селект типа задачи «в строке» — PillSelect. Архивные типы не предлагаются, но текущий тип задачи виден, даже
+   если его убрали в архив (TaskMeta.Selectable). *@
+
+<PillSelect T="TaskTypeResponse" Items="TaskMeta.Selectable(Types, Value)" Value="Current" Disabled="Disabled"
+            Current="@(t => t.Id == Value)" OnChange="@(t => OnChange.InvokeAsync(t.Id))"
+            Label="@(t => t?.Name ?? "—")" AriaLabel="Сменить тип задачи" Title="Сменить тип">
+    <Glyph Context="t">
+        @if (t is not null)
+        {
+            <TaskTypeIcon Kind="t.Kind" Name="@t.Name" Size="13" />
+        }
+    </Glyph>
+</PillSelect>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TaskTypeResponse> Types { get; set; } = [];
+    [Parameter] public Guid Value { get; set; }
+    [Parameter] public EventCallback<Guid> OnChange { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private TaskTypeResponse? Current => Types.FirstOrDefault(t => t.Id == Value);
+}

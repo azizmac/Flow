@@ -1,3 +1,4 @@
+using System.Globalization;
 ﻿using System.Linq.Expressions;
 using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Tasks;
@@ -17,6 +18,9 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
             .Where(t => assigneeId == null || t.AssigneeId == assigneeId)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<TaskItem>> GetByStatusIdAsync(Guid statusId, CancellationToken cancellationToken) =>
+        await db.TaskItems.Where(t => t.StatusId == statusId).ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<TaskItem>> SearchAsync(TaskListFilter filter, CancellationToken cancellationToken)
     {
@@ -55,38 +59,63 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
     /// </summary>
     private IQueryable<TaskItem> Ordered(IQueryable<TaskItem> query, TaskListFilter filter)
     {
-        var desc = filter.Descending;
+        // ORDER BY из FQL — список ключей; без него — одна колонка таблицы.
+        var orders = filter.Orders is { Count: > 0 } fromFql ? fromFql : [new TaskOrder(filter.Sort, filter.Descending)];
 
-        IOrderedQueryable<TaskItem> ordered = filter.Sort switch
+        IOrderedQueryable<TaskItem>? ordered = null;
+        void By<TKey>(Expression<Func<TaskItem, TKey>> key, bool desc) =>
+            ordered = ordered is null
+                ? desc ? query.OrderByDescending(key) : query.OrderBy(key)
+                : desc ? ordered.ThenByDescending(key) : ordered.ThenBy(key);
+
+        foreach (var (field, desc) in orders)
         {
-            // Внутри проекта разворачиваем и номера: при обратной сортировке ожидается WEB-9, WEB-8, …
-            TaskSortField.Code => Order(
-                Order(query, t => db.Boards.Where(b => b.Id == t.BoardId).Select(b => b.Key).FirstOrDefault(), desc),
-                t => t.CreatedAt, desc),
-            TaskSortField.Title => Order(query, t => t.Title, desc),
-            TaskSortField.Status => Order(query, t => db.Statuses.Where(s => s.Id == t.StatusId).Select(s => s.SortOrder).FirstOrDefault(), desc),
-            // Без исполнителя — в конец при любом направлении: пустые строки иначе всплывали бы наверх.
-            TaskSortField.Assignee => Order(
-                query.OrderBy(t => t.AssigneeId == null),
-                t => db.Users.Where(u => u.Id == t.AssigneeId).Select(u => u.LastName + " " + u.FirstName).FirstOrDefault(),
-                desc),
-            TaskSortField.Due => Order(query.OrderBy(t => t.DueDate == null), t => t.DueDate, desc),
-            _ => Order(query, t => t.CreatedAt, desc)
-        };
+            switch (field)
+            {
+                // Внутри проекта разворачиваем и номера: при обратной сортировке ожидается WEB-9, WEB-8, …
+                case TaskSortField.Code:
+                    By(t => db.Boards.Where(b => b.Id == t.BoardId).Select(b => b.Key).FirstOrDefault(), desc);
+                    By(t => t.CreatedAt, desc);
+                    break;
+                case TaskSortField.Title:
+                    By(t => t.Title, desc);
+                    break;
+                case TaskSortField.Status:
+                    By(t => db.Statuses.Where(s => s.Id == t.StatusId).Select(s => s.SortOrder).FirstOrDefault(), desc);
+                    break;
+                // Без исполнителя — в конец при любом направлении: пустые строки иначе всплывали бы наверх.
+                case TaskSortField.Assignee:
+                    By(t => t.AssigneeId == null, false);
+                    By(t => db.Users.Where(u => u.Id == t.AssigneeId).Select(u => u.LastName + " " + u.FirstName).FirstOrDefault(), desc);
+                    break;
+                case TaskSortField.Due:
+                    By(t => t.DueDate == null, false);
+                    By(t => t.DueDate, desc);
+                    break;
+                case TaskSortField.Priority:
+                    By(t => t.Priority, desc);
+                    break;
+                case TaskSortField.Updated:
+                    By(t => t.UpdatedAt, desc);
+                    break;
+                // Ранг уникален только внутри проекта; в сводном списке порядок проектов задаёт ключ.
+                case TaskSortField.Rank:
+                    By(t => t.BoardId, desc);
+                    By(t => t.Rank, desc);
+                    break;
+                default:
+                    By(t => t.CreatedAt, desc);
+                    break;
+            }
+        }
 
-        return ordered.ThenBy(t => t.Id);
+        return ordered!.ThenBy(t => t.Id);
     }
-
-    private static IOrderedQueryable<TaskItem> Order<TKey>(IQueryable<TaskItem> query, Expression<Func<TaskItem, TKey>> key, bool desc) =>
-        desc ? query.OrderByDescending(key) : query.OrderBy(key);
-
-    private static IOrderedQueryable<TaskItem> Order<TKey>(IOrderedQueryable<TaskItem> query, Expression<Func<TaskItem, TKey>> key, bool desc) =>
-        desc ? query.ThenByDescending(key) : query.ThenBy(key);
 
     public async Task<TaskCounts> CountAsync(TaskListFilter filter, CancellationToken cancellationToken)
     {
         // Счётчики показывают, сколько задач найдётся в каждом статусе, поэтому сам фильтр статуса здесь снят.
-        var query = Filtered(filter with { StatusId = null, StatusType = null });
+        var query = Filtered(filter with { StatusId = null, StatusType = null, UntypedStatus = false });
 
         // Matched — число задач с учётом всех фильтров: по нему таблица считает количество страниц.
         var matched = await Filtered(filter).CountAsync(cancellationToken);
@@ -114,12 +143,133 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
             byStatus.Select(x => (x.StatusId, x.Count)).ToList());
     }
 
+    public async Task<IReadOnlyList<TaskItem>> GetBySprintIdAsync(Guid sprintId, CancellationToken cancellationToken) =>
+        await db.TaskItems.Where(t => t.SprintId == sprintId).OrderBy(t => t.Rank).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<TaskGroupCount>> GroupCountAsync(
+        TaskListFilter filter, TaskGroupField field, IReadOnlyList<Guid>? customFieldIds, CancellationToken cancellationToken)
+    {
+        var query = Filtered(filter);
+        switch (field)
+        {
+            case TaskGroupField.Status:
+                return (await query.GroupBy(t => t.StatusId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                    .Select(x => new TaskGroupCount(x.Key.ToString(), x.Count)).ToList();
+            case TaskGroupField.Assignee:
+                return (await query.GroupBy(t => t.AssigneeId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                    .Select(x => new TaskGroupCount(x.Key?.ToString(), x.Count)).ToList();
+            case TaskGroupField.Priority:
+                return (await query.GroupBy(t => t.Priority).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                    .Select(x => new TaskGroupCount(((int)x.Key).ToString(CultureInfo.InvariantCulture), x.Count)).ToList();
+            case TaskGroupField.Type:
+                return (await query.GroupBy(t => t.TypeId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                    .Select(x => new TaskGroupCount(x.Key.ToString(), x.Count)).ToList();
+            case TaskGroupField.Board:
+                return (await query.GroupBy(t => t.BoardId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken))
+                    .Select(x => new TaskGroupCount(x.Key.ToString(), x.Count)).ToList();
+        }
+
+        // Пользовательское поле: значения лежат в jsonb, у MultiSelect — массивом. Группировку по вариантам делаем в
+        // памяти по одной колонке задач под фильтром — без разворачивания jsonb в SQL; предел — MaxGroupRows задач.
+        var ids = customFieldIds?.Select(id => id.ToString()).ToList() ?? [];
+        var rows = await query.Select(t => t.CustomFieldsJson).Take(MaxGroupRows).ToListAsync(cancellationToken);
+        var counts = new Dictionary<string, int>();
+        var empty = 0;
+        foreach (var json in rows)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var values = ids.Select(id => doc.RootElement.TryGetProperty(id, out var v) ? v : (System.Text.Json.JsonElement?)null)
+                .FirstOrDefault(v => v is not null);
+            var keys = values switch
+            {
+                { ValueKind: System.Text.Json.JsonValueKind.Array } arr => arr.EnumerateArray().Select(e => e.ToString()).ToList(),
+                { } one => [one.ToString()],
+                null => new List<string>()
+            };
+            if (keys.Count == 0)
+                empty++;
+            foreach (var key in keys)
+                counts[key] = counts.GetValueOrDefault(key) + 1;
+        }
+
+        var result = counts.Select(c => new TaskGroupCount(c.Key, c.Value)).ToList();
+        if (empty > 0)
+            result.Add(new TaskGroupCount(null, empty));
+        return result;
+    }
+
+    /// <summary>Предел задач для разбивки по пользовательскому полю (группировка в памяти).</summary>
+    private const int MaxGroupRows = 20000;
+
+    public async Task<TaskDailyCounts> DailyCountsAsync(TaskListFilter filter, DateTime since, CancellationToken cancellationToken)
+    {
+        var query = Filtered(filter);
+        var created = await query.Where(t => t.CreatedAt >= since)
+            .GroupBy(t => t.CreatedAt.Date)
+            .Select(g => new { Day = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        var closed = await query.Where(t => t.StatusChangedAt >= since && db.Statuses.Any(s => s.Id == t.StatusId && s.IsFinal))
+            .GroupBy(t => t.StatusChangedAt.Date)
+            .Select(g => new { Day = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        return new TaskDailyCounts(
+            created.ToDictionary(x => DateOnly.FromDateTime(x.Day), x => x.Count),
+            closed.ToDictionary(x => DateOnly.FromDateTime(x.Day), x => x.Count));
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetByMilestoneIdAsync(Guid milestoneId, CancellationToken cancellationToken) =>
+        await db.TaskItems.Where(t => t.MilestoneId == milestoneId).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, MilestoneCounts>> CountByMilestonesAsync(
+        IReadOnlyCollection<Guid> milestoneIds, DateOnly today, DateTime closedSince, CancellationToken cancellationToken)
+    {
+        if (milestoneIds.Count == 0)
+            return new Dictionary<Guid, MilestoneCounts>();
+
+        // Один GROUP BY с join статусов: финальность и вид — признаки статуса, не задачи.
+        var rows = await db.TaskItems
+            .Where(t => t.MilestoneId != null && milestoneIds.Contains(t.MilestoneId.Value))
+            .Join(db.Statuses, t => t.StatusId, s => s.Id, (t, s) => new
+            {
+                MilestoneId = t.MilestoneId!.Value,
+                s.IsFinal,
+                Working = s.Type == StatusType.InProgress || s.Type == StatusType.InReview,
+                Points = t.StoryPoints ?? 0,
+                t.DueDate,
+                t.StatusChangedAt
+            })
+            .GroupBy(x => x.MilestoneId)
+            .Select(g => new
+            {
+                MilestoneId = g.Key,
+                Total = g.Count(),
+                Done = g.Count(x => x.IsFinal),
+                InProgress = g.Count(x => !x.IsFinal && x.Working),
+                Points = g.Sum(x => x.Points),
+                DonePoints = g.Sum(x => x.IsFinal ? x.Points : 0),
+                Overdue = g.Count(x => !x.IsFinal && x.DueDate != null && x.DueDate < today),
+                ClosedRecently = g.Count(x => x.IsFinal && x.StatusChangedAt >= closedSince)
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(
+            x => x.MilestoneId,
+            x => new MilestoneCounts(x.Total, x.Done, x.InProgress, x.Points, x.DonePoints, x.Overdue, x.ClosedRecently));
+    }
+
+    public async Task<IReadOnlyList<Guid>> MatchingIdsAsync(TaskListFilter filter, CancellationToken cancellationToken) =>
+        await Filtered(filter).Select(t => t.Id).ToListAsync(cancellationToken);
+
     private IQueryable<TaskItem> Filtered(TaskListFilter filter)
     {
         var query = db.TaskItems.AsQueryable();
 
         if (filter.BoardId is { } boardId)
             query = query.Where(t => t.BoardId == boardId);
+
+        if (filter.VisibleBoardIds is { } visible)
+            query = query.Where(t => visible.Contains(t.BoardId));
 
         if (filter.AssigneeId is { } assigneeId)
             query = query.Where(t => t.AssigneeId == assigneeId);
@@ -132,6 +282,29 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
         if (filter.StatusType is { } statusType)
             query = query.Where(t => db.Statuses.Any(s => s.Id == t.StatusId && s.Type == statusType));
 
+        if (filter.UntypedStatus)
+            query = query.Where(t => db.Statuses.Any(s => s.Id == t.StatusId && s.Type == null));
+
+        // Окно финальной колонки канбана: у каждого проекта своё число дней, поэтому оно берётся из доски задачи.
+        if (filter.DoneWindowAt is { } now)
+            query = query.Where(t =>
+                !db.Statuses.Any(s => s.Id == t.StatusId && s.IsFinal)
+                || t.StatusChangedAt >= now.AddDays(-db.Boards.Where(b => b.Id == t.BoardId).Select(b => b.DoneColumnDays).First()));
+
+        // Вид типа — общий ключ для всех проектов, как StatusType: «все ошибки» ищутся без знания Id типов.
+        if (filter.TypeKind is { } typeKind)
+            query = query.Where(t => db.TaskTypes.Any(tt => tt.Id == t.TypeId && tt.Kind == typeKind));
+
+        if (filter.Priority is { } priority)
+            query = query.Where(t => t.Priority == priority);
+
+        if (filter.ParentId is { } parentId)
+            query = query.Where(t => t.ParentId == parentId);
+
+        // Условие FQL (docs/TZ_task_views.md §7) — тем же Where, поэтому и страница, и счётчики считаются с ним.
+        if (filter.Condition is { } condition)
+            query = query.Where(TaskFilterTranslator.ToPredicate(condition, db));
+
         if (!string.IsNullOrWhiteSpace(filter.Query))
         {
             // Тот же поиск, что раньше делал клиент по загруженному списку: по названию и по коду задачи.
@@ -143,13 +316,15 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
             var matchedByCode = db.Database.SqlQuery<Guid>(
                 $"""SELECT "Id" AS "Value" FROM "TaskItems" WHERE "Code" ILIKE {pattern}""");
 
-            query = query.Where(t => EF.Functions.ILike(t.Title, pattern) || matchedByCode.Contains(t.Id));
+            query = query.Where(t => EF.Functions.ILike(t.Title, pattern, "\\") || matchedByCode.Contains(t.Id));
         }
 
         return query;
     }
 
     // ILIKE трактует % и _ как шаблон: в пользовательском запросе они должны искаться буквально.
+    internal static string EscapeLike(string value) => Escape(value);
+
     private static string Escape(string value) =>
         value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
@@ -174,13 +349,91 @@ public sealed class TaskItemRepository(FlowDbContext db) : ITaskItemRepository
     /// выражения EF не переводит. Коды в базе всегда в верхнем регистре (ключ доски такой), запрос
     /// приводится к нему здесь.
     /// </summary>
-    public Task<TaskItem?> GetByCodeAsync(string code, CancellationToken cancellationToken)
+    public async Task<TaskItem?> GetByCodeAsync(string code, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(code))
-            return Task.FromResult<TaskItem?>(null);
+            return null;
 
-        var normalized = TaskCode.FromValue(code.Trim().ToUpperInvariant());
-        return db.TaskItems.FirstOrDefaultAsync(t => t.Code == normalized, cancellationToken);
+        var raw = code.Trim().ToUpperInvariant();
+        var normalized = TaskCode.FromValue(raw);
+        // Живой код важнее алиаса: алиас — прежний код задачи, переехавшей в другой проект (docs/TZ_task_model.md §6).
+        return await db.TaskItems.FirstOrDefaultAsync(t => t.Code == normalized, cancellationToken)
+               ?? await db.TaskItems.FirstOrDefaultAsync(t => db.TaskCodeAliases.Any(a => a.Code == raw && a.TaskId == t.Id), cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetChildrenAsync(Guid parentId, CancellationToken cancellationToken) =>
+        await db.TaskItems.Where(t => t.ParentId == parentId).OrderBy(t => t.Rank).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, ChildCounts>> CountChildrenAsync(IReadOnlyCollection<Guid> parentIds, CancellationToken cancellationToken)
+    {
+        if (parentIds.Count == 0)
+            return new Dictionary<Guid, ChildCounts>();
+
+        // Финальность — признак статуса, поэтому join до группировки: одна строка на родителя, не N+1.
+        var rows = await db.TaskItems
+            .Where(t => t.ParentId != null && parentIds.Contains(t.ParentId.Value))
+            .Join(db.Statuses, t => t.StatusId, s => s.Id, (t, s) => new { ParentId = t.ParentId!.Value, s.IsFinal })
+            .GroupBy(x => x.ParentId)
+            .Select(g => new { ParentId = g.Key, Total = g.Count(), Done = g.Count(x => x.IsFinal) })
+            .ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(x => x.ParentId, x => new ChildCounts(x.Total, x.Done));
+    }
+
+    public async Task<IReadOnlyList<TaskTreeEntry>> GetTreeAsync(Guid boardId, Guid? rootId, CancellationToken cancellationToken)
+    {
+        // Рекурсивный CTE с путём из рангов: сортировка по пути даёт порядок обхода «родитель, затем его
+        // поддерево», а внутри уровня — ручной порядок. Разделитель '/' меньше любой цифры base-62, поэтому
+        // «a0/…» (дети a0) встаёт между «a0» и «a0V». COLLATE "C" — чтобы сравнение шло по байтам, как у Rank.
+        var rows = rootId is { } root
+            ? await db.Database.SqlQuery<TreeRow>($"""
+                WITH RECURSIVE tree AS (
+                    SELECT t."Id", 0 AS "Depth", (t."Rank" || '/') COLLATE "C" AS "Path"
+                    FROM "TaskItems" t WHERE t."BoardId" = {boardId} AND t."Id" = {root}
+                    UNION ALL
+                    SELECT c."Id", tree."Depth" + 1, (tree."Path" || c."Rank" || '/') COLLATE "C"
+                    FROM "TaskItems" c JOIN tree ON c."ParentId" = tree."Id")
+                SELECT "Id", "Depth", "Path" FROM tree
+                """).OrderBy(r => r.Path).ToListAsync(cancellationToken)
+            : await db.Database.SqlQuery<TreeRow>($"""
+                WITH RECURSIVE tree AS (
+                    SELECT t."Id", 0 AS "Depth", (t."Rank" || '/') COLLATE "C" AS "Path"
+                    FROM "TaskItems" t WHERE t."BoardId" = {boardId} AND t."ParentId" IS NULL
+                    UNION ALL
+                    SELECT c."Id", tree."Depth" + 1, (tree."Path" || c."Rank" || '/') COLLATE "C"
+                    FROM "TaskItems" c JOIN tree ON c."ParentId" = tree."Id")
+                SELECT "Id", "Depth", "Path" FROM tree
+                """).OrderBy(r => r.Path).ToListAsync(cancellationToken);
+
+        var ids = rows.Select(r => r.Id).ToList();
+        var items = await db.TaskItems.Where(t => ids.Contains(t.Id)).AsNoTracking().ToDictionaryAsync(t => t.Id, cancellationToken);
+
+        return rows.Where(r => items.ContainsKey(r.Id)).Select(r => new TaskTreeEntry(items[r.Id], r.Depth)).ToList();
+    }
+
+    /// <summary>Строка рекурсивного CTE дерева; SqlQuery читает колонки по именам свойств.</summary>
+    private sealed class TreeRow
+    {
+        public Guid Id { get; init; }
+        public int Depth { get; init; }
+        public string Path { get; init; } = "";
+    }
+
+    public Task<string?> GetMaxRankAsync(Guid boardId, Guid? excludeTaskId, CancellationToken cancellationToken) =>
+        db.TaskItems
+            .Where(t => t.BoardId == boardId && t.Id != excludeTaskId)
+            .OrderByDescending(t => t.Rank)
+            .Select(t => t.Rank)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<string?> GetNeighborRankAsync(Guid boardId, string rank, bool after, Guid excludeTaskId, CancellationToken cancellationToken)
+    {
+        // Параметр сравнивается с колонкой и получает её COLLATE "C": порядок тот же, что в индексе (BoardId, Rank).
+        var query = db.TaskItems.Where(t => t.BoardId == boardId && t.Id != excludeTaskId);
+
+        return after
+            ? query.Where(t => string.Compare(t.Rank, rank) > 0).OrderBy(t => t.Rank).Select(t => t.Rank).FirstOrDefaultAsync(cancellationToken)
+            : query.Where(t => string.Compare(t.Rank, rank) < 0).OrderByDescending(t => t.Rank).Select(t => t.Rank).FirstOrDefaultAsync(cancellationToken);
     }
 
     public void Add(TaskItem task) => db.TaskItems.Add(task);

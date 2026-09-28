@@ -16,13 +16,14 @@ internal sealed class SearchQueryHandler(
     ITaskItemRepository tasks,
     IUserRepository users,
     SearchOptions options,
-    ActorResolver actors)
+    ActorResolver actors,
+    IProjectAccess projectAccess)
     : IRequestHandler<SearchQuery, SearchResponse?>
 {
     /// <summary>Что ищется, когда тип не выбран. Вложения входят сюда наравне с остальным: файл,
     /// который виден только при явном фильтре «Файлы», для человека всё равно что не найден.</summary>
     private static readonly SearchSourceType[] AllTypes =
-        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User, SearchSourceType.Attachment];
+        [SearchSourceType.Task, SearchSourceType.Comment, SearchSourceType.Board, SearchSourceType.User, SearchSourceType.Attachment, SearchSourceType.Development];
 
     /// <summary>Сколько текста описания уходит в подсказку прямого попадания по коду задачи.</summary>
     private const int DirectSnippetLength = 160;
@@ -39,7 +40,10 @@ internal sealed class SearchQueryHandler(
             throw new ArgumentException("Запрос поиска не может быть пустым.", nameof(request.Text));
 
         var started = Stopwatch.GetTimestamp();
-        var resolved = await ResolveAsync(intent, actor, request, cancellationToken);
+        // Видимые проекты — одним запросом на весь поиск: ими фильтруются и выдача индекса (BoardId чанка),
+        // и разбор строки (проект:KEY, статусы, код задачи) — скрытый проект не должен угадываться даже по ключу.
+        var visible = await projectAccess.VisibleBoardIdsAsync(actor, cancellationToken);
+        var resolved = await ResolveAsync(intent, actor, request, visible, cancellationToken);
 
         // Код задачи в строке — это не поиск, а прямое попадание: задача идёт первой в выдаче,
         // а клиент может открыть её сразу.
@@ -116,7 +120,8 @@ internal sealed class SearchQueryHandler(
             StatusIds: resolved.StatusIds,
             OverdueOnly: intent.Overdue,
             UpdatedSince: resolved.UpdatedSince,
-            VisionQueryEmbedding: visionEmbedding);
+            VisionQueryEmbedding: visionEmbedding,
+            VisibleBoardIds: visible);
 
         var page = await index.SearchAsync(criteria, cancellationToken);
 
@@ -248,7 +253,8 @@ internal sealed class SearchQueryHandler(
     /// проект:KEY → id, статус:… → набор id (название статуса своё у каждого проекта).
     /// Нераспознанное возвращается в текст запроса — опечатка в фильтре не должна обнулять выдачу.
     /// </summary>
-    private async Task<ResolvedIntent> ResolveAsync(SearchIntent intent, User actor, SearchQuery request, CancellationToken cancellationToken)
+    private async Task<ResolvedIntent> ResolveAsync(
+        SearchIntent intent, User actor, SearchQuery request, IReadOnlyCollection<Guid>? visible, CancellationToken cancellationToken)
     {
         var text = intent.Text;
         Guid? assigneeId = intent.Mine ? actor.Id : null;
@@ -259,7 +265,8 @@ internal sealed class SearchQueryHandler(
         // Проекты со статусами нужны трём разным веткам ниже, а запрос один и тот же: их единицы,
         // но дёргать его трижды незачем — и незачем вовсе, когда ни одна ветка не сработала.
         IReadOnlyList<Board>? allBoards = null;
-        async Task<IReadOnlyList<Board>> BoardsAsync() => allBoards ??= await boards.GetAllAsync(cancellationToken);
+        async Task<IReadOnlyList<Board>> BoardsAsync() => allBoards ??=
+            (await boards.GetAllAsync(cancellationToken)).Where(b => visible is null || visible.Contains(b.Id)).ToList();
 
         if (intent.AssigneeUsername is { } username)
         {
@@ -272,7 +279,10 @@ internal sealed class SearchQueryHandler(
 
         if (intent.TaskCode is { } code)
         {
+            // Код задачи скрытого проекта — как несуществующий: остаётся текстом запроса.
             task = await tasks.GetByCodeAsync(code, cancellationToken);
+            if (task is not null && visible is not null && !visible.Contains(task.BoardId))
+                task = null;
             if (task is null)
                 text = Append(text, code);
         }

@@ -115,7 +115,7 @@ public class UsersController(IMediator mediator, IActorAccessor actor) : Control
         try
         {
             var preferences = await mediator.Send(
-                new UserUpdatePreferencesCommand(actor.Require(), request.SidebarMode, request.StartPage, request.TasksPageSize),
+                new UserUpdatePreferencesCommand(actor.Require(), request.SidebarMode, request.StartPage, request.TasksPageSize, request.TasksView),
                 cancellationToken);
 
             return Ok(preferences);

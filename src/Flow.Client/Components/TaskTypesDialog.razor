@@ -1,0 +1,231 @@
+@* Модалка «Типы задач» проекта (docs/TZ_task_model.md §1, Admin+): список типов с переименованием по клику,
+   «сделать основным», архив/возврат и добавление нового. Каждое действие — отдельный запрос; ответ — проект
+   целиком (флаг «по умолчанию» мог переехать), он же уходит наверх через OnChanged.
+
+   Удаления нет намеренно: на тип ссылаются задачи, архивный тип просто не предлагается при создании.
+   Жизненный цикл MudDialog — как у CreateBoardDialog: закрываем ссылку на диалог явно (CloseDialog). *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Типы задач · @_board.Key</h3>
+        <div class="hint">Вид задаёт иконку и уровень: эпик → история → задача и ошибка → подзадача. Основной тип
+            получают новые задачи; тип в архиве остаётся у старых задач, но не предлагается при создании.</div>
+    </TitleContent>
+    <DialogContent>
+        <div class="tt-list">
+            @foreach (var t in _board.TaskTypes)
+            {
+                <div class="tt-row hover-row @(t.IsArchived ? "archived" : "")" @key="t.Id">
+                    <TaskTypeIcon Kind="t.Kind" Size="15" />
+                    @if (_editingId == t.Id)
+                    {
+                        <DsInput Id="tt-edit" Compact="true" Class="tt-name-input" MaxLength="50" Value="@_editName" ValueChanged="v => _editName = v"
+                                 OnKeyDown="OnEditKey" OnBlur="CommitRename" EscapeReverts="true" />
+                    }
+                    else
+                    {
+                        <button type="button" class="tt-name" title="Переименовать" disabled="@_busy" @onclick="() => StartRename(t)">@t.Name</button>
+                    }
+                    <span class="tt-kind">@TaskMeta.KindLabel(t.Kind)</span>
+                    <span class="tt-actions">
+                        @if (t.IsDefault)
+                        {
+                            <span class="status-pill sm">основной</span>
+                        }
+                        else if (t.IsArchived)
+                        {
+                            <span class="status-pill sm">в архиве</span>
+                        }
+                        <RowActions Disabled="_busy" OnEdit="() => StartRename(t)">
+                            @if (!t.IsDefault && !t.IsArchived)
+                            {
+                                <DsIconButton Icon="star" Size="26" Title="Сделать основным" Disabled="_busy"
+                                              OnClick="() => Update(t, new UpdateTaskTypeRequest(IsDefault: true))" />
+                                <DsIconButton Icon="archive" Size="26" Title="В архив" Disabled="_busy"
+                                              OnClick="() => Update(t, new UpdateTaskTypeRequest(IsArchived: true))" />
+                            }
+                            else if (t.IsArchived)
+                            {
+                                <DsIconButton Icon="unarchive" Size="26" Title="Вернуть из архива" Disabled="_busy"
+                                              OnClick="() => Update(t, new UpdateTaskTypeRequest(IsArchived: false))" />
+                            }
+                        </RowActions>
+                    </span>
+                </div>
+            }
+        </div>
+
+        <div class="tt-add">
+            <DsInput Id="tt-new" Label="Новый тип" Placeholder="Например, «Инцидент»" MaxLength="50"
+                     Value="@_newName" ValueChanged="v => { _newName = v; _error = null; }" OnKeyDown="OnNewKey" />
+            <div class="seg" role="radiogroup" aria-label="Вид типа">
+                @foreach (var kind in TaskMeta.Kinds)
+                {
+                    <button type="button" class="seg-btn @(kind == _newKind ? "on" : "")" role="radio"
+                            aria-checked="@(kind == _newKind ? "true" : "false")" @onclick="() => _newKind = kind">
+                        <TaskTypeIcon Kind="kind" Size="13" />@TaskMeta.KindLabel(kind)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Готово</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Add" Disabled="@(_newName.Trim().Length == 0 || _busy)" Busy="_busy">Добавить тип</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter] public EventCallback<BoardResponse> OnChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private BoardResponse _board = default!;
+    private Guid _boardId;
+    private Guid? _editingId;
+    private string _editName = "";
+    private bool _editCancelled;
+    private string _newName = "";
+    private TaskTypeKind _newKind = TaskTypeKind.Task;
+    private string? _error;
+
+    private readonly DialogOptions _options = new()
+    {
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true,
+        CloseButton = false,
+        CloseOnEscapeKey = true,
+        BackdropClick = true
+    };
+
+    /// <summary>
+    /// Проект берём из параметра только при открытии (или смене проекта): дальше источник — ответы сервера.
+    /// Иначе перерисовка страницы со старым Board, пришедшая после OnChanged, откатывала бы список типов.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        if (_boardId == Board.Id)
+            return;
+
+        _boardId = Board.Id;
+        _board = Board;
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing)
+            return;
+
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy)
+            return;
+
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task StartRename(TaskTypeResponse type)
+    {
+        _editingId = type.Id;
+        _editName = type.Name;
+        _editCancelled = false;
+        StateHasChanged();
+        // Содержимое MudDialog рисует провайдер следующим проходом — Yield не дождётся поля (AGENTS.md, «Диалоги»).
+        await Task.Delay(50);
+        await Browser.FocusAsync("tt-edit", select: true);
+    }
+
+    private async Task OnEditKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitRename();
+        else if (e.Key == "Escape") { _editCancelled = true; _editingId = null; }
+    }
+
+    private async Task CommitRename()
+    {
+        if (_editingId is not { } id || _editCancelled)
+            return;
+
+        _editingId = null;
+        var type = _board.TaskTypes.FirstOrDefault(t => t.Id == id);
+        var name = _editName.Trim();
+        if (type is null || name.Length == 0 || name == type.Name || NameTaken(name, type.Id))
+            return;
+
+        await Update(type, new UpdateTaskTypeRequest(Name: name));
+    }
+
+    private Task Update(TaskTypeResponse type, UpdateTaskTypeRequest request) =>
+        Send(() => Api.UpdateTaskType(_board.Id, type.Id, request));
+
+    private async Task OnNewKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Add();
+    }
+
+    private async Task Add()
+    {
+        var name = _newName.Trim();
+        if (name.Length == 0 || _busy)
+            return;
+
+        if (NameTaken(name, exceptId: null))
+            return;
+
+        if (await Send(() => Api.CreateTaskType(_board.Id, new CreateTaskTypeRequest(name, _newKind))))
+            _newName = "";
+    }
+
+    /// <summary>Та же проверка, что в домене (без учёта регистра), — чтобы ответить по-русски до запроса.</summary>
+    private bool NameTaken(string name, Guid? exceptId)
+    {
+        var taken = _board.TaskTypes.Any(t => t.Id != exceptId && string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+        _error = taken ? $"Тип «{name}» в проекте уже есть" : null;
+        return taken;
+    }
+
+    /// <summary>Ошибку сервера («такой тип уже есть», «основной тип нельзя в архив») показываем под формой.</summary>
+    private async Task<bool> Send(Func<Task<ApiResult<BoardResponse>>> call)
+    {
+        _busy = true;
+        _error = null;
+        var result = await call();
+        _busy = false;
+
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить тип";
+            return false;
+        }
+
+        _board = result.Value!;
+        await OnChanged.InvokeAsync(_board);
+        return true;
+    }
+}

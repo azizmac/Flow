@@ -1,0 +1,16 @@
+@* Глиф приоритета; у «без приоритета» глифа нет — компонент ничего не рисует, если не просили заглушку. *@
+@if (TaskMeta.PriorityIcon(Value) is { } icon)
+{
+    <span class="prio-ico" title="@TaskMeta.PriorityLabel(Value)" style="color:@TaskMeta.PriorityColor(Value)"><Icon Name="@icon" Size="Size" /></span>
+}
+else if (ShowNone)
+{
+    <span class="prio-ico none" title="@TaskMeta.PriorityLabel(Value)"></span>
+}
+
+@code {
+    [Parameter] public TaskPriority Value { get; set; }
+    [Parameter] public int Size { get; set; } = 14;
+    /// <summary>Держать место под глиф и у «без приоритета» — чтобы в меню подписи стояли ровно.</summary>
+    [Parameter] public bool ShowNone { get; set; }
+}

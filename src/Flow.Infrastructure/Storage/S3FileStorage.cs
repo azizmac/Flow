@@ -44,6 +44,27 @@ internal sealed class S3FileStorage(IAmazonS3 client, S3Options options, ILogger
         }
     }
 
+    /// <summary>Server-side CopyObject: байты не идут через хост. Отсутствующий источник — false, а не исключение.</summary>
+    public async Task<bool> CopyAsync(string sourceKey, string targetKey, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await client.CopyObjectAsync(new CopyObjectRequest
+            {
+                SourceBucket = options.Bucket,
+                SourceKey = sourceKey,
+                DestinationBucket = options.Bucket,
+                DestinationKey = targetKey
+            }, cancellationToken);
+            return true;
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            logger.LogWarning("Объект {Key} не найден при копировании", sourceKey);
+            return false;
+        }
+    }
+
     public Task DeleteAsync(string key, CancellationToken cancellationToken) =>
         // S3 считает удаление несуществующего ключа успехом — повторный вызов безопасен.
         client.DeleteObjectAsync(options.Bucket, key, cancellationToken);

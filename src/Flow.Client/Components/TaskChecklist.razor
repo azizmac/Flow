@@ -1,0 +1,168 @@
+@* Чек-лист задачи (docs/TZ_task_model.md §8) в слайдере и на странице: прогресс, отметка кликом по квадрату, правка
+   текста по клику, удаление и перестановка стрелками (видны при наведении), новый пункт — строкой по Enter.
+   Каждое действие — отдельный запрос, ответ — чек-лист целиком. Прогресс уходит наверх (OnCountsChanged): строка
+   списка показывает тот же «4/5», а лента получает запись без перезагрузки. Без права правки — только чтение;
+   у задачи без пунктов и без права правки блока нет. *@
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+
+@if (_items is not null && (CanEdit || _items.Count > 0))
+{
+    <div class="checklist">
+        <div class="subtasks-head">
+            <div class="meta-k">Чек-лист</div>
+            @if (_items.Count > 0)
+            {
+                <span class="subtasks-count">@Done/@_items.Count</span>
+                <span class="subtasks-bar" role="progressbar" aria-valuemin="0" aria-valuemax="@_items.Count" aria-valuenow="@Done">
+                    <span style="width:@(_items.Count == 0 ? 0 : (int)Math.Round(100.0 * Done / _items.Count))%"></span>
+                </span>
+            }
+        </div>
+        @for (var i = 0; i < _items.Count; i++)
+        {
+            var item = _items[i];
+            var index = i;
+            <div class="check-row @(item.IsDone ? "done" : "")" @key="item.Id">
+                <DsCheckbox Value="item.IsDone" ValueChanged="_ => Toggle(item)" Disabled="@(!CanEdit || _busy)"
+                            title="@(item.IsDone ? "Снять отметку" : "Отметить")" />
+                @if (_editingId == item.Id)
+                {
+                    <input id="@_editInputId" class="check-edit" value="@_editText" maxlength="500"
+                           @oninput="e => _editText = e.Value?.ToString() ?? string.Empty" @onkeydown="OnEditKey" @onblur="CommitEdit" />
+                }
+                else
+                {
+                    <span class="check-text" role="@(CanEdit ? "button" : null)" tabindex="@(CanEdit ? 0 : -1)"
+                          title="@(CanEdit ? "Нажмите, чтобы изменить" : null)" @onclick="() => StartEdit(item)">@item.Text</span>
+                }
+                @if (CanEdit)
+                {
+                    <span class="check-actions">
+                        <button type="button" class="st-arrow up" title="Выше" aria-label="Выше" disabled="@(_busy || index == 0)"
+                                @onclick="() => Move(index, -1)"><Icon Name="chevron-down" Size="12" /></button>
+                        <button type="button" class="st-arrow" title="Ниже" aria-label="Ниже" disabled="@(_busy || index == _items.Count - 1)"
+                                @onclick="() => Move(index, 1)"><Icon Name="chevron-down" Size="12" /></button>
+                        <button type="button" class="st-arrow" title="Удалить пункт" aria-label="Удалить пункт" disabled="@_busy"
+                                @onclick="() => Remove(item)"><Icon Name="close-simple" Size="11" /></button>
+                    </span>
+                }
+            </div>
+        }
+        @if (CanEdit)
+        {
+            <div class="subtask-add">
+                <Icon Name="plus" Size="13" />
+                <input id="@_newInputId" class="subtask-input" placeholder="Новый пункт — Enter" maxlength="500" value="@_draft"
+                       disabled="@_busy" autocomplete="off" @oninput="e => _draft = e.Value?.ToString() ?? string.Empty" @onkeydown="OnNewKey" />
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid TaskId { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    /// <summary>Прогресс изменился: (было выполнено, было всего, стало выполнено, стало всего).</summary>
+    [Parameter] public EventCallback<(int OldDone, int OldTotal, int Done, int Total)> OnCountsChanged { get; set; }
+
+    private readonly string _newInputId = "chk-" + Guid.NewGuid().ToString("N")[..8];
+    private readonly string _editInputId = "chke-" + Guid.NewGuid().ToString("N")[..8];
+    private List<TaskChecklistItemResponse>? _items;
+    private Guid _loadedFor;
+    private string _draft = "";
+    private Guid? _editingId;
+    private string _editText = "";
+    private bool _editCancelled;
+    private bool _busy;
+
+    private int Done => _items?.Count(i => i.IsDone) ?? 0;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == TaskId)
+            return;
+
+        _loadedFor = TaskId;
+        _items = null;
+        _draft = "";
+        _editingId = null;
+        var id = TaskId;
+        var result = await Api.GetChecklist(id);
+        if (id == TaskId)
+            _items = result.Ok ? result.Value!.ToList() : [];
+    }
+
+    private async Task Send(Func<Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>>> call)
+    {
+        var (oldDone, oldTotal) = (Done, _items!.Count);
+        _busy = true;
+        var result = await call();
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось сохранить чек-лист");
+            return;
+        }
+
+        _items = result.Value!.ToList();
+        if ((oldDone, oldTotal) != (Done, _items.Count))
+            await OnCountsChanged.InvokeAsync((oldDone, oldTotal, Done, _items.Count));
+    }
+
+    private Task Toggle(TaskChecklistItemResponse item) =>
+        Send(() => Api.UpdateChecklistItem(TaskId, item.Id, new UpdateChecklistItemRequest(IsDone: !item.IsDone)));
+
+    private Task Remove(TaskChecklistItemResponse item) =>
+        Send(() => Api.DeleteChecklistItem(TaskId, item.Id));
+
+    private Task Move(int index, int delta)
+    {
+        var order = _items!.Select(i => i.Id).ToList();
+        (order[index], order[index + delta]) = (order[index + delta], order[index]);
+        return Send(() => Api.ReorderChecklist(TaskId, new ReorderChecklistRequest(order)));
+    }
+
+    private async Task OnNewKey(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter" || _busy || _draft.Trim().Length == 0)
+            return;
+
+        var text = _draft.Trim();
+        _draft = "";
+        await Send(() => Api.AddChecklistItem(TaskId, new AddChecklistItemRequest(text)));
+        await Browser.FocusAsync(_newInputId);
+    }
+
+    private async Task StartEdit(TaskChecklistItemResponse item)
+    {
+        if (!CanEdit) return;
+        _editingId = item.Id;
+        _editText = item.Text;
+        _editCancelled = false;
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync(_editInputId, select: true);
+    }
+
+    private async Task OnEditKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitEdit();
+        else if (e.Key == "Escape") { _editCancelled = true; _editingId = null; }
+    }
+
+    private async Task CommitEdit()
+    {
+        if (_editingId is not { } id || _editCancelled)
+            return;
+
+        _editingId = null;
+        var item = _items!.FirstOrDefault(i => i.Id == id);
+        var text = _editText.Trim();
+        if (item is null || text.Length == 0 || text == item.Text)
+            return;
+
+        await Send(() => Api.UpdateChecklistItem(TaskId, id, new UpdateChecklistItemRequest(Text: text)));
+    }
+}

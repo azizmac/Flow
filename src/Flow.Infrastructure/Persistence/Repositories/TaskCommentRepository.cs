@@ -17,6 +17,9 @@ public sealed class TaskCommentRepository(FlowDbContext db) : ITaskCommentReposi
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<TaskComment>> GetByTaskIdForUpdateAsync(Guid taskId, CancellationToken cancellationToken) =>
+        await db.TaskComments.Where(c => c.TaskId == taskId).OrderBy(c => c.CreatedAt).ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyDictionary<Guid, int>> CountByTaskIdsAsync(
         IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken)
     {

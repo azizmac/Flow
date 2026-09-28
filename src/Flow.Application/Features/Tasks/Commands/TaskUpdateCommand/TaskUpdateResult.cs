@@ -14,6 +14,9 @@ public sealed class TaskUpdateResult
 
     public TaskResponse? Response { get; }
 
+    /// <summary>Workflow не пускает смену статуса: почему — по-русски, для человека (docs/TZ_workflow_config.md §2).</summary>
+    public IReadOnlyList<string>? Reasons { get; private init; }
+
     private TaskUpdateResult(bool isNotFound, string? validationError, TaskResponse? response)
     {
         IsNotFound = isNotFound;
@@ -21,10 +24,16 @@ public sealed class TaskUpdateResult
         Response = response;
     }
 
+    public static TaskUpdateResult TransitionNotAllowed(IReadOnlyList<string> reasons) =>
+        new(false, "Переход запрещён workflow проекта: " + string.Join("; ", reasons), null) { Reasons = reasons };
+
     public static TaskUpdateResult NotFound() => new(true, null, null);
 
     public static TaskUpdateResult InvalidStatus(Guid statusId) =>
         new(false, $"Status {statusId} does not belong to task's board.", null);
+
+    public static TaskUpdateResult InvalidType(Guid typeId) =>
+        new(false, $"Task type {typeId} does not belong to task's board.", null);
 
     public static TaskUpdateResult Success(TaskResponse response) => new(false, null, response);
 }

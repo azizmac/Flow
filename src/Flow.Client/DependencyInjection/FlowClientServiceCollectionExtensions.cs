@@ -30,6 +30,8 @@ public static class FlowClientServiceCollectionExtensions
         });
 
         services.AddScoped<UserDirectory>();
+        services.AddScoped<TeamDirectory>();
+        services.AddScoped<ProjectAccessState>();
         services.AddScoped<BrowserInterop>();
         services.AddScoped<HotkeyService>();
         // Scoped, а не Singleton: внутри лежит ISnackbar, который сам scoped.
@@ -44,6 +46,7 @@ public static class FlowClientServiceCollectionExtensions
         // Размеры картинок-вложений: их узнаёт список вложений, а нужны они рендеру Markdown.
         services.AddScoped<AttachmentSizes>();
         services.AddScoped<PreferencesState>();
+        services.AddScoped<SavedFiltersState>();
 
         return services;
     }

@@ -3,6 +3,10 @@ using Flow.Shared.Contracts.About;
 using Flow.Shared.Contracts.Attachments;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
+using Flow.Shared.Contracts.Dashboards;
+using Flow.Shared.Contracts.Scm;
+using Flow.Shared.Contracts.Milestones;
+using Flow.Shared.Contracts.Sprints;
 using Flow.Shared.Contracts.Tasks;
 using Flow.Shared.Contracts.Users;
 using Microsoft.AspNetCore.Components.Forms;
@@ -21,6 +25,9 @@ public sealed record ApiResult<T>(T? Value, string? Error, HttpStatusCode Status
     public bool Conflict => Status == HttpStatusCode.Conflict;
     public bool Unauthorized => Status == HttpStatusCode.Unauthorized;
     public bool Forbidden => Status == HttpStatusCode.Forbidden;
+
+    /// <summary>Ошибка в строке FQL — с местом, чтобы подчеркнуть его; у остальных ошибок null.</summary>
+    public Flow.Shared.Contracts.Filters.FqlErrorResponse? FqlError { get; init; }
 
     public static ApiResult<T> Success(T value, HttpStatusCode status) => new(value, null, status);
     public static ApiResult<T> Fail(string error, HttpStatusCode status) => new(default, error, status);
@@ -41,8 +48,176 @@ public interface IFlowApi
     Task<ApiResult<IReadOnlyList<BoardResponse>>> GetBoards(CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> GetBoard(Guid id, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> CreateBoard(CreateBoardRequest request, CancellationToken ct = default);
+
+    // Шаблоны задач (этап 3G)
+    Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Tasks.TaskTemplateResponse>>> GetTaskTemplates(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Tasks.TaskTemplateResponse>> CreateTaskTemplate(Guid boardId, Flow.Shared.Contracts.Tasks.SaveTaskTemplateRequest request, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Tasks.TaskTemplateResponse>> UpdateTaskTemplate(Guid templateId, Flow.Shared.Contracts.Tasks.SaveTaskTemplateRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteTaskTemplate(Guid templateId, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Tasks.TaskTemplateResponse>> SaveTaskAsTemplate(Guid taskId, string name, CancellationToken ct = default);
+
+    // Шаблоны проектов и перенос конфигурации (этап 3F)
+    Task<ApiResult<IReadOnlyList<BoardTemplateResponse>>> GetBoardTemplates(CancellationToken ct = default);
+    Task<ApiResult<BoardTemplateResponse>> SaveBoardAsTemplate(Guid boardId, SaveBoardTemplateRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteBoardTemplate(Guid templateId, CancellationToken ct = default);
+    Task<ApiResult<ApplyConfigPreviewResponse>> PreviewApplyConfig(Guid sourceBoardId, ApplyBoardConfigRequest request, CancellationToken ct = default);
+    Task<ApiResult<ApplyBoardConfigResponse>> ApplyConfig(Guid sourceBoardId, ApplyBoardConfigRequest request, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> RenameBoard(Guid id, RenameBoardRequest request, CancellationToken ct = default);
     Task<ApiResult<bool>> DeleteBoard(Guid id, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> CreateTaskType(Guid boardId, CreateTaskTypeRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> UpdateTaskType(Guid boardId, Guid typeId, UpdateTaskTypeRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> CreateStatus(Guid boardId, CreateStatusRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> UpdateStatus(Guid boardId, Guid statusId, UpdateStatusRequest request, CancellationToken ct = default);
+    /// <summary>Удалить статус, переведя его задачи в <paramref name="moveTo"/> (в журнал задач — смена статуса).</summary>
+    Task<ApiResult<BoardResponse>> DeleteStatus(Guid boardId, Guid statusId, Guid moveTo, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> ReorderStatuses(Guid boardId, ReorderStatusesRequest request, CancellationToken ct = default);
+
+    // Workflow (docs/TZ_workflow_config.md §2)
+    Task<ApiResult<WorkflowResponse>> GetWorkflow(Guid boardId, Guid? typeId = null, CancellationToken ct = default);
+    Task<ApiResult<WorkflowResponse>> ResetTypeWorkflow(Guid boardId, Guid typeId, CancellationToken ct = default);
+    Task<ApiResult<WorkflowResponse>> SetWorkflow(Guid boardId, SetWorkflowRequest request, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskTransitionResponse>>> GetTransitions(Guid taskId, CancellationToken ct = default);
+
+    // Канбан (docs/TZ_task_views.md §1): без колонки — все колонки первой страницей, с колонкой — её страница с offset.
+    Task<ApiResult<TaskBoardResponse>> GetTaskBoard(
+        Guid? boardId = null,
+        Guid? assigneeId = null,
+        bool unassigned = false,
+        string? query = null,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
+        string? fql = null,
+        Guid? statusId = null,
+        StatusType? statusType = null,
+        bool other = false,
+        int offset = 0,
+        int? limit = null,
+        CancellationToken ct = default);
+
+    Task<ApiResult<BoardResponse>> SetDoneColumnDays(Guid boardId, int days, CancellationToken ct = default);
+
+    // Календарь (docs/TZ_task_views.md §5): задачи, пересекающие окно дат; фильтры — как у списка.
+    Task<ApiResult<TaskCalendarResponse>> GetCalendar(
+        DateOnly from,
+        DateOnly to,
+        Guid? boardId = null,
+        Guid? assigneeId = null,
+        bool unassigned = false,
+        string? query = null,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
+        string? fql = null,
+        CancellationToken ct = default);
+
+    // Спринты и бэклог (docs/TZ_task_views.md §2).
+    Task<ApiResult<IReadOnlyList<SprintResponse>>> GetSprints(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<SprintResponse>> CreateSprint(Guid boardId, CreateSprintRequest request, CancellationToken ct = default);
+    Task<ApiResult<SprintResponse>> UpdateSprint(Guid sprintId, UpdateSprintRequest request, CancellationToken ct = default);
+    Task<ApiResult<SprintResponse>> StartSprint(Guid sprintId, StartSprintRequest request, CancellationToken ct = default);
+    Task<ApiResult<SprintResponse>> CompleteSprint(Guid sprintId, CompleteSprintRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteSprint(Guid sprintId, CancellationToken ct = default);
+    Task<ApiResult<SprintReportResponse>> GetSprintReport(Guid sprintId, CancellationToken ct = default);
+
+    Task<ApiResult<BacklogResponse>> GetBacklog(
+        Guid boardId,
+        Guid? assigneeId = null,
+        bool unassigned = false,
+        string? query = null,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
+        string? fql = null,
+        Guid? epicId = null,
+        CancellationToken ct = default);
+
+    Task<ApiResult<TaskResponse>> SetTaskSprint(Guid taskId, SetTaskSprintRequest request, CancellationToken ct = default);
+
+    // Пользовательские поля (docs/TZ_task_model.md §4): определения отвечают проектом целиком.
+    Task<ApiResult<BoardResponse>> CreateCustomField(Guid boardId, Flow.Shared.Contracts.CustomFields.CreateCustomFieldRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> UpdateCustomField(Guid boardId, Guid fieldId, Flow.Shared.Contracts.CustomFields.UpdateCustomFieldRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> ReorderCustomFields(Guid boardId, Flow.Shared.Contracts.CustomFields.ReorderCustomFieldsRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> SetTaskCustomFields(Guid taskId, Flow.Shared.Contracts.CustomFields.SetCustomFieldsRequest request, CancellationToken ct = default);
+
+    // Экраны задач (docs/TZ_workflow_config.md §3): taskTypeId = null — для всех типов; ответ — проект целиком.
+    Task<ApiResult<BoardResponse>> SetScreen(Guid boardId, Guid? taskTypeId, ScreenContext context, SetScreenRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardResponse>> ResetScreen(Guid boardId, Guid? taskTypeId, ScreenContext context, CancellationToken ct = default);
+
+    // Вехи (docs/TZ_task_views.md §6).
+    Task<ApiResult<IReadOnlyList<MilestoneResponse>>> GetMilestones(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<MilestoneResponse>> GetMilestone(Guid milestoneId, CancellationToken ct = default);
+    Task<ApiResult<MilestoneResponse>> CreateMilestone(Guid boardId, CreateMilestoneRequest request, CancellationToken ct = default);
+    Task<ApiResult<MilestoneResponse>> UpdateMilestone(Guid milestoneId, UpdateMilestoneRequest request, CancellationToken ct = default);
+    Task<ApiResult<MilestoneResponse>> ShareMilestone(Guid milestoneId, ShareMilestoneRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteMilestone(Guid milestoneId, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> SetTaskMilestone(Guid taskId, SetTaskMilestoneRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> SetTaskTeam(Guid taskId, SetTaskTeamRequest request, CancellationToken ct = default);
+
+    // Слияние, разделение, перенос (docs/TZ_task_model.md §6); код — живой или прежний (после переноса).
+    Task<ApiResult<TaskResponse>> GetTaskByCode(string code, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> MergeTask(Guid taskId, MergeTaskRequest request, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskResponse>>> SplitTask(Guid taskId, SplitTaskRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskMovePreviewResponse>> PreviewTaskMove(Guid taskId, MoveTaskRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> MoveTask(Guid taskId, MoveTaskRequest request, CancellationToken ct = default);
+
+    // Повторение задачи (docs/TZ_task_model.md §9): правило на образце и превью ближайших дат черновика.
+    Task<ApiResult<TaskRecurrenceResponse>> GetRecurrence(Guid taskId, CancellationToken ct = default);
+    Task<ApiResult<TaskRecurrenceResponse>> SetRecurrence(Guid taskId, TaskRecurrenceRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteRecurrence(Guid taskId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<DateOnly>>> PreviewRecurrence(Guid taskId, TaskRecurrenceRequest request, int count = 5, CancellationToken ct = default);
+
+    // Git-хостинги (docs/TZ_scm_integration.md): подключения и репозитории — Admin+, привязка к проекту — ManageScm.
+    Task<ApiResult<IReadOnlyList<ScmConnectionResponse>>> GetScmConnections(CancellationToken ct = default);
+    Task<ApiResult<ScmConnectionResponse>> CreateScmConnection(CreateScmConnectionRequest request, CancellationToken ct = default);
+    Task<ApiResult<ScmConnectionResponse>> UpdateScmConnection(Guid id, UpdateScmConnectionRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteScmConnection(Guid id, CancellationToken ct = default);
+    Task<ApiResult<ScmConnectionResponse>> CheckScmConnection(Guid id, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<ScmRemoteRepositoryResponse>>> GetAvailableRepositories(Guid connectionId, string? query, CancellationToken ct = default);
+    Task<ApiResult<ScmRepositoryResponse>> AddScmRepository(AddScmRepositoryRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DisableScmRepository(Guid repositoryId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<ScmDeliveryResponse>>> GetScmDeliveries(Guid repositoryId, ScmDeliveryStatus? status = null, CancellationToken ct = default);
+    Task<ApiResult<ScmDeliveryResponse>> RetryScmDelivery(Guid deliveryId, CancellationToken ct = default);
+    Task<ApiResult<bool>> BackfillScmRepository(Guid repositoryId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> GetBoardRepositories(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> SetBoardRepository(Guid boardId, Guid repositoryId, bool bound,
+        UpdateScmBindingRequest? settings = null, CancellationToken ct = default);
+    Task<ApiResult<TaskDevelopmentResponse>> GetTaskDevelopment(Guid taskId, CancellationToken ct = default);
+    // Этап 5D: ветка и PR из карточки задачи (WriteScm); ответ — блок «Разработка» целиком.
+    Task<ApiResult<TaskDevelopmentResponse>> CreateScmBranch(Guid taskId, CreateScmBranchRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskDevelopmentResponse>> CreateScmPullRequest(Guid taskId, CreateScmPullRequestRequest request, CancellationToken ct = default);
+
+    // Дашборды (docs/TZ_task_views.md §8): данные каждого виджета — отдельным вызовом; ошибка виджета — в WidgetDataResponse.Error.
+    Task<ApiResult<IReadOnlyList<DashboardResponse>>> GetDashboards(CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> GetDefaultDashboard(CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> GetDashboard(Guid dashboardId, CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> CreateDashboard(CreateDashboardRequest request, CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> UpdateDashboard(Guid dashboardId, UpdateDashboardRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteDashboard(Guid dashboardId, CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> AddWidget(Guid dashboardId, AddWidgetRequest request, CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> UpdateWidget(Guid dashboardId, Guid widgetId, UpdateWidgetRequest request, CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> RemoveWidget(Guid dashboardId, Guid widgetId, CancellationToken ct = default);
+    Task<ApiResult<WidgetDataResponse>> GetWidgetData(Guid dashboardId, Guid widgetId, CancellationToken ct = default);
+
+    // ---- Доступ к проектам ----
+    Task<ApiResult<IReadOnlyList<ProjectAccessResponse>>> GetMyAccess(CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> GetBoardMembers(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> SetBoardMember(Guid boardId, Guid userId, SetBoardMemberRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> RemoveBoardMember(Guid boardId, Guid userId, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> SetBoardGroup(Guid boardId, Guid groupId, SetBoardMemberRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> RemoveBoardGroup(Guid boardId, Guid groupId, CancellationToken ct = default);
+
+    // Наборы прав (этап 4E): читают все, правит Owner
+    Task<ApiResult<IReadOnlyList<PermissionSetResponse>>> GetPermissionSets(CancellationToken ct = default);
+    Task<ApiResult<PermissionSetResponse>> CreatePermissionSet(SavePermissionSetRequest request, CancellationToken ct = default);
+    Task<ApiResult<PermissionSetResponse>> UpdatePermissionSet(Guid setId, SavePermissionSetRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeletePermissionSet(Guid setId, CancellationToken ct = default);
+
+    // Группы людей (этап 4C): читают все, меняют Admin+
+    Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Users.GroupResponse>>> GetGroups(CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Users.GroupResponse>> CreateGroup(Flow.Shared.Contracts.Users.SaveGroupRequest request, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Users.GroupResponse>> UpdateGroup(Guid groupId, Flow.Shared.Contracts.Users.SaveGroupRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteGroup(Guid groupId, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Users.GroupResponse>> SetGroupMember(Guid groupId, Guid userId, bool member, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> SetBoardVisibility(Guid boardId, SetVisibilityRequest request, CancellationToken ct = default);
+    Task<ApiResult<BoardMembersResponse>> SetBoardDefaultRole(Guid boardId, SetDefaultRoleRequest request, CancellationToken ct = default);
 
     // ---- Задачи ----
     Task<ApiResult<IReadOnlyList<TaskResponse>>> GetTasks(Guid boardId, Guid? assigneeId = null, CancellationToken ct = default);
@@ -59,14 +234,57 @@ public interface IFlowApi
         int? offset = null,
         TaskSortField? sort = null,
         bool descending = false,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
+        Guid? parentId = null,
+        string? fql = null,
         CancellationToken ct = default);
+
+    // ---- FQL и сохранённые фильтры (docs/TZ_task_views.md §7); ошибка FQL — ApiResult.FqlError ----
+    Task<ApiResult<Flow.Shared.Contracts.Filters.FqlSuggestResponse>> SuggestQuery(string query, int position, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Filters.SavedFilterResponse>>> GetFilters(CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Filters.SavedFilterResponse>> GetFilter(Guid id, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Filters.SavedFilterResponse>> CreateFilter(Flow.Shared.Contracts.Filters.CreateSavedFilterRequest request, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Filters.SavedFilterResponse>> UpdateFilter(Guid id, Flow.Shared.Contracts.Filters.UpdateSavedFilterRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteFilter(Guid id, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Filters.SavedFilterResponse>> StarFilter(Guid id, bool starred, CancellationToken ct = default);
 
     Task<ApiResult<TaskResponse>> GetTask(Guid id, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> CreateTask(Guid boardId, CreateTaskRequest request, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> UpdateTask(Guid id, UpdateTaskRequest request, CancellationToken ct = default);
-    Task<ApiResult<bool>> DeleteTask(Guid id, CancellationToken ct = default);
+    /// <summary>cascade — вместе с подзадачами; без него задача с подзадачами не удаляется (400).</summary>
+    Task<ApiResult<bool>> DeleteTask(Guid id, bool cascade = false, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> AssignTask(Guid id, AssignTaskRequest request, CancellationToken ct = default);
     Task<ApiResult<TaskResponse>> SetDueDate(Guid id, SetTaskDueDateRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> SetSchedule(Guid id, SetTaskScheduleRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskResponse>> SetEstimate(Guid id, SetTaskEstimateRequest request, CancellationToken ct = default);
+    /// <summary>Родитель в иерархии (docs/TZ_task_model.md §3); null — снять.</summary>
+    Task<ApiResult<TaskResponse>> SetParent(Guid id, SetTaskParentRequest request, CancellationToken ct = default);
+    /// <summary>Место в ручном порядке проекта (§7): ключ ранга вычисляет сервер по соседям.</summary>
+    Task<ApiResult<TaskResponse>> RankTask(Guid id, RankTaskRequest request, CancellationToken ct = default);
+    // Связи (docs/TZ_task_model.md §5) и чек-лист (§8)
+    Task<ApiResult<IReadOnlyList<TaskLinkResponse>>> GetLinks(Guid taskId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskBlockEdge>>> GetBoardBlocks(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<TaskLinkCreatedResponse>> CreateLink(Guid taskId, CreateTaskLinkRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteLink(Guid linkId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> GetChecklist(Guid taskId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> AddChecklistItem(Guid taskId, AddChecklistItemRequest request, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> UpdateChecklistItem(Guid taskId, Guid itemId, UpdateChecklistItemRequest request, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> DeleteChecklistItem(Guid taskId, Guid itemId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<TaskChecklistItemResponse>>> ReorderChecklist(Guid taskId, ReorderChecklistRequest request, CancellationToken ct = default);
+    /// <summary>Дерево проекта (docs/TZ_task_views.md §3): фильтры как у списка, maxDepth — глубина от корня обхода.</summary>
+    Task<ApiResult<IReadOnlyList<TaskTreeNode>>> GetTree(
+        Guid boardId,
+        Guid? rootId = null,
+        Guid? assigneeId = null,
+        bool unassigned = false,
+        string? query = null,
+        TaskTypeKind? typeKind = null,
+        TaskPriority? priority = null,
+        Guid? statusId = null,
+        string? fql = null,
+        int? maxDepth = null,
+        CancellationToken ct = default);
 
     // ---- Комментарии и журнал ----
     Task<ApiResult<IReadOnlyList<TaskCommentResponse>>> GetComments(Guid taskId, CancellationToken ct = default);

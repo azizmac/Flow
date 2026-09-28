@@ -1,0 +1,16 @@
+@* Полоса прогресса вехи: закрыто — основная полоса, «в работе» — буфер за ней; подписи — числами рядом, цвет не
+   единственный носитель смысла. *@
+
+<div class="ms-progress">
+    <MudProgressLinear Value="@Percent(Progress.Done)" BufferValue="@Percent(Progress.Done + Progress.InProgress)" Buffer="true"
+                       Color="Color.Success" Rounded="true" Size="Size.Small" Class="ms-bar" aria-label="Прогресс вехи" />
+    <span class="ms-progress-text">
+        @Progress.Done/@Progress.Total@(Progress.Points > 0 ? $" · {Ru.Points(Progress.DonePoints)}/{Ru.Points(Progress.Points)} SP" : "")
+    </span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public MilestoneProgress Progress { get; set; } = default!;
+
+    private double Percent(int count) => Progress.Total == 0 ? 0 : 100.0 * count / Progress.Total;
+}

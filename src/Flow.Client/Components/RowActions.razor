@@ -1,0 +1,30 @@
+@* Действия со строкой-настройкой (docs/TZ_ui_consistency.md, «Действия со строкой»): группа, статус, тип, поле,
+   шаблон, набор прав. Карандаш и корзина справа, видны при наведении на строку (у неё класс hover-row) или при
+   фокусе внутри неё; на устройствах без наведения — всегда. Дополнительные действия (в архив, клонировать) —
+   DsIconButton размера 26 в ChildContent, перед карандашом. Строку, которую открывают кликом (задача, проект, человек), это не касается —
+   у неё меню «…» (RowMenu). *@
+
+<span class="row-actions @Class">
+    @ChildContent
+    @if (OnEdit.HasDelegate)
+    {
+        <DsIconButton Icon="edit" Size="26" Title="@EditTitle" Disabled="Disabled" OnClick="() => OnEdit.InvokeAsync()" />
+    }
+    @if (OnDelete.HasDelegate)
+    {
+        <DsIconButton Icon="trash" Size="26" Title="@DeleteTitle" Class="danger" Disabled="@(Disabled || DeleteDisabled)"
+                      OnClick="() => OnDelete.InvokeAsync()" />
+    }
+</span>
+
+@code {
+    [Parameter] public EventCallback OnEdit { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+    [Parameter] public string EditTitle { get; set; } = "Переименовать";
+    [Parameter] public string DeleteTitle { get; set; } = "Удалить";
+    [Parameter] public bool Disabled { get; set; }
+    /// <summary>Удалить нельзя (последний финальный статус и т. п.) — причину несёт DeleteTitle.</summary>
+    [Parameter] public bool DeleteDisabled { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

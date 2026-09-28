@@ -21,12 +21,12 @@ public class TaskSearchPersistenceTests(PostgresFixture db)
         var here = (await db.SendAsync(new TaskCreateCommand(PostgresFixture.OwnerId, first.Id, "Здесь", null, null)))!;
         var there = (await db.SendAsync(new TaskCreateCommand(PostgresFixture.OwnerId, second.Id, "Там", null, null)))!;
 
-        var all = await db.SendAsync(new TaskSearchQuery(Limit: 500));
+        var all = await db.SendAsync(new TaskSearchQuery(PostgresFixture.OwnerId, Limit: 500));
 
         Assert.Contains(all.Items, t => t.Id == here.Id);
         Assert.Contains(all.Items, t => t.Id == there.Id);
 
-        var onlyFirst = await db.SendAsync(new TaskSearchQuery(BoardId: first.Id));
+        var onlyFirst = await db.SendAsync(new TaskSearchQuery(PostgresFixture.OwnerId, BoardId: first.Id));
 
         Assert.Equal(here.Id, Assert.Single(onlyFirst.Items).Id);
         Assert.Equal(1, onlyFirst.Total);
@@ -41,7 +41,7 @@ public class TaskSearchPersistenceTests(PostgresFixture db)
         var working = (await db.SendAsync(new TaskCreateCommand(PostgresFixture.OwnerId, board.Id, "В работе", null, inProgress.Id)))!;
         await db.SendAsync(new TaskCreateCommand(PostgresFixture.OwnerId, board.Id, "Готово", null, done.Id));
 
-        var result = await db.SendAsync(new TaskSearchQuery(BoardId: board.Id, StatusType: StatusType.InProgress));
+        var result = await db.SendAsync(new TaskSearchQuery(PostgresFixture.OwnerId, BoardId: board.Id, StatusType: StatusType.InProgress));
 
         Assert.Equal(working.Id, Assert.Single(result.Items).Id);
 
@@ -57,8 +57,8 @@ public class TaskSearchPersistenceTests(PostgresFixture db)
         var board = (await db.SendAsync(new BoardCreateCommand(PostgresFixture.OwnerId, "Query", "QRY"))).Response!;
         var task = (await db.SendAsync(new TaskCreateCommand(PostgresFixture.OwnerId, board.Id, "Починить Аватарку", null, null)))!;
 
-        var byTitle = await db.SendAsync(new TaskSearchQuery(Query: "аватарк"));
-        var byCode = await db.SendAsync(new TaskSearchQuery(Query: "qry-"));
+        var byTitle = await db.SendAsync(new TaskSearchQuery(PostgresFixture.OwnerId, Query: "аватарк"));
+        var byCode = await db.SendAsync(new TaskSearchQuery(PostgresFixture.OwnerId, Query: "qry-"));
 
         Assert.Contains(byTitle.Items, t => t.Id == task.Id);
         Assert.Contains(byCode.Items, t => t.Id == task.Id);
@@ -72,7 +72,7 @@ public class TaskSearchPersistenceTests(PostgresFixture db)
         for (var i = 1; i <= 5; i++)
             created.Add((await db.SendAsync(new TaskCreateCommand(PostgresFixture.OwnerId, board.Id, $"Задача {i}", null, null)))!.Id);
 
-        var page = await db.SendAsync(new TaskSearchQuery(BoardId: board.Id, Limit: 2));
+        var page = await db.SendAsync(new TaskSearchQuery(PostgresFixture.OwnerId, BoardId: board.Id, Limit: 2));
         Assert.Equal(2, page.Items.Count);
         Assert.NotNull(page.NextCursor);
         Assert.Equal(5, page.Total);
@@ -81,7 +81,7 @@ public class TaskSearchPersistenceTests(PostgresFixture db)
         var cursor = page.NextCursor;
         while (cursor is not null)
         {
-            var next = await db.SendAsync(new TaskSearchQuery(BoardId: board.Id, Limit: 2, Cursor: cursor));
+            var next = await db.SendAsync(new TaskSearchQuery(PostgresFixture.OwnerId, BoardId: board.Id, Limit: 2, Cursor: cursor));
             seen.AddRange(next.Items.Select(t => t.Id));
             cursor = next.NextCursor;
         }

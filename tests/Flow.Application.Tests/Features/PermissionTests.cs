@@ -1,11 +1,22 @@
+using Flow.Application.Features.Dashboards;
+using Flow.Application.Features.Filters;
+using Flow.Application.Features.Tasks.Restructure;
+using Flow.Application.Features.Tasks.Recurrence;
+using Flow.Application.Features.Scm;
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
+using Flow.Application.Features.Boards.Commands.TaskTypeCreateCommand;
+using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Search.Commands.ReindexCommand;
+using Flow.Application.Features.Milestones;
+using Flow.Application.Features.Sprints.Commands.SprintCreateCommand;
 using Flow.Application.Features.Search.Queries.SearchStatusQuery;
 using Flow.Application.Features.Tasks.Commands.TaskAssignCommand;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetEstimateCommand;
+using Flow.Application.Features.Tasks.Commands.TaskSetScheduleCommand;
 using Flow.Application.Features.Tasks.Commands.TaskUpdateCommand;
 using Flow.Application.Features.Users.Commands.UserChangeEmailCommand;
 using Flow.Application.Features.Users.Commands.UserChangePasswordCommand;
@@ -92,6 +103,108 @@ public class PermissionTests
         Assert.True(deleted);
     }
 
+    // ---- типы задач (docs/TZ_task_model.md §1) ----
+
+    [Theory]
+    [InlineData(UserRole.Reader)]
+    [InlineData(UserRole.Member)]
+    [InlineData(UserRole.Developer)]
+    public async Task Below_Admin_Cannot_Manage_Task_Types(UserRole role)
+    {
+        var (mediator, boards, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "user");
+        var boardId = await CreateBoardAsync(mediator);
+        var typeId = (await boards.GetByIdAsync(boardId, CancellationToken.None))!.TaskTypes.First().Id;
+
+        await Forbidden(() => mediator.Send(new TaskTypeCreateCommand(actor, boardId, "Инцидент", TaskTypeKind.Bug), CancellationToken.None));
+        await Forbidden(() => mediator.Send(new TaskTypeUpdateCommand(actor, boardId, typeId, Name: "X"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Admin_Can_Manage_Task_Types()
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var admin = AddUser(users, UserRole.Admin, "admin");
+        var boardId = await CreateBoardAsync(mediator);
+
+        var board = await mediator.Send(new TaskTypeCreateCommand(admin, boardId, "Инцидент", TaskTypeKind.Bug), CancellationToken.None);
+
+        Assert.Contains(board!.TaskTypes, t => t.Name == "Инцидент");
+    }
+
+    // ---- спринты (docs/TZ_task_views.md §2): ManageSprints — Developer и выше ----
+
+    [Theory]
+    [InlineData(UserRole.Reader)]
+    [InlineData(UserRole.Member)]
+    public async Task Below_Developer_Cannot_Manage_Sprints(UserRole role)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "user");
+        var boardId = await CreateBoardAsync(mediator);
+
+        await Forbidden(() => mediator.Send(new SprintCreateCommand(actor, boardId), CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(UserRole.Developer)]
+    [InlineData(UserRole.Admin)]
+    public async Task Developer_And_Above_Can_Manage_Sprints(UserRole role)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "user");
+        var boardId = await CreateBoardAsync(mediator);
+
+        Assert.Equal("Спринт 1", (await mediator.Send(new SprintCreateCommand(actor, boardId), CancellationToken.None))!.Name);
+    }
+
+    // ---- шаблоны задач (docs/TZ_workflow_config.md §5): ManageTaskTemplates — Developer и выше ----
+
+    [Theory]
+    [InlineData(UserRole.Reader, false)]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Developer, true)]
+    [InlineData(UserRole.Admin, true)]
+    public async Task Developer_And_Above_Manage_Task_Templates(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "user");
+        var boardId = await CreateBoardAsync(mediator);
+        var create = new Flow.Application.Features.TaskTemplates.TaskTemplateCreateCommand(actor, boardId,
+            new Flow.Shared.Contracts.Tasks.SaveTaskTemplateRequest("Релиз", "Релиз {n}"));
+
+        if (allowed)
+            Assert.Equal("Релиз", (await mediator.Send(create, CancellationToken.None))!.Name);
+        else
+            await Forbidden(() => mediator.Send(create, CancellationToken.None));
+    }
+
+    // ---- вехи (docs/TZ_task_views.md §6): ManageMilestones — Developer и выше ----
+
+    [Theory]
+    [InlineData(UserRole.Reader)]
+    [InlineData(UserRole.Member)]
+    public async Task Below_Developer_Cannot_Manage_Milestones(UserRole role)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "user");
+        var boardId = await CreateBoardAsync(mediator);
+
+        await Forbidden(() => mediator.Send(new MilestoneCreateCommand(actor, boardId, "1.0"), CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(UserRole.Developer)]
+    [InlineData(UserRole.Admin)]
+    public async Task Developer_And_Above_Can_Manage_Milestones(UserRole role)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "user");
+        var boardId = await CreateBoardAsync(mediator);
+
+        Assert.Equal("1.0", (await mediator.Send(new MilestoneCreateCommand(actor, boardId, "1.0"), CancellationToken.None))!.Name);
+    }
+
     // ---- задачи ----
 
     [Fact]
@@ -124,6 +237,30 @@ public class PermissionTests
 
         await Forbidden(() => mediator.Send(new TaskUpdateCommand(member, foreign, "Renamed", null, null), CancellationToken.None));
         await Forbidden(() => mediator.Send(new TaskDeleteCommand(member, foreign), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Planning_Fields_Follow_EditTask_Rights()
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var member = AddUser(users, UserRole.Member, "member");
+        var other = AddUser(users, UserRole.Member, "other");
+        var reader = AddUser(users, UserRole.Reader, "reader");
+        var boardId = await CreateBoardAsync(mediator);
+        var own = await CreateTaskAsync(mediator, member, boardId);
+        var foreign = await CreateTaskAsync(mediator, other, boardId);
+
+        var updated = await mediator.Send(new TaskUpdateCommand(member, own, null, null, null, Priority: TaskPriority.High), CancellationToken.None);
+        Assert.Equal(Shared.Contracts.Tasks.TaskPriority.High, updated.Response!.Priority);
+        Assert.NotNull((await mediator.Send(new TaskSetScheduleCommand(member, own, new DateOnly(2026, 10, 1), null), CancellationToken.None)).Response);
+        Assert.NotNull((await mediator.Send(new TaskSetEstimateCommand(member, own, 3m, 60), CancellationToken.None)).Response);
+
+        foreach (var actor in new[] { member, reader })
+        {
+            await Forbidden(() => mediator.Send(new TaskUpdateCommand(actor, foreign, null, null, null, Priority: TaskPriority.High), CancellationToken.None));
+            await Forbidden(() => mediator.Send(new TaskSetScheduleCommand(actor, foreign, new DateOnly(2026, 10, 1), null), CancellationToken.None));
+            await Forbidden(() => mediator.Send(new TaskSetEstimateCommand(actor, foreign, 3m, 60), CancellationToken.None));
+        }
     }
 
     [Fact]
@@ -350,5 +487,156 @@ public class PermissionTests
 
         await mediator.Send(new ReindexCommand(Owner, null, null), CancellationToken.None);
         await Forbidden(() => mediator.Send(new ReindexCommand(admin, null, null), CancellationToken.None));
+    }
+
+    // ---- Сохранённые фильтры (docs/TZ_task_views.md §7) ----
+
+    [Theory]
+    [InlineData(UserRole.Owner, false)]
+    [InlineData(UserRole.Member, false)]
+    public async Task SavedFilter_Edit_Only_Author(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var filter = await mediator.Send(new SavedFilterCreateCommand(Owner, "Общий", "", true), CancellationToken.None);
+
+        Task Edit() => mediator.Send(new SavedFilterUpdateCommand(actor, filter.Id, "X", null, null), CancellationToken.None);
+
+        if (allowed) await Edit(); else await Forbidden(Edit);
+        Assert.NotNull(await mediator.Send(new SavedFilterUpdateCommand(Owner, filter.Id, "Своё", null, null), CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Admin, true)]
+    public async Task SavedFilter_Delete_Shared_Author_Or_Admin(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var filter = await mediator.Send(new SavedFilterCreateCommand(Owner, "Общий", "", true), CancellationToken.None);
+
+        Task Delete() => mediator.Send(new SavedFilterDeleteCommand(actor, filter.Id), CancellationToken.None);
+
+        if (allowed) await Delete(); else await Forbidden(Delete);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Owner, false)]
+    [InlineData(UserRole.Member, false)]
+    public async Task Dashboard_Edit_Only_Author(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var author = AddUser(users, UserRole.Member, "author");
+        var dashboard = await mediator.Send(new DashboardCreateCommand(author, "Общий", true), CancellationToken.None);
+
+        Task Edit() => mediator.Send(new DashboardUpdateCommand(actor, dashboard.Id, Name: "X"), CancellationToken.None);
+
+        if (allowed) await Edit(); else await Forbidden(Edit);
+        Assert.NotNull(await mediator.Send(new DashboardUpdateCommand(author, dashboard.Id, Name: "Своё"), CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Admin, true)]
+    public async Task Dashboard_Delete_Shared_Author_Or_Admin(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var dashboard = await mediator.Send(new DashboardCreateCommand(Owner, "Общий", true), CancellationToken.None);
+
+        Task Delete() => mediator.Send(new DashboardDeleteCommand(actor, dashboard.Id), CancellationToken.None);
+
+        if (allowed) await Delete(); else await Forbidden(Delete);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Developer, true)]
+    public async Task Merge_Needs_Edit_On_Both_Tasks(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var board = await CreateBoardAsync(mediator);
+        var source = await CreateTaskAsync(mediator, Owner, board);
+        var target = await CreateTaskAsync(mediator, Owner, board);
+
+        Task Merge() => mediator.Send(new TaskMergeCommand(actor, source, target), CancellationToken.None);
+
+        if (allowed) await Merge(); else await Forbidden(Merge);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Reader, false)]
+    [InlineData(UserRole.Member, true)]
+    public async Task Split_Needs_Edit_And_Create(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var board = await CreateBoardAsync(mediator);
+        // Своя задача Member: создал сам — правка разрешена правом EditOwnTask.
+        var source = await CreateTaskAsync(mediator, allowed ? actor : Owner, board);
+
+        Task Split() => mediator.Send(new TaskSplitCommand(actor, source, [new Flow.Shared.Contracts.Tasks.SplitPart("Часть")]), CancellationToken.None);
+
+        if (allowed) await Split(); else await Forbidden(Split);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Developer, true)]
+    public async Task Move_Needs_Edit_In_Source_And_Create_In_Target(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var board = await CreateBoardAsync(mediator);
+        var target = (await mediator.Send(new BoardCreateCommand(Owner, "Цель", "DST"), CancellationToken.None)).Response!.Id;
+        var task = await CreateTaskAsync(mediator, Owner, board);
+
+        Task Move() => mediator.Send(new TaskMoveCommand(actor, task, target), CancellationToken.None);
+
+        if (allowed) await Move(); else await Forbidden(Move);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Member, false)]
+    [InlineData(UserRole.Developer, true)]
+    public async Task Recurrence_Needs_Edit_On_The_Template(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var task = await CreateTaskAsync(mediator, Owner, await CreateBoardAsync(mediator));
+        var rule = new Flow.Shared.Contracts.Tasks.TaskRecurrenceRequest(Flow.Shared.Contracts.Tasks.RecurrenceFrequency.Daily, 1, new DateOnly(2030, 1, 1));
+
+        Task Set() => mediator.Send(new TaskRecurrenceSetCommand(actor, task, rule), CancellationToken.None);
+
+        if (allowed) await Set(); else await Forbidden(Set);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Developer, false)]
+    [InlineData(UserRole.Admin, true)]
+    public async Task Integrations_Are_Managed_By_Global_Admins(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+
+        Task List() => mediator.Send(new ScmConnectionListQuery(actor), CancellationToken.None);
+
+        if (allowed) await List(); else await Forbidden(List);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Developer, false)]
+    [InlineData(UserRole.Admin, true)]
+    public async Task Repositories_Are_Bound_By_Project_Admins(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+        var board = await CreateBoardAsync(mediator);
+
+        Task List() => mediator.Send(new ScmBoardRepositoriesQuery(actor, board), CancellationToken.None);
+
+        if (allowed) await List(); else await Forbidden(List);
     }
 }

@@ -1,4 +1,8 @@
 using Flow.Application.Abstractions;
+using Flow.Application.Exceptions;
+using Flow.Infrastructure.Persistence.Configurations;
+using Npgsql;
+using Flow.Domain.Entities;
 using Flow.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,6 +17,41 @@ internal sealed class UnitOfWork(FlowDbContext db, SearchIndexQueue searchQueue)
     /// оставил бы в очереди источник, которого нет.
     /// </summary>
     public async Task SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        TouchModifiedTasks();
+
+        try
+        {
+            await SaveCoreAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg
+                                           && pg.ConstraintName == TaskItemConfiguration.RankIndexName)
+        {
+            // Два запроса вычислили один ранг (docs/TZ_task_model.md §7): хендлер пересчитает ключ и повторит.
+            throw new RankConflictException(ex);
+        }
+    }
+
+    public void DiscardChanges()
+    {
+        db.ChangeTracker.Clear();
+        searchQueue.Clear();
+    }
+
+    public async Task InTransactionAsync(Func<Task> action, CancellationToken cancellationToken)
+    {
+        if (db.Database.CurrentTransaction is not null)
+        {
+            await action();
+            return;
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await action();
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    private async Task SaveCoreAsync(CancellationToken cancellationToken)
     {
         if (!searchQueue.HasPending)
         {
@@ -32,5 +71,43 @@ internal sealed class UnitOfWork(FlowDbContext db, SearchIndexQueue searchQueue)
         await db.SaveChangesAsync(cancellationToken);
         await searchQueue.FlushAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// TaskItem.UpdatedAt ставится здесь, а не в каждом доменном методе: новое поле задачи, забывшее «тронуть»
+    /// дату, иначе тихо ломало бы сортировку «по изменению». Entries() сам вызывает DetectChanges, поэтому
+    /// изменённые через методы сущности задачи уже помечены Modified.
+    /// </summary>
+    private void TouchModifiedTasks()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var entry in db.ChangeTracker.Entries<TaskItem>())
+        {
+            // Перестановка в ручном порядке — положение задачи, а не её изменение (§7): одна смена ранга дату не двигает.
+            if (entry.State == EntityState.Modified
+                && entry.Properties.Any(p => p.IsModified && p.Metadata.Name != nameof(TaskItem.Rank)))
+            {
+                entry.Entity.Touch(now);
+
+                // Окно финальной колонки канбана считается от смены статуса (docs/TZ_task_views.md §1).
+                if (entry.Property(t => t.StatusId).IsModified)
+                    entry.Entity.MarkStatusChanged(now);
+            }
+        }
+
+        // Чек-лист — owned-коллекция: его пункты — отдельные записи трекера, а сама задача остаётся Unchanged.
+        // Правка пункта — правка задачи, поэтому её «трогаем» по внешнему ключу владельца.
+        // Сначала собрать владельцев, потом трогать: Entries() зовёт DetectChanges и меняет трекер под перечислением.
+        var owners = db.ChangeTracker.Entries<TaskChecklistItem>()
+            .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .Select(e => e.Property("TaskId"))
+            .Select(p => (Guid)(p.EntityEntry.State == EntityState.Deleted ? p.OriginalValue : p.CurrentValue)!)
+            .ToHashSet();
+
+        if (owners.Count == 0)
+            return;
+
+        foreach (var task in db.ChangeTracker.Entries<TaskItem>().Where(t => owners.Contains(t.Entity.Id)).Select(t => t.Entity).ToList())
+            task.Touch(now);
     }
 }

@@ -34,9 +34,9 @@ public class BoardPersistenceTests(PostgresFixture db)
         var deleted = await db.SendAsync(new BoardDeleteCommand(PostgresFixture.OwnerId, board.Id));
 
         Assert.True(deleted);
-        Assert.Null(await db.SendAsync(new BoardGetQuery(board.Id)));
-        Assert.Null(await db.SendAsync(new TaskGetQuery(task1.Id)));
-        Assert.Null(await db.SendAsync(new TaskGetQuery(task2.Id)));
+        Assert.Null(await db.SendAsync(new BoardGetQuery(PostgresFixture.OwnerId, board.Id)));
+        Assert.Null(await db.SendAsync(new TaskGetQuery(PostgresFixture.OwnerId, task1.Id)));
+        Assert.Null(await db.SendAsync(new TaskGetQuery(PostgresFixture.OwnerId, task2.Id)));
         Assert.Equal(0, await db.QueryAsync(ctx => ctx.Statuses.CountAsync(s => s.BoardId == board.Id)));
         Assert.Equal(0, await db.QueryAsync(ctx => ctx.TaskItems.CountAsync(t => t.BoardId == board.Id)));
     }
@@ -51,8 +51,8 @@ public class BoardPersistenceTests(PostgresFixture db)
 
         await db.SendAsync(new BoardDeleteCommand(PostgresFixture.OwnerId, drop.Id));
 
-        Assert.NotNull(await db.SendAsync(new BoardGetQuery(keep.Id)));
-        Assert.NotNull(await db.SendAsync(new TaskGetQuery(keepTask.Id)));
+        Assert.NotNull(await db.SendAsync(new BoardGetQuery(PostgresFixture.OwnerId, keep.Id)));
+        Assert.NotNull(await db.SendAsync(new TaskGetQuery(PostgresFixture.OwnerId, keepTask.Id)));
         Assert.Equal(4, await db.QueryAsync(ctx => ctx.Statuses.CountAsync(s => s.BoardId == keep.Id)));
     }
 

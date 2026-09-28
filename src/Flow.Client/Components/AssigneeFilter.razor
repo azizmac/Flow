@@ -34,9 +34,7 @@
         {
             var u = Users.Find(id);
             <MudMenuItem Class="@($"pop-item user {(Value == id.ToString() ? "cur" : "")}")" OnClick="() => Select(id.ToString())">
-                <Avatar User="u" Size="22" />
-                <span class="pop-user"><span class="pop-user-name">@(u?.FullName ?? "…")</span></span>
-                <span class="pop-n">@n</span>
+                <UserOption User="u" Count="n" ShowUsername="false" />
             </MudMenuItem>
         }
         @if (Unassigned > 0)

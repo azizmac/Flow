@@ -50,6 +50,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         services.AddSingleton<IAccountService, AlwaysSucceedingAccountService>();
         // Вложения кладём в память: S3-клиент проверяется отдельным тестом против MinIO.
         services.AddSingleton<IFileStorage>(Storage);
+        services.AddSingleton<IScmSecretProtector>(new FakeScmSecretProtector());
         _services = services.BuildServiceProvider();
 
         await using var scope = _services.CreateAsyncScope();
@@ -69,6 +70,13 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         await using var scope = _services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<IMediator>().Send(request, CancellationToken.None);
+    }
+
+    /// <summary>Произвольная работа в одном scope — когда тесту нужен сам репозиторий или IUnitOfWork, а не команда.</summary>
+    public async Task InScopeAsync(Func<IServiceProvider, Task> action)
+    {
+        await using var scope = _services.CreateAsyncScope();
+        await action(scope.ServiceProvider);
     }
 
     /// <summary>Прямой доступ к БД для ассертов, в отдельном scope, без трекинга.</summary>

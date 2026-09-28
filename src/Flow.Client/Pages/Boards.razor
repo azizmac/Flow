@@ -9,6 +9,7 @@
 @inject HotkeyService Hotkeys
 @inject AppState State
 @inject UserDirectory Users
+@inject ProjectAccessState Access
 @inject PreferencesState Preferences
 
 <PageTitle>Проекты — Flow</PageTitle>
@@ -45,7 +46,13 @@
         <div class="board-grid stagger">
             @foreach (var b in Filtered)
             {
-                <BoardCard @key="b.Id" Board="b" CanManage="CanManage" OnOpen="Open" OnRename="Rename" OnDelete="AskDelete" OnCopy="CopyKey" />
+                var access = Access.For(b.Id);
+                <BoardCard @key="b.Id" Board="b" OnOpen="Open" OnRename="Rename" OnDelete="AskDelete" OnCopy="CopyKey"
+                           CanRename="Permissions.CanRenameBoard(access)" CanDelete="Permissions.CanDeleteBoard(Me, access)"
+                           CanConfigure="Permissions.CanManageConfig(access)" CanManageMembers="Permissions.CanManageMembers(access)"
+                           OnTaskTypes="bb => _typesBoard = bb" OnStatuses="bb => _statusesBoard = bb" OnAccess="bb => _accessBoard = bb"
+                           CanSaveTemplate="CanManage && Permissions.CanManageConfig(access)"
+                           OnSaveTemplate="bb => _templateBoard = bb" OnApplyConfig="bb => _configSource = bb" />
             }
             @if (!HasSearch && CanManage)
             {
@@ -71,6 +78,31 @@
     <CreateBoardDialog OnCreated="OnCreated" OnCancel="() => _createOpen = false" />
 }
 
+@if (_typesBoard is not null)
+{
+    <TaskTypesDialog Board="_typesBoard" OnChanged="Replace" OnClose="() => _typesBoard = null" />
+}
+
+@if (_statusesBoard is not null)
+{
+    <StatusesDialog Board="_statusesBoard" OnChanged="Replace" OnClose="() => _statusesBoard = null" />
+}
+
+@if (_templateBoard is not null)
+{
+    <SaveTemplateDialog Board="_templateBoard" OnClose="() => _templateBoard = null" />
+}
+
+@if (_configSource is not null)
+{
+    <ApplyConfigDialog Source="_configSource" Boards="_boards" OnApplied="ReloadBoards" OnClose="() => _configSource = null" />
+}
+
+@if (_accessBoard is not null)
+{
+    <ProjectAccessDialog Board="_accessBoard" OnClose="() => _accessBoard = null" />
+}
+
 @if (_deleting is not null)
 {
     <ConfirmDialog Title="@($"Удалить проект {_deleting.Key}?")"
@@ -86,6 +118,10 @@
     private string _search = "";
     private bool _createOpen;
     private BoardResponse? _deleting;
+    /// <summary>Проект, чьи типы задач сейчас редактируются в модалке; null — модалка закрыта.</summary>
+    private BoardResponse? _typesBoard;
+    /// <summary>Проект, чьи статусы сейчас редактируются; null — модалка закрыта.</summary>
+    private BoardResponse? _statusesBoard;
     private IDisposable? _hotkeys;
 
     private bool HasSearch => _search.Trim().Length > 0;
@@ -103,8 +139,17 @@
         }
     }
 
-    /// <summary>Проекты создают, переименовывают и удаляют Admin и Owner (docs/TZ_user_roles.md).</summary>
-    private bool CanManage => Permissions.CanManageBoards(Users.Find(State.CurrentUserId));
+    private UserResponse? Me => Users.Find(State.CurrentUserId);
+
+    /// <summary>Создают проекты глобальные Admin и Owner; остальное в карточке — по правам в самом проекте.</summary>
+    private bool CanManage => Permissions.CanCreateBoard(Me);
+
+    /// <summary>Проект, который сохраняют как шаблон / чьи настройки переносят в другие проекты (этап 3F).</summary>
+    private BoardResponse? _templateBoard;
+    private BoardResponse? _configSource;
+
+    /// <summary>Проект, чьих участников сейчас правят в модалке «Доступ»; null — модалка закрыта.</summary>
+    private BoardResponse? _accessBoard;
 
     protected override async Task OnInitializedAsync()
     {
@@ -139,9 +184,20 @@
         var result = await Api.GetBoards();
         _loading = false;
         if (result.Ok)
+        {
             _boards = result.Value!.ToList();
+            await Access.EnsureCoversAsync(_boards.Select(b => b.Id));
+        }
         else
             _loadError = result.Error;
+    }
+
+    /// <summary>После переноса настроек — без скелетона: открытый диалог остаётся на месте.</summary>
+    private async Task ReloadBoards()
+    {
+        var result = await Api.GetBoards();
+        if (result.Ok)
+            _boards = result.Value!.ToList();
     }
 
     private void OpenCreate() => _createOpen = true;
@@ -205,6 +261,8 @@
     {
         var i = _boards.FindIndex(x => x.Id == updated.Id);
         if (i >= 0) _boards[i] = updated;
+        if (_typesBoard?.Id == updated.Id) _typesBoard = updated;
+        if (_statusesBoard?.Id == updated.Id) _statusesBoard = updated;
     }
 
     private void OnUsersChanged() => InvokeAsync(StateHasChanged);

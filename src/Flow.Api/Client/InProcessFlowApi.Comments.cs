@@ -20,7 +20,7 @@ internal sealed partial class InProcessFlowApi
         Scoped(async mediator =>
         {
             // Actor не нужен: читать ленту могут все роли, запрос его и не принимает.
-            var comments = await mediator.Send(new TaskCommentListQuery(taskId), ct);
+            var comments = await mediator.Send(new TaskCommentListQuery(await ActorAsync(), taskId), ct);
             return comments is null ? NotFound<IReadOnlyList<TaskCommentResponse>>() : Ok(comments);
         });
 
@@ -57,7 +57,7 @@ internal sealed partial class InProcessFlowApi
     public Task<ApiResult<IReadOnlyList<TaskActivityResponse>>> GetActivity(Guid taskId, CancellationToken ct = default) =>
         Scoped(async mediator =>
         {
-            var activity = await mediator.Send(new TaskActivityListQuery(taskId), ct);
+            var activity = await mediator.Send(new TaskActivityListQuery(await ActorAsync(), taskId), ct);
             return activity is null ? NotFound<IReadOnlyList<TaskActivityResponse>>() : Ok(activity);
         });
 }

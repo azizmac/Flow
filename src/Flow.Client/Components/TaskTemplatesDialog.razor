@@ -1,0 +1,230 @@
+@* «Шаблоны задач» проекта (docs/TZ_workflow_config.md §5, этап 3G): список, правка и удаление. Шаблон заполняет форму
+   создания (название по образцу с {date} и {n}, тип, приоритет, описание, значения полей) и создаёт вместе с задачей
+   чек-лист и подзадачи. Значения полей и чек-листы подзадач приходят из «Сохранить как шаблон» у задачи — здесь их
+   видно числом, правка их не теряет. Право — ManageTaskTemplates (Developer+). *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject ToastService Toasts
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal wide"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Шаблоны задач @Board.Key</h3>
+        <div class="hint">Форма «Создать задачу» → «Шаблон» заполнит поля; чек-лист и подзадачи создадутся вместе с задачей</div>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <Skeleton Kind="rows" Count="3" />
+        }
+        else if (_draft is null)
+        {
+            @if (_templates.Count == 0)
+            {
+                <div class="empty"><div class="empty-title">Шаблонов пока нет</div></div>
+            }
+            @foreach (var t in _templates)
+            {
+                <div class="tpl-row hover-row" data-template="@t.Name">
+                    <div class="tpl-name">
+                        <b>@t.Name</b>
+                        <span class="hint">@t.TitlePattern · @Ru.Tasks(t.UsageCount) создано@(t.Checklist.Count > 0 ? $" · ☑ {t.Checklist.Count}" : "")@(t.Subtasks.Count > 0 ? $" · подзадач: {t.Subtasks.Count}" : "")</span>
+                    </div>
+                    <RowActions EditTitle="Изменить шаблон" DeleteTitle="Удалить шаблон" Disabled="_busy"
+                                OnEdit="() => Edit(t)" OnDelete="() => _deleting = t" />
+                </div>
+            }
+        }
+        else
+        {
+            <div class="tt-form">
+                <DsInput Id="tt-name" Label="Название шаблона" MaxLength="80" Value="@_draft.Name" ValueChanged="v => _draft.Name = v" />
+                <DsInput Label="Название задачи" MaxLength="500" Placeholder="Релиз {n} от {date}" Value="@_draft.TitlePattern" ValueChanged="v => _draft.TitlePattern = v" />
+                <div class="hint">{date} — сегодняшняя дата, {n} — номер задачи по шаблону</div>
+                <div class="meta-grid">
+                    <div class="meta-k">Тип</div>
+                    <div><TaskTypeSelect Types="Board.TaskTypes" Value="_draft.TypeId ?? DefaultTypeId" OnChange="id => _draft.TypeId = id" /></div>
+                    <div class="meta-k">Приоритет</div>
+                    <div><PrioritySelect Value="_draft.Priority" OnChange="p => _draft.Priority = p" /></div>
+                </div>
+                <DsInput Label="Описание" Lines="4" Value="@(_draft.Description ?? "")" ValueChanged="v => _draft.Description = v" Class="tt-area" />
+                <DsInput Label="Чек-лист — пункт на строку" Lines="3" Value="@(_draft.Checklist ?? "")" ValueChanged="v => _draft.Checklist = v" Class="tt-area" />
+
+                <div class="meta-section">Подзадачи</div>
+                @foreach (var sub in _draft.Subtasks)
+                {
+                    <div class="tt-sub">
+                        <DsInput Compact="true" Placeholder="Название подзадачи" Value="@(sub.Title ?? "")" ValueChanged="v => sub.Title = v" Class="tt-sub-title" />
+                        <PillSelect T="Guid?" Items="SubtaskTypeOptions" Value="sub.TypeId" OnChange="v => sub.TypeId = v" AriaLabel="Тип подзадачи"
+                                    Empty="@(id => id is null)" Label="@(id => id is { } t ? Board.TaskTypes.FirstOrDefault(x => x.Id == t)?.Name ?? "—" : "Тип уровнем ниже")" />
+                        <span class="hint">@(sub.Checklist.Count > 0 ? $"☑ {sub.Checklist.Count}" : "")</span>
+                        <DsIconButton Icon="close" Size="26" Title="Убрать подзадачу" OnClick="() => _draft.Subtasks.Remove(sub)" />
+                    </div>
+                }
+                @if (_draft.Subtasks.Count < 20)
+                {
+                    <DsButton Variant="tertiary" Size="sm" Icon="plus" OnClick="() => _draft.Subtasks.Add(new SubDraft())">Подзадача</DsButton>
+                }
+                @if (_draft.CustomFields.Count > 0)
+                {
+                    <div class="hint">Значения полей: @_draft.CustomFields.Count
+                        <button type="button" class="icon-lnk" @onclick="() => _draft.CustomFields.Clear()">Очистить</button>
+                    </div>
+                }
+            </div>
+        }
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_draft is null)
+        {
+            <DsButton Variant="secondary" Size="md" OnClick="Close">Закрыть</DsButton>
+            <DsButton Variant="primary" Size="md" Icon="plus" OnClick="New">Новый шаблон</DsButton>
+        }
+        else
+        {
+            <DsButton Variant="secondary" Size="md" OnClick="() => { _draft = null; _error = null; }" Disabled="_busy">Назад</DsButton>
+            <DsButton Variant="primary" Size="md" OnClick="Save" Busy="_busy"
+                      Disabled="@(_busy || _draft.Name.Trim().Length == 0 || _draft.TitlePattern.Trim().Length == 0)">Сохранить</DsButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@if (_deleting is { } deleting)
+{
+    <ConfirmDialog Title="@($"Удалить шаблон «{deleting.Name}»?")" Text="Задачи, уже созданные по шаблону, останутся как есть."
+                   OnConfirm="() => ConfirmDelete(deleting)" OnCancel="() => _deleting = null" />
+}
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Тип подзадачи шаблона: «уровнем ниже» (null) или любой неархивный тип проекта.</summary>
+    private IEnumerable<Guid?> SubtaskTypeOptions =>
+        new Guid?[] { null }.Concat(Board.TaskTypes.Where(t => !t.IsArchived).Select(t => (Guid?)t.Id));
+
+    private sealed class SubDraft
+    {
+        public string Title { get; set; } = "";
+        public Guid? TypeId { get; set; }
+        public List<string> Checklist { get; set; } = [];
+    }
+
+    private sealed class Draft
+    {
+        public Guid? Id { get; init; }
+        public string Name { get; set; } = "";
+        public string TitlePattern { get; set; } = "";
+        public Guid? TypeId { get; set; }
+        public TaskPriority Priority { get; set; }
+        public string Description { get; set; } = "";
+        public string Checklist { get; set; } = "";
+        public List<SubDraft> Subtasks { get; init; } = [];
+        public Dictionary<Guid, System.Text.Json.JsonElement> CustomFields { get; init; } = [];
+    }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private TaskTemplateResponse? _deleting;
+    private bool _loading = true;
+    private List<TaskTemplateResponse> _templates = [];
+    private Draft? _draft;
+    private string? _error;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    private Guid DefaultTypeId => Board.TaskTypes.FirstOrDefault(t => t.IsDefault)?.Id ?? Guid.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Api.GetTaskTemplates(Board.Id);
+        _loading = false;
+        if (result.Ok)
+            _templates = result.Value!.ToList();
+        else
+            _error = result.Error;
+    }
+
+    private void New() => _draft = new Draft { TypeId = DefaultTypeId == Guid.Empty ? null : DefaultTypeId };
+
+    private void Edit(TaskTemplateResponse t) => _draft = new Draft
+    {
+        Id = t.Id, Name = t.Name, TitlePattern = t.TitlePattern, TypeId = t.TypeId, Priority = t.Priority, Description = t.Description ?? "",
+        Checklist = string.Join("\n", t.Checklist),
+        Subtasks = t.Subtasks.Select(s => new SubDraft { Title = s.Title, TypeId = s.TypeId, Checklist = (s.Checklist ?? []).ToList() }).ToList(),
+        CustomFields = new(t.CustomFields)
+    };
+
+    private async Task Save()
+    {
+        var d = _draft!;
+        var request = new SaveTaskTemplateRequest(d.Name.Trim(), d.TitlePattern.Trim(), d.TypeId, d.Priority,
+            string.IsNullOrWhiteSpace(d.Description) ? null : d.Description,
+            d.CustomFields.ToDictionary(p => p.Key, p => (System.Text.Json.JsonElement?)p.Value),
+            d.Checklist.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            d.Subtasks.Where(s => s.Title.Trim().Length > 0).Select(s => new TaskTemplateSubtaskDto(s.Title.Trim(), s.TypeId, s.Checklist)).ToList());
+
+        _busy = true;
+        _error = null;
+        var result = d.Id is { } id ? await Api.UpdateTaskTemplate(id, request) : await Api.CreateTaskTemplate(Board.Id, request);
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить шаблон";
+            return;
+        }
+
+        var saved = result.Value!;
+        var index = _templates.FindIndex(t => t.Id == saved.Id);
+        if (index >= 0) _templates[index] = saved;
+        else _templates.Add(saved);
+        _draft = null;
+        Toasts.Ok($"Шаблон «{saved.Name}» сохранён");
+    }
+
+    private async Task ConfirmDelete(TaskTemplateResponse t)
+    {
+        _deleting = null;
+        await Delete(t);
+    }
+
+    private async Task Delete(TaskTemplateResponse t)
+    {
+        _busy = true;
+        var result = await Api.DeleteTaskTemplate(t.Id);
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        _templates.Remove(t);
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

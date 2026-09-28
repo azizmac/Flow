@@ -1,0 +1,64 @@
+@* Родитель задачи (docs/TZ_task_model.md §3) — TaskPicker в виде пилюли: поиск по коду и названию среди задач того же
+   проекта. Предлагаются только задачи строго выше по уровню типа — те же правила, что проверит сервер; саму задачу и
+   её детей (они ниже) правило отсекает само. Выбор → OnChange(parentId | null). Без права правки — ссылка на родителя. *@
+@inject IFlowApi Api
+
+@if (!CanEdit)
+{
+    @if (_parent is { } p)
+    {
+        <a class="parent-link" href="tasks/@p.Id" title="@p.Title"><KeyChip Value="@p.Code" /><span class="val">@p.Title</span></a>
+    }
+    else
+    {
+        <span class="meta-v muted">—</span>
+    }
+}
+else
+{
+    <TaskPicker Value="_parent" BoardId="Board.Id" Boards="[Board]" Disabled="Disabled" AriaLabel="Сделать подзадачей"
+                Where="@(t => t.Id != Task.Id && TaskMeta.LevelOf(Board, t.TypeId) < OwnLevel)"
+                EmptyText="@(OwnLevel <= 1 ? "Эпик — верхний уровень, родителя у него нет" : "Не найдено задач уровнем выше")"
+                ClearLabel="Без родителя" OnChange="Select" />
+}
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter, EditorRequired] public TaskResponse Task { get; set; } = default!;
+    [Parameter] public Guid? Value { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<Guid?> OnChange { get; set; }
+
+    private TaskResponse? _parent;
+    private Guid? _loadedFor;
+
+    private int OwnLevel => TaskMeta.LevelOf(Board, Task.TypeId);
+
+    /// <summary>Родителя читаем по Id только при его смене: код и название нужны триггеру, в TaskResponse их нет.</summary>
+    protected override async System.Threading.Tasks.Task OnParametersSetAsync()
+    {
+        if (_loadedFor == Value && (_parent is not null || Value is null))
+            return;
+
+        _loadedFor = Value;
+        if (Value is not { } id)
+        {
+            _parent = null;
+            return;
+        }
+
+        if (_parent?.Id == id)
+            return;
+
+        var result = await Api.GetTask(id);
+        _parent = result.Ok ? result.Value : null;
+    }
+
+    private async System.Threading.Tasks.Task Select(TaskResponse? parent)
+    {
+        _parent = parent;
+        _loadedFor = parent?.Id;
+        await OnChange.InvokeAsync(parent?.Id);
+    }
+}

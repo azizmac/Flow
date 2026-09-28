@@ -41,10 +41,11 @@
     <ChildContent>
         @if (Boards.Count > PopoverSearchFrom)
         {
-            <div class="pop-search" @onclick:stopPropagation>
-                <input id="@_searchId" class="ds-input sm" placeholder="Найти проект…" value="@_search"
+            <label class="pop-search" @onclick:stopPropagation>
+                <Icon Name="search" Size="14" />
+                <input id="@_searchId" placeholder="Найти проект…" value="@_search" autocomplete="off" spellcheck="false"
                        @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
-            </div>
+            </label>
         }
         @if (AllowAll)
         {
@@ -59,6 +60,10 @@
             <MudMenuItem Class="@($"pop-item {(b.Id == Value ? "cur" : "")}")" OnClick="() => Select(b.Id)">
                 <KeyChip Value="@b.Key" />
                 <span class="pop-board-name" title="@b.Name">@b.Name</span>
+                @if (b.Visibility == BoardVisibility.Private)
+                {
+                    <span class="lock-ico" title="Приватный проект"><Icon Name="lock" Size="12" /></span>
+                }
                 <span class="n">@b.TaskCount</span>
             </MudMenuItem>
         }

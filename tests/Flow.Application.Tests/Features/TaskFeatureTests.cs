@@ -65,7 +65,7 @@ public class TaskFeatureTests
         await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, boardA.Id, "Task A", null, null), CancellationToken.None);
         await mediator.Send(new TaskCreateCommand(TestMediatorFactory.OwnerId, boardB.Id, "Task B", null, null), CancellationToken.None);
 
-        var boardATasks = await mediator.Send(new TaskListQuery(boardA.Id), CancellationToken.None);
+        var boardATasks = await mediator.Send(new TaskListQuery(TestMediatorFactory.OwnerId, boardA.Id), CancellationToken.None);
 
         Assert.Single(boardATasks);
         Assert.Equal("Task A", boardATasks[0].Title);
@@ -86,7 +86,7 @@ public class TaskFeatureTests
         Assert.Null(result.ValidationError);
         Assert.Equal("New title", result.Response!.Title);
 
-        var refetched = await mediator.Send(new TaskGetQuery(created.Id), CancellationToken.None);
+        var refetched = await mediator.Send(new TaskGetQuery(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None);
         Assert.Equal("New title", refetched!.Title);
     }
 
@@ -148,7 +148,7 @@ public class TaskFeatureTests
         var deleted = await mediator.Send(new TaskDeleteCommand(TestMediatorFactory.OwnerId, created!.Id), CancellationToken.None);
 
         Assert.True(deleted);
-        var afterDelete = await mediator.Send(new TaskGetQuery(created.Id), CancellationToken.None);
+        var afterDelete = await mediator.Send(new TaskGetQuery(TestMediatorFactory.OwnerId, created.Id), CancellationToken.None);
         Assert.Null(afterDelete);
     }
 

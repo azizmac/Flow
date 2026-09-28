@@ -1,0 +1,70 @@
+@* Блок «Повторение» в карточке и слайдере (docs/TZ_task_model.md §9): правило задачи-образца одной строкой и
+   ближайшая дата копии; на паузе — причина (автор деактивирован, ошибка генерации). Настроить — RecurrenceDialog.
+   Без права правки и без правила блока нет. *@
+@inject IFlowApi Api
+
+@if (_loaded && (CanEdit || _rule is not null))
+{
+    <div class="recurrence">
+        <div class="subtasks-head">
+            <div class="meta-k">Повторение</div>
+            @if (CanEdit)
+            {
+                <button type="button" class="icon-lnk" @onclick="() => _editing = true">
+                    <Icon Name="@(_rule is null ? "plus" : "edit")" Size="13" />@(_rule is null ? "Повторять" : "Настроить")
+                </button>
+            }
+        </div>
+        @if (_rule is { } r)
+        {
+            <div class="rec-line @(r.IsActive ? "" : "paused")">
+                <Icon Name="history" Size="14" />
+                <span>@RecurrenceText.Describe(r)</span>
+                @if (!r.IsActive)
+                {
+                    <span class="rec-state">на паузе</span>
+                }
+                else if (r.NextDates.Count > 0)
+                {
+                    <span class="hint">следующая: @Ru.DateOnlyShort(r.NextDates[0])</span>
+                }
+            </div>
+            @if (r.LastError is { } error)
+            {
+                <div class="rec-error">@error</div>
+            }
+        }
+    </div>
+}
+
+@if (_editing)
+{
+    <RecurrenceDialog TaskId="TaskId" Rule="_rule" OnSaved="OnSaved" OnClose="() => _editing = false" />
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid TaskId { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+
+    private TaskRecurrenceResponse? _rule;
+    private bool _loaded;
+    private bool _editing;
+    private Guid _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == TaskId)
+            return;
+        _loadedFor = TaskId;
+        _loaded = false;
+        var result = await Api.GetRecurrence(TaskId);
+        _rule = result.Ok ? result.Value : null;
+        _loaded = true;
+    }
+
+    private void OnSaved(TaskRecurrenceResponse? rule)
+    {
+        _editing = false;
+        _rule = rule;
+    }
+}

@@ -1,0 +1,228 @@
+@* Строка FQL на экране «Задачи» (docs/TZ_task_views.md §7): запрос складывается с панелью фильтров через AND.
+   Enter применяет (запрос уходит в адрес ?fql=, ссылкой можно поделиться), подсказки у курсора — с сервера
+   (GET /tasks/query/suggest): поля, операторы, значения поля, связки. Пока список подсказок открыт, ↑↓ Enter Tab Esc
+   принадлежат ему — preventDefault делает flow.js по data-listnav (declarative preventDefault опоздал бы на клавишу).
+   Ошибка сервера показывается под строкой, её место в запросе подчёркнуто.
+   Отклонение от ТЗ: поле — обычный input, а не однострочный CodeMirror: подсветку синтаксиса отложили, подсказки
+   и подчёркивание ошибки работают и так. *@
+@implements IDisposable
+@inject IFlowApi Api
+@inject BrowserInterop Browser
+
+<div class="fql-bar">
+    <div id="@LineId" class="fql-line @(Error is not null ? "error" : "") @(_morphing ? "morphing" : "")">
+        <span class="fql-tag">FQL</span>
+        <div class="fql-input-wrap">
+            <input id="@InputId" class="fql-input" value="@_text" autocomplete="off" spellcheck="false"
+                   placeholder="project = WEB AND assignee = me() AND statusCategory != done ORDER BY priority DESC"
+                   data-listnav="@(_items.Count > 0 ? "1" : null)"
+                   @oninput="OnInput" @onkeydown="OnKey" @onclick="Suggest" @onblur="OnBlur" />
+            @if (_items.Count > 0)
+            {
+                <div class="fql-suggest flow-pop-list" role="listbox">
+                    @for (var i = 0; i < _items.Count; i++)
+                    {
+                        var item = _items[i];
+                        var index = i;
+                        <button type="button" class="pop-item @(index == _active ? "on" : "")" role="option" aria-selected="@(index == _active)"
+                                @onmousedown="() => Insert(item)" @onmousedown:preventDefault>
+                            <span class="fql-kind @item.Kind">@KindGlyph(item.Kind)</span>
+                            <span class="fql-label">@item.Label</span>
+                            @if (item.Hint is not null)
+                            {
+                                <span class="fql-hint">@item.Hint</span>
+                            }
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+        <DsButton Variant="primary" Size="sm" OnClick="Apply">Найти</DsButton>
+        @if (CanSave)
+        {
+            <DsButton Variant="secondary" Size="sm" OnClick="() => OnSave.InvokeAsync(_text.Trim())">Сохранить…</DsButton>
+        }
+        <DsIconButton Icon="close-simple" Size="28" Title="Закрыть строку запроса" Style="color:rgba(255,255,255,0.45)" OnClick="() => OnClose.InvokeAsync()" />
+    </div>
+    @if (Error is { } error)
+    {
+        <div class="fql-error">
+            <code class="fql-echo">@Before(error)<mark>@At(error)</mark>@After(error)</code>
+            <span>@error.Message</span>
+        </div>
+    }
+</div>
+
+@code {
+    public const string InputId = "fql-input";
+    public const string LineId = "fql-line";
+
+    /// <summary>Применённый запрос (из адреса): при его смене поле показывает его.</summary>
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public FqlErrorResponse? Error { get; set; }
+    [Parameter] public bool CanSave { get; set; } = true;
+    [Parameter] public EventCallback<string> OnApply { get; set; }
+    [Parameter] public EventCallback<string> OnSave { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>
+    /// Id кнопки, из которой строка вырастает при появлении (морф в flow.js); null — строка просто стоит на месте
+    /// (открыли по ссылке с ?fql=). Читается один раз: анимация — только у первого рендера.
+    /// </summary>
+    [Parameter] public string? MorphFrom { get; set; }
+
+    private const int DebounceMs = 150;
+
+    private string _text = "";
+    private string? _shownValue;
+    private List<FqlSuggestion> _items = [];
+    private int _active;
+    private int _replaceFrom;
+    private int _replaceLength;
+    private CancellationTokenSource? _cts;
+    private bool _morphing;
+
+    protected override void OnInitialized() => _morphing = MorphFrom is not null;
+
+    /// <summary>
+    /// Строка отрисована скрытой (класс morphing), JS запускает морф и снимает класс сам. Флаг сбрасываем и здесь:
+    /// иначе следующий рендер (ошибка, подсказки) снова вписал бы morphing в class и спрятал строку.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !_morphing)
+            return;
+
+        var ok = await Browser.MorphInAsync(MorphFrom!, LineId);
+        _morphing = false;
+        if (!ok)
+            StateHasChanged();
+
+        await Browser.FocusAsync(InputId);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_shownValue == Value)
+            return;
+
+        _shownValue = Value;
+        _text = Value ?? "";
+        _items = [];
+    }
+
+    private string Before(FqlErrorResponse e) => Slice(0, e.Position);
+    private string At(FqlErrorResponse e) => e.Position >= _shownText.Length ? "␣" : Slice(e.Position, e.Length);
+    private string After(FqlErrorResponse e) => Slice(e.Position + e.Length, _shownText.Length);
+
+    /// <summary>Ошибка относится к применённому запросу, а не к тому, что человек уже успел допечатать.</summary>
+    private string _shownText => Value ?? "";
+
+    private string Slice(int from, int length)
+    {
+        from = Math.Clamp(from, 0, _shownText.Length);
+        return _shownText.Substring(from, Math.Clamp(length, 0, _shownText.Length - from));
+    }
+
+    private static string KindGlyph(string kind) => kind switch
+    {
+        "field" => "ƒ",
+        "operator" => "=",
+        "keyword" => "∧",
+        _ => "·"
+    };
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        _text = e.Value?.ToString() ?? "";
+        _ = SuggestLaterAsync();
+    }
+
+    private Task Suggest() => SuggestLaterAsync(immediate: true);
+
+    private async Task SuggestLaterAsync(bool immediate = false)
+    {
+        _cts?.Cancel();
+        var cts = _cts = new CancellationTokenSource();
+        try
+        {
+            if (!immediate)
+                await Task.Delay(DebounceMs, cts.Token);
+
+            var caret = await Browser.CaretAsync(InputId);
+            var text = _text;
+            var result = await Api.SuggestQuery(text, caret < 0 ? text.Length : caret, cts.Token);
+            if (cts.IsCancellationRequested || !result.Ok)
+                return;
+
+            _items = result.Value!.Items.ToList();
+            _replaceFrom = result.Value.ReplaceFrom;
+            _replaceLength = result.Value.ReplaceLength;
+            _active = 0;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+            // Печатают дальше — старые подсказки не нужны.
+        }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (_items.Count > 0)
+        {
+            switch (e.Key)
+            {
+                case "ArrowDown":
+                    _active = (_active + 1) % _items.Count;
+                    return;
+                case "ArrowUp":
+                    _active = (_active - 1 + _items.Count) % _items.Count;
+                    return;
+                case "Tab" or "Enter":
+                    await Insert(_items[_active]);
+                    return;
+                case "Escape":
+                    _items = [];
+                    return;
+            }
+        }
+
+        if (e.Key == "Enter")
+            await Apply();
+    }
+
+    private async Task Insert(FqlSuggestion item)
+    {
+        var from = Math.Clamp(_replaceFrom, 0, _text.Length);
+        var length = Math.Clamp(_replaceLength, 0, _text.Length - from);
+        _text = _text[..from] + item.Insert + _text[(from + length)..];
+        _items = [];
+        StateHasChanged();
+
+        // Курсор — после вставки; у «IN ()» и «childrenOf()» — внутрь скобок.
+        var caret = from + item.Insert.Length;
+        if (item.Insert.TrimEnd().EndsWith("()"))
+            caret = from + item.Insert.TrimEnd().Length - 1;
+        await Task.Yield();
+        await Browser.SetCaretAsync(InputId, caret);
+        await SuggestLaterAsync(immediate: true);
+    }
+
+    private async Task Apply()
+    {
+        _items = [];
+        _cts?.Cancel();
+        await OnApply.InvokeAsync(_text.Trim());
+    }
+
+    private async Task OnBlur()
+    {
+        // Клик по подсказке срабатывает на mousedown раньше blur; здесь только закрываем список.
+        await Task.Delay(100);
+        _items = [];
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

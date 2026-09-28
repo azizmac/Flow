@@ -1015,18 +1015,6 @@ a.sb-me:active { transform: scale(0.98); }
 .pop-item .n { margin-left: auto; font: var(--fw-bold) 11px var(--font-display); color: var(--text-tertiary); }
 .pop-board-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pop-empty { padding: 10px; font: var(--fw-medium) 12.5px var(--font-text); color: var(--text-tertiary); }
-.pop-search { padding: 2px 2px 6px; }
-.pop-search input {
-    width: 100%;
-    padding: 7px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: rgba(0, 0, 0, 0.12);
-    color: #fff;
-    font: var(--fw-medium) 12.5px var(--font-text);
-    outline: 0;
-}
-.pop-search input:focus { border-color: var(--accent); }
 
 /* ---------- Segmented status filter ---------- */
 .seg {
@@ -1065,7 +1053,12 @@ a.sb-me:active { transform: scale(0.98); }
 .seg-btn.solo.on { border-color: var(--accent); }
 /* Служебная группа (кастомные статусы): показывает число, но фильтром не является. */
 .seg-btn.muted { cursor: default; opacity: 0.7; }
+/* Вид только внутри проекта, а выбраны «Все проекты»: кнопка кликается (объясняет тостом), но выглядит выключенной. */
+.seg-btn.needs-project { opacity: 0.4; cursor: not-allowed; }
+.seg-btn.needs-project:active { transform: none; }
 .filter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+/* Вкладки раздела в строке фильтров («Люди») — от края панели, без полосы на всю ширину, как в «Настройках». */
+.filter-row > .tabs { padding: 0; border-bottom: 0; }
 
 /* ---------- Empty states ---------- */
 .empty {
@@ -1402,7 +1395,8 @@ a.sb-me:active { transform: scale(0.98); }
 .status-sel .n, .pop-n { font: var(--fw-bold) 11px var(--font-display); color: var(--text-tertiary); }
 .pop-n { margin-left: auto; padding-left: 8px; }
 
-/* Поповер выбора: поле поиска + пункты-люди */
+/* Поле поиска в поповере выбора (исполнитель, люди, родитель, проект): рамка и лупа — у label, у самого input рамки
+   нет. Правило одно на все поповеры: прежние два набора давали рамку и label, и input — два поля одно в другом. */
 .pop-search {
     display: flex;
     align-items: center;
@@ -1416,11 +1410,15 @@ a.sb-me:active { transform: scale(0.98); }
     color: var(--text-tertiary);
     transition: border-color 150ms ease;
 }
-.pop-search:focus-within { border-color: var(--border-strong); }
+.pop-search:focus-within { border-color: var(--accent); }
 .pop-search input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: #fff; font: var(--fw-medium) 12.5px var(--font-text); }
 .pop-search input::placeholder { color: var(--text-tertiary); }
 .pop-empty { padding: 10px 10px 8px; font: var(--fw-medium) 12px/1.45 var(--font-text); color: var(--text-tertiary); white-space: normal; }
 .pop-item.user { padding: 6px 10px; }
+/* UserPicker в режиме «несколько»: флажок слева от аватара, отмеченная строка — тем же фоном, что текущее значение. */
+.pick-mark { width: 16px; height: 16px; flex: none; display: inline-grid; place-items: center; border-radius: 4px;
+    border: 1.5px solid var(--text-tertiary); color: var(--on-accent); transition: background-color 120ms ease, border-color 120ms ease; }
+.pop-item.pick.on .pick-mark { background: var(--accent); border-color: var(--accent); }
 .pop-user { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
 .pop-user-name { color: #fff; overflow: hidden; text-overflow: ellipsis; }
 .pop-user-un { font: var(--fw-medium) 11px var(--font-text); color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; }
@@ -1672,6 +1670,8 @@ a.sb-me:active { transform: scale(0.98); }
 /* ---------- Настройки: вкладки профиля, одна колонка карточек ---------- */
 .settings-tabs { padding-top: 8px; }
 .settings-body { display: flex; flex-direction: column; gap: 16px; padding: 24px 40px 36px; max-width: 760px; }
+/* Широкие вкладки (матрица наборов прав) — во всю ширину; пояснение над таблицей держит свою ширину (.ps-hint). */
+.settings-body.wide { max-width: none; }
 .settings-body .meta-grid { grid-template-columns: 140px minmax(0, 1fr); row-gap: 12px; }
 .settings-body .seg { align-self: flex-start; }
 .settings-body .mono { font: var(--fw-medium) 12px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2042,12 +2042,6 @@ a.task-row { color: inherit; text-decoration: none; }
 .due-chip.soon { color: var(--accent); border-color: rgba(255, 186, 0, 0.4); }
 .task-meta-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .count-chip { display: inline-flex; align-items: center; gap: 4px; font: var(--fw-semibold) 11.5px var(--font-display); color: var(--text-tertiary); }
-.due-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.due-edit input[type="date"] {
-    color-scheme: dark; background: rgba(0, 0, 0, 0.18); border: 1px solid var(--border); border-radius: 8px;
-    color: #fff; font: var(--fw-semibold) 12.5px var(--font-display); padding: 5px 8px; outline: 0;
-}
-.due-edit input[type="date"]:focus { border-color: var(--accent); }
 .sk-line { height: 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); }
 
 /* ---------- Вложения (docs/TZ_attachments.md) ---------- */
@@ -2214,3 +2208,716 @@ a.task-row { color: inherit; text-decoration: none; }
 .md-editor:has(.att-file:focus-visible) .md-tool[for] { background: rgba(255, 255, 255, 0.1); color: #fff; }
 /* В редакторе очередь загрузки идёт под полем и на всю ширину, а не жмётся вправо, как в блоке вложений. */
 .md-editor > .att-upload { align-items: stretch; padding: 8px 12px 0; }
+
+/* ---------- Тип задачи, приоритет, оценка (docs/TZ_task_model.md, этап 1A) ---------- */
+.type-ico, .prio-ico { display: inline-flex; align-items: center; flex: none; line-height: 0; }
+.prio-ico.none { width: 13px; height: 13px; }
+.row-key .type-ico { margin-right: 6px; vertical-align: -2px; }
+.task-title .prio-ico { margin-right: 5px; vertical-align: -2px; }
+.status-sel .type-ico, .status-sel .prio-ico { margin-right: 2px; }
+.est-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.est-part { display: inline-flex; align-items: center; gap: 5px; }
+.est-input {
+    background: rgba(0, 0, 0, 0.18); border: 1px solid var(--border); border-radius: 8px;
+    color: #fff; font: var(--fw-semibold) 12.5px var(--font-display); padding: 5px 8px; outline: 0;
+}
+.est-input.pts { width: 56px; }
+.est-input.time { width: 96px; }
+.est-input:focus { border-color: var(--accent); }
+.est-input.invalid { border-color: var(--danger); }
+.est-input:disabled { opacity: 0.55; }
+.est-unit { font: var(--fw-bold) 11px var(--font-display); color: var(--text-tertiary); }
+
+/* Модалка «Типы задач» */
+.tt-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
+.tt-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: 8px; min-height: 36px; }
+.tt-row.archived .tt-name, .tt-row.archived .type-ico { opacity: 0.5; }
+.tt-name {
+    background: none; border: 0; padding: 0; color: #fff; cursor: text; text-align: left;
+    font: var(--fw-semibold) 13.5px var(--font-display); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Переименование на месте — DsInput Compact вместо своего <input>: ширина по имени, а не на всю строку. */
+.ds-field.tt-name-input { flex: 0 1 220px; min-width: 0; }
+.tt-kind { font: var(--fw-medium) 11.5px var(--font-text); color: var(--text-tertiary); }
+.tt-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; flex: none; }
+.tt-add { display: flex; flex-direction: column; gap: 10px; }
+.tt-add .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.tt-add .seg-btn { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Иерархия задачи (docs/TZ_task_model.md §3): родитель, блок «Подзадачи», ссылки в журнале */
+.count-chip.done { color: var(--sage); }
+.parent-sel { max-width: 100%; }
+.parent-sel .code, .pop-task .code, .subtask-row .code, .tl-task .code {
+    font: var(--fw-semibold) 11.5px var(--font-mono, var(--font-display)); color: var(--accent); flex: none;
+}
+.parent-sel .lbl { min-width: 0; }
+/* Пустое значение в любой пилюле («Нет», «Бэклог», «—») — приглушено, как было у «Родителя». */
+.status-sel .lbl.muted, .meta-v.muted { color: var(--text-tertiary); }
+.parent-link { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: #fff; text-decoration: none; }
+.parent-link .val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* TaskPicker в виде поля формы (слияние): строка задачи вместо значения DsSelect, шеврон справа, пустое — подсказкой. */
+.task-field { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; outline: 0;
+    font: var(--fw-semibold) var(--text-body) var(--font-display); color: var(--text-primary); }
+.task-field > .ds-icon:last-child { margin-left: auto; color: var(--text-tertiary); flex: none; }
+.task-field.empty-value > span:first-child { color: var(--text-tertiary); font-weight: var(--fw-medium); }
+.task-field .pop-task { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-field-wrap:focus-within .ds-field-row::after { transform: scaleX(1); }
+.pop-task { display: inline-flex; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subtasks { display: flex; flex-direction: column; gap: 2px; }
+.subtasks-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.subtasks-count { font: var(--fw-semibold) 11.5px var(--font-display); color: var(--text-tertiary); }
+.subtasks-bar { flex: 0 0 120px; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.subtasks-bar > span { display: block; height: 100%; background: var(--sage); border-radius: inherit; }
+.subtask-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; min-height: 34px;
+    color: #fff; text-decoration: none;
+}
+.subtask-row .subtask-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subtask-row.done .subtask-title { color: var(--text-tertiary); text-decoration: line-through; }
+.subtask-add { display: flex; align-items: center; gap: 8px; padding: 4px 8px; }
+.subtask-input {
+    flex: 1 1 auto; min-width: 0; background: none; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 5px 0; color: #fff; font: var(--fw-medium) 13px var(--font-text); outline: 0;
+}
+.subtask-input:focus { border-bottom-color: var(--accent); }
+.tl-task { display: inline-flex; gap: 5px; color: #fff; text-decoration: none; font-weight: var(--fw-semibold); }
+@media (hover: hover) and (pointer: fine) {
+    .subtask-row:hover { background: rgba(255, 255, 255, 0.05); }
+    .parent-link:hover .val, .tl-task:hover { text-decoration: underline; }
+}
+
+/* Чек-лист и связи задачи (docs/TZ_task_model.md §5, §8) */
+.count-chip.blocked { color: var(--danger); }
+.checklist, .links { display: flex; flex-direction: column; gap: 2px; }
+.check-row { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border-radius: 8px; min-height: 32px; }
+.check-text { flex: 1 1 auto; min-width: 0; color: #fff; font: var(--fw-medium) 13px var(--font-text); overflow-wrap: anywhere; }
+.check-row.done .check-text { color: var(--text-tertiary); text-decoration: line-through; }
+.check-edit {
+    flex: 1 1 auto; min-width: 0; background: rgba(0, 0, 0, 0.18); border: 1px solid var(--accent); border-radius: 6px;
+    padding: 3px 8px; color: #fff; font: var(--fw-medium) 13px var(--font-text); outline: 0;
+}
+.check-actions { display: inline-flex; gap: 2px; flex: none; opacity: 0; transition: opacity 150ms var(--ease-out); }
+.check-row:focus-within .check-actions { opacity: 1; }
+.link-group { display: flex; flex-direction: column; }
+.link-label { font: var(--fw-semibold) 11px var(--font-display); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 8px 2px; }
+.link-target { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; color: #fff; text-decoration: none; }
+.link-row .subtask-title.muted { color: var(--text-tertiary); display: inline-flex; align-items: center; gap: 6px; }
+.link-add { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.14); }
+.link-add .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Выбор второй задачи (TaskPicker-кнопка) слева, «Готово» справа. */
+.link-add-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+@media (hover: hover) and (pointer: fine) {
+    .check-row:hover { background: rgba(255, 255, 255, 0.04); }
+    .check-row:hover .check-actions { opacity: 1; }
+    .link-target:hover .subtask-title { text-decoration: underline; }
+}
+@media (hover: none) { .check-actions { opacity: 1; } }
+
+/* Строка FQL и сохранённые фильтры (docs/TZ_task_views.md §7) */
+.fql-bar { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
+.fql-line {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-radius: 12px;
+    background: rgba(0, 0, 0, 0.16); border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fql-line:focus-within { border-color: var(--accent); }
+/* До запуска морфа из кнопки FQL: рендер приходит раньше вызова JS, полная строка не должна мелькнуть (flow.morphIn). */
+.fql-line.morphing { opacity: 0; }
+.fql-line.error { border-color: var(--danger); }
+.fql-tag { font: var(--fw-bold) 10.5px var(--font-display); color: var(--accent); letter-spacing: 0.06em; flex: none; }
+.fql-input-wrap { position: relative; flex: 1 1 auto; min-width: 0; }
+.fql-input {
+    width: 100%; background: none; border: 0; outline: 0; color: #fff; padding: 6px 0;
+    font: var(--fw-medium) 13px var(--font-mono);
+}
+.fql-input::placeholder { color: var(--text-tertiary); }
+.fql-suggest {
+    position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; min-width: 320px; max-width: 520px; max-height: 320px; overflow-y: auto;
+    padding: 4px; border-radius: 12px; background: var(--surface-raised); border: 1px solid var(--border); box-shadow: var(--shadow-modal);
+    transform-origin: top left; animation: fql-pop 140ms var(--ease-out);
+}
+@keyframes fql-pop { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+.fql-suggest .pop-item { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; text-align: left; color: #fff; }
+.fql-suggest .pop-item.on { background: rgba(255, 255, 255, 0.08); }
+.fql-kind { width: 16px; flex: none; text-align: center; color: var(--text-tertiary); font: var(--fw-bold) 12px var(--font-mono); }
+.fql-kind.field { color: var(--accent); }
+.fql-kind.value { color: var(--sage); }
+.fql-label { font: var(--fw-medium) 13px var(--font-mono); white-space: nowrap; }
+.fql-hint { margin-left: auto; color: var(--text-tertiary); font: var(--fw-medium) 11.5px var(--font-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fql-error { display: flex; flex-direction: column; gap: 3px; padding: 0 12px; color: var(--danger); font: var(--fw-medium) 12px var(--font-text); }
+.fql-echo { color: var(--text-tertiary); font: 12px var(--font-mono); white-space: pre-wrap; }
+.fql-echo mark { background: none; color: var(--danger); text-decoration: underline wavy var(--danger); text-underline-offset: 3px; }
+.filter-item { display: flex; align-items: center; gap: 8px; }
+.filter-name { flex: 1 1 auto; min-width: 0; color: #fff; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filter-star { background: none; border: 0; padding: 0 2px; cursor: pointer; color: rgba(255, 255, 255, 0.3); font-size: 14px; line-height: 1; }
+.filter-star.on { color: var(--accent); }
+.sf-shared { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; color: var(--text-secondary, #cfd8d3); font: var(--fw-medium) 13px var(--font-text); }
+@media (prefers-reduced-motion: reduce) { .fql-suggest { animation: none; } }
+@media (hover: hover) and (pointer: fine) {
+    .fql-suggest .pop-item:hover { background: rgba(255, 255, 255, 0.06); }
+    .filter-star:hover { color: var(--accent); }
+}
+
+/* Workflow проекта (docs/TZ_workflow_config.md §2) */
+.topbar-title { font: var(--fw-bold) 20px var(--font-display); margin: 0 0 0 8px; color: #fff; }
+.wf-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.wf-head .hint { flex: 1 1 320px; }
+.wf-actions { display: inline-flex; gap: 14px; }
+.wf-warn { margin-bottom: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(255, 196, 0, 0.08); color: var(--accent); font: var(--fw-medium) 12.5px var(--font-text); }
+.wf-warn.error { background: rgba(255, 90, 70, 0.1); color: var(--danger); }
+.wf-matrix-wrap, .wf-conditions, .wf-graph { flex: none; }
+.wf-type { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.wf-graph-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.wf-graph-head .icon-lnk { margin-left: auto; }
+.wf-graph-scroll { overflow: auto; max-height: 560px; }
+.wf-graph svg { display: block; }
+.wf-node.editable { cursor: grab; touch-action: none; }
+.wf-node.dragging { cursor: grabbing; opacity: 0.9; }
+.wf-connect { fill: var(--surface, #1B4A3B); stroke: var(--accent); stroke-width: 1.5; cursor: crosshair; opacity: 0; transition: opacity 120ms var(--ease-out); }
+.wf-node:hover .wf-connect, .wf-node:focus-within .wf-connect { opacity: 1; }
+.wf-temp { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; pointer-events: none; }
+.wf-edge { cursor: pointer; }
+.wf-edge-hit { fill: none; stroke: transparent; stroke-width: 12; }
+@media (hover: none) { .wf-connect { opacity: 1; } }
+.wf-matrix-wrap { overflow-x: auto; padding: 8px; margin-bottom: 12px; }
+.wf-matrix { border-collapse: separate; border-spacing: 0; }
+.wf-matrix th, .wf-matrix td { padding: 6px 10px; text-align: center; white-space: nowrap; }
+.wf-matrix thead th { font-weight: 400; }
+.wf-matrix tbody th { text-align: left; }
+.wf-matrix tbody tr + tr > * { border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.wf-matrix tr.dead th .status-pill { box-shadow: inset 0 0 0 1px var(--danger); }
+.wf-corner { color: var(--text-tertiary); font: var(--fw-medium) 11px var(--font-text); }
+.wf-any { color: var(--accent); font: var(--fw-semibold) 12px var(--font-display); }
+.wf-self { color: rgba(255, 255, 255, 0.15); }
+.wf-matrix td.sel { background: rgba(255, 255, 255, 0.06); border-radius: 8px; }
+.wf-cell { display: inline-flex; align-items: center; gap: 6px; }
+.wf-gear { background: none; border: 0; padding: 0; color: rgba(255, 255, 255, 0.35); cursor: pointer; display: inline-flex; }
+.wf-gear.on { color: var(--accent); }
+.wf-conditions { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; margin-bottom: 12px; max-width: 720px; }
+.wf-cond-head { display: flex; align-items: center; justify-content: space-between; color: #fff; }
+.wf-conditions .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.wf-flags { display: flex; flex-direction: column; gap: 6px; color: #fff; font: var(--fw-medium) 13px var(--font-text); }
+.wf-graph { padding: 12px 16px; overflow-x: auto; }
+.wf-graph svg { min-width: 480px; display: block; margin: 0 auto; }
+.pop-item.denied { opacity: 0.55; cursor: not-allowed; }
+@media (hover: hover) and (pointer: fine) { .wf-gear:hover { color: #fff; } }
+
+/* Модалка «Статусы» проекта (docs/TZ_workflow_config.md §1) */
+.st-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
+.st-row { border-radius: 8px; padding: 4px; }
+.st-row.deleting { background: rgba(0, 0, 0, 0.16); }
+.st-main { display: flex; align-items: center; gap: 8px; min-height: 34px; }
+.st-main .tt-name, .st-main .tt-name-input { flex: 1 1 auto; min-width: 60px; }
+.st-main .tt-name { display: block; text-align: left; }
+.st-move { display: inline-flex; flex-direction: column; gap: 2px; flex: none; }
+.st-arrow {
+    display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 16px; padding: 0;
+    background: none; border: 0; border-radius: 4px; color: rgba(255, 255, 255, 0.45); cursor: pointer;
+}
+.st-arrow.up svg { transform: rotate(180deg); }
+.st-arrow:disabled { opacity: 0.25; cursor: default; }
+.st-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.st-flag {
+    background: none; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 999px; padding: 2px 9px;
+    color: var(--text-tertiary); font: var(--fw-medium) 11.5px var(--font-text); cursor: pointer;
+    transition: background-color 160ms var(--ease-out), color 160ms var(--ease-out), transform 160ms var(--ease-out);
+}
+.st-flag.on { background: rgba(255, 255, 255, 0.1); border-color: transparent; color: #fff; }
+.st-flag:disabled { cursor: default; }
+.st-flag:not(.on):disabled { opacity: 0.4; }
+.st-flag:active:not(:disabled) { transform: scale(0.97); }
+.st-delete { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 4px 4px 30px; }
+.st-delete-actions { margin-left: auto; display: inline-flex; gap: 12px; }
+.st-add-opts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+@media (hover: hover) and (pointer: fine) {
+    .st-arrow:not(:disabled):hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+    .st-flag:not(:disabled):not(.on):hover { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+}
+
+/* Модалка «Доступ» проекта (docs/TZ_project_access.md) */
+.pa-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.pa-seg { display: flex; flex-wrap: wrap; gap: 6px; align-self: flex-start; }
+.pa-list { display: flex; flex-direction: column; gap: 2px; }
+.pa-row { display: flex; align-items: center; gap: 10px; padding: 5px 4px; border-radius: 8px; }
+.pa-user { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.pa-name { font: var(--fw-semibold) 13px var(--font-display); color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pa-un { font: var(--fw-medium) 11px var(--font-text); color: var(--text-tertiary); }
+.pa-add { display: flex; align-items: flex-end; gap: 10px; }
+.pa-add > :first-child { flex: 1; }
+.role-item .pop-user-un { white-space: normal; }
+
+/* Приватный проект (docs/TZ_project_access.md, этап 4B) */
+.lock-ico { display: inline-flex; align-items: center; line-height: 0; color: var(--text-tertiary); flex: none; }
+.board-card-key { display: inline-flex; align-items: center; gap: 8px; }
+.pa-warn { color: var(--tan); }
+
+/* ---- Канбан (docs/TZ_task_views.md §1, этап 2B) ---- */
+.kb-toolbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; flex: none; }
+.kb-window { display: inline-flex; align-items: center; gap: 6px; color: var(--text-tertiary); font: var(--fw-medium) 12.5px var(--font-text); }
+.kb-window b { color: var(--text-secondary); font-weight: var(--fw-semibold); }
+.kb-scroll { flex: 1; min-height: 0; overflow: auto; padding-bottom: 8px; }
+.kb { min-width: min-content; }
+.kb-heads, .kb-row { display: grid; gap: 12px; }
+.kb-heads { position: sticky; top: 0; z-index: 2; background: var(--bg-content); padding-bottom: 8px; }
+.kb-head {
+    display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: var(--r-md);
+    background: var(--surface); border: 1px solid var(--border); color: #fff; font: var(--fw-semibold) 13px var(--font-display);
+    transition: opacity 150ms ease;
+}
+.kb-head .sd { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.kb-head-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-count { color: var(--text-tertiary); font: var(--fw-bold) 11.5px var(--font-display); }
+.kb-head.over { border-color: var(--danger); }
+.kb-head.over .kb-count { color: var(--danger); }
+.kb-lane-title {
+    display: flex; align-items: center; gap: 8px; margin: 14px 0 8px; color: var(--text-secondary);
+    font: var(--fw-semibold) 12.5px var(--font-display);
+}
+.kb-col {
+    display: flex; flex-direction: column; gap: 8px; padding: 8px; min-height: 72px;
+    background: rgba(0, 0, 0, 0.12); border-radius: var(--r-md); transition: opacity 150ms ease;
+}
+.kb-col.denied, .kb-head.denied { opacity: 0.35; }
+/* Зона тянется на всю колонку: иначе в пустую колонку (она растянута гридом по строке) бросить можно
+   только в полосу min-height под шапкой, а ниже карточка уезжает обратно. */
+.kb-zone { display: flex; flex-direction: column; gap: 8px; min-height: 36px; flex: 1; }
+.kb-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+    padding: 10px 12px; cursor: grab; display: flex; flex-direction: column; gap: 6px;
+    transition: border-color 150ms ease, transform 160ms var(--ease-out);
+}
+.kb-card.locked { cursor: pointer; }
+.kb-card:active { transform: scale(0.98); }
+.kb-card.sel { border-color: var(--accent); }
+.kb-card.done .kb-card-title { color: var(--text-tertiary); }
+.kb-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kb-card-top { display: flex; align-items: center; gap: 6px; }
+.kb-card-top .code { font: var(--fw-semibold) 11.5px var(--font-mono); color: var(--text-tertiary); }
+.kb-spacer { flex: 1; }
+.kb-card-title { color: #fff; font: var(--fw-medium) 13.5px/1.35 var(--font-text); overflow-wrap: anywhere; }
+.kb-card .task-meta-chips { margin-top: 0; }
+.kb-more, .kb-add { align-self: flex-start; font-size: 12px; }
+.kb-new {
+    background: var(--surface); color: #fff; border: 1px solid var(--accent); border-radius: var(--r-sm);
+    padding: 7px 10px; font: var(--fw-medium) 13px var(--font-text); outline: none;
+}
+@media (hover: hover) and (pointer: fine) { .kb-card:hover { border-color: var(--border-strong); } }
+@media (prefers-reduced-motion: reduce) { .kb-card, .kb-card:active { transform: none; transition: none; } }
+
+/* ---- Дерево задач (docs/TZ_task_views.md §3, этап 2C): ячейки MudDataGrid, сама таблица — .flow-grid ---- */
+.tree-cell { display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: calc(var(--depth) * 24px); }
+.tree-cell .row-key { display: inline-flex; align-items: center; gap: 6px; }
+.tree-cell .code { font: var(--fw-semibold) 12px var(--font-mono); color: var(--accent); white-space: nowrap; }
+.tree-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--fw-medium) 13.5px var(--font-text); color: #fff; }
+.tree-toggle { color: var(--text-tertiary); transform: rotate(-90deg); transition: transform 160ms var(--ease-out); flex: none; }
+.tree-toggle.open { transform: rotate(0); }
+.tree-toggle-space { width: 24px; flex: none; }
+.tree-progress { display: flex; align-items: center; gap: 8px; }
+.tree-progress .tree-bar { width: 70px; flex: none; }
+@media (prefers-reduced-motion: reduce) { .tree-toggle { transition: none; } }
+
+/* ---- Бэклог и спринты (docs/TZ_task_views.md §2, этап 2D) ---- */
+.bl { display: flex; gap: 16px; flex: 1; min-height: 0; }
+.bl-epics { flex: 0 0 220px; padding: 14px 10px; gap: 4px; overflow: auto; }
+.bl-epics .section-title { padding: 0 8px 6px; }
+.bl-epics .hint { padding: 4px 8px; }
+.bl-epic {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: var(--r-sm);
+    justify-content: flex-start; background: transparent; color: var(--text-secondary); font: var(--fw-medium) 13px var(--font-text); text-align: left; cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+}
+.bl-epic .code { font: var(--fw-semibold) 11.5px var(--font-mono); color: var(--text-tertiary); flex: none; }
+.bl-epic-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-epic.on { background: rgba(255, 186, 0, 0.12); color: #fff; }
+.bl-epic.on .code { color: var(--accent); }
+.bl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.bl-sections { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+.bl-section { flex: none; overflow: visible; padding: 12px 14px; gap: 8px; }
+.bl-section.active { border-color: rgba(255, 186, 0, 0.45); }
+.bl-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.bl-title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; color: #fff; font: var(--fw-semibold) 14px var(--font-display); }
+.bl-state {
+    padding: 1px 8px; border-radius: var(--r-pill, 999px); background: rgba(255, 186, 0, 0.14); color: var(--accent);
+    font: var(--fw-bold) 11px var(--font-display);
+}
+.bl-load { display: flex; align-items: center; gap: 10px; }
+.bl-load-item { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); font: var(--fw-semibold) 11.5px var(--font-display); }
+.bl-actions { display: flex; align-items: center; gap: 6px; }
+.bl-goal { color: var(--text-secondary); font: var(--fw-medium) 12.5px/1.45 var(--font-text); }
+.bl-zone { display: flex; flex-direction: column; min-height: 36px; border-radius: var(--r-md); }
+.bl-empty { color: var(--text-tertiary); font: var(--fw-medium) 12.5px var(--font-text); padding: 4px 2px; }
+.bl-row {
+    display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-top: 1px solid var(--border-subtle);
+    cursor: grab; background: var(--surface); transition: background 150ms ease;
+}
+.bl-row .code { font: var(--fw-semibold) 12px var(--font-mono); color: var(--accent); white-space: nowrap; }
+.bl-row-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; font: var(--fw-medium) 13.5px var(--font-text); }
+.bl-row.sel { background: rgba(255, 186, 0, 0.08); }
+.bl-row.done .bl-row-title { color: var(--text-tertiary); text-decoration: line-through; }
+.bl-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bl-epic-chip {
+    flex: none; padding: 1px 6px; border-radius: var(--r-sm); background: rgba(109, 151, 115, 0.18); color: var(--sage);
+    font: var(--fw-semibold) 11px var(--font-mono);
+}
+.bl-who { width: 20px; flex: none; display: inline-flex; }
+.bl-row .status-pill { flex: none; }
+@media (hover: hover) and (pointer: fine) {
+    .bl-epic:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+    .bl-row:hover { background: rgba(255, 255, 255, 0.03); }
+}
+
+/* Модалка спринта */
+.sd-dates { display: flex; gap: 16px; }
+.sd-date { flex: 1; }
+
+/* Отчёт спринта */
+.sr-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+.sr-head h2 { margin: 0; color: #fff; font: var(--fw-extrabold) 22px var(--font-display); }
+.sr-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.sr-tile { padding: 14px 16px; gap: 4px; flex: none; }
+.sr-tile-label { color: var(--text-secondary); font: var(--fw-semibold) 12px var(--font-display); }
+.sr-tile-value { color: #fff; font: var(--fw-extrabold) 24px var(--font-display); }
+.sr-tile-value small { color: var(--text-tertiary); font-size: 12px; }
+.sr-chart { padding: 14px 16px; gap: 8px; flex: none; margin-bottom: 16px; overflow: visible; }
+.sr-table .code { font: var(--fw-semibold) 12px var(--font-mono); color: var(--accent); white-space: nowrap; }
+
+/* ---- Вехи (docs/TZ_task_views.md §6, этап 2E) ---- */
+.ms-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.ms-card {
+    flex: none; padding: 14px 16px; gap: 10px; color: inherit; text-decoration: none;
+    transition: border-color 150ms ease, transform 160ms var(--ease-out);
+}
+.ms-card:active { transform: scale(0.99); }
+.ms-card.closed { opacity: 0.7; }
+.ms-card-head { display: flex; align-items: center; gap: 10px; color: #fff; font: var(--fw-semibold) 14px var(--font-display); }
+.ms-card-head .hint { margin-left: auto; }
+.ms-state {
+    padding: 1px 8px; border-radius: 999px; background: rgba(109, 151, 115, 0.18); color: var(--sage);
+    font: var(--fw-bold) 11px var(--font-display);
+}
+/* ProgressBar — одна полоса «сделано из» на подзадачи, чек-лист, вехи и дерево (docs/TZ_ui_consistency.md). */
+.ds-progress { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ds-progress .ds-progress-bar { flex: 1; min-width: 60px; }
+.ds-progress-text { color: var(--text-secondary); font: var(--fw-semibold) 12px var(--font-display); white-space: nowrap; }
+/* InlineActions — «Сохранить / Отмена» при правке на месте. */
+.inline-actions { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+/* «Удалить задачу» — одинаково в подвале слайдера и внизу страницы задачи. */
+.icon-lnk.task-delete { padding: 0 4px; align-self: flex-start; }
+/* RowActions — карандаш и корзина у строки-настройки: видны при наведении на строку (.hover-row) и при фокусе внутри неё.
+   Место под них занято всегда (opacity, а не display), иначе строка прыгала бы под курсором. */
+.row-actions { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.row-actions .ds-iconbtn { color: var(--text-tertiary); }
+.row-actions .ds-iconbtn.danger:hover:not(:disabled) { color: var(--danger); }
+@media (hover: hover) and (pointer: fine) {
+    .row-actions { opacity: 0; transition: opacity 150ms var(--ease-out); }
+    .hover-row:hover .row-actions, .hover-row:focus-within .row-actions { opacity: 1; }
+}
+.ms-progress { display: flex; align-items: center; gap: 10px; }
+.ms-progress .ms-bar { flex: 1; }
+.ms-progress-text { color: var(--text-secondary); font: var(--fw-semibold) 12px var(--font-display); white-space: nowrap; }
+.ms-facts { display: flex; gap: 12px; color: var(--text-tertiary); font: var(--fw-medium) 12px var(--font-text); min-height: 16px; }
+.ms-overdue { color: var(--danger); }
+.ms-late { color: var(--tan); }
+.ms-tasks-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 6px; }
+@media (hover: hover) and (pointer: fine) { .ms-card:hover { border-color: var(--border-strong); } }
+@media (prefers-reduced-motion: reduce) { .ms-card, .ms-card:active { transform: none; transition: none; } }
+
+/* ---- Пользовательские поля (docs/TZ_task_model.md §4, этап 1D) ---- */
+.cf-row.on { background: rgba(255, 186, 0, 0.08); }
+.cf-key { font: var(--fw-semibold) 11.5px var(--font-mono); color: var(--text-tertiary); }
+.cf-form { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.cf-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: end; }
+.cf-key-fixed { display: flex; flex-direction: column; gap: 6px; padding-bottom: 6px; }
+.cf-options { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.cf-option { display: flex; align-items: center; gap: 6px; width: 100%; max-width: 360px; }
+.cf-option .tt-name-input { flex: 1; }
+.cf-value { min-width: 0; }
+
+/* ---- Экраны задач (docs/TZ_workflow_config.md §3, этап 3C) ---- */
+.meta-section {
+    grid-column: 1 / -1; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--border-subtle);
+    color: var(--text-secondary); font: var(--fw-bold) 11.5px var(--font-display); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.meta-k.req { color: var(--tan); }
+.sc-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.sc-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px 150px auto; gap: 12px; align-items: center; }
+.sc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; font: var(--fw-medium) 13px var(--font-text); }
+.sc-section {
+    width: 100%; min-width: 0; background: rgba(0, 0, 0, 0.15); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px;
+    color: #fff; font: var(--fw-medium) 12.5px var(--font-text); outline: 0;
+}
+.sc-section:focus { border-color: var(--accent); }
+.sc-row .tt-actions { margin-left: 0; }
+
+/* ---- Календарь (docs/TZ_task_views.md §5, этап 2F) ---- */
+.cal { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
+.cal-title { color: #fff; font: var(--fw-bold) 15px var(--font-display); }
+.cal-next svg { transform: rotate(180deg); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.cal-wd { color: var(--text-tertiary); font: var(--fw-bold) 11px var(--font-display); text-transform: uppercase; padding: 0 6px; }
+.cal-days { flex: 1; min-height: 0; overflow: auto; align-content: start; }
+.cal-day {
+    min-height: 118px; display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: var(--r-md);
+    background: var(--surface); border: 1px solid var(--border-subtle);
+}
+.cal-days.week .cal-day { min-height: 360px; }
+.cal-day.other { opacity: 0.55; }
+.cal-day.today { border-color: var(--accent); }
+.cal-date { color: var(--text-secondary); font: var(--fw-bold) 12px var(--font-display); }
+.cal-day.today .cal-date { color: var(--accent); }
+.cal-zone { display: flex; flex-direction: column; gap: 3px; min-height: 20px; flex: 1; }
+.cal-chip {
+    display: flex; align-items: center; gap: 5px; padding: 2px 6px; border-radius: 5px; min-width: 0; cursor: grab;
+    background: rgba(255, 255, 255, 0.07); border-left: 3px solid var(--sage); font: var(--fw-medium) 12px var(--font-text); color: #fff;
+}
+.cal-chip .code { font: var(--fw-semibold) 10.5px var(--font-mono); color: var(--text-tertiary); flex: none; }
+.cal-chip-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cal-chip-title.muted { color: var(--text-tertiary); }
+.cal-chip.cont { border-left-color: transparent; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.cal-chip.open-end { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.cal-chip.overdue { border-left-color: var(--danger); }
+.cal-chip.soon { border-left-color: var(--accent); }
+.cal-chip.done { opacity: 0.55; border-left-color: var(--text-tertiary); }
+.cal-chip.sel { outline: 1px solid var(--accent); }
+.cal-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cal-more { align-self: flex-start; font-size: 11.5px; }
+
+/* ---- Роадмап (docs/TZ_task_views.md §4, этап 2F) ---- */
+.rm { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
+.rm-body { display: flex; gap: 12px; flex: 1; min-height: 0; }
+.rm-main { flex: 1; min-width: 0; }
+.rm-scroll { display: flex; overflow: auto; flex: 1; min-height: 0; }
+.rm-left { flex: none; width: 300px; position: sticky; left: 0; z-index: 3; background: var(--surface); border-right: 1px solid var(--border); }
+.rm-head-cell, .rm-scale { height: 34px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.rm-head-cell { display: flex; align-items: center; padding: 0 12px; color: var(--text-tertiary); font: var(--fw-bold) 11.5px var(--font-display); }
+.rm-name, .rm-lane { height: 32px; border-bottom: 1px solid var(--border-subtle); }
+.rm-name { display: flex; align-items: center; gap: 6px; padding-right: 8px; min-width: 0; }
+.rm-name.sel, .rm-lane.sel { background: rgba(255, 186, 0, 0.07); }
+.rm-toggle { border: 0; background: transparent; color: var(--text-tertiary); padding: 0; width: 16px; flex: none; cursor: pointer; transform: rotate(-90deg); transition: transform 160ms var(--ease-out); }
+.rm-toggle.open { transform: rotate(0); }
+.rm-toggle-space { width: 16px; flex: none; }
+.rm-title { border: 0; background: transparent; color: #fff; font: var(--fw-medium) 13px var(--font-text); text-align: left; cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; padding: 0; }
+.rm-title .code { font: var(--fw-semibold) 11.5px var(--font-mono); color: var(--accent); margin-right: 6px; }
+.rm-right { flex: none; position: relative; }
+.rm-scale { position: sticky; }
+.rm-tick { position: absolute; top: 0; height: 34px; display: flex; align-items: center; padding-left: 6px; border-left: 1px solid var(--border);
+    color: var(--text-tertiary); font: var(--fw-semibold) 11px var(--font-display); white-space: nowrap; }
+.rm-ms-label { position: absolute; top: 18px; transform: translateX(-4px); color: var(--tan); font: var(--fw-bold) 10.5px var(--font-display); white-space: nowrap; }
+.rm-lanes { position: relative; }
+.rm-grid { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border-subtle); }
+.rm-today { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--accent); z-index: 1; }
+.rm-ms { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--tan); z-index: 1; }
+.rm-lane { position: relative; }
+.rm-bar {
+    position: absolute; top: 7px; height: 18px; border-radius: 5px; border: 1px solid transparent; padding: 0 6px; cursor: pointer; z-index: 2;
+    background: var(--sage); color: #0f2a22; font: var(--fw-semibold) 11px var(--font-display); text-align: left;
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.rm-bar.derived { background: transparent; border: 1px dashed var(--sage); color: var(--text-secondary); }
+.rm-bar.overdue { background: var(--danger); color: #fff; }
+.rm-bar.done { opacity: 0.5; }
+.rm-diamond { position: absolute; top: 9px; width: 14px; height: 14px; transform: rotate(45deg); background: var(--sage); border: 0; cursor: pointer; z-index: 2; }
+.rm-diamond.overdue { background: var(--danger); }
+.rm-diamond.done { opacity: 0.5; }
+.rm-bar:focus-visible, .rm-diamond:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rm-arrows { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 3; overflow: visible; }
+.rm-arrows path { fill: none; stroke: var(--text-tertiary); stroke-width: 1.5; }
+.rm-arrows path.conflict { stroke: var(--danger); }
+.rm-bar.editable, .rm-diamond.editable { cursor: grab; touch-action: none; }
+.rm-bar.dragging, .rm-diamond.dragging { cursor: grabbing; opacity: 0.85; box-shadow: 0 0 0 2px var(--accent); z-index: 4; }
+.rm-edge-l, .rm-edge-r { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; }
+.rm-edge-l { left: 0; }
+.rm-edge-r { right: 0; }
+.rm-undated-item.editable { cursor: grab; touch-action: none; }
+.rm-ghost { position: fixed; z-index: 2000; pointer-events: none; padding: 4px 10px; border-radius: 6px; background: var(--sage); color: #0f2a22;
+    font: var(--fw-semibold) 12px var(--font-display); white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+body.pointer-dragging { user-select: none; cursor: grabbing; }
+.rm-undated { flex: 0 0 240px; padding: 12px; gap: 6px; overflow: auto; }
+.rm-undated-item { display: flex; gap: 6px; border: 0; background: transparent; color: #fff; text-align: left; padding: 4px 2px; cursor: pointer;
+    font: var(--fw-medium) 12.5px var(--font-text); border-radius: 4px; }
+.rm-undated-item .code { font: var(--fw-semibold) 11px var(--font-mono); color: var(--accent); flex: none; }
+@media (hover: hover) and (pointer: fine) { .rm-undated-item:hover, .rm-title:hover { color: var(--accent); } }
+@media (prefers-reduced-motion: reduce) { .rm-toggle { transition: none; } }
+
+/* ---- Дашборды (docs/TZ_task_views.md §8, этап 2G): сетка 12 колонок, строка 90px ---- */
+.dash-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 90px; gap: 12px; }
+.dw { flex: none; min-width: 0; min-height: 0; padding: 12px 14px; gap: 8px; overflow: hidden; position: relative; }
+.dw-head.movable { cursor: grab; touch-action: none; }
+.dw.dragging { z-index: 5; opacity: 0.9; box-shadow: 0 0 0 2px var(--accent); }
+.dw-resize { position: absolute; right: 2px; bottom: 2px; width: 14px; height: 14px; cursor: nwse-resize; touch-action: none;
+    background: linear-gradient(135deg, transparent 50%, var(--text-tertiary) 50%, var(--text-tertiary) 60%, transparent 60%, transparent 72%, var(--text-tertiary) 72%, var(--text-tertiary) 82%, transparent 82%); }
+.dw-head { display: flex; align-items: center; gap: 6px; min-height: 24px; }
+.dw-title { flex: 1; min-width: 0; color: #fff; font: var(--fw-semibold) 14px var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dw-open { color: var(--text-tertiary); font: var(--fw-semibold) 12px var(--font-display); text-decoration: none; padding: 0 4px; }
+.dw-open:hover { color: var(--accent); }
+.dw-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.dw-error { display: flex; align-items: flex-start; gap: 8px; color: var(--danger); font: var(--fw-medium) 13px var(--font-text); }
+.dw-error svg { flex: none; margin-top: 2px; }
+.dw-more { margin-top: auto; }
+.dw-table .code { font: var(--fw-semibold) 12px var(--font-mono); white-space: nowrap; width: 1%; }
+.dw-table .code a { color: var(--accent); text-decoration: none; }
+.dw-task-title { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dw-task-title a { color: var(--text-primary); text-decoration: none; }
+.dw-task-title a:hover { text-decoration: underline; }
+.dw-task-due, .dw-task-who { width: 1%; white-space: nowrap; }
+.dw-counter { flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
+.dw-number { color: #fff; font: var(--fw-bold) 44px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.dw-bars, .dw-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dw-bars li { display: grid; grid-template-columns: minmax(80px, 35%) 1fr auto; align-items: center; gap: 10px; }
+.dw-bars b, .dw-legend b { color: var(--text-primary); font: var(--fw-semibold) 13px var(--font-display); font-variant-numeric: tabular-nums; text-align: right; }
+.dw-label { color: var(--text-secondary); font: var(--fw-medium) 13px var(--font-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dw-track { height: 10px; }
+.dw-bar { display: block; height: 100%; border-radius: 0 4px 4px 0; }
+.dw-pie { display: flex; align-items: center; gap: 16px; }
+.dw-pie .mud-chart { flex: none; }
+.dw-legend { flex: 1; min-width: 0; }
+.dw-legend li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 38px; align-items: center; gap: 8px; }
+.dw-legend .hint { text-align: right; }
+.dw-swatch { width: 10px; height: 10px; border-radius: 3px; }
+.dw-sprint { display: flex; align-items: baseline; gap: 10px; }
+.dw-sprint a { color: #fff; font: var(--fw-semibold) 13px var(--font-display); text-decoration: none; }
+.dw-sprint a:hover { text-decoration: underline; }
+.dw .desc-box.dw-note { border: 0; background: none; padding: 0; min-height: 0; font-size: 13px; cursor: default; }
+
+/* Диалог виджета */
+.wd-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.wd-row > * { flex: 1 1 140px; min-width: 0; }
+.wd-seg { align-self: flex-start; margin: 4px 0; }
+.wd-narrow { max-width: 220px; }
+/* Узкое поле (число, короткий выбор) в строке формы — по содержимому, остальное место отдаётся соседу. */
+.wd-row > .wd-narrow { flex: 0 1 110px; }
+.wd-grid { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+
+/* ---- Слияние, разделение, перенос (docs/TZ_task_model.md §6, этап 1E) ---- */
+.rs-parts { display: flex; flex-direction: column; gap: 6px; }
+.rs-part { display: flex; align-items: flex-end; gap: 8px; }
+.rs-part > .ds-field, .rs-part > div:not(.rs-num) { flex: 1; min-width: 0; }
+.rs-num { flex: none; width: 18px; padding-bottom: 8px; color: var(--text-tertiary); font: var(--fw-semibold) 12px var(--font-display); text-align: right; }
+.rs-notes { margin: 10px 0 0; padding-left: 18px; color: var(--text-secondary); font: var(--fw-medium) 13px var(--font-text); display: flex; flex-direction: column; gap: 4px; }
+.rs-notes .warn { color: var(--accent); }
+.rs-facts { display: flex; gap: 14px; margin: 10px 0 0; color: var(--text-primary); font: var(--fw-semibold) 13px var(--font-display); }
+.rs-map { margin-top: 10px; }
+.rs-map td { vertical-align: middle; }
+.rs-map .rs-inline { min-width: 160px; }
+.tl-code { margin-right: 6px; font: var(--fw-semibold) 12px var(--font-mono); color: var(--accent); text-decoration: none; }
+
+/* ---- Повторяющиеся задачи (docs/TZ_task_model.md §9, этап 1F) ---- */
+.recurrence { display: flex; flex-direction: column; gap: 4px; }
+.recurrence .subtasks-head .icon-lnk { margin-left: auto; }
+.rec-line { display: flex; align-items: center; gap: 8px; color: var(--text-primary); font: var(--fw-medium) 13px var(--font-text); }
+.rec-line svg { color: var(--sage); flex: none; }
+.rec-line.paused { color: var(--text-tertiary); }
+.rec-line.paused svg { color: var(--text-tertiary); }
+.rec-state { padding: 1px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); font: var(--fw-bold) 11px var(--font-display); }
+.rec-error { color: var(--danger); font: var(--fw-medium) 12px var(--font-text); }
+.rec-days { margin: 6px 0 4px; }
+.rec-checks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
+.rec-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.rec-date { padding: 2px 8px; border-radius: 999px; background: rgba(109, 151, 115, 0.18); color: var(--sage); font: var(--fw-semibold) 12px var(--font-display); }
+
+/* ---- Интеграция с Git (docs/TZ_scm_integration.md, этап 5A) ---- */
+.dev-block { display: flex; flex-direction: column; gap: 4px; }
+.dev-block .subtasks-head .icon-lnk:first-of-type { margin-left: auto; }
+.dev-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; color: var(--text-primary); text-decoration: none; font: var(--fw-medium) 13px var(--font-text); }
+.dev-row:hover { background: rgba(255, 255, 255, 0.04); }
+.dev-kind { color: var(--text-tertiary); font: var(--fw-semibold) 12px var(--font-display); white-space: nowrap; }
+.dev-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dev-title.gone { text-decoration: line-through; color: var(--text-tertiary); }
+.dev-block .mono, .dev-kind.mono { font-family: var(--font-mono); }
+.dev-state { padding: 1px 8px; border-radius: 999px; font: var(--fw-bold) 11px var(--font-display); background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); }
+.dev-state.open { background: rgba(255, 186, 0, 0.16); color: var(--accent); }
+.dev-state.merged { background: rgba(109, 151, 115, 0.2); color: var(--sage); }
+.count-chip.pr-chip.open { color: var(--accent); }
+.count-chip.pr-chip.merged { color: var(--sage); }
+.scm-conn { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--border); }
+.scm-conn-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scm-conn-head b { color: #fff; font: var(--fw-semibold) 14px var(--font-display); }
+.scm-check { margin-left: auto; }
+.scm-repos tr.off td { opacity: 0.55; }
+.scm-repos a { color: var(--text-primary); text-decoration: none; }
+.scm-hint { margin-top: 6px; }
+.scm-hint a { margin-left: 6px; color: var(--accent); }
+.scm-remote { display: flex; flex-direction: column; max-height: 320px; overflow: auto; margin-top: 8px; }
+.scm-remote-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--text-primary); font: var(--fw-medium) 13px var(--font-text); text-align: left; cursor: pointer; }
+.scm-remote-row:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); }
+.scm-remote-row:disabled { cursor: default; opacity: 0.55; }
+.scm-manual { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.scm-manual code { padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); font: 12px var(--font-mono); word-break: break-all; }
+.scm-auth { margin: 4px 0 2px; }
+.scm-pem textarea { font: 12px var(--font-mono) !important; }
+.scm-deliv-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.scm-deliv-actions { display: flex; gap: 8px; margin-left: auto; }
+.scm-deliv td { vertical-align: top; }
+.scm-deliv td.nowrap { white-space: nowrap; }
+.scm-deliv td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.scm-deliv-error { display: flex; flex-direction: column; gap: 2px; max-width: 360px; word-break: break-word; }
+.scm-deliv-state { display: inline-block; padding: 1px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); color: var(--text-secondary); font: var(--fw-medium) 12px var(--font-text); white-space: nowrap; }
+.scm-deliv-state.failed { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.scm-deliv-state.pending { color: var(--accent); }
+.scm-deliv-state.done { color: var(--sage); }
+.ms-shared { padding: 1px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); color: var(--text-secondary); font: var(--fw-medium) 12px var(--font-text); }
+.md-shared { margin-top: 8px; }
+.scm-auto { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; padding: 0 0 12px 30px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.scm-auto .scm-auto-smart { grid-column: 1 / -1; }
+.scm-create { display: flex; flex-direction: column; gap: 12px; }
+.dev-note { margin: -2px 0 4px 10px; color: var(--accent); font: var(--fw-medium) 12px var(--font-text); }
+.tl-source { color: var(--text-muted); }
+.tl-source a { color: inherit; text-decoration: underline dotted; }
+.scm-bind { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* Шаблоны проектов и перенос настроек (этап 3F) */
+.cb-template { margin-top: 4px; }
+.cb-template-hint { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+.cb-template-hint .icon-lnk { align-self: flex-start; margin-top: 2px; }
+.ac-parts { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.ac-target { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.ac-target-head { display: flex; align-items: baseline; gap: 8px; font: var(--fw-medium) 13.5px var(--font-text); color: var(--text-primary); }
+.ac-target-head b { font: var(--fw-bold) 13.5px var(--font-display); }
+.ac-result { margin-left: auto; font-size: 12.5px; }
+.ac-result.ok { color: var(--sage); }
+.ac-result.fail { color: var(--danger); }
+
+/* Шаблоны задач (этап 3G) */
+/* Свои имена: .tt-row/.tt-name принадлежат «Типам задач», и одноимённое правило здесь перебивало их строки сеткой. */
+.tpl-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+.tpl-name { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; color: #fff; font: var(--fw-medium) 13.5px var(--font-text); }
+.tpl-name .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-form { display: flex; flex-direction: column; gap: 10px; }
+.tt-sub { display: grid; grid-template-columns: minmax(0, 1fr) 190px auto auto; gap: 10px; align-items: center; }
+.tpl-pick { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.tpl-pick .mud-select { max-width: 280px; }
+.tpl-pick .hint { font-size: 12px; }
+
+/* Группы (этап 4C) */
+.groups-panel { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+/* Кнопка — по содержимому (колонка auto растягивалась на весь остаток), полю — место под подсказку крупным шрифтом поля. */
+.gp-new { display: grid; grid-template-columns: minmax(0, 460px) max-content; justify-content: start; gap: 16px; align-items: end; }
+.gp-group { padding: 12px 0; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px; }
+.gp-head { display: flex; align-items: center; gap: 12px; color: #fff; font: var(--fw-medium) 14px var(--font-text); }
+.gp-members { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gp-member { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 3px; border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--text-primary); font: var(--fw-medium) 12.5px var(--font-text); }
+.gp-x { border: 0; background: none; color: var(--text-tertiary); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+.gp-x:hover { color: var(--danger); }
+.pa-group-ico { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; background: rgba(255,255,255,0.08); color: var(--text-secondary); }
+.gp-team { padding: 1px 8px; border-radius: 999px; background: rgba(109,151,115,0.2); color: var(--sage); font: var(--fw-semibold) 11px var(--font-display); }
+/* Флажок и иконки строки — к правому краю; .mud-input-control — чтобы пересилить сброс margin в mud-overrides.css. */
+.gp-head .ds-check.mud-input-control { margin-left: auto; }
+
+/* Наборы прав (этап 4E) */
+.ps-hint { margin-bottom: 12px; max-width: 760px; }
+/* Форма нового набора — как «Новая группа»: поле, основа, кнопка по содержимому. */
+.ps-new { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 240px) max-content; justify-content: start; gap: 16px; align-items: end; }
+/* Таблица лежит в карточке: подложка — карточка, у MudSimpleTable своего фона нет, липкая колонка «Право» — цвета карточки. */
+.ps-card .ps-matrix.mud-simple-table { background: transparent; }
+.ps-card .ps-matrix th:first-child, .ps-card .ps-matrix td.ps-perm { background: var(--surface); }
+.ps-wrap { overflow-x: auto; }
+.ps-matrix th, .ps-matrix td { white-space: nowrap; }
+.ps-matrix th:first-child, .ps-matrix td.ps-perm { position: sticky; left: 0; z-index: 1; background: var(--bg-content); white-space: normal; min-width: 220px; max-width: 280px; }
+.ps-col { vertical-align: top; min-width: 140px; }
+.ps-name { display: block; color: #fff; font: var(--fw-semibold) 13px var(--font-display); cursor: default; }
+.ps-base { display: block; color: var(--text-tertiary); font: var(--fw-medium) 11px var(--font-text); }
+.ps-actions { margin-top: 2px; margin-left: -4px; }
+.ps-perm { color: var(--text-primary); }
+.ps-cell { text-align: center; }
+.ps-mark { color: var(--text-tertiary); }
+.ps-mark.on { color: var(--sage); font-weight: 700; }

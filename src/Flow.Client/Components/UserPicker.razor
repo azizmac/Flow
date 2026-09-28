@@ -1,0 +1,174 @@
+@* Выбор человека (docs/TZ_ui_consistency.md, этап 4) — один компонент на все места, где выбирают людей: исполнитель
+   задачи (пилюля и аватар в строке списка), поле «Пользователь», состав группы, участник проекта. Строки — UserOption,
+   поиск по имени и @username, список — активные из UserDirectory (деактивированных не выбирают).
+
+   Режимы:
+   - один (по умолчанию): Value/OnChange. Триггер — пилюля «аватар + имя» (Compact — только аватар) или, если задан
+     ButtonLabel, кнопка «добавить». Пункт «снять» (ClearLabel) появляется, когда значение есть.
+   - Multiple: Values/OnToggle — у строки флажок, меню после клика не закрывается, чтобы отметить людей подряд;
+     каждый клик — сразу OnToggle(id, выбран), сохраняет вызывающий. Триггер — кнопка.
+
+   Слой — MudMenu. Фокус намеренно уходит в поиск: печатать важнее, чем ходить стрелками. Enter — первый
+   найденный, Esc — закрыть. Клик по триггеру не всплывает: пилюля лежит внутри кликабельной строки задачи. *@
+@implements IDisposable
+@inject UserDirectory Users
+@inject BrowserInterop Browser
+
+<MudMenu @bind-Open="_open" PopoverClass="flow-pop flow-pop-wide" ListClass="flow-pop-list" AnchorOrigin="@AnchorOrigin"
+         TransformOrigin="@TransformOrigin" Dense="true" DropShadow="false" Ripple="false" AriaLabel="@AriaLabel">
+    <ActivatorContent>
+        @if (Multiple || ButtonLabel is not null)
+        {
+            <DsButton Variant="secondary" Size="sm" Icon="user-plus" Disabled="Disabled" StopPropagation="true" OnClick="Toggle">@(ButtonLabel ?? "Добавить людей")</DsButton>
+        }
+        else
+        {
+            <div class="assignee-sel @(Compact ? "compact" : "") @(Current is null ? "none" : "")" @onclick="Toggle" @onclick:stopPropagation
+                 role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-expanded="@(_open ? "true" : "false")"
+                 title="@(Disabled ? "" : AriaLabel)">
+                <Avatar User="Current" Size="@(Compact ? 20 : 22)" />
+                @if (!Compact)
+                {
+                    <span class="lbl">@(Current?.FullName ?? EmptyLabel)</span>
+                    <Icon Name="chevrons" Size="12" />
+                }
+            </div>
+        }
+    </ActivatorContent>
+    <ChildContent>
+        <label class="pop-search" @onclick:stopPropagation>
+            <Icon Name="search" Size="14" />
+            <input id="@_inputId" placeholder="Имя или @@username" value="@_query" autocomplete="off" spellcheck="false"
+                   @oninput="e => _query = e.Value?.ToString() ?? string.Empty" @onkeydown="OnKey" />
+        </label>
+        @if (!Users.IsLoaded)
+        {
+            <div class="pop-empty">Загрузка…</div>
+        }
+        else
+        {
+            var list = Found;
+            if (list.Count == 0)
+            {
+                <div class="pop-empty">@(Users.Active.Count == 0 ? "Пока нет людей — добавьте на странице «Люди»" : EmptyText)</div>
+            }
+            @foreach (var u in list)
+            {
+                if (Multiple)
+                {
+                    var on = Values.Contains(u.Id);
+                    <MudMenuItem Class="@($"pop-item user pick {(on ? "on" : "")}")" AutoClose="false" Disabled="Disabled"
+                                 OnClick="() => Pick(u.Id)" aria-checked="@(on ? "true" : "false")" role="menuitemcheckbox">
+                        <span class="pick-mark" aria-hidden="true">@if (on) { <Icon Name="check" Size="12" /> }</span>
+                        <UserOption User="u" />
+                    </MudMenuItem>
+                }
+                else
+                {
+                    <MudMenuItem Class="@($"pop-item user {(u.Id == Value ? "cur" : "")}")" OnClick="() => Pick(u.Id)">
+                        <UserOption User="u" />
+                    </MudMenuItem>
+                }
+            }
+        }
+        @if (!Multiple && Value is not null && ClearLabel is not null)
+        {
+            <div class="pop-sep"></div>
+            <MudMenuItem Class="pop-item" OnClick="() => Pick(null)">
+                <Icon Name="user-off" Size="15" />@ClearLabel
+            </MudMenuItem>
+        }
+    </ChildContent>
+</MudMenu>
+
+@code {
+    // ---- один ----
+    [Parameter] public Guid? Value { get; set; }
+    [Parameter] public EventCallback<Guid?> OnChange { get; set; }
+    /// <summary>Только аватар — для строки списка задач.</summary>
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public string EmptyLabel { get; set; } = "Не назначена";
+    /// <summary>Пункт «снять» при заданном значении; null — пункта нет (выбор без очистки, например «добавить участника»).</summary>
+    [Parameter] public string? ClearLabel { get; set; } = "Снять исполнителя";
+    /// <summary>Ограничить выбор одним человеком (Member назначает только себя); null — все активные.</summary>
+    [Parameter] public Guid? OnlyUserId { get; set; }
+
+    // ---- несколько ----
+    [Parameter] public bool Multiple { get; set; }
+    /// <summary>Кто уже выбран (состав группы).</summary>
+    [Parameter] public IReadOnlyCollection<Guid> Values { get; set; } = [];
+    /// <summary>Клик по строке: (id, true) — добавить, (id, false) — убрать.</summary>
+    [Parameter] public EventCallback<(Guid Id, bool Selected)> OnToggle { get; set; }
+
+    // ---- общее ----
+    /// <summary>Триггер — кнопка с этой подписью вместо пилюли (в Multiple кнопка всегда).</summary>
+    [Parameter] public string? ButtonLabel { get; set; }
+    /// <summary>Кого не предлагать (уже участники проекта).</summary>
+    [Parameter] public Func<UserResponse, bool>? Exclude { get; set; }
+    [Parameter] public string EmptyText { get; set; } = "Никого не найдено";
+    /// <summary>"left" — меню под левым краем триггера, "right" — под правым.</summary>
+    [Parameter] public string Align { get; set; } = "left";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string AriaLabel { get; set; } = "Назначить исполнителя";
+
+    private readonly string _inputId = "upk-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _open;
+    private string _query = "";
+
+    private UserResponse? Current => Users.Find(Value);
+
+    private Origin AnchorOrigin => Align == "right" ? Origin.BottomRight : Origin.BottomLeft;
+
+    private Origin TransformOrigin => Align == "right" ? Origin.TopRight : Origin.TopLeft;
+
+    private IReadOnlyList<UserResponse> Found => Users.Filter(_query)
+        .Where(u => OnlyUserId is not { } only || u.Id == only)
+        .Where(u => Exclude?.Invoke(u) != true)
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Users.Changed += OnUsersChanged;
+        if (!Users.IsLoaded)
+            await Users.EnsureLoadedAsync();
+    }
+
+    private void OnUsersChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task Toggle()
+    {
+        if (Disabled) return;
+        _open = !_open;
+        if (!_open) return;
+
+        _query = "";
+        StateHasChanged();
+        // Меню рендерится в портал провайдера — поле появляется в DOM на кадр позже.
+        await Task.Delay(50);
+        await Browser.FocusAsync(_inputId);
+    }
+
+    private async Task Pick(Guid? id)
+    {
+        if (Multiple)
+        {
+            if (id is { } person)
+                await OnToggle.InvokeAsync((person, !Values.Contains(person)));
+            return;
+        }
+
+        _open = false;
+        if (id != Value)
+            await OnChange.InvokeAsync(id);
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && Found.FirstOrDefault() is { } first)
+            await Pick(first.Id);
+        else if (e.Key == "Escape")
+            _open = false;
+    }
+
+    public void Dispose() => Users.Changed -= OnUsersChanged;
+}

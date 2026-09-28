@@ -1,0 +1,271 @@
+@* Календарь задач (docs/TZ_task_views.md §5, этап 2F) поверх GET /tasks/calendar: месяц или неделя, задача стоит в
+   каждом дне своего отрезка [начало ?? срок, срок ?? начало] — первый день с названием, остальные продолжением.
+   В ячейке до четырёх задач и «ещё N». Перенос задачи на другой день (MudDropContainer) сдвигает обе даты на одно и то
+   же число дней — длительность сохраняется (PATCH /tasks/{id}/schedule); просроченные незакрытые — цветом DueChip. *@
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject ProjectAccessState Access
+
+<div class="cal">
+    <div class="kb-toolbar cal-toolbar">
+        <div class="seg" role="radiogroup" aria-label="Масштаб">
+            <button type="button" class="seg-btn @(_week ? "" : "on")" role="radio" aria-checked="@(!_week)" @onclick="() => SetScale(false)">Месяц</button>
+            <button type="button" class="seg-btn @(_week ? "on" : "")" role="radio" aria-checked="@_week" @onclick="() => SetScale(true)">Неделя</button>
+        </div>
+        <DsIconButton Icon="arrow-left" Size="28" Title="Назад" OnClick="() => Shift(-1)" />
+        <DsButton Variant="secondary" Size="sm" OnClick="GoToday">Сегодня</DsButton>
+        <DsIconButton Icon="arrow-left" Size="28" Title="Вперёд" Class="cal-next" OnClick="() => Shift(1)" />
+        <span class="cal-title">@Title</span>
+        @if (_truncated)
+        {
+            <span class="hint">Показаны первые 1000 задач — сузьте фильтр.</span>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="empty"><div class="empty-title">Не удалось загрузить календарь</div><div>@_error</div></div>
+    }
+    else
+    {
+        <div class="cal-grid @(_week ? "week" : "")">
+            @foreach (var wd in Ru.WeekdaysShort)
+            {
+                <div class="cal-wd">@wd</div>
+            }
+        </div>
+        <MudDropContainer T="CalendarChip" @ref="_drop" Items="_chips" ItemsSelector="InDay" ItemDropped="OnDropped"
+                          ItemDisabled="c => !CanMove(c.Task)" Class="@($"cal-grid cal-days {(_week ? "week" : "")}")">
+            <ChildContent>
+                @for (var day = _from; day <= _to; day = day.AddDays(1))
+                {
+                    var d = day;
+                    var hidden = HiddenCount(d);
+                    <div class="cal-day @(d.Month != _anchor.Month && !_week ? "other" : "") @(d == Today ? "today" : "")">
+                        <div class="cal-date">@d.Day</div>
+                        <MudDropZone T="CalendarChip" Identifier="@Key(d)" Class="cal-zone" />
+                        @if (hidden > 0)
+                        {
+                            <button type="button" class="icon-lnk cal-more" @onclick="() => _expanded.Add(d)">ещё @hidden</button>
+                        }
+                        else if (_expanded.Contains(d) && _chips.Count(c => c.Day == d) > Visible)
+                        {
+                            <button type="button" class="icon-lnk cal-more" @onclick="() => _expanded.Remove(d)">свернуть</button>
+                        }
+                    </div>
+                }
+            </ChildContent>
+            <ItemRenderer>
+                @{ var chip = context; var task = chip.Task; }
+                <div class="cal-chip @ChipClass(chip) @(task.Id == SelectedId ? "sel" : "")" role="button" tabindex="0"
+                     title="@($"{task.Code}: {task.Title}")" @onclick="() => OnOpen.InvokeAsync(task)"
+                     @onkeydown="e => OnChipKey(e, task)">
+                    @if (chip.IsFirst)
+                    {
+                        <span class="code">@task.Code</span>
+                        <span class="cal-chip-title">@task.Title</span>
+                    }
+                    else
+                    {
+                        <span class="cal-chip-title muted">⋯ @task.Title</span>
+                    }
+                </div>
+            </ItemRenderer>
+        </MudDropContainer>
+    }
+</div>
+
+@code {
+    /// <summary>Сколько задач видно в ячейке до «ещё N».</summary>
+    private const int Visible = 4;
+
+    [Parameter, EditorRequired] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
+    [Parameter] public Guid? BoardId { get; set; }
+    [Parameter] public Guid? AssigneeId { get; set; }
+    [Parameter] public bool Unassigned { get; set; }
+    [Parameter] public string? Query { get; set; }
+    [Parameter] public string? Fql { get; set; }
+    [Parameter] public UserResponse? Me { get; set; }
+    [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public EventCallback<TaskResponse> OnOpen { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<TaskResponse>> OnLoaded { get; set; }
+    [Parameter] public EventCallback<FqlErrorResponse?> OnFqlError { get; set; }
+
+    /// <summary>Задача в одном дне своего отрезка; IsFirst — день, где рисуется код и название.</summary>
+    private sealed record CalendarChip(TaskResponse Task, DateOnly Day, bool IsFirst, bool IsLast);
+
+    private MudDropContainer<CalendarChip>? _drop;
+    private List<CalendarChip> _chips = [];
+    private IReadOnlyList<TaskResponse> _tasks = [];
+    private readonly HashSet<DateOnly> _expanded = [];
+    private DateOnly _anchor = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly _from;
+    private DateOnly _to;
+    private bool _week;
+    private bool _truncated;
+    private string? _error;
+    private string? _loadedKey;
+    private bool _refreshZones;
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
+
+    private string Title => _week
+        ? $"{Ru.DateOnlyShort(_from)} — {Ru.DateOnlyShort(_to)}"
+        : Ru.MonthTitle(_anchor);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{BoardId}|{AssigneeId}|{Unassigned}|{Query}|{Fql}";
+        if (_loadedKey == key)
+            return;
+
+        _loadedKey = key;
+        await ReloadAsync();
+    }
+
+    public async Task ReloadAsync()
+    {
+        (_from, _to) = _week
+            ? (Ru.WeekStart(_anchor), Ru.WeekStart(_anchor).AddDays(6))
+            : (Ru.WeekStart(new DateOnly(_anchor.Year, _anchor.Month, 1)),
+               Ru.WeekStart(new DateOnly(_anchor.Year, _anchor.Month, 1).AddMonths(1).AddDays(-1)).AddDays(6));
+
+        _error = null;
+        var result = await Api.GetCalendar(_from, _to, BoardId, AssigneeId, Unassigned, Query, fql: Fql);
+        await OnFqlError.InvokeAsync(result.FqlError);
+        if (result.FqlError is not null)
+        {
+            _tasks = [];
+            _chips = [];
+            return;
+        }
+        if (!result.Ok)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        _tasks = result.Value!.Items;
+        _truncated = result.Value.Truncated;
+        _chips = BuildChips(_tasks);
+        _refreshZones = true;
+        await OnLoaded.InvokeAsync(_tasks);
+    }
+
+    /// <summary>Правка в слайдере (даты, статус) — пересобираем раскладку по новой версии задачи.</summary>
+    public void Replace(TaskResponse task)
+    {
+        _tasks = _tasks.Select(t => t.Id == task.Id ? task : t).ToList();
+        _chips = BuildChips(_tasks);
+        _refreshZones = true;
+        StateHasChanged();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Зоны MudDropZone сами не перерисовываются при смене списка — только по Refresh контейнера.
+        if (!_refreshZones || _drop is null)
+            return;
+
+        _refreshZones = false;
+        _drop.Refresh();
+    }
+
+    private List<CalendarChip> BuildChips(IEnumerable<TaskResponse> tasks)
+    {
+        var chips = new List<CalendarChip>();
+        foreach (var task in tasks)
+        {
+            if ((task.StartDate ?? task.DueDate) is not { } start || (task.DueDate ?? task.StartDate) is not { } end)
+                continue;
+
+            var first = start < _from ? _from : start;
+            var last = end > _to ? _to : end;
+            for (var day = first; day <= last; day = day.AddDays(1))
+                chips.Add(new CalendarChip(task, day, day == first || day.DayOfWeek == DayOfWeek.Monday, day == end));
+        }
+        return chips;
+    }
+
+    private static string Key(DateOnly day) => day.ToString("yyyy-MM-dd");
+
+    /// <summary>Первые четыре задачи дня (или все, если день раскрыт) — по порядку ответа (сроки раньше — выше).</summary>
+    private bool InDay(CalendarChip chip, string zone)
+    {
+        if (Key(chip.Day) != zone)
+            return false;
+        if (_expanded.Contains(chip.Day))
+            return true;
+
+        var index = 0;
+        foreach (var c in _chips)
+        {
+            if (c.Day != chip.Day)
+                continue;
+            if (ReferenceEquals(c, chip))
+                return index < Visible;
+            index++;
+        }
+        return false;
+    }
+
+    private int HiddenCount(DateOnly day) => _expanded.Contains(day) ? 0 : Math.Max(0, _chips.Count(c => c.Day == day) - Visible);
+
+    private bool IsDone(TaskResponse task) =>
+        Boards.FirstOrDefault(b => b.Id == task.BoardId)?.Statuses.FirstOrDefault(s => s.Id == task.StatusId)?.IsFinal == true;
+
+    private string ChipClass(CalendarChip chip)
+    {
+        var task = chip.Task;
+        var state = IsDone(task) ? "done"
+            : task.DueDate is { } due && due < Today ? "overdue"
+            : task.DueDate is { } soon && soon <= Today.AddDays(1) ? "soon"
+            : "";
+        return $"{state} {(chip.IsFirst ? "" : "cont")} {(chip.IsLast ? "" : "open-end")}";
+    }
+
+    private bool CanMove(TaskResponse task) => Permissions.CanEditTask(Me, Access.For(task.BoardId), task);
+
+    /// <summary>Перенос на другой день сдвигает начало и срок на ту же разницу — длительность не меняется.</summary>
+    private async Task OnDropped(MudItemDropInfo<CalendarChip> info)
+    {
+        var chip = info.Item!;
+        if (!DateOnly.TryParseExact(info.DropzoneIdentifier, "yyyy-MM-dd", out var target) || target == chip.Day)
+            return;
+
+        var shift = target.DayNumber - chip.Day.DayNumber;
+        var task = chip.Task;
+        var result = await Api.SetSchedule(task.Id, new SetTaskScheduleRequest(task.StartDate?.AddDays(shift), task.DueDate?.AddDays(shift)));
+        if (!result.Ok)
+            Toasts.Error(result.Error ?? "Не удалось перенести задачу");
+        else
+            Toasts.Ok($"{task.Code} → {Ru.DateOnlyShort((result.Value!.DueDate ?? result.Value.StartDate)!.Value)}");
+
+        await ReloadAsync();
+    }
+
+    private Task OnChipKey(KeyboardEventArgs e, TaskResponse task) => e.Key == "Enter" ? OnOpen.InvokeAsync(task) : Task.CompletedTask;
+
+    private async Task SetScale(bool week)
+    {
+        if (_week == week)
+            return;
+        _week = week;
+        _expanded.Clear();
+        await ReloadAsync();
+    }
+
+    private async Task Shift(int direction)
+    {
+        _anchor = _week ? _anchor.AddDays(7 * direction) : _anchor.AddMonths(direction);
+        _expanded.Clear();
+        await ReloadAsync();
+    }
+
+    private async Task GoToday()
+    {
+        _anchor = Today;
+        _expanded.Clear();
+        await ReloadAsync();
+    }
+}

@@ -25,7 +25,7 @@ public class TaskAssigneePersistenceTests(PostgresFixture db)
         Assert.Equal(user.Id, result.Response!.AssigneeId);
         var stored = await db.QueryAsync(ctx => ctx.TaskItems.SingleAsync(t => t.Id == task.Id));
         Assert.Equal(user.Id, stored.AssigneeId);
-        var mine = await db.SendAsync(new TaskListQuery(board.Id, user.Id));
+        var mine = await db.SendAsync(new TaskListQuery(PostgresFixture.OwnerId, board.Id, user.Id));
         Assert.Equal(task.Id, Assert.Single(mine).Id);
     }
 

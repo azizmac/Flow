@@ -1,0 +1,97 @@
+@* Сохранение фильтра (docs/TZ_task_views.md §7): имя и «виден всем». Если открыт свой сохранённый фильтр — можно
+   обновить его запрос или сохранить как новый. Сервер проверяет FQL ещё раз: ошибка показывается здесь же.
+   Жизненный цикл MudDialog — как у TaskTypesDialog. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject SavedFiltersState Filters
+@inject BrowserInterop Browser
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>@(Current is { IsOwner: true } ? "Сохранить фильтр" : "Новый фильтр")</h3>
+        <div class="hint"><code>@(string.IsNullOrWhiteSpace(Query) ? "все задачи" : Query)</code></div>
+    </TitleContent>
+    <DialogContent>
+        <DsInput Id="sf-name" Label="Название" MaxLength="80" Value="@_name" ValueChanged="v => { _name = v; _error = null; }" />
+        <DsCheckbox @bind-Value="_shared" Class="sf-shared" Label="Виден всем — каждый увидит только задачи тех проектов, которые ему доступны" />
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Отмена</DsButton>
+        @if (Current is { IsOwner: true })
+        {
+            <DsButton Variant="secondary" Size="md" OnClick="() => Save(asNew: true)" Disabled="@(_busy || _name.Trim().Length == 0)">Как новый</DsButton>
+        }
+        <DsButton Variant="primary" Size="md" OnClick="() => Save(asNew: false)" Disabled="@(_busy || _name.Trim().Length == 0)" Busy="_busy">Сохранить</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public string Query { get; set; } = "";
+    /// <summary>Открытый сохранённый фильтр (если есть): свой можно обновить.</summary>
+    [Parameter] public SavedFilterResponse? Current { get; set; }
+    [Parameter] public EventCallback<SavedFilterResponse> OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private string _name = "";
+    private bool _shared;
+    private string? _error;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _name = Current is { IsOwner: true } ? Current.Name : "";
+        _shared = Current is { IsOwner: true, Shared: true };
+        await Task.Delay(50);
+        await Browser.FocusAsync("sf-name", select: true);
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task Save(bool asNew)
+    {
+        _busy = true;
+        _error = null;
+        var result = !asNew && Current is { IsOwner: true } current
+            ? await Api.UpdateFilter(current.Id, new UpdateSavedFilterRequest(_name.Trim(), Query, _shared))
+            : await Api.CreateFilter(new CreateSavedFilterRequest(_name.Trim(), Query, _shared));
+        _busy = false;
+
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить фильтр";
+            return;
+        }
+
+        Filters.Put(result.Value!);
+        await CloseDialog();
+        await OnSaved.InvokeAsync(result.Value!);
+    }
+}

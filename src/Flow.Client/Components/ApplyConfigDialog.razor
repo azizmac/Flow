@@ -1,0 +1,243 @@
+@* «Применить настройки к проектам» (docs/TZ_workflow_config.md §4, этап 3F): что переносить (статусы, workflow, типы,
+   поля, экраны) и куда — проекты, где можно настраивать. До применения сервер показывает, что станет с каждым: какие
+   статусы появятся, переименуются, удалятся и сколько задач переедет; карту статусов («этот статус станет тем») можно
+   поправить — превью пересчитывается. Каждый проект применяется отдельно: ошибка в одном не мешает остальным. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject ProjectAccessState Access
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal wide"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Применить настройки @Source.Key к проектам</h3>
+        <div class="hint">Проекты станут настроены так же, как «@Source.Name». Типы и поля только добавляются — лишние остаются с данными задач.</div>
+    </TitleContent>
+    <DialogContent>
+        <div class="ac-parts">
+            @foreach (var (part, label) in Parts)
+            {
+                <DsCheckbox Value="_parts.HasFlag(part)" ValueChanged="v => TogglePart(part, v)" Label="@label" Disabled="_busy" />
+            }
+        </div>
+
+        <DsSelect T="Guid" Multiple="true" Label="Проекты" SelectedValues="_targets" SelectedValuesChanged="OnTargetsChanged" Class="rs-field"
+                  Disabled="_busy" MultiSelectionTextFunc="@(ids => ids.Count == 0 ? "" : string.Join(", ", ids.Select(KeyOf)))"
+                  Placeholder="@(Candidates.Count == 0 ? "Нет проектов, которые вы можете настраивать" : "Выберите проекты")">
+            @foreach (var b in Candidates)
+            {
+                <MudSelectItem T="Guid" Value="b.Id">@b.Key · @b.Name</MudSelectItem>
+            }
+        </DsSelect>
+
+        @if (_loading)
+        {
+            <Skeleton Kind="rows" Count="3" />
+        }
+        else if (_preview is { } p)
+        {
+            @foreach (var t in p.Targets)
+            {
+                var result = _results?.FirstOrDefault(r => r.BoardId == t.BoardId);
+                <section class="ac-target" data-board="@t.Key">
+                    <div class="ac-target-head">
+                        <b>@t.Key</b> <span>@t.Name</span>
+                        @if (result is not null)
+                        {
+                            <span class="ac-result @(result.Success ? "ok" : "fail")">
+                                @(result.Success ? result.Changed ? $"применено{(result.TasksMoved > 0 ? $", задач перенесено: {result.TasksMoved}" : "")}" : "без изменений" : result.Error)
+                            </span>
+                        }
+                    </div>
+                    @if (t.Error is not null)
+                    {
+                        <div class="ds-field-error">@t.Error</div>
+                    }
+                    <ul class="rs-notes">
+                        @foreach (var line in Notes(t))
+                        {
+                            <li class="@(line.Warn ? "warn" : null)">@line.Text</li>
+                        }
+                    </ul>
+                    @if (NeedsMap)
+                    {
+                        <MudSimpleTable Dense="true" Elevation="0" Class="rs-map">
+                            <thead><tr><th>В @t.Key</th><th></th><th>Станет</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var m in t.StatusMap)
+                                {
+                                    <tr>
+                                        <td>@m.Name</td>
+                                        <td class="hint">→</td>
+                                        <td>
+                                            <DsSelect T="Guid" Value="m.MapsTo" ValueChanged="v => MapStatus(t.BoardId, m.StatusId, v)" Class="rs-inline" Disabled="_busy"
+                                                      AriaLabel="@($"Во что превратится «{m.Name}»")">
+                                                @foreach (var s in p.SourceStatuses)
+                                                {
+                                                    <MudSelectItem T="Guid" Value="s.Id">@s.Name</MudSelectItem>
+                                                }
+                                            </DsSelect>
+                                        </td>
+                                        <td class="hint">
+                                            @Ru.Tasks(m.TaskCount)@(!m.Kept && _parts.HasFlag(ConfigParts.Statuses) ? " · статус удалится" : "")
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                </section>
+            }
+        }
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">@(_results is null ? "Отмена" : "Закрыть")</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Apply" Disabled="@(_busy || _preview is null || _preview.Targets.Count == 0 || _parts == ConfigParts.None)" Busy="_busy">Применить</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Source { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
+    /// <summary>Применение прошло хотя бы в одном проекте — страница перечитывает проекты.</summary>
+    [Parameter] public EventCallback OnApplied { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private static readonly (ConfigParts Part, string Label)[] Parts =
+    [
+        (ConfigParts.Statuses, "Статусы"), (ConfigParts.Workflow, "Workflow"), (ConfigParts.TaskTypes, "Типы задач"),
+        (ConfigParts.CustomFields, "Поля"), (ConfigParts.Screens, "Экраны")
+    ];
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private bool _loading;
+    private ConfigParts _parts = ConfigParts.All;
+    private IReadOnlyCollection<Guid> _targets = [];
+    private ApplyConfigPreviewResponse? _preview;
+    private IReadOnlyList<ApplyConfigTargetResult>? _results;
+    private string? _error;
+    private readonly Dictionary<Guid, Dictionary<Guid, Guid>> _maps = [];
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    private IReadOnlyList<BoardResponse> Candidates =>
+        Boards.Where(b => b.Id != Source.Id && Permissions.CanManageConfig(Access.For(b.Id))).OrderBy(b => b.Name).ToList();
+
+    /// <summary>Карта нужна статусам и workflow: переходы переносятся на те статусы, которыми станут статусы проекта.</summary>
+    private bool NeedsMap => (_parts & (ConfigParts.Statuses | ConfigParts.Workflow)) != 0;
+
+    /// <summary>MultiSelectionTextFunc отдаёт значения строками.</summary>
+    private string KeyOf(string id) => Guid.TryParse(id, out var g) ? Boards.FirstOrDefault(b => b.Id == g)?.Key ?? "?" : id;
+
+    protected override Task OnInitializedAsync() => Access.EnsureLoadedAsync();
+
+    private IEnumerable<(string Text, bool Warn)> Notes(ConfigTargetPreview t)
+    {
+        foreach (var name in t.StatusesCreated)
+            yield return ($"Новый статус «{name}»", false);
+        foreach (var rename in t.StatusesRenamed)
+            yield return ($"Переименование: {rename}", false);
+        foreach (var removed in t.StatusesRemoved)
+            yield return ($"Удалится статус {removed}", true);
+        foreach (var name in t.TaskTypesAdded)
+            yield return ($"Новый тип задач «{name}»", false);
+        foreach (var name in t.CustomFieldsAdded)
+            yield return ($"Новое поле «{name}»", false);
+        foreach (var name in t.CustomFieldsUpdated)
+            yield return ($"Поле «{name}» обновится", false);
+        if (_parts.HasFlag(ConfigParts.Workflow))
+            yield return ("Переходы заменятся переходами источника", false);
+        if (_parts.HasFlag(ConfigParts.Screens))
+            yield return ("Экраны задач заменятся экранами источника", false);
+    }
+
+    private Task TogglePart(ConfigParts part, bool on)
+    {
+        _parts = on ? _parts | part : _parts & ~part;
+        return PreviewAsync();
+    }
+
+    private Task OnTargetsChanged(IEnumerable<Guid> ids)
+    {
+        _targets = ids.ToHashSet();
+        return PreviewAsync();
+    }
+
+    private Task MapStatus(Guid boardId, Guid statusId, Guid sourceStatusId)
+    {
+        if (!_maps.TryGetValue(boardId, out var map))
+            _maps[boardId] = map = [];
+        map[statusId] = sourceStatusId;
+        return PreviewAsync();
+    }
+
+    private ApplyBoardConfigRequest Request() =>
+        new(_targets.Select(id => new ApplyConfigTarget(id, _maps.TryGetValue(id, out var map) ? map : null)).ToList(), _parts);
+
+    private async Task PreviewAsync()
+    {
+        _error = null;
+        _results = null;
+        if (!_targets.Any() || _parts == ConfigParts.None)
+        {
+            _preview = null;
+            return;
+        }
+
+        // Первое превью — со скелетоном; пересчёт после правки карты — без мигания.
+        _loading = _preview is null;
+        var result = await Api.PreviewApplyConfig(Source.Id, Request());
+        _loading = false;
+        _preview = result.Ok ? result.Value : null;
+        if (!result.Ok)
+            _error = result.Error ?? "Не удалось подготовить перенос настроек";
+    }
+
+    private async Task Apply()
+    {
+        _busy = true;
+        _error = null;
+        var result = await Api.ApplyConfig(Source.Id, Request());
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось применить настройки";
+            return;
+        }
+
+        _results = result.Value!.Results;
+        _maps.Clear();
+        if (_results.Any(r => r.Changed))
+            await OnApplied.InvokeAsync();
+        // Карта и превью пересчитываются по новому состоянию: повторное «Применить» покажет «без изменений».
+        var results = _results;
+        await PreviewAsync();
+        _results = results;
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

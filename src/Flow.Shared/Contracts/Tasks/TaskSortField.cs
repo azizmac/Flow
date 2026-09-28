@@ -22,5 +22,14 @@ public enum TaskSortField
     Assignee,
 
     /// <summary>По сроку; задачи без срока уходят в конец.</summary>
-    Due
+    Due,
+
+    /// <summary>По приоритету (Critical выше всех при убывании).</summary>
+    Priority,
+
+    /// <summary>По времени последнего изменения задачи.</summary>
+    Updated,
+
+    /// <summary>Ручной порядок (ранг, docs/TZ_task_model.md §7): «по возрастанию» — сверху то, что поставили выше.</summary>
+    Rank
 }

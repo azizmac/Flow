@@ -13,6 +13,9 @@ public interface ITaskCommentRepository
     /// <summary>Число комментариев по задачам одним GROUP BY — для TaskResponse.CommentCount. Задач без комментариев в словаре нет.</summary>
     Task<IReadOnlyDictionary<Guid, int>> CountByTaskIdsAsync(IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken);
 
+    /// <summary>Комментарии задачи с отслеживанием — для переноса при слиянии (docs/TZ_task_model.md §6).</summary>
+    Task<IReadOnlyList<TaskComment>> GetByTaskIdForUpdateAsync(Guid taskId, CancellationToken cancellationToken);
+
     void Add(TaskComment comment);
 
     void Remove(TaskComment comment);

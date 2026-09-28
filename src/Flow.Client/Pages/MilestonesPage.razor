@@ -1,0 +1,125 @@
+@* Вехи проекта (docs/TZ_task_views.md §6, этап 2E): открытые по порядку, потом закрытые; у каждой — целевая дата,
+   полоса прогресса, просроченные и прогноз. Создают и правят разработчики и администраторы проекта (ManageMilestones).
+   Общие вехи (этап 2H) видны во всех своих проектах: у чужой — «из KEY», у своей общей — «общая: KEY, KEY». *@
+@page "/boards/{Id:guid}/milestones"
+@inject IFlowApi Api
+@inject ProjectAccessState Access
+
+<PageTitle>Вехи @(_board?.Key) — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        <a class="topbar-back" href="@($"tasks?board={Id}")" title="К задачам проекта"><Icon Name="arrow-left" Size="18" /></a>
+        @if (_board is not null)
+        {
+            <KeyChip Value="@_board.Key" />
+            <h1 class="topbar-title">Вехи</h1>
+        }
+    </div>
+    <div class="topbar-right">
+        @if (CanManage && _board is not null)
+        {
+            <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="() => _creating = true">Веха</DsButton>
+        }
+    </div>
+</div>
+
+<div class="content">
+    @if (_error is not null)
+    {
+        <div class="empty"><div class="empty-title">@_error</div><a href="boards">К проектам</a></div>
+    }
+    else if (_milestones is null)
+    {
+        <Skeleton Kind="rows" Count="4" />
+    }
+    else if (_milestones.Count == 0)
+    {
+        <div class="empty">
+            <div class="empty-title">Вех пока нет</div>
+            <div>Веха — релиз или результат с целевой датой: задачи в ней показывают прогресс к дате.</div>
+        </div>
+    }
+    else
+    {
+        <div class="ms-list">
+            @foreach (var m in _milestones)
+            {
+                <a class="ms-card panel @(m.State == MilestoneState.Closed ? "closed" : "")" href="@($"milestones/{m.Id}")">
+                    <div class="ms-card-head">
+                        <b>@m.Name</b>
+                        @if (m.State == MilestoneState.Closed)
+                        {
+                            <span class="ms-state">закрыта</span>
+                        }
+                        <span class="hint">@TargetText(m)</span>
+                        @if (m.BoardId != Id)
+                        {
+                            <span class="ms-shared">из @KeyOf(m.BoardId)</span>
+                        }
+                        else if (m.SharedBoardIds is { Count: > 0 } shared)
+                        {
+                            <span class="ms-shared">общая: @string.Join(", ", shared.Select(KeyOf))</span>
+                        }
+                    </div>
+                    <MilestoneProgressBar Progress="m.Progress" />
+                    <div class="ms-facts">
+                        @if (m.Progress.Overdue > 0)
+                        {
+                            <span class="ms-overdue">просрочено: @m.Progress.Overdue</span>
+                        }
+                        @if (m.State == MilestoneState.Open && m.Progress.Forecast is { } forecast)
+                        {
+                            <span class="@(m.TargetDate is { } t && forecast > t ? "ms-late" : "")">прогноз: @Ru.DateOnlyShort(forecast)</span>
+                        }
+                    </div>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@if (_creating && _board is not null)
+{
+    <MilestoneDialog BoardId="_board.Id" OnSaved="OnCreated" OnClose="() => _creating = false" />
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private BoardResponse? _board;
+    private List<MilestoneResponse>? _milestones;
+    private string? _error;
+    private bool _creating;
+    private IReadOnlyList<BoardResponse> _boards = [];
+
+    private string KeyOf(Guid boardId) => _boards.FirstOrDefault(b => b.Id == boardId)?.Key ?? "…";
+
+    private bool CanManage => Permissions.CanManageMilestones(Access.For(Id));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Access.EnsureLoadedAsync();
+        var board = Api.GetBoard(Id);
+        var milestones = Api.GetMilestones(Id);
+        var boards = Api.GetBoards();
+        await Task.WhenAll(board, milestones, boards);
+        _boards = boards.Result.Ok ? boards.Result.Value! : [];
+        if (!board.Result.Ok || !milestones.Result.Ok)
+        {
+            _error = board.Result.NotFound || milestones.Result.NotFound ? "Проект не найден" : board.Result.Error ?? milestones.Result.Error;
+            return;
+        }
+
+        _board = board.Result.Value;
+        _milestones = milestones.Result.Value!.ToList();
+    }
+
+    private void OnCreated(MilestoneResponse milestone)
+    {
+        _creating = false;
+        _milestones!.Insert(_milestones.Count(m => m.State == MilestoneState.Open), milestone);
+    }
+
+    internal static string TargetText(MilestoneResponse m) => m.TargetDate is { } date ? $"к {Ru.DateOnlyShort(date)}" : "без даты";
+}

@@ -1,0 +1,466 @@
+@* Роадмап проекта (docs/TZ_task_views.md §4, этап 2F — только чтение) поверх того же GET /boards/{id}/tree, что и дерево:
+   строки — задачи в порядке иерархии (сначала два верхних уровня, глубже — по раскрытию), полоса — от начала до срока,
+   одна дата — ромб. У задачи без своих дат полоса выводится из поддерева (самое раннее начало, самый поздний срок) и
+   рисуется пунктиром «по подзадачам». Масштаб — неделя / месяц / квартал, линия «сегодня», вехи — вертикальными
+   отметками по целевой дате. Задачи без дат (и без дат в поддереве) — списком «Без дат» справа. Клик — слайдер.
+   Этап 2H: полосу можно тащить (обе даты), за края (начало или срок), ромб — единственную дату; задачу из «Без дат» —
+   на день шкалы (неделя от этого дня). Движение считает flow.roadmapAttach в браузере, сюда приходит только итог в днях,
+   и уходит PATCH /tasks/{id}/schedule; выведенные полосы («по подзадачам») не тянутся — своих дат у задачи нет.
+   Связи Blocks проекта — стрелками от конца блокирующей к началу блокируемой; красная — блокируемая начинается раньше. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject BrowserInterop Browser
+@inject ToastService Toasts
+
+<div class="rm" id="@_rootId" data-px="@PxPerDay">
+    <div class="kb-toolbar">
+        <div class="seg" role="radiogroup" aria-label="Масштаб">
+            @foreach (var (scale, label) in Scales)
+            {
+                <button type="button" class="seg-btn @(scale == _scale ? "on" : "")" role="radio" aria-checked="@(scale == _scale)"
+                        @onclick="() => _scale = scale">@label</button>
+            }
+        </div>
+        <button type="button" class="icon-lnk" @onclick="ExpandAll">Раскрыть всё</button>
+        <button type="button" class="icon-lnk" @onclick="CollapseAll">Свернуть</button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="empty"><div class="empty-title">Не удалось загрузить роадмап</div><div>@_error</div></div>
+    }
+    else if (_rows.Count == 0 && !_loading)
+    {
+        <div class="empty"><div class="empty-title">Задач нет</div></div>
+    }
+    else
+    {
+        var px = PxPerDay;
+        var width = (_end.DayNumber - _start.DayNumber + 1) * px;
+        <div class="rm-body">
+            <div class="rm-main panel">
+                <div class="rm-scroll">
+                    <div class="rm-left">
+                        <div class="rm-head-cell">Задача</div>
+                        @foreach (var row in VisibleRows)
+                        {
+                            var task = row.Node.Task;
+                            <div class="rm-name @(task.Id == SelectedId ? "sel" : "")" style="padding-left:@(12 + row.Node.Depth * 18)px">
+                                @if (row.HasChildren)
+                                {
+                                    <button type="button" class="rm-toggle @(_expanded.Contains(task.Id) ? "open" : "")" aria-label="Раскрыть"
+                                            @onclick="() => Toggle(task.Id)"><Icon Name="chevron-down" Size="12" /></button>
+                                }
+                                else
+                                {
+                                    <span class="rm-toggle-space"></span>
+                                }
+                                @if (TaskMeta.TypeOf(Board, task.TypeId) is { } type)
+                                {
+                                    <TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />
+                                }
+                                <button type="button" class="rm-title" title="@($"{task.Code}: {task.Title}")" @onclick="() => OnOpen.InvokeAsync(task)">
+                                    <span class="code">@task.Code</span> @task.Title
+                                </button>
+                            </div>
+                        }
+                    </div>
+                    <div class="rm-right" style="width:@(width)px">
+                        <div class="rm-scale" style="width:@(width)px">
+                            @foreach (var tick in Ticks())
+                            {
+                                <div class="rm-tick" style="left:@((tick.Day.DayNumber - _start.DayNumber) * px)px">@tick.Label</div>
+                            }
+                            @foreach (var m in _milestones)
+                            {
+                                <div class="rm-ms-label" style="left:@((m.TargetDate!.Value.DayNumber - _start.DayNumber) * px + px / 2)px" title="@($"Веха «{m.Name}» — {Ru.DateOnlyShort(m.TargetDate.Value)}")">◆ @m.Name</div>
+                            }
+                        </div>
+                        <div class="rm-lanes" style="width:@(width)px">
+                            @foreach (var tick in Ticks())
+                            {
+                                <div class="rm-grid" style="left:@((tick.Day.DayNumber - _start.DayNumber) * px)px"></div>
+                            }
+                            @if (Today >= _start && Today <= _end)
+                            {
+                                <div class="rm-today" style="left:@((Today.DayNumber - _start.DayNumber) * px + px / 2)px" title="Сегодня"></div>
+                            }
+                            @foreach (var m in _milestones)
+                            {
+                                <div class="rm-ms" style="left:@((m.TargetDate!.Value.DayNumber - _start.DayNumber) * px + px / 2)px"></div>
+                            }
+                            @if (Arrows(px).ToList() is { Count: > 0 } arrows)
+                            {
+                                <svg class="rm-arrows" width="@width" height="@(VisibleRows.Count() * RowHeight)" aria-hidden="true">
+                                    <defs>
+                                        <marker id="rm-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                                            <path d="M0,0 L8,4 L0,8 z" fill="context-stroke" />
+                                        </marker>
+                                    </defs>
+                                    @foreach (var a in arrows)
+                                    {
+                                        <path d="@a.Path" class="@(a.Conflict ? "conflict" : "")" marker-end="url(#rm-arrow)"><title>@a.Title</title></path>
+                                    }
+                                </svg>
+                            }
+                            @foreach (var row in VisibleRows)
+                            {
+                                var task = row.Node.Task;
+                                var editable = !row.Derived && CanEdit?.Invoke(task) == true;
+                                <div class="rm-lane @(task.Id == SelectedId ? "sel" : "")">
+                                    @if (row.Span is { } span)
+                                    {
+                                        var left = (span.Start.DayNumber - _start.DayNumber) * px;
+                                        var w = (span.End.DayNumber - span.Start.DayNumber + 1) * px;
+                                        @if (span.Start == span.End && !row.Derived)
+                                        {
+                                            <button type="button" class="rm-diamond @BarClass(task) @(editable ? "editable" : "")" style="left:@(left + px / 2 - 7)px"
+                                                    data-rm-drag="@(editable ? "1" : null)" data-task="@task.Id"
+                                                    title="@BarTitle(row)" @onclick="() => OnOpen.InvokeAsync(task)"></button>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="rm-bar @BarClass(task) @(row.Derived ? "derived" : "") @(editable ? "editable" : "")"
+                                                    style="left:@(left)px;width:@(Math.Max(w, 6))px" data-rm-drag="@(editable ? "1" : null)" data-task="@task.Id"
+                                                    title="@BarTitle(row)" @onclick="() => OnOpen.InvokeAsync(task)">
+                                                @if (editable)
+                                                {
+                                                    <span class="rm-edge-l"></span><span class="rm-edge-r"></span>
+                                                }
+                                                @if (w > 90)
+                                                {
+                                                    <span>@(row.Derived ? "по подзадачам" : task.Title)</span>
+                                                }
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @if (Undated.Count > 0)
+            {
+                <aside class="rm-undated panel">
+                    <div class="section-title">Без дат</div>
+                    <div class="hint">Перетащите задачу на шкалу — начнётся с этого дня и займёт неделю.</div>
+                    @foreach (var task in Undated)
+                    {
+                        <button type="button" class="rm-undated-item @(CanEdit?.Invoke(task) == true ? "editable" : "")" @onclick="() => OnOpen.InvokeAsync(task)"
+                                data-rm-undated="@(CanEdit?.Invoke(task) == true ? "1" : null)" data-task="@task.Id">
+                            <span class="code">@task.Code</span> <span>@task.Title</span>
+                        </button>
+                    }
+                </aside>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private enum Scale { Week, Month, Quarter }
+
+    private static readonly (Scale Scale, string Label)[] Scales = [(Scale.Week, "Неделя"), (Scale.Month, "Месяц"), (Scale.Quarter, "Квартал")];
+
+    [Parameter, EditorRequired] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
+    [Parameter, EditorRequired] public Guid BoardId { get; set; }
+    [Parameter] public Guid? AssigneeId { get; set; }
+    [Parameter] public bool Unassigned { get; set; }
+    [Parameter] public string? Query { get; set; }
+    [Parameter] public string? Fql { get; set; }
+    [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public EventCallback<TaskResponse> OnOpen { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<TaskResponse>> OnLoaded { get; set; }
+    [Parameter] public EventCallback<FqlErrorResponse?> OnFqlError { get; set; }
+    /// <summary>Можно ли тянуть полосу задачи (право правки); null — только чтение.</summary>
+    [Parameter] public Func<TaskResponse, bool>? CanEdit { get; set; }
+
+    private const int RowHeight = 32;
+
+    private readonly string _rootId = $"rm-{Guid.NewGuid():N}";
+    private DotNetObjectReference<TaskRoadmap>? _ref;
+    private bool _attached;
+    private IReadOnlyList<TaskBlockEdge> _blocks = [];
+
+    private readonly record struct Span(DateOnly Start, DateOnly End);
+
+    /// <summary>Строка: узел дерева, отрезок (свой или выведенный из поддерева), есть ли видимые дети.</summary>
+    private sealed record Row(TaskTreeNode Node, Span? Span, bool Derived, bool HasChildren, int Index);
+
+    private List<Row> _rows = [];
+    private IReadOnlyList<MilestoneResponse> _milestones = [];
+    private readonly HashSet<Guid> _expanded = [];
+    private Scale _scale = Scale.Month;
+    private DateOnly _start;
+    private DateOnly _end;
+    private bool _loading = true;
+    private string? _error;
+    private string? _loadedKey;
+
+    private BoardResponse? Board => Boards.FirstOrDefault(b => b.Id == BoardId);
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
+
+    private int PxPerDay => _scale switch { Scale.Week => 28, Scale.Month => 8, _ => 3 };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{BoardId}|{AssigneeId}|{Unassigned}|{Query}|{Fql}";
+        if (_loadedKey == key)
+            return;
+
+        if (_loadedKey?.StartsWith(BoardId.ToString()) != true)
+            _expanded.Clear();
+        _loadedKey = key;
+        await ReloadAsync();
+    }
+
+    public async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var tree = Api.GetTree(BoardId, null, AssigneeId, Unassigned, Query, fql: Fql);
+        var milestones = Api.GetMilestones(BoardId);
+        var blocks = Api.GetBoardBlocks(BoardId);
+        await Task.WhenAll(tree, milestones, blocks);
+        _blocks = blocks.Result.Ok ? blocks.Result.Value! : [];
+        _loading = false;
+
+        await OnFqlError.InvokeAsync(tree.Result.FqlError);
+        if (tree.Result.FqlError is not null)
+        {
+            _rows = [];
+            return;
+        }
+        if (!tree.Result.Ok)
+        {
+            _error = tree.Result.Error;
+            return;
+        }
+
+        _milestones = milestones.Result.Ok ? milestones.Result.Value!.Where(m => m.TargetDate is not null).ToList() : [];
+        Build(tree.Result.Value!);
+        if (_expanded.Count == 0)
+            foreach (var row in _rows.Where(r => r.Node.Depth == 0 && r.HasChildren))
+                _expanded.Add(row.Node.Task.Id);
+
+        await OnLoaded.InvokeAsync(_rows.Select(r => r.Node.Task).ToList());
+    }
+
+    /// <summary>Правка в слайдере: даты могли смениться — пересобираем отрезки (выведенные зависят от детей).</summary>
+    public void Replace(TaskResponse task)
+    {
+        var nodes = _rows.Select(r => r.Node.Task.Id == task.Id ? r.Node with { Task = task } : r.Node).ToList();
+        Build(nodes);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Отрезки одним обратным проходом по обходу дерева: у задачи — свои даты (одна дата — точка), иначе самое раннее
+    /// начало и самый поздний срок среди детей (их отрезков, тоже возможно выведенных).
+    /// </summary>
+    private void Build(IReadOnlyList<TaskTreeNode> nodes)
+    {
+        var spans = new Span?[nodes.Count];
+        var derived = new bool[nodes.Count];
+        var children = new List<int>[nodes.Count];
+        var parents = new Stack<int>();
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            children[i] = [];
+            while (parents.Count > 0 && nodes[parents.Peek()].Depth >= nodes[i].Depth)
+                parents.Pop();
+            if (parents.Count > 0)
+                children[parents.Peek()].Add(i);
+            parents.Push(i);
+        }
+
+        for (var i = nodes.Count - 1; i >= 0; i--)
+        {
+            var task = nodes[i].Task;
+            if ((task.StartDate ?? task.DueDate) is { } s && (task.DueDate ?? task.StartDate) is { } e)
+            {
+                spans[i] = new Span(s <= e ? s : e, s <= e ? e : s);
+                continue;
+            }
+
+            var child = children[i].Select(c => spans[c]).OfType<Span>().ToList();
+            if (child.Count > 0)
+            {
+                spans[i] = new Span(child.Min(x => x.Start), child.Max(x => x.End));
+                derived[i] = true;
+            }
+        }
+
+        _rows = nodes.Select((n, i) => new Row(n, spans[i], derived[i], children[i].Count > 0, i)).ToList();
+
+        var dates = _rows.Where(r => r.Span is not null).SelectMany(r => new[] { r.Span!.Value.Start, r.Span.Value.End })
+            .Concat(_milestones.Select(m => m.TargetDate!.Value)).Append(Today).ToList();
+        _start = Ru.WeekStart(dates.Min().AddDays(-7));
+        _end = dates.Max().AddDays(21);
+    }
+
+    /// <summary>Строки, чьи предки раскрыты.</summary>
+    private IEnumerable<Row> VisibleRows
+    {
+        get
+        {
+            var hiddenBelow = int.MaxValue;
+            foreach (var row in _rows)
+            {
+                if (row.Node.Depth > hiddenBelow)
+                    continue;
+                hiddenBelow = int.MaxValue;
+                yield return row;
+                if (row.HasChildren && !_expanded.Contains(row.Node.Task.Id))
+                    hiddenBelow = row.Node.Depth;
+            }
+        }
+    }
+
+    private List<TaskResponse> Undated => _rows.Where(r => r.Span is null && !r.Node.IsContextOnly).Select(r => r.Node.Task).ToList();
+
+    /// <summary>Деления шкалы: неделя — каждый понедельник, месяц и квартал — первое число месяца.</summary>
+    private IEnumerable<(DateOnly Day, string Label)> Ticks()
+    {
+        if (_scale == Scale.Week)
+        {
+            for (var d = Ru.WeekStart(_start); d <= _end; d = d.AddDays(7))
+                if (d >= _start)
+                    yield return (d, Ru.DateOnlyShort(d));
+            yield break;
+        }
+
+        for (var d = new DateOnly(_start.Year, _start.Month, 1).AddMonths(1); d <= _end; d = d.AddMonths(1))
+            if (_scale == Scale.Month || (d.Month - 1) % 3 == 0)
+                yield return (d, _scale == Scale.Quarter ? $"Q{(d.Month - 1) / 3 + 1} {d.Year}" : Ru.MonthShort(d));
+    }
+
+    private string BarClass(TaskResponse task) =>
+        Board?.Statuses.FirstOrDefault(s => s.Id == task.StatusId) is { IsFinal: true } ? "done"
+        : task.DueDate is { } due && due < Today ? "overdue"
+        : "";
+
+    private static string BarTitle(Row row)
+    {
+        var task = row.Node.Task;
+        var span = row.Span!.Value;
+        var dates = span.Start == span.End ? Ru.DateOnlyShort(span.Start) : $"{Ru.DateOnlyShort(span.Start)} — {Ru.DateOnlyShort(span.End)}";
+        return $"{task.Code}: {task.Title} · {dates}{(row.Derived ? " (по подзадачам)" : "")}";
+    }
+
+    private void Toggle(Guid id)
+    {
+        if (!_expanded.Remove(id))
+            _expanded.Add(id);
+    }
+
+    private void ExpandAll()
+    {
+        foreach (var row in _rows.Where(r => r.HasChildren))
+            _expanded.Add(row.Node.Task.Id);
+    }
+
+    private void CollapseAll() => _expanded.Clear();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Корень есть всегда, но пересоздаётся вместе с компонентом — вешаем один раз на экземпляр.
+        if (_attached)
+            return;
+        _ref ??= DotNetObjectReference.Create(this);
+        _attached = await Browser.RoadmapAttachAsync(_rootId, _ref);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Browser.DragDetachAsync(_rootId);
+        _ref?.Dispose();
+    }
+
+    /// <summary>Итог перетаскивания полосы: move — обе даты, start/end — один край (не дальше другого).</summary>
+    [JSInvokable]
+    public async Task OnBarDragged(string taskId, string mode, int days)
+    {
+        if (!Guid.TryParse(taskId, out var id) || _rows.FirstOrDefault(r => r.Node.Task.Id == id) is not { } row || days == 0)
+            return;
+
+        var task = row.Node.Task;
+        DateOnly? start = task.StartDate, due = task.DueDate;
+        switch (mode)
+        {
+            case "start" when start is { } from:
+                start = due is { } until && from.AddDays(days) > until ? until : from.AddDays(days);
+                break;
+            case "end" when due is { } to:
+                due = start is { } begin && to.AddDays(days) < begin ? begin : to.AddDays(days);
+                break;
+            default:
+                start = start?.AddDays(days);
+                due = due?.AddDays(days);
+                break;
+        }
+
+        await SaveAsync(task, start, due);
+    }
+
+    /// <summary>Задача из «Без дат» брошена на день шкалы: неделя с этого дня.</summary>
+    [JSInvokable]
+    public async Task OnUndatedDropped(string taskId, int dayIndex)
+    {
+        if (!Guid.TryParse(taskId, out var id) || _rows.FirstOrDefault(r => r.Node.Task.Id == id) is not { } row)
+            return;
+        var day = _start.AddDays(Math.Max(0, dayIndex));
+        await SaveAsync(row.Node.Task, day, day.AddDays(6));
+    }
+
+    private async Task SaveAsync(TaskResponse task, DateOnly? start, DateOnly? due)
+    {
+        if (start == task.StartDate && due == task.DueDate)
+            return;
+
+        var result = await Api.SetSchedule(task.Id, new SetTaskScheduleRequest(start, due));
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось изменить даты");
+            return;
+        }
+
+        Replace(task with { StartDate = result.Value!.StartDate, DueDate = result.Value.DueDate, UpdatedAt = result.Value.UpdatedAt });
+        await OnChanged.InvokeAsync(result.Value);
+    }
+
+    [Parameter] public EventCallback<TaskResponse> OnChanged { get; set; }
+
+    private sealed record Arrow(string Path, bool Conflict, string Title);
+
+    /// <summary>
+    /// Стрелки Blocks между видимыми строками со своими или выведенными отрезками: от конца блокирующей полосы к началу
+    /// блокируемой, кривой Безье. Конфликт — блокируемая начинается раньше, чем кончается блокирующая.
+    /// </summary>
+    private IEnumerable<Arrow> Arrows(int px)
+    {
+        if (_blocks.Count == 0)
+            yield break;
+
+        var visible = VisibleRows.Select((r, i) => (Row: r, Index: i)).Where(x => x.Row.Span is not null)
+            .ToDictionary(x => x.Row.Node.Task.Id, x => x);
+        foreach (var edge in _blocks)
+        {
+            if (!visible.TryGetValue(edge.SourceId, out var from) || !visible.TryGetValue(edge.TargetId, out var to))
+                continue;
+
+            var a = from.Row.Span!.Value;
+            var b = to.Row.Span!.Value;
+            var sx = (a.End.DayNumber - _start.DayNumber + 1) * px;
+            var tx = (b.Start.DayNumber - _start.DayNumber) * px;
+            var sy = from.Index * RowHeight + RowHeight / 2;
+            var ty = to.Index * RowHeight + RowHeight / 2;
+            var bend = Math.Max(24, Math.Abs(tx - sx) / 3);
+            var path = FormattableString.Invariant($"M{sx},{sy} C{sx + bend},{sy} {tx - bend},{ty} {tx},{ty}");
+            yield return new Arrow(path, b.Start <= a.End,
+                $"{from.Row.Node.Task.Code} блокирует {to.Row.Node.Task.Code}{(b.Start <= a.End ? " — начинается раньше, чем закончится блокирующая" : "")}");
+        }
+    }
+}

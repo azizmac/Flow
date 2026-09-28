@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Flow.Application.Abstractions;
 using Flow.Application.Features.Tasks.Mentions;
 using Flow.Application.Security;
@@ -21,7 +22,20 @@ public static class FlowApplicationServiceCollectionExtensions
 
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<ActorResolver>();
+        services.AddScoped<IProjectAccess, ProjectAccess>();
         services.AddScoped<MentionResolver>();
+        services.AddScoped<Features.Scm.ScmAutomation>();
+        services.AddScoped<Features.Tasks.TaskResponses>();
+        services.AddScoped<Features.Tasks.TaskLinkResponses>();
+        services.AddScoped<Features.Tasks.TransitionGuard>();
+        services.AddScoped<Features.Templates.BoardConfigApplier>();
+        services.AddScoped<Features.Sprints.TaskSprints>();
+        services.AddScoped<Features.Milestones.TaskMilestones>();
+        services.AddScoped<Features.CustomFields.TaskCustomFields>();
+        services.AddScoped<Features.Milestones.MilestoneProgressCalculator>();
+        // Секцию "Recurrence" привязывает Flow.Infrastructure вместе с воркером; здесь — умолчания для тестов и хостов без него.
+        services.TryAddSingleton(new Features.Tasks.Recurrence.RecurrenceOptions());
+        services.TryAddSingleton(new Features.Scm.ScmOptions());
 
         return services;
     }

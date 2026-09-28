@@ -59,6 +59,8 @@ services:
       Auth__EncryptionCertificate__Path: /certs/encryption.pfx
       Auth__EncryptionCertificate__Password: ${AUTH_CERT_PASSWORD:-flow-certs}
       DataProtection__KeysPath: /keys
+      # Адрес Flow снаружи — для вебхуков Git-хостингов ({адрес}/hooks/scm/{id}): изнутри контейнера его не узнать.
+      Scm__PublicBaseUrl: ${SCM_PUBLIC_BASE_URL:-http://localhost:8080}
       Cors__Origins__0: http://localhost:${CLIENT_PORT:-5016}
       ConnectionStrings__Postgres: >-
         Host=${POSTGRES_HOST:-postgres};Port=${POSTGRES_INTERNAL_PORT:-5432};Database=${POSTGRES_DB:-flow};Username=${POSTGRES_USER:-flow};Password=${POSTGRES_PASSWORD:-flow}

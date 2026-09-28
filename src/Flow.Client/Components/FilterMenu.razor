@@ -1,0 +1,75 @@
+@* Меню сохранённых фильтров на экране «Задачи»: свои и общие, звезда — в избранное сайдбара, выбор открывает
+   фильтр (?filter=id). Удалить можно свой, а общий — ещё Admin+ (сервер проверит, отказ — тостом). *@
+@implements IDisposable
+@inject SavedFiltersState Filters
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject NavigationManager Nav
+
+<MudMenu @bind-Open="_open" PopoverClass="flow-pop flow-pop-wide" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomLeft"
+         TransformOrigin="Origin.TopLeft" Dense="true" DropShadow="false" Ripple="false" AriaLabel="Сохранённые фильтры">
+    <ActivatorContent>
+        <button type="button" class="seg-btn solo @(Current is not null ? "on" : "")" @onclick="Toggle" title="Сохранённые фильтры">
+            <Icon Name="list" Size="12" />@(Current?.Name ?? "Фильтры")
+        </button>
+    </ActivatorContent>
+    <ChildContent>
+        @if (Filters.All.Count == 0)
+        {
+            <div class="pop-empty">Сохранённых фильтров нет — наберите запрос в FQL и нажмите «Сохранить»</div>
+        }
+        @foreach (var f in Filters.All)
+        {
+            <div class="pop-item filter-item @(f.Id == Current?.Id ? "cur" : "")" @key="f.Id">
+                <button type="button" class="filter-star @(f.IsStarred ? "on" : "")" title="@(f.IsStarred ? "Убрать из избранного" : "В избранное")"
+                        @onclick="() => Star(f)" @onclick:stopPropagation>★</button>
+                <a class="filter-name" href="@($"tasks?filter={f.Id}")" @onclick="() => _open = false">@f.Name</a>
+                @if (f.Shared)
+                {
+                    <span class="fql-hint">общий</span>
+                }
+                <button type="button" class="st-arrow" title="Удалить фильтр" @onclick="() => Delete(f)" @onclick:stopPropagation><Icon Name="close-simple" Size="11" /></button>
+            </div>
+        }
+    </ChildContent>
+</MudMenu>
+
+@code {
+    [Parameter] public SavedFilterResponse? Current { get; set; }
+
+    private bool _open;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Filters.Changed += OnChanged;
+        await Filters.EnsureLoadedAsync();
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    private void Toggle() => _open = !_open;
+
+    private async Task Star(SavedFilterResponse f)
+    {
+        var result = await Api.StarFilter(f.Id, !f.IsStarred);
+        if (result.Ok) Filters.Put(result.Value!);
+        else Toasts.Error(result.Error ?? "Не удалось изменить избранное");
+    }
+
+    private async Task Delete(SavedFilterResponse f)
+    {
+        var result = await Api.DeleteFilter(f.Id);
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось удалить фильтр");
+            return;
+        }
+
+        Filters.Remove(f.Id);
+        Toasts.Ok($"Фильтр «{f.Name}» удалён");
+        if (f.Id == Current?.Id)
+            Nav.NavigateTo(Nav.GetUriWithQueryParameter("filter", (string?)null), replace: true);
+    }
+
+    public void Dispose() => Filters.Changed -= OnChanged;
+}

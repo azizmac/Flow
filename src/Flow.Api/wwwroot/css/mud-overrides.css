@@ -87,6 +87,138 @@ a.mud-link:hover {
     margin: 0;
     padding: 0;
 }
+
+/* Компактное (Compact) и многострочное (Lines > 1) поле — текст интерфейса, а не крупное значение. */
+.ds-field.sm .ds-field-row .mud-input,
+.ds-field.multiline .ds-field-row .mud-input {
+    font-size: var(--text-body);
+    font-weight: var(--fw-medium);
+    letter-spacing: normal;
+}
+
+.ds-field.multiline .ds-field-row .mud-input > textarea.mud-input-root {
+    padding: 0;
+    color: var(--text-primary);
+}
+
+/* DsSelect, DsDateField, DsNumber: у Mud свои обёртки вокруг ввода и значок справа — шеврон или календарь.
+   Значок тихий и светлеет вместе с линией, когда поле в фокусе. */
+.ds-field-row .mud-select,
+.ds-field-row .mud-picker {
+    flex: 1;
+    min-width: 0;
+}
+
+.ds-field-row .mud-input-adornment-end {
+    margin-left: 8px;
+}
+
+/* С выбранным значением MudSelect показывает вместо input такой же div.mud-input-slot — со своими отступами
+   Material: поле вырастало на 13px, и форма под ним прыгала в момент выбора. */
+.ds-field-row .mud-input > div.mud-input-slot {
+    padding: 0;
+    min-height: 0;
+    color: var(--text-primary);
+}
+
+/* Поле-список — не текст: по Tab браузер выделял значение в readonly-input, и оно подсвечивалось как выделение. */
+.ds-select .mud-input > input.mud-input-root {
+    caret-color: transparent;
+}
+
+.ds-select .mud-input > input.mud-input-root::selection {
+    background: transparent;
+}
+
+.ds-field-row .mud-input-adornment .mud-icon-root {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+    color: var(--text-tertiary);
+    transition: color 150ms ease;
+}
+
+.ds-field:focus-within .ds-field-row .mud-input-adornment .mud-icon-root {
+    color: var(--text-primary);
+}
+
+.ds-field-row .mud-input-adornment .mud-icon-button {
+    padding: 2px;
+}
+
+/* DsDateField Pill — дата как значение на экране: рамка, фон и шрифт те же, что у пилюли-селекта (.status-sel),
+   внутри — поле MudDatePicker с вводом текстом, крестик «снять» и календарь. */
+.date-pill {
+    display: inline-flex;
+    max-width: 100%;
+}
+
+.date-pill .mud-input-control {
+    margin: 0;
+    width: auto;
+}
+
+.date-pill .mud-input {
+    width: 138px;
+    padding: 3px 4px 3px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.04);
+    font: var(--fw-semibold) 12px var(--font-display);
+    color: #fff;
+    transition: border-color 150ms ease;
+}
+
+.date-pill .mud-input:focus-within {
+    border-color: var(--accent);
+}
+
+.date-pill .mud-input > input.mud-input-root {
+    padding: 2px 0;
+    color: #fff;
+}
+
+.date-pill .mud-input > input.mud-input-root::placeholder {
+    color: var(--text-tertiary);
+    opacity: 1;
+}
+
+/* Material ставит кнопке у края (Edge.End) отрицательный отступ, чтобы «вынести» её к краю поля; в нашей рамке она из-за
+   этого вылезала за границу пилюли. Кнопка — обычный элемент строки, поле ввода сжимается под неё. */
+.date-pill .mud-input-adornment .mud-icon-button,
+.ds-field-row .mud-input-adornment .mud-icon-button {
+    padding: 2px;
+    margin: 0;
+}
+
+.date-pill .mud-input > input.mud-input-root {
+    flex: 1;
+    min-width: 0;
+}
+
+.date-pill .mud-input-adornment .mud-icon-root,
+.date-pill .mud-input-clear-button .mud-icon-root {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* DsCheckbox: один размер и цвет на всех экранах, подпись — обычный текст интерфейса. */
+.ds-check.mud-input-control {
+    margin: 0;
+    flex: none;
+}
+
+.ds-check .mud-button-root {
+    padding: 2px;
+}
+
+.ds-check .mud-typography {
+    color: var(--text-primary);
+    font: var(--fw-medium) 13px var(--font-text);
+    letter-spacing: normal;
+}
 /* ---------- Скелетоны ----------
    Ширину и высоту полос задаёт Components/Skeleton.razor, цвет — Palette.Skeleton из темы.
    Здесь: радиус как у остальной вёрстки Flow и выравнивание в строке-сетке списка задач. */
@@ -142,6 +274,10 @@ a.mud-link:hover {
     color: var(--danger);
 }
 
+.mud-snackbar.toast.warn .mud-snackbar-icon {
+    color: var(--accent);
+}
+
 /* ---------- Меню ----------
    .flow-pop — слой Flow поверх MudPopover: тот же вид, что у прежнего .pop в app.css, но без
    position/opacity — позицию и появление считает библиотека. Отдельное имя нужно, пока свой
@@ -164,6 +300,53 @@ a.mud-link:hover {
     flex-direction: column;
     gap: 2px;
     background: transparent;
+}
+
+/* Слой MudSelect: прокручивается сам список (MudBlazor ведёт по нему стрелками), а у слоя от его отступа
+   появлялась вторая полоса прокрутки. Отступ переезжает в список, слой только обрезает. */
+.mud-popover.flow-pop:has(> .mud-list) {
+    padding: 0;
+    overflow: hidden;
+}
+
+.mud-popover.flow-pop > .mud-list {
+    padding: 6px;
+}
+
+/* Пункты MudSelect в слое Flow (группы, спринт…). Список выше — flex-колонка, и при переполнении слоя
+   (max-height) пункты по умолчанию сжимались: строка в 37px ужималась до 19px, и имена наезжали друг на друга.
+   Не сжимаем, держим в одну строку с многоточием, вид — как у .pop-item. */
+.flow-pop .mud-list-item {
+    flex-shrink: 0;
+    min-height: 0;
+    padding: 7px 10px;
+    border-radius: 8px;
+    transition: background-color 120ms ease;
+}
+
+.flow-pop .mud-list-item .mud-list-item-text {
+    margin: 0;
+    min-width: 0;
+}
+
+.flow-pop .mud-list-item .mud-typography {
+    font: var(--fw-semibold) 12.5px var(--font-display);
+    color: var(--text-secondary);
+    letter-spacing: normal;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.flow-pop .mud-list-item:hover,
+.flow-pop .mud-list-item:focus-visible,
+.flow-pop .mud-list-item.mud-selected-item {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.flow-pop .mud-list-item:hover .mud-typography,
+.flow-pop .mud-list-item:focus-visible .mud-typography {
+    color: #fff;
 }
 
 .flow-pop .pop-item.mud-menu-item {
@@ -227,6 +410,9 @@ a.mud-link:hover {
     box-shadow: var(--shadow-modal);
 }
 
+/* «Статусы»: в строке имя, вид, два флага и корзина — в 440px имя сжималось до пары букв. */
+.mud-dialog.flow-modal.st-modal { width: 640px; }
+
 .flow-modal .flow-modal-title {
     padding: 0;
 }
@@ -271,6 +457,26 @@ a.mud-link:hover {
     width: 260px;
 }
 
+/* Меню, чей триггер — поле формы (TaskPicker с FieldLabel): обёртки MudMenu по умолчанию ужимаются по содержимому,
+   а поле в диалоге должно быть во всю ширину, как DsInput рядом. */
+.mud-menu.menu-block,
+.mud-menu.menu-block > * {
+    display: block;
+    width: 100%;
+}
+
+/* TaskPicker: код и название задачи длиннее имени человека — слой шире, название обрезается многоточием. */
+.mud-popover.flow-pop-tasks {
+    width: 400px;
+}
+
+.flow-pop-tasks .pop-task {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .mud-popover.flow-pop-boards {
     width: 300px;
 }
@@ -279,29 +485,6 @@ a.mud-link:hover {
     width: 300px;
     max-height: none;
     overflow: visible;
-}
-
-/* Поле поиска внутри меню (исполнитель, проект): клик по нему меню не закрывает. */
-.flow-pop .pop-search {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 2px 2px 6px;
-}
-
-.flow-pop .pop-search input {
-    width: 100%;
-    padding: 7px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: rgba(0, 0, 0, 0.12);
-    color: #fff;
-    font: var(--fw-medium) 12.5px var(--font-text);
-    outline: 0;
-}
-
-.flow-pop .pop-search input:focus {
-    border-color: var(--accent);
 }
 
 /* Карточка человека висит на своём якоре: MudPopover считает позицию по ближайшему
@@ -398,7 +581,7 @@ a.mud-link:hover {
 }
 
 /* Ширины колонок: код · задача · кто · статус · создана · меню — как в прежней сетке. */
-.flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: 92px; }
+.flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: max(92px, var(--code-col, 0px)); }
 .flow-grid th:nth-child(3), .flow-grid td:nth-child(3) { width: 56px; }
 .flow-grid th:nth-child(4), .flow-grid td:nth-child(4) { width: 170px; }
 .flow-grid th:nth-child(5), .flow-grid td:nth-child(5) { width: 110px; }
@@ -479,7 +662,7 @@ a.mud-link:hover {
 
     /* Колонки ужимаются вслед за окном: при прежних 92 и 170px на 400px ширины название оставалось
        без места и обрезалось на первом слове. */
-    .flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: 76px; }
+    .flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: max(76px, var(--code-col, 0px)); }
     .flow-grid th:nth-child(4), .flow-grid td:nth-child(4) { width: 118px; }
     .flow-grid th:nth-child(6), .flow-grid td:nth-child(6) { width: 34px; }
 
@@ -497,7 +680,7 @@ a.mud-link:hover {
         display: none;
     }
 
-    .flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: 70px; }
+    .flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: max(70px, var(--code-col, 0px)); }
 }
 
 /* Пустой список и индикатор загрузки занимают всю ширину таблицы. */
@@ -525,3 +708,80 @@ a.mud-link:hover {
 .mud-popover.flow-pop[data-mudpopover-flip] {
     transform: translateY(-6px);
 }
+
+/* Канбан: зона MudDropZone — наша колонка, без отступов и фона Material; призрак переносимой карточки — полупрозрачный. */
+.kb .mud-drop-zone { background: transparent; }
+.kb .mud-drop-item-preview-start { opacity: 0.4; }
+.kb .mud-drop-item { display: block; }
+.kb-col.denied .mud-dropitem-placeholder { display: none; }
+
+/* Дерево задач — тот же .flow-grid, свои ширины колонок: название, прогресс, исполнитель, статус. */
+.flow-grid.tree-grid { flex: 1; min-height: 0; }
+.flow-grid.tree-grid th:nth-child(1), .flow-grid.tree-grid td:nth-child(1) { width: auto; }
+.flow-grid.tree-grid th:nth-child(2), .flow-grid.tree-grid td:nth-child(2) { width: 230px; }
+.flow-grid.tree-grid th:nth-child(3), .flow-grid.tree-grid td:nth-child(3) { width: 56px; }
+.flow-grid.tree-grid th:nth-child(4), .flow-grid.tree-grid td:nth-child(4) { width: 170px; }
+.flow-grid.tree-grid tr.task-row.ctx .tree-title,
+.flow-grid.tree-grid tr.task-row.ctx .code { color: var(--text-tertiary); }
+.flow-grid.tree-grid tr.task-row.done .tree-title { color: var(--text-tertiary); }
+
+/* Флажки MudCheckBox в своих местах (матрица workflow, чек-лист, условия, общий фильтр): без лишних отступов Material,
+   отмеченный — цвет sage, как прежний свой флажок. */
+.wf-flags .mud-input-control { margin: 0; }
+.wf-flags .mud-checkbox .mud-typography, .sf-shared .mud-typography { color: #fff; font: var(--fw-medium) 13px var(--font-text); }
+
+/* Таблица-матрица workflow — MudSimpleTable на прозрачном фоне панели. */
+.wf-matrix.mud-simple-table { background: transparent; }
+.wf-matrix.mud-simple-table table { width: auto; }
+.wf-matrix.mud-simple-table table * tr > td, .wf-matrix.mud-simple-table table * tr > th { border-bottom: 0; padding: 6px 10px; }
+
+/* Селект окна финальной колонки и поле WIP — компактные, без подчёркивания Material. */
+/* WIP-лимит в строке статуса — DsNumber Compact в рамке, как поля «Оценка» в панели задачи: не поле формы, а число в строке. */
+.ds-field.st-wip { width: 64px; flex: none; gap: 0; }
+.ds-field.st-wip .ds-field-row { padding: 2px 6px; border: 1px solid var(--border); border-radius: var(--r-sm); background: rgba(0, 0, 0, 0.15); }
+.ds-field.st-wip .ds-field-row::after { display: none; }
+.ds-field.st-wip:focus-within .ds-field-row { border-color: var(--accent); }
+.ds-field.st-wip .ds-field-row .mud-input { font: var(--fw-semibold) 12px var(--font-display); }
+
+/* Поле «Спринт» в карточке — компактный MudSelect в строке мета-полей. */
+
+/* Бэклог: MudDropZone — наша секция без фона Material; призрак переносимой строки — полупрозрачный. */
+.bl-sections .mud-drop-zone { background: transparent; }
+.bl-sections .mud-drop-item { display: block; }
+.bl-sections .mud-drop-item-preview-start { opacity: 0.4; }
+/* Цель «вставить первым» у MudDropZone — absolute-полоса 20px поверх начала зоны: строка бэклога ниже карточки канбана,
+   и полоса накрывала середину первой строки (клик и перетаскивание шли мимо). Ужата до 8px на верхней границе. */
+.bl-sections .mud-drop-zone > .mud-drop-item-preview-start:not(.mud-drop-item-draggable) { height: 8px; top: -4px; }
+.sd-target.mud-input-control { margin-top: 8px; }
+
+/* Отчёт спринта: график на прозрачном фоне панели, подписи осей — вторичными чернилами, сетка приглушена;
+   «Идеально» — пунктиром (второй признак кроме цвета: её контраст к поверхности ниже 3:1). */
+.sr-chart .mud-chart { background: transparent; }
+.sr-chart .mud-charts-xaxis text, .sr-chart .mud-charts-yaxis text { fill: var(--text-tertiary); font: var(--fw-medium) 11px var(--font-text); }
+.sr-chart .mud-charts-gridlines-yaxis path, .sr-chart .mud-charts-gridlines-xaxis-lines path { stroke: var(--border-subtle); }
+.sr-chart .mud-chart-line path.mud-chart-serie:nth-of-type(2), .sr-chart .mud-chart-serie:nth-child(2) { stroke-dasharray: 6 4; }
+.sr-chart .mud-chart-legend-item .mud-typography { color: var(--text-secondary); font: var(--fw-semibold) 12px var(--font-display); }
+.sr-table.mud-simple-table { background: transparent; }
+.sr-table.mud-simple-table table * tr > th { color: var(--text-tertiary); font: var(--fw-semibold) 12px var(--font-display); border-bottom: 1px solid var(--border); }
+.sr-table.mud-simple-table table * tr > td { color: #fff; border-bottom: 1px solid var(--border-subtle); font: var(--fw-medium) 13px var(--font-text); }
+
+/* Пользовательские поля: значения в сетке карточки — компактные поля Mud без подчёркивания Material, как селекты рядом;
+   стрелка «выше» в модалке — тот же шеврон, повёрнутый вверх. */
+.cf-input.mud-input-control { margin: 0; flex: 1; min-width: 0; }
+.cf-input .mud-input { color: #fff; font: var(--fw-medium) 13px var(--font-text); }
+.cf-input .mud-input-slot::placeholder { color: var(--text-tertiary); opacity: 1; }
+.cf-select.mud-input-control { margin: 0; }
+.cf-up svg { transform: rotate(180deg); }
+.cf-required.mud-input-control { margin: 0; }
+.sc-type.mud-input-control { width: 200px; flex: none; }
+.sc-add.mud-input-control { max-width: 320px; }
+/* Модалки настройки проекта со списком полей («Экраны задач», «Поля проекта») — шире стандартных 440px. */
+.mud-dialog.flow-modal.wide { width: 680px; max-width: calc(100vw - 32px); }
+/* Диагностика доставок SCM — таблица в шесть колонок с текстом ошибки. */
+.mud-dialog.flow-modal.scm-deliv-modal { width: 880px; max-width: calc(100vw - 32px); }
+.sc-req .mud-typography { color: var(--text-secondary); font: var(--fw-medium) 12px var(--font-text); }
+
+/* Календарь: MudDropZone — наша ячейка дня без фона Material; цель «вставить первым» ужата до полосы на границе. */
+.cal-days .mud-drop-zone { background: transparent; }
+.cal-days .mud-drop-item { display: block; }
+.cal-days .mud-drop-zone > .mud-drop-item-preview-start:not(.mud-drop-item-draggable) { height: 6px; top: -3px; }

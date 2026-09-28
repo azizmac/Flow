@@ -1,4 +1,4 @@
-﻿@* Экран «Задачи» (GET /tasks): плоский список задач по всем проектам или по одному — проект выбирается
+﻿@* Экран «Задачи» (GET /tasks): список задач или канбан (?view=board, docs/TZ_task_views.md §1) по всем проектам или по одному — проект выбирается
    селектором в топбаре и живёт в query (?board=). Фильтры (?status= внутри проекта, ?type= в сводном режиме,
    ?who= — id, "none" — без исполнителя) и поиск считает сервер, страница грузится порциями по курсору.
    Слайдер создания (N) и слайдер задачи (?task=) — как раньше.
@@ -13,7 +13,9 @@
 @inject HotkeyService Hotkeys
 @inject AppState State
 @inject UserDirectory Users
+@inject ProjectAccessState Access
 @inject PreferencesState Preferences
+@inject SavedFiltersState Filters
 
 <PageTitle>@(CurrentBoard?.Name ?? "Задачи") — Flow</PageTitle>
 
@@ -30,9 +32,34 @@
         else
         {
             <BoardSelect Boards="_boards" Value="BoardId" ValueChanged="SelectBoard" Disabled="_boardsLoading" />
-            @if (CurrentBoard is not null && CanManageBoard)
+            @if (CurrentBoard is not null)
             {
-                <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
+                var boardAccess = Access.For(CurrentBoard.Id);
+                @if (Permissions.CanRenameBoard(boardAccess))
+                {
+                    <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
+                }
+                @if (Permissions.CanManageConfig(boardAccess))
+                {
+                    <DsIconButton Icon="list" Size="30" Title="Статусы проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _statusesOpen = true" />
+                    <DsIconButton Icon="link" Size="30" Title="Workflow проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/workflow"))" />
+                    <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _typesOpen = true" />
+                    <DsIconButton Icon="check-square" Size="30" Title="Поля проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _fieldsOpen = true" />
+                    <DsIconButton Icon="view" Size="30" Title="Экраны задач" Style="color:rgba(255,255,255,0.45)" OnClick="() => _screensOpen = true" />
+                }
+                @if (Permissions.CanManageTaskTemplates(boardAccess))
+                {
+                    <DsIconButton Icon="copy" Size="30" Title="Шаблоны задач" Style="color:rgba(255,255,255,0.45)" OnClick="() => _templatesOpen = true" />
+                }
+                <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/milestones"))" />
+                @if (Permissions.CanManageScm(boardAccess))
+                {
+                    <DsIconButton Icon="code" Size="30" Title="Репозитории проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _reposOpen = true" />
+                }
+                @if (Permissions.CanManageMembers(boardAccess))
+                {
+                    <DsIconButton Icon="users" Size="30" Title="Доступ к проекту" Style="color:rgba(255,255,255,0.45)" OnClick="() => _accessOpen = true" />
+                }
             }
         }
     </div>
@@ -67,11 +94,29 @@
     {
         <div class="filter-row">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                @if (CurrentBoard is { } board)
+                <div class="seg" role="radiogroup" aria-label="Вид">
+                    <button type="button" class="seg-btn @(CurrentView == TaskView.List ? "on" : "")" role="radio" aria-checked="@(CurrentView == TaskView.List)"
+                            title="Список" @onclick="() => SetView(TaskView.List)"><Icon Name="list" Size="14" />Список</button>
+                    <button type="button" class="seg-btn @(IsBoardView ? "on" : "")" role="radio" aria-checked="@IsBoardView"
+                            title="Доска: колонки по статусам" @onclick="() => SetView(TaskView.Board)"><Icon Name="grid" Size="14" />Доска</button>
+                    <button type="button" class="seg-btn @(IsTreeView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsTreeView" aria-disabled="@(BoardId is null)"
+                            title="@(BoardId is null ? "Дерево — внутри одного проекта: выберите проект" : "Дерево: эпики, истории и подзадачи")"
+                            @onclick="() => SetProjectView(TaskView.Tree)"><Icon Name="list-ordered" Size="14" />Дерево</button>
+                    <button type="button" class="seg-btn @(IsBacklogView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsBacklogView" aria-disabled="@(BoardId is null)"
+                            title="@(BoardId is null ? "Бэклог — внутри одного проекта: выберите проект" : "Бэклог и спринты")"
+                            @onclick="() => SetProjectView(TaskView.Backlog)"><Icon Name="history" Size="14" />Бэклог</button>
+                    <button type="button" class="seg-btn @(IsCalendarView ? "on" : "")" role="radio" aria-checked="@IsCalendarView"
+                            title="Календарь: задачи по датам" @onclick="() => SetView(TaskView.Calendar)"><Icon Name="calendar" Size="14" />Календарь</button>
+                    <button type="button" class="seg-btn @(IsRoadmapView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsRoadmapView" aria-disabled="@(BoardId is null)"
+                            title="@(BoardId is null ? "Роадмап — внутри одного проекта: выберите проект" : "Роадмап: полосы от начала до срока")"
+                            @onclick="() => SetProjectView(TaskView.Roadmap)"><Icon Name="chart" Size="14" />Роадмап</button>
+                </div>
+                @* В доске фильтр статуса не нужен: колонки и есть статусы. *@
+                @if (CurrentView == TaskView.List && CurrentBoard is { } board)
                 {
                     <StatusFilter Statuses="board.Statuses" Counts="_countsByStatus" Total="_total" Value="StatusId" ValueChanged="SetStatusFilter" />
                 }
-                else
+                else if (CurrentView == TaskView.List)
                 {
                     <StatusTypeFilter Counts="_countsByType" Total="_total" Value="TypeFilter" ValueChanged="SetTypeFilter" />
                 }
@@ -81,15 +126,60 @@
                     <button type="button" class="seg-btn solo @(Who == me.Id.ToString() ? "on" : "")"
                             title="Задачи, где я исполнитель" @onclick="ToggleMine">Мои задачи</button>
                 }
+                <FilterMenu Current="CurrentFilter" />
+                <button type="button" id="@FqlToggleId" class="seg-btn solo @(FqlVisible ? "on" : "")" @onclick="OpenFql"
+                        title="@(HasPanelFilters && !FqlVisible ? "Показать фильтры строкой FQL" : "Строка запроса FQL")">FQL</button>
             </div>
             <div class="meta-line">
-                @Ru.Tasks(_total)@(CurrentBoard is { } b ? $" · создан {Ru.Date(b.CreatedAt)}" : $" · {Ru.Projects(_boards.Count)}")
+                @if (CurrentView == TaskView.List)
+                {
+                    @Ru.Tasks(_total)@(" · ")
+                }@(CurrentBoard is { } b ? $"создан {Ru.Date(b.CreatedAt)}" : Ru.Projects(_boards.Count))
             </div>
         </div>
 
+        @if (FqlVisible)
+        {
+            <FqlBar Value="@EffectiveFql" Error="_fqlError" MorphFrom="@(_fqlMorph ? FqlToggleId : null)"
+                    OnApply="ApplyFql" OnSave="OpenSave" OnClose="CloseFql" />
+        }
+
+        @if (IsCalendarView)
+        {
+            <TaskCalendar @ref="_calendar" Boards="_boards" BoardId="BoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
+                          Query="@_search" Fql="@EffectiveFql" Me="Me" SelectedId="TaskId"
+                          OnOpen="OpenTask" OnLoaded="OnKanbanLoaded" OnFqlError="e => _fqlError = e" />
+        }
+        else if (IsRoadmapView && BoardId is { } roadmapBoardId)
+        {
+            <TaskRoadmap @ref="_roadmap" Boards="_boards" BoardId="roadmapBoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
+                         Query="@_search" Fql="@EffectiveFql" SelectedId="TaskId" CanEdit="t => Permissions.CanEditTask(Me, AccessFor(t), t)"
+                         OnOpen="OpenTask" OnLoaded="OnKanbanLoaded" OnFqlError="e => _fqlError = e" />
+        }
+        else if (IsBacklogView && BoardId is { } backlogBoardId)
+        {
+            <BacklogView @ref="_backlog" Boards="_boards" BoardId="backlogBoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
+                         Query="@_search" Fql="@EffectiveFql" Me="Me" SelectedId="TaskId"
+                         OnOpen="OpenTask" OnLoaded="OnKanbanLoaded" OnFqlError="e => _fqlError = e" />
+        }
+        else if (IsTreeView && BoardId is { } treeBoardId)
+        {
+            <TaskTree @ref="_tree" Boards="_boards" BoardId="treeBoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
+                      Query="@_search" Fql="@EffectiveFql" Me="Me" SelectedId="TaskId"
+                      OnOpen="OpenTask" OnLoaded="OnKanbanLoaded" OnFqlError="e => _fqlError = e" />
+        }
+        else if (IsBoardView)
+        {
+            <KanbanBoard @ref="_kanban" Boards="_boards" BoardId="BoardId" AssigneeId="AssigneeFilterId" Unassigned="@(Who == "none")"
+                         Query="@_search" Fql="@EffectiveFql" Me="Me" SelectedId="TaskId"
+                         OnOpen="OpenTask" OnLoaded="OnKanbanLoaded" OnFqlError="e => _fqlError = e"
+                         OnBoardChanged="ReplaceBoard" OnCreated="OnQuickCreated" />
+        }
+        else
+        {
         @* Страницу и размер страницы, как и сортировку, ведём сами: встроенные переключатели таблицы в
            серверном режиме меняют только подписи пейджера, а повторный запрос не делают. *@
-        <MudDataGrid @ref="_grid" T="TaskResponse" ServerData="LoadTasks" Class="flow-grid panel"
+        <MudDataGrid @ref="_grid" T="TaskResponse" ServerData="LoadTasks" Class="flow-grid panel" Style="@($"--code-col: {_codeColumn}px")"
                      Dense="true" Hover="true" Elevation="0" SortMode="SortMode.None"
                      CurrentPage="_page" CurrentPageChanged="OnPageChanged"
                      RowsPerPage="_pageSize" RowsPerPageChanged="OnPageSizeChanged"
@@ -105,7 +195,10 @@
                         <span id="@TaskAnchorId(context.Item.Id)" class="row-key" role="button" tabindex="0"
                               aria-label="@($"{context.Item.Code}: {context.Item.Title}")"
                               @onclick:stopPropagation @onclick="() => OpenTask(context.Item)"
-                              @onkeydown="e => OnRowKey(e, context.Item)">@context.Item.Code</span>
+                              @onkeydown="e => OnRowKey(e, context.Item)">@if (TypeFor(context.Item) is { } type)
+                              {
+                                  <TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />
+                              }@context.Item.Code</span>
                     </CellTemplate>
                 </PropertyColumn>
 
@@ -124,19 +217,43 @@
                             }
                             else
                             {
-                                @context.Item.Title
+                                <PriorityIcon Value="context.Item.Priority" Size="13" />@context.Item.Title
                             }
                         </div>
                         @if (!string.IsNullOrWhiteSpace(context.Item.Description))
                         {
                             <div class="task-desc">@Ru.PlainFirstLine(context.Item.Description)</div>
                         }
-                        @if (context.Item.DueDate is not null || context.Item.CommentCount > 0)
+                        @if (context.Item.DueDate is not null || context.Item.CommentCount > 0 || context.Item.StoryPoints is not null || context.Item.ChildCount > 0 || context.Item.ChecklistTotal > 0 || context.Item.BlockedByCount > 0 || context.Item.PullRequestState is not null)
                         {
                             <div class="task-meta-chips">
+                                @if (context.Item.StoryPoints is { } sp)
+                                {
+                                    <span class="count-chip" title="Story points">@Ru.Points(sp) SP</span>
+                                }
                                 @if (context.Item.DueDate is { } d)
                                 {
                                     <DueChip Value="d" IsDone="IsDone(context.Item)" />
+                                }
+                                @if (context.Item.PullRequestState is { } prState)
+                                {
+                                    <span class="count-chip pr-chip @ScmMeta.StateClass(prState)" title="@($"Последний PR: {ScmMeta.StateLabel(prState)}")"><Icon Name="code" Size="12" />PR</span>
+                                }
+                                @if (context.Item.BlockedByCount > 0)
+                                {
+                                    <span class="count-chip blocked" title="@($"Заблокирована незакрытыми задачами: {context.Item.BlockedByCount}")"><Icon Name="lock" Size="12" />заблокирована</span>
+                                }
+                                @if (context.Item.ChildCount > 0)
+                                {
+                                    var ci = context.Item;
+                                    <span class="count-chip @(ci.ChildDoneCount == ci.ChildCount ? "done" : "")"
+                                          title="@($"Подзадачи: выполнено {ci.ChildDoneCount} из {ci.ChildCount}")"><Icon Name="list" Size="12" />@ci.ChildDoneCount/@ci.ChildCount</span>
+                                }
+                                @if (context.Item.ChecklistTotal > 0)
+                                {
+                                    var cl = context.Item;
+                                    <span class="count-chip @(cl.ChecklistDone == cl.ChecklistTotal ? "done" : "")"
+                                          title="@($"Чек-лист: {cl.ChecklistDone} из {cl.ChecklistTotal}")"><Icon Name="check-square" Size="12" />@cl.ChecklistDone/@cl.ChecklistTotal</span>
                                 }
                                 @if (context.Item.CommentCount > 0)
                                 {
@@ -152,8 +269,8 @@
                         <SortHeader Field="TaskSortField.Assignee" Current="_sortField" Descending="_sortDescending" OnSort="SortBy">Кто</SortHeader>
                     </HeaderTemplate>
                     <CellTemplate>
-                        <AssigneeSelect Compact="true" Value="context.Item.AssigneeId" Disabled="!Permissions.CanAssign(Me, context.Item)"
-                                        OnlyUserId="OnlyAssigneeId" OnChange="id => AssignTask((context.Item, id))" />
+                        <UserPicker Compact="true" Value="context.Item.AssigneeId" Disabled="!Permissions.CanAssign(Me, AccessFor(context.Item), context.Item)"
+                                        OnlyUserId="OnlyAssigneeFor(context.Item.BoardId)" OnChange="id => AssignTask((context.Item, id))" />
                     </CellTemplate>
                 </PropertyColumn>
 
@@ -162,9 +279,10 @@
                         <SortHeader Field="TaskSortField.Status" Current="_sortField" Descending="_sortDescending" OnSort="SortBy">Статус</SortHeader>
                     </HeaderTemplate>
                     <CellTemplate>
-                        @if (Permissions.CanEditTask(Me, context.Item))
+                        @if (Permissions.CanEditTask(Me, AccessFor(context.Item), context.Item))
                         {
                             <StatusSelect Statuses="StatusesFor(context.Item)" Value="context.Item.StatusId"
+                                          TaskId="context.Item.Id" Restricted="IsRestricted(context.Item.BoardId)"
                                           OnChange="id => ChangeStatus((context.Item, id))" />
                         }
                         else
@@ -186,10 +304,14 @@
 
                 <TemplateColumn T="TaskResponse" Sortable="false" Filterable="false" CellClass="task-cell-menu">
                     <CellTemplate>
-                        <RowMenu OnOpen="() => OpenTask(context.Item)" ShowRename="Permissions.CanEditTask(Me, context.Item)"
-                                 ShowDelete="Permissions.CanEditTask(Me, context.Item)"
+                        <RowMenu OnOpen="() => OpenTask(context.Item)" ShowRename="Permissions.CanEditTask(Me, AccessFor(context.Item), context.Item)"
+                                 ShowDelete="Permissions.CanEditTask(Me, AccessFor(context.Item), context.Item)"
                                  OnRename="() => StartTaskRename(context.Item)" OnCopy="() => CopyCode(context.Item)"
-                                 OnDelete="() => AskDeleteTask(context.Item)" />
+                                 OnDelete="() => AskDeleteTask(context.Item)"
+                                 ShowRestructure="Permissions.CanEditTask(Me, AccessFor(context.Item), context.Item)"
+                                 OnSplit="() => Restructure(context.Item, TaskRestructureMode.Split)"
+                                 OnMerge="() => Restructure(context.Item, TaskRestructureMode.Merge)"
+                                 OnMove="() => Restructure(context.Item, TaskRestructureMode.Move)" />
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>
@@ -226,23 +348,74 @@
                 <MudDataGridPager T="TaskResponse" RowsPerPageString="Задач на странице" InfoFormat="{first_item}–{last_item} из {all_items}" />
             </PagerContent>
         </MudDataGrid>
+        }
     }
 </div>
 
 <Drawer Open="DrawerOpen" OnClose="CloseDrawer">
     @if (DrawerBoard is { } drawerBoard && (_createOpen || SelectedTask is not null))
     {
-        <TaskDrawer Board="drawerBoard" Boards="_boards" OnBoardChanged="SetCreateBoard" Item="@(_createOpen ? null : SelectedTask)"
-                    CanEdit="@(SelectedTask is { } sel && Permissions.CanEditTask(Me, sel))" CanAssign="@(SelectedTask is { } sel2 && Permissions.CanAssign(Me, sel2))" OnlyAssigneeId="OnlyAssigneeId"
-                    OnClose="CloseDrawer" OnCreated="OnTaskCreated" OnUpdated="OnTaskUpdated" OnDelete="AskDeleteTask" />
+        <TaskDrawer Board="drawerBoard" Boards="CreatableBoards" OnBoardChanged="SetCreateBoard" Item="@(_createOpen ? null : SelectedTask)"
+                    CanEdit="@(SelectedTask is { } sel && Permissions.CanEditTask(Me, AccessFor(sel), sel))"
+                    CanAssign="@(SelectedTask is { } sel2 && Permissions.CanAssign(Me, AccessFor(sel2), sel2))"
+                    OnlyAssigneeId="OnlyAssigneeFor(drawerBoard.Id)"
+                    OnClose="CloseDrawer" OnCreated="OnTaskCreated" OnUpdated="OnTaskUpdated" OnDelete="AskDeleteTask"
+                    OnHierarchyChanged="Reload" />
     }
 </Drawer>
+
+@if (_accessOpen && CurrentBoard is { } accessBoard)
+{
+    <ProjectAccessDialog Board="accessBoard" OnClose="() => _accessOpen = false" />
+}
+
+@if (_saveQuery is not null)
+{
+    <SaveFilterDialog Query="@_saveQuery" Current="CurrentFilter" OnSaved="OnFilterSaved" OnClose="() => _saveQuery = null" />
+}
+
+@if (_statusesOpen && CurrentBoard is { } statusesBoard)
+{
+    <StatusesDialog Board="statusesBoard" OnChanged="OnStatusesChanged" OnClose="() => _statusesOpen = false" />
+}
+
+@if (_templatesOpen && CurrentBoard is { } templatesBoard)
+{
+    <TaskTemplatesDialog Board="templatesBoard" OnClose="() => _templatesOpen = false" />
+}
+
+@if (_screensOpen && CurrentBoard is { } screensBoard)
+{
+    <ScreensDialog Board="screensBoard" OnChanged="ReplaceBoard" OnClose="() => _screensOpen = false" />
+}
+
+@if (_fieldsOpen && CurrentBoard is { } fieldsBoard)
+{
+    <CustomFieldsDialog Board="fieldsBoard" OnChanged="ReplaceBoard" OnClose="() => _fieldsOpen = false" />
+}
+
+@if (_typesOpen && CurrentBoard is { } typesBoard)
+{
+    <TaskTypesDialog Board="typesBoard" OnChanged="ReplaceBoard" OnClose="() => _typesOpen = false" />
+}
 
 @if (_deleting is not null)
 {
     <ConfirmDialog Title="@($"Удалить задачу {_deleting.Code}?")"
-                   Text="@($"«{_deleting.Title}» будет удалена без возможности восстановления.")"
+                   Text="@TaskMeta.DeleteWarning(_deleting)"
                    OnConfirm="ConfirmDeleteTask" OnCancel="() => _deleting = null" />
+}
+
+
+@if (_restructureTask is not null && _restructureMode != TaskRestructureMode.None)
+{
+    <TaskRestructure Task="_restructureTask" @bind-Mode="_restructureMode" OnDone="_ => Reload()" />
+}
+
+
+@if (_reposOpen && CurrentBoard is not null)
+{
+    <BoardRepositoriesDialog Board="CurrentBoard" OnClose="() => _reposOpen = false" />
 }
 
 @code {
@@ -266,7 +439,100 @@
     /// <summary>Фильтр по исполнителю: Guid пользователя или "none" — без исполнителя.</summary>
     [SupplyParameterFromQuery(Name = "who")] public string? Who { get; set; }
 
+    /// <summary>Запрос FQL (docs/TZ_task_views.md §7); складывается с панелью фильтров через AND.</summary>
+    [SupplyParameterFromQuery(Name = "fql")] public string? Fql { get; set; }
+
+    /// <summary>Представление: list | board; без параметра — из личных настроек (docs/TZ_task_views.md).</summary>
+    [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
+
+    /// <summary>Открытый сохранённый фильтр; его запрос действует, пока в адресе нет своего ?fql= (правки до «Сохранить»).</summary>
+    [SupplyParameterFromQuery(Name = "filter")] public Guid? FilterId { get; set; }
+
     private MudDataGrid<TaskResponse>? _grid;
+    private KanbanBoard? _kanban;
+
+    private TaskTree? _tree;
+
+    /// <summary>
+    /// Вид экрана: из адреса, без него — из личных настроек. Дерево — только внутри проекта (docs/TZ_task_views.md §3):
+    /// в «Все проекты» оно показывает список.
+    /// </summary>
+    private TaskView CurrentView
+    {
+        get
+        {
+            var view = View switch
+            {
+                "board" => TaskView.Board,
+                "tree" => TaskView.Tree,
+                "backlog" => TaskView.Backlog,
+                "calendar" => TaskView.Calendar,
+                "roadmap" => TaskView.Roadmap,
+                "list" => TaskView.List,
+                _ => Preferences.TasksView
+            };
+            return view is TaskView.Tree or TaskView.Backlog or TaskView.Roadmap && BoardId is null ? TaskView.List : view;
+        }
+    }
+
+    private bool IsBoardView => CurrentView == TaskView.Board;
+
+    private bool IsTreeView => CurrentView == TaskView.Tree;
+
+    private bool IsBacklogView => CurrentView == TaskView.Backlog;
+
+    private bool IsCalendarView => CurrentView == TaskView.Calendar;
+
+    private bool IsRoadmapView => CurrentView == TaskView.Roadmap;
+
+    private TaskCalendar? _calendar;
+
+    private TaskRoadmap? _roadmap;
+
+    private BacklogView? _backlog;
+
+    /// <summary>
+    /// Смена вида. Фильтр статуса есть только у списка (в доске колонки и есть статусы, в дереве статус виден в строке),
+    /// поэтому он снимается; остальные фильтры едут с адресом.
+    /// </summary>
+    private void SetView(TaskView view)
+    {
+        if (view == CurrentView)
+            return;
+
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["view"] = view.ToString().ToLowerInvariant(),
+            ["status"] = null,
+            ["type"] = null
+        }));
+    }
+
+    /// <summary>
+    /// Дерево, бэклог и роадмап живут внутри одного проекта: в «Все проекты» вид не меняется, а тост объясняет почему.
+    /// Кнопка при этом не disabled — по выключенной кнопке клик не доходит, и человек не узнал бы, что делать.
+    /// </summary>
+    private void SetProjectView(TaskView view)
+    {
+        if (BoardId is null)
+        {
+            var name = view switch { TaskView.Tree => "Дерево", TaskView.Backlog => "Бэклог", _ => "Роадмап" };
+            Toasts.Warning($"{name} — внутри одного проекта: сначала выберите проект");
+            return;
+        }
+
+        SetView(view);
+    }
+
+    /// <summary>Карточки доски — те же _tasks, по которым ходят слайдер и ↑↓.</summary>
+    private void OnKanbanLoaded(IReadOnlyList<TaskResponse> cards) => _tasks = cards.ToList();
+
+    private async Task OnQuickCreated(TaskResponse t)
+    {
+        BumpNextNumber(t.BoardId);
+        Toasts.Ok($"Задача {t.Code} создана");
+        await Task.CompletedTask;
+    }
     private TaskSortField _sortField = TaskSortField.Created;
     private bool _sortDescending = true;
     private int _page;
@@ -274,6 +540,17 @@
     private List<BoardResponse> _boards = [];
     private bool _boardsLoading = true;
     private List<TaskResponse> _tasks = [];
+
+    /// <summary>
+    /// Ширина колонки «Код» под самый длинный код страницы: ключ проекта бывает до 10 букв, и в прежние 92px
+    /// «DFRONT-25» уже не помещался — хвост кода наезжал на название. Таблица с table-layout: fixed сама по
+    /// содержимому не растёт, поэтому ширину считает страница и отдаёт гриду переменной --code-col (CSS берёт
+    /// максимум с прежней шириной). 47px — отступы ячейки и глиф типа, ~9.5px — символ кода.
+    /// </summary>
+    private int _codeColumn;
+
+    private static int CodeColumnWidth(IEnumerable<TaskResponse> tasks) =>
+        tasks.Select(t => t.Code.Length).DefaultIfEmpty(0).Max() is var chars and > 0 ? 47 + (int)Math.Ceiling(chars * 9.5) : 0;
     /// <summary>Сколько строк под текущим отбором — им живёт пейджер таблицы.</summary>
     private int _matched;
     /// <summary>Флаг для <see cref="LoadTasks"/>: отдать текущую страницу без запроса (см. Redraw).</summary>
@@ -301,6 +578,35 @@
 
     private BoardResponse? CurrentBoard => _boards.FirstOrDefault(b => b.Id == BoardId);
 
+    /// <summary>Открыта модалка типов задач текущего проекта.</summary>
+    private bool _typesOpen;
+    private bool _fieldsOpen;
+    private bool _screensOpen;
+    private bool _templatesOpen;
+
+    /// <summary>Открыта модалка статусов текущего проекта.</summary>
+    private bool _statusesOpen;
+
+    /// <summary>
+    /// Статусы — часть строки задачи (пилюля, порядок сортировки, «закрыта»), а удаление статуса переносит задачи:
+    /// после любой правки список перечитывается, не только проект в шапке.
+    /// </summary>
+    private async Task OnStatusesChanged(BoardResponse updated)
+    {
+        ReplaceBoard(updated);
+        await Reload();
+    }
+
+    private void ReplaceBoard(BoardResponse updated)
+    {
+        var i = _boards.FindIndex(b => b.Id == updated.Id);
+        if (i >= 0)
+            _boards[i] = updated;
+    }
+
+    private TaskTypeResponse? TypeFor(TaskResponse task) =>
+        TaskMeta.TypeOf(_boards.FirstOrDefault(b => b.Id == task.BoardId), task.TypeId);
+
     private StatusType? TypeFilter => Enum.TryParse<StatusType>(Type, out var t) ? t : null;
 
     private bool DrawerOpen => _createOpen || (TaskId is not null && SelectedTask is not null);
@@ -309,16 +615,46 @@
 
     /// <summary>Проект для слайдера: у открытой задачи — её собственный, у формы создания — выбранный.</summary>
     private BoardResponse? DrawerBoard => _createOpen
-        ? _boards.FirstOrDefault(b => b.Id == (_createBoardId ?? BoardId)) ?? _boards.FirstOrDefault()
+        ? _boards.FirstOrDefault(b => b.Id == (_createBoardId ?? BoardId)) ?? CreatableBoards.FirstOrDefault() ?? _boards.FirstOrDefault()
         : SelectedTask is { } t ? _boards.FirstOrDefault(b => b.Id == t.BoardId) : null;
 
-    private bool HasFilters => StatusId is not null || TypeFilter is not null || Who is not null || _search.Trim().Length > 0;
+    private bool HasPanelFilters => StatusId is not null || TypeFilter is not null || Who is not null || _search.Trim().Length > 0;
+
+    private bool HasFilters => HasPanelFilters || !string.IsNullOrWhiteSpace(EffectiveFql);
+
+    private SavedFilterResponse? CurrentFilter => Filters.Find(FilterId);
+
+    /// <summary>Действующий запрос: свой из адреса или сохранённого фильтра.</summary>
+    private string? EffectiveFql => Fql ?? CurrentFilter?.Query;
+
+    private bool _fqlOpen;
+    /// <summary>Строку открыли кнопкой — она вырастает из кнопки; по ссылке с ?fql= появляется без анимации.</summary>
+    private bool _fqlMorph;
+    private const string FqlToggleId = "fql-toggle";
+    private FqlErrorResponse? _fqlError;
+    private string? _saveQuery;
+
+    private bool FqlVisible => _fqlOpen || !string.IsNullOrWhiteSpace(EffectiveFql) || _fqlError is not null;
 
     // Права по матрице docs/TZ_user_roles.md; Flow.Api — источник истины, здесь только показ кнопок.
     private UserResponse? Me => Users.Find(State.CurrentUserId);
-    private bool CanManageBoard => Permissions.CanManageBoards(Me);
-    private bool CanCreateTask => Permissions.CanCreateTask(Me);
-    private Guid? OnlyAssigneeId => Permissions.CanAssignAnyone(Me) ? null : Me?.Id;
+    /// <summary>Права — в проекте каждой строки: в сводном списке соседние задачи из разных проектов (docs/TZ_project_access.md).</summary>
+    private ProjectAccessResponse? AccessFor(TaskResponse task) => Access.For(task.BoardId);
+
+    private Guid? OnlyAssigneeFor(Guid boardId) => Permissions.CanAssignAnyone(Access.For(boardId)) ? null : Me?.Id;
+
+    /// <summary>В проекте — право в нём; в сводном списке — хоть в одном проекте.</summary>
+    private bool CanCreateTask => BoardId is { } id
+        ? Permissions.CanCreateTask(Access.For(id))
+        : _boards.Any(b => Permissions.CanCreateTask(Access.For(b.Id)));
+
+    /// <summary>Куда можно завести задачу: селектор проекта в форме создания предлагает только их.</summary>
+    private IReadOnlyList<BoardResponse> CreatableBoards => _boards.Where(b => Permissions.CanCreateTask(Access.For(b.Id))).ToList();
+
+    private bool _accessOpen;
+
+    /// <summary>Workflow проекта ограничен — селект статуса спросит, куда можно (docs/TZ_workflow_config.md §2).</summary>
+    private bool IsRestricted(Guid boardId) => _boards.FirstOrDefault(b => b.Id == boardId)?.WorkflowMode == WorkflowMode.Restricted;
 
     /// <summary>Статусы проекта этой задачи: в сводном списке соседние строки могут быть из разных проектов.</summary>
     private IReadOnlyList<StatusResponse> StatusesFor(TaskResponse task) =>
@@ -353,8 +689,11 @@
             await LoadBoards();
         }
 
+        if (FilterId is not null)
+            await Filters.EnsureLoadedAsync();
+
         // Фильтры считает сервер, поэтому любое их изменение — это новый запрос списка.
-        var key = $"{BoardId}|{StatusId}|{Type}|{Who}|{_search.Trim()}";
+        var key = $"{BoardId}|{StatusId}|{Type}|{Who}|{_search.Trim()}|{EffectiveFql}|{CurrentView}";
         if (_loadedKey != key)
         {
             _loadedKey = key;
@@ -376,6 +715,7 @@
         }
 
         _boards = result.Value!.ToList();
+        await Access.EnsureCoversAsync(_boards.Select(b => b.Id));
 
         // Аватары исполнителей в строках — из справочника; грузим фоном, строки перерисуются по Users.Changed.
         if (!Users.IsLoaded)
@@ -393,6 +733,10 @@
             _loading = false;
             return;
         }
+
+        // Доска и дерево перечитываются сами, когда меняются их параметры (фильтры в адресе).
+        if (CurrentView != TaskView.List)
+            return;
 
         // Первый заход: таблица ещё не смонтирована и запросит данные сама, когда появится.
         // Фильтры сменились — показываем первую страницу отбора.
@@ -426,8 +770,20 @@
         var result = await Api.SearchTasks(
             BoardId, AssigneeFilterId, Who == "none", StatusId, BoardId is null ? TypeFilter : null, _search,
             limit: _pageSize, offset: _page * _pageSize, sort: _sortField, descending: _sortDescending,
-            ct: cancellationToken);
+            fql: EffectiveFql, ct: cancellationToken);
         _loading = false;
+
+        // Ошибка в строке FQL — не поломка экрана: показываем её под строкой, таблица пустая.
+        _fqlError = result.FqlError;
+        if (result.FqlError is not null)
+        {
+            _tasks = [];
+            _matched = 0;
+            _total = 0;
+            _countsByType = [];
+            _countsByStatus = new();
+            return new GridData<TaskResponse> { Items = [], TotalItems = 0 };
+        }
 
         if (!result.Ok)
         {
@@ -439,6 +795,12 @@
         var page = result.Value!;
         // Копия страницы нужна слайдеру и хоткеям: они ходят по текущему списку.
         _tasks = page.Items.ToList();
+        // ServerData перерисовывает только сам грид; ширина колонки — атрибут грида у страницы, её надо перерисовать.
+        if (CodeColumnWidth(_tasks) is var codeColumn && codeColumn != _codeColumn)
+        {
+            _codeColumn = codeColumn;
+            StateHasChanged();
+        }
         _total = page.Total;
         _countsByType = page.ByType;
         _countsByStatus = page.ByStatus.ToDictionary(c => c.StatusId, c => c.Count);
@@ -486,8 +848,49 @@
         await Reload();
     }
 
+    private bool _reposOpen;
+    private TaskResponse? _restructureTask;
+    private TaskRestructureMode _restructureMode;
+
+    /// <summary>Разделить, слить или перенести задачу из строки списка (docs/TZ_task_model.md §6); после — перечитать список.</summary>
+    private void Restructure(TaskResponse task, TaskRestructureMode mode)
+    {
+        _restructureTask = task;
+        _restructureMode = mode;
+    }
+
     private async Task Reload()
     {
+        if (IsBoardView)
+        {
+            if (_kanban is not null)
+                await _kanban.ReloadAsync();
+            return;
+        }
+
+        if (IsTreeView)
+        {
+            if (_tree is not null)
+                await _tree.ReloadAsync();
+            return;
+        }
+
+        if (IsBacklogView)
+        {
+            if (_backlog is not null)
+                await _backlog.ReloadAsync();
+            return;
+        }
+
+        if (IsCalendarView || IsRoadmapView)
+        {
+            if (_calendar is not null)
+                await _calendar.ReloadAsync();
+            if (_roadmap is not null)
+                await _roadmap.ReloadAsync();
+            return;
+        }
+
         if (_grid is not null)
             await _grid.ReloadServerData();
     }
@@ -620,6 +1023,98 @@
     private void SetWhoFilter(string? who) =>
         Nav.NavigateTo(Nav.GetUriWithQueryParameter("who", who), replace: true);
 
+    // ---- FQL и сохранённые фильтры ----
+
+    /// <summary>
+    /// Кнопка «FQL»: при пустой строке и включённой панели — «Показать как FQL»: фильтры панели переезжают в строку
+    /// (проект остаётся в селекторе), дальше их можно править текстом. Иначе просто открывает строку.
+    /// </summary>
+    private async Task OpenFql()
+    {
+        if (FqlVisible && string.IsNullOrWhiteSpace(EffectiveFql))
+        {
+            await Browser.MorphOutAsync(FqlToggleId, FqlBar.LineId);
+            _fqlOpen = false;
+            _fqlMorph = false;
+            return;
+        }
+
+        // Появляется — вырастет из кнопки и сама возьмёт фокус после морфа; уже открытую только фокусируем.
+        var appearing = !FqlVisible;
+        _fqlMorph = appearing;
+        _fqlOpen = true;
+        if (string.IsNullOrWhiteSpace(EffectiveFql) && HasPanelFilters)
+        {
+            var fql = PanelAsFql();
+            _search = "";
+            Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+            {
+                ["status"] = null,
+                ["type"] = null,
+                ["who"] = null,
+                ["fql"] = fql
+            }), replace: true);
+        }
+
+        if (appearing)
+            return;
+
+        await Task.Delay(50);
+        await Browser.FocusAsync(FqlBar.InputId);
+    }
+
+    /// <summary>Панель фильтров строкой FQL — то же условие, что сервер строит из query-параметров.</summary>
+    private string PanelAsFql()
+    {
+        var parts = new List<string>();
+        if (StatusId is { } statusId && CurrentBoard?.Statuses.FirstOrDefault(s => s.Id == statusId) is { } status)
+            parts.Add($"status = {FqlValue(status.Name)}");
+        if (BoardId is null && TypeFilter is { } type)
+            parts.Add($"statusCategory = {char.ToLowerInvariant(type.ToString()[0])}{type.ToString()[1..]}");
+        if (Who == "none")
+            parts.Add("assignee IS EMPTY");
+        else if (AssigneeFilterId is { } who)
+            parts.Add(who == State.CurrentUserId ? "assignee = me()" : $"assignee = @{Users.Find(who)?.Username ?? who.ToString()}");
+        if (_search.Trim().Length > 0)
+            parts.Add($"text ~ {FqlValue(_search.Trim())}");
+        return string.Join(" AND ", parts);
+    }
+
+    private static string FqlValue(string value) =>
+        value.All(c => char.IsLetterOrDigit(c) || c is '_' or '-' or '.') ? value : $"\"{value.Replace("\"", "\\\"")}\"";
+
+    /// <summary>Применить строку: запрос уходит в адрес. Совпал с открытым сохранённым фильтром — адрес без ?fql=.</summary>
+    private void ApplyFql(string text)
+    {
+        var fql = string.IsNullOrWhiteSpace(text) || text == CurrentFilter?.Query ? null : text;
+        _page = 0;
+        if (fql == Fql && _grid is not null)
+        {
+            _ = Reload();
+            return;
+        }
+
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("fql", fql), replace: true);
+    }
+
+    private async Task CloseFql()
+    {
+        await Browser.MorphOutAsync(FqlToggleId, FqlBar.LineId);
+        _fqlOpen = false;
+        _fqlMorph = false;
+        _fqlError = null;
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["fql"] = null, ["filter"] = null }), replace: true);
+    }
+
+    private void OpenSave(string query) => _saveQuery = query;
+
+    private void OnFilterSaved(SavedFilterResponse filter)
+    {
+        _saveQuery = null;
+        Toasts.Ok($"Фильтр «{filter.Name}» сохранён");
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["fql"] = null, ["filter"] = filter.Id.ToString() }), replace: true);
+    }
+
     private void ToggleMine()
     {
         if (Me is not { } me)
@@ -681,7 +1176,10 @@
             Nav.NavigateTo(Nav.GetUriWithQueryParameter("task", (string?)null));
 
         // В сводном режиме проект берём из прошлого создания — «в тот же проект, что и в прошлый раз».
-        _createBoardId ??= BoardId ?? State.LastBoardId ?? _boards[0].Id;
+        // Проект без права создавать задачи (только чтение) не предлагаем — берём первый, где можно.
+        var creatable = CreatableBoards;
+        _createBoardId ??= new[] { BoardId, State.LastBoardId }.FirstOrDefault(id => id is { } i && creatable.Any(b => b.Id == i))
+                           ?? creatable.FirstOrDefault()?.Id;
         _createOpen = true;
     }
 
@@ -782,7 +1280,7 @@
         var result = await Api.UpdateTask(task.Id, new UpdateTaskRequest(null, null, statusId));
         if (result.Ok)
         {
-            await ReplaceTask(result.Value!);
+            await ReplaceTask(result.Value!.WithCountsOf(task));
             // Счётчики статусов считает сервер: после смены статуса они устарели.
             await RefreshCounts();
         }
@@ -797,7 +1295,7 @@
     private async Task RefreshCounts()
     {
         var result = await Api.SearchTasks(
-            BoardId, AssigneeFilterId, Who == "none", StatusId, BoardId is null ? TypeFilter : null, _search, limit: 1);
+            BoardId, AssigneeFilterId, Who == "none", StatusId, BoardId is null ? TypeFilter : null, _search, limit: 1, fql: EffectiveFql);
 
         if (!result.Ok)
             return;
@@ -817,7 +1315,7 @@
         var result = await Api.AssignTask(task.Id, new AssignTaskRequest(userId));
         if (result.Ok)
         {
-            await ReplaceTask(result.Value!);
+            await ReplaceTask(result.Value!.WithCountsOf(task));
             var who = Users.Find(userId);
             Toasts.Ok(who is null ? $"{task.Code}: исполнитель снят" : $"{task.Code} → {who.FullName}");
         }
@@ -832,7 +1330,7 @@
     {
         var result = await Api.UpdateTask(args.Task.Id, new UpdateTaskRequest(args.Title, null, null));
         if (result.Ok)
-            await ReplaceTask(result.Value!);
+            await ReplaceTask(result.Value!.WithCountsOf(args.Task));
         else
             Toasts.Error(result.Error ?? "Не удалось переименовать задачу");
     }
@@ -848,7 +1346,7 @@
     private async Task ConfirmDeleteTask()
     {
         var t = _deleting!;
-        var result = await Api.DeleteTask(t.Id);
+        var result = await Api.DeleteTask(t.Id, cascade: t.ChildCount > 0);
         _deleting = null;
         if (!result.Ok)
         {
@@ -858,7 +1356,10 @@
 
         _tasks.RemoveAll(x => x.Id == t.Id);
         _total = Math.Max(0, _total - 1);
-        await Reload();
+        if (IsBoardView)
+            _kanban?.Remove(t.Id);
+        else
+            await Reload();
         var i = _boards.FindIndex(b => b.Id == t.BoardId);
         if (i >= 0)
             _boards[i] = _boards[i] with { TaskCount = Math.Max(0, _boards[i].TaskCount - 1) };
@@ -877,6 +1378,12 @@
             return;
 
         _tasks[i] = t;
+        _kanban?.Replace(t);
+        _tree?.Replace(t);
+        _calendar?.Replace(t);
+        _roadmap?.Replace(t);
+        if (_backlog is not null)
+            await _backlog.ReplaceAsync(t);
         await Redraw();
     }
 

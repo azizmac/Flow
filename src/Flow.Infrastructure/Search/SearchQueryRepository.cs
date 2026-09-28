@@ -29,6 +29,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
         c."ModelVersion" = @model
             AND c."SourceType" = ANY(@types)
             AND (@boardId::uuid IS NULL OR c."BoardId" = @boardId)
+            AND (@visible::uuid[] IS NULL OR c."BoardId" IS NULL OR c."BoardId" = ANY(@visible))
             AND (@includeArchived OR c."IsClosed" = false)
             AND (@since::timestamptz IS NULL OR c."SourceUpdatedAt" >= @since)
         """;
@@ -197,15 +198,15 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             SELECT b."SourceType" AS "SourceType",
                    b."SourceId" AS "SourceId",
                    b."BoardId" AS "BoardId",
-                   COALESCE(ti."Title", ct."Title", bd."Name", at."FileName",
+                   COALESCE(ti."Title", ct."Title", bd."Name", at."FileName", sl."Title",
                             NULLIF(btrim(COALESCE(u."FirstName", '') || ' ' || COALESCE(u."LastName", '')), ''),
                             u."Username", '') AS "Title",
                    ts_headline('russian', b."Content", websearch_to_tsquery('russian', @text),
                                'MaxFragments=2, MinWords=5, MaxWords=20, StartSel=<mark>, StopSel=</mark>') AS "Snippet",
                    b.score::double precision AS "Score",
-                   COALESCE(ti."Code", ct."Code", att."Code") AS "TaskCode",
+                   COALESCE(ti."Code", ct."Code", att."Code", slt."Code") AS "TaskCode",
                    b."SourceUpdatedAt" AS "UpdatedAt",
-                   COALESCE(cm."TaskId", at."TaskId") AS "ParentId",
+                   COALESCE(cm."TaskId", at."TaskId", sl."TaskId") AS "ParentId",
                    b."Content" AS "Content",
                    b."IsClosed" AS "IsClosed",
                    {isVisual} AS "IsVisual",
@@ -218,6 +219,8 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             LEFT JOIN "Users" u ON b."SourceType" = 4 AND u."Id" = b."SourceId"
             LEFT JOIN "Attachments" at ON b."SourceType" = 5 AND at."Id" = b."SourceId"
             LEFT JOIN "TaskItems" att ON att."Id" = at."TaskId"
+            LEFT JOIN "ScmLinks" sl ON b."SourceType" = 6 AND sl."Id" = b."SourceId"
+            LEFT JOIN "TaskItems" slt ON slt."Id" = sl."TaskId"
             WHERE b."SourceType" <> 4 OR u."Status" <> 2
             ORDER BY b.score DESC, b."SourceUpdatedAt" DESC
             LIMIT @limit OFFSET @offset
@@ -247,6 +250,8 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             new("model", embedder.ModelVersion),
             new("types", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = criteria.Types.Select(type => (int)type).ToArray() },
             new("boardId", NpgsqlDbType.Uuid) { Value = (object?)criteria.BoardId ?? DBNull.Value },
+            // Видимые проекты — в общем условии обеих половин (и в HNSW, и в GIN): фильтр после слияния съел бы окно.
+            new("visible", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = (object?)criteria.VisibleBoardIds?.ToArray() ?? DBNull.Value },
             new("includeArchived", criteria.IncludeArchived),
             new("text", criteria.Query),
             new("rrfK", criteria.RrfK),
@@ -287,7 +292,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
     /// и модель здесь не нужна вовсе. Сначала ближайшие чанки по HNSW, потом свёртка в задачи:
     /// иначе DISTINCT ON пришлось бы считать по всей таблице и индекс не работал бы.
     /// </summary>
-    public async Task<IReadOnlyList<SearchHit>> FindSimilarAsync(Guid taskId, int limit, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SearchHit>> FindSimilarAsync(Guid taskId, int limit, IReadOnlyCollection<Guid>? visibleBoardIds, CancellationToken cancellationToken)
     {
         var parameters = new NpgsqlParameter[]
         {
@@ -295,7 +300,8 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             new("taskId", taskId),
             new("limit", Math.Max(1, limit)),
             // Запас на свёртку: у длинной задачи несколько чанков, и после DISTINCT ON их станет меньше.
-            new("scan", Math.Max(1, limit) * 5)
+            new("scan", Math.Max(1, limit) * 5),
+            new("visible", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = (object?)visibleBoardIds?.ToArray() ?? DBNull.Value }
         };
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -323,6 +329,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
                   AND c."Embedding" IS NOT NULL
                   AND c."IsClosed" = false
                   AND c."SourceId" <> @taskId
+                  AND (@visible::uuid[] IS NULL OR c."BoardId" = ANY(@visible))
                   AND EXISTS (SELECT 1 FROM source)
                 ORDER BY c."Embedding" <=> (SELECT "Embedding" FROM source)
                 LIMIT @scan

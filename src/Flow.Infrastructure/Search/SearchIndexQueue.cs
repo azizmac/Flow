@@ -38,6 +38,9 @@ internal sealed class SearchIndexQueue(FlowDbContext db, SearchOptions options) 
 
     public bool HasPending => _pending.Count > 0;
 
+    /// <summary>Отказ от накопленного — вместе с несохранёнными правками (IUnitOfWork.DiscardChanges).</summary>
+    public void Clear() => _pending.Clear();
+
     /// <summary>Пишет накопленное. Вызывается из UnitOfWork внутри той же транзакции, что и SaveChangesAsync.</summary>
     public async Task FlushAsync(CancellationToken cancellationToken)
     {

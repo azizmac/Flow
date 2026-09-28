@@ -1,0 +1,251 @@
+@* Один виджет дашборда (docs/TZ_task_views.md §8): грузит свои данные сам и падает сам — ошибка (битый FQL, удалённый
+   фильтр, нет активного спринта) остаётся в рамке виджета, соседи живут. Данные считаются правами смотрящего.
+   Цвета: разбивка — категориальная палитра из восьми оттенков (прошла валидатор против поверхности #1B4A3B), «Другие» —
+   нейтральный серый; у каждой группы видимая подпись и число, так что цвет не единственный носитель смысла.
+   «Создано / закрыто» — та же пара амбер/зелёный, что у burndown. *@
+@inject IFlowApi Api
+@inject UserDirectory Users
+
+<section class="panel dw" style="@GridStyle" aria-label="@Title" data-widget="@Widget.Id">
+    <header class="dw-head @(CanEdit ? "movable" : "")" data-dw-move="@(CanEdit ? "1" : null)" title="@(CanEdit ? "Перетащите, чтобы переставить" : null)">
+        <span class="dw-title">@Title</span>
+        @if (_data?.Fql is { } fql && Widget.Type is WidgetType.TaskList or WidgetType.Counter or WidgetType.Breakdown or WidgetType.CreatedVsClosed)
+        {
+            <a class="dw-open" href="@TasksHref(fql)" title="Открыть в задачах">все</a>
+        }
+        @if (CanEdit)
+        {
+            <DsIconButton Icon="edit" Size="24" Title="Настроить виджет" OnClick="() => OnEdit.InvokeAsync(Widget)" />
+            <DsIconButton Icon="trash" Size="24" Title="Убрать виджет" OnClick="() => OnRemove.InvokeAsync(Widget)" />
+        }
+    </header>
+    <div class="dw-body">
+        @if (_data is null)
+        {
+            <Skeleton Kind="rows" Count="2" />
+        }
+        else if (_data.Error is { } error)
+        {
+            <div class="dw-error"><Icon Name="danger" Size="16" /><span>@error</span></div>
+        }
+        else
+        {
+            @switch (Widget.Type)
+            {
+                case WidgetType.TaskList:
+                    @if (_data.Tasks is not { Count: > 0 } tasks)
+                    {
+                        <div class="hint">Задач нет.</div>
+                    }
+                    else
+                    {
+                        <MudSimpleTable Dense="true" Elevation="0" Class="dw-table">
+                            <tbody>
+                                @foreach (var task in tasks)
+                                {
+                                    <tr>
+                                        <td class="code"><a href="@($"tasks/{task.Id}")">@task.Code</a></td>
+                                        <td class="dw-task-title"><PriorityIcon Value="task.Priority" /> <a href="@($"tasks/{task.Id}")">@task.Title</a></td>
+                                        <td class="dw-task-due">
+                                            @if (task.DueDate is { } due)
+                                            {
+                                                <DueChip Value="due" />
+                                            }
+                                        </td>
+                                        <td class="dw-task-who"><Avatar User="Users.Find(task.AssigneeId)" Size="20" /></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                        @if (_data.Count > tasks.Count)
+                        {
+                            <div class="hint dw-more">показаны @tasks.Count из @_data.Count</div>
+                        }
+                    }
+                    break;
+                case WidgetType.Counter:
+                    <div class="dw-counter">
+                        <span class="dw-number">@_data.Count</span>
+                        <span class="hint">@Ru.Plural(_data.Count ?? 0, "задача", "задачи", "задач")</span>
+                    </div>
+                    break;
+                case WidgetType.Breakdown:
+                    @if (_data.Groups is not { Count: > 0 } groups)
+                    {
+                        <div class="hint">Задач нет.</div>
+                    }
+                    else if (Widget.Config.Chart == "pie")
+                    {
+                        <div class="dw-pie">
+                            <MudChart T="double" ChartType="ChartType.Donut" ChartSeries="_pieSeries" ChartLabels="_pieLabels" ChartOptions="_pieOptions"
+                                      Width="160px" Height="160px" />
+                            <ul class="dw-legend">
+                                @for (var i = 0; i < groups.Count; i++)
+                                {
+                                    var g = groups[i];
+                                    <li><span class="dw-swatch" style="background:@ColorOf(g, i)"></span><span class="dw-label" title="@g.Label">@g.Label</span><b>@g.Count</b><span class="hint">@Percent(g.Count)</span></li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                    else
+                    {
+                        var max = groups.Max(g => g.Count);
+                        <ul class="dw-bars">
+                            @for (var i = 0; i < groups.Count; i++)
+                            {
+                                var g = groups[i];
+                                <li title="@($"{g.Label}: {g.Count}")">
+                                    <span class="dw-label">@g.Label</span>
+                                    <span class="dw-track"><span class="dw-bar" style="@BarStyle(g, i, max)"></span></span>
+                                    <b>@g.Count</b>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    break;
+                case WidgetType.CreatedVsClosed:
+                    <MudChart T="double" ChartType="ChartType.Line" ChartSeries="_daySeries" ChartLabels="_dayLabels" ChartOptions="_dayOptions"
+                              Width="100%" Height="@ChartHeight" LegendPosition="Position.Top" MatchBoundsToSize="true" />
+                    <div class="hint dw-more">за @Ru.Days(_data.Days!.Count): создано @_data.Days.Sum(d => d.Created), закрыто @_data.Days.Sum(d => d.Closed)</div>
+                    break;
+                case WidgetType.SprintBurndown:
+                    var sprint = _data.Sprint!;
+                    <div class="dw-sprint">
+                        <a href="@($"boards/{sprint.Sprint.BoardId}/sprints/{sprint.Sprint.Id}/report")">@sprint.Sprint.Name</a>
+                        <span class="hint">сделано @Ru.Tasks(sprint.Done.Count) из @(sprint.Committed.Count + sprint.Added.Count)</span>
+                    </div>
+                    @if (sprint.Burndown.Count == 0)
+                    {
+                        <div class="hint">График появится, когда у спринта будут даты.</div>
+                    }
+                    else
+                    {
+                        <BurndownChart Points="sprint.Burndown" Height="@ChartHeight" MaxLabels="7" FillBounds="true" />
+                    }
+                    break;
+                case WidgetType.MilestoneProgress:
+                    var m = _data.Milestone!;
+                    <div class="dw-sprint">
+                        <a href="@($"milestones/{m.Id}")">@m.Name</a>
+                        <span class="hint">@(m.TargetDate is { } t ? $"к {Ru.DateOnlyShort(t)}" : "без даты")</span>
+                    </div>
+                    <MilestoneProgressBar Progress="m.Progress" />
+                    <div class="ms-facts">
+                        @if (m.Progress.Overdue > 0)
+                        {
+                            <span class="ms-overdue">просрочено: @m.Progress.Overdue</span>
+                        }
+                        @if (m.Progress.Forecast is { } forecast)
+                        {
+                            <span class="@(m.TargetDate is { } target && forecast > target ? "ms-late" : "")">прогноз: @Ru.DateOnlyShort(forecast)</span>
+                        }
+                    </div>
+                    break;
+                default:
+                    <MarkdownView Text="@_data.Text" Placeholder="Пустая заметка" Class="dw-note" />
+                    break;
+            }
+        }
+    </div>
+    @if (CanEdit)
+    {
+        <span class="dw-resize" data-dw-resize="1" title="Потяните, чтобы изменить размер"></span>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public Guid DashboardId { get; set; }
+    [Parameter, EditorRequired] public DashboardWidgetResponse Widget { get; set; } = default!;
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public EventCallback<DashboardWidgetResponse> OnEdit { get; set; }
+    [Parameter] public EventCallback<DashboardWidgetResponse> OnRemove { get; set; }
+
+    /// <summary>Категориальная палитра — в фиксированном порядке, девятого цвета нет: хвост сервер свернул в «Другие».</summary>
+    internal static readonly string[] Palette = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+    private const string OtherColor = "rgba(255,255,255,0.35)";
+    private static readonly string[] DayPalette = ["#D07E1F", "#3A9D6E"];
+
+    private WidgetDataResponse? _data;
+    private DashboardWidgetResponse? _loaded;
+
+    private List<ChartSeries<double>> _pieSeries = [];
+    private string[] _pieLabels = [];
+    private DonutChartOptions _pieOptions = new();
+    private List<ChartSeries<double>> _daySeries = [];
+    private string[] _dayLabels = [];
+    private LineChartOptions _dayOptions = new();
+
+    private string Title => Widget.Title ?? DefaultTitle(Widget.Type);
+    private string GridStyle => $"grid-column: {Widget.X + 1} / span {Widget.W}; grid-row: {Widget.Y + 1} / span {Widget.H};";
+    /// <summary>Высота графика — от высоты виджета в строках сетки (строка — 90px) минус шапка и подпись.</summary>
+    private string ChartHeight => $"{Math.Max(120, Widget.H * 90 - 110)}px";
+
+    internal static string DefaultTitle(WidgetType type) => type switch
+    {
+        WidgetType.TaskList => "Задачи",
+        WidgetType.Counter => "Счётчик",
+        WidgetType.Breakdown => "Разбивка",
+        WidgetType.CreatedVsClosed => "Создано / закрыто",
+        WidgetType.SprintBurndown => "Burndown спринта",
+        WidgetType.MilestoneProgress => "Прогресс вехи",
+        _ => "Заметка"
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Перечитываем, только если виджет правили: родитель перерисовывает всю сетку при любой правке дашборда.
+        if (ReferenceEquals(_loaded, Widget) || _loaded == Widget)
+            return;
+        _loaded = Widget;
+        await ReloadAsync();
+    }
+
+    public async Task ReloadAsync()
+    {
+        _data = null;
+        var result = await Api.GetWidgetData(DashboardId, Widget.Id);
+        _data = result.Ok ? result.Value! : new WidgetDataResponse(Widget.Type, Error: result.Error ?? "Не удалось загрузить виджет");
+        Prepare();
+    }
+
+    private void Prepare()
+    {
+        if (_data?.Groups is { Count: > 0 } groups)
+        {
+            _pieSeries = [new ChartSeries<double> { Name = Title, Data = groups.Select(g => (double)g.Count).ToArray() }];
+            _pieLabels = groups.Select(g => g.Label).ToArray();
+            _pieOptions = new DonutChartOptions { ChartPalette = groups.Select((g, i) => ColorOf(g, i)).ToArray(), ShowLegend = false, ShowToolTips = true };
+        }
+
+        if (_data?.Days is { Count: > 0 } days)
+        {
+            var step = Math.Max(1, (days.Count + 6) / 7);
+            _dayLabels = days.Select((d, i) => i % step == 0 ? Ru.DateOnlyShort(d.Date) : "").ToArray();
+            var max = days.Max(d => Math.Max(d.Created, d.Closed));
+            _dayOptions = new LineChartOptions
+            {
+                ChartPalette = DayPalette,
+                LineStrokeWidth = 2,
+                ShowToolTips = true,
+                ShowLegend = true,
+                YAxisRequireZeroPoint = true,
+                YAxisTicks = Math.Max(1, (int)Math.Ceiling(max / 5.0))
+            };
+            _daySeries =
+            [
+                new ChartSeries<double> { Name = "Создано", Data = days.Select(d => (double)d.Created).ToArray() },
+                new ChartSeries<double> { Name = "Закрыто", Data = days.Select(d => (double)d.Closed).ToArray() }
+            ];
+        }
+    }
+
+    private static string ColorOf(WidgetGroup group, int index) => group.Key == "other" ? OtherColor : Palette[index % Palette.Length];
+
+    private static string BarStyle(WidgetGroup group, int index, int max) =>
+        $"width:{Math.Max(2, group.Count * 100.0 / Math.Max(1, max)).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}%;background:{ColorOf(group, index)}";
+
+    private string Percent(int count) => _data?.Count is int total and > 0 ? $"{Math.Round(count * 100.0 / total)}%" : "";
+
+    private static string TasksHref(string fql) => string.IsNullOrWhiteSpace(fql) ? "tasks" : $"tasks?fql={Uri.EscapeDataString(fql)}";
+}

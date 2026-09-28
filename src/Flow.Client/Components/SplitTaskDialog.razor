@@ -1,0 +1,117 @@
+@* Разделение задачи (docs/TZ_task_model.md §6): 1–20 новых задач с тем же родителем, типом, приоритетом, исполнителем
+   и полями; у каждой — связь «выделена из». Исходная не закрывается: остаток работы может остаться в ней.
+   Enter в строке добавляет следующую. Жизненный цикл MudDialog — как у MilestoneDialog. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject BrowserInterop Browser
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Разделить @Task.Code</h3>
+        <div class="hint">Новые задачи получат родителя, тип, приоритет, исполнителя и поля «@Task.Title». Исходная останется открытой.</div>
+    </TitleContent>
+    <DialogContent>
+        <div class="rs-parts">
+            @for (var i = 0; i < _parts.Count; i++)
+            {
+                var index = i;
+                <div class="rs-part">
+                    <span class="rs-num">@(index + 1)</span>
+                    <DsInput Id="@PartId(index)" Label="@(index == 0 ? "Название части" : null)" MaxLength="500" Placeholder="Что выделяем"
+                             Value="@_parts[index]" ValueChanged="v => { _parts[index] = v; _error = null; }" OnKeyDown="e => OnPartKey(e, index)" />
+                    @if (_parts.Count > 1)
+                    {
+                        <DsIconButton Icon="close-simple" Size="26" Title="Убрать часть" OnClick="() => _parts.RemoveAt(index)" />
+                    }
+                </div>
+            }
+        </div>
+        @if (_parts.Count < MaxParts)
+        {
+            <button type="button" class="icon-lnk" @onclick="() => AddAfter(_parts.Count - 1)"><Icon Name="plus" Size="14" />Ещё часть</button>
+        }
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Отмена</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="@(_busy || Filled.Count == 0)" Busy="_busy">Разделить на @Ru.Tasks(Filled.Count)</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public TaskResponse Task { get; set; } = default!;
+    [Parameter] public EventCallback<IReadOnlyList<TaskResponse>> OnDone { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private const int MaxParts = 20;
+    private readonly string _prefix = "rs-" + Guid.NewGuid().ToString("N")[..6];
+    private readonly List<string> _parts = ["", ""];
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private string? _error;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    private List<string> Filled => _parts.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).ToList();
+
+    private string PartId(int index) => $"{_prefix}-{index}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await System.Threading.Tasks.Task.Delay(50);
+        await Browser.FocusAsync(PartId(0), select: true);
+    }
+
+    private async Task AddAfter(int index)
+    {
+        if (_parts.Count >= MaxParts)
+            return;
+        _parts.Insert(index + 1, "");
+        StateHasChanged();
+        await System.Threading.Tasks.Task.Delay(30);
+        await Browser.FocusAsync(PartId(index + 1));
+    }
+
+    private Task OnPartKey(KeyboardEventArgs e, int index) => e.Key == "Enter" ? AddAfter(index) : System.Threading.Tasks.Task.CompletedTask;
+
+    private async Task Save()
+    {
+        _busy = true;
+        var result = await Api.SplitTask(Task.Id, new SplitTaskRequest(Filled.Select(t => new SplitPart(t)).ToList()));
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось разделить задачу";
+            return;
+        }
+
+        await CloseDialog();
+        await OnDone.InvokeAsync(result.Value!);
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? System.Threading.Tasks.Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

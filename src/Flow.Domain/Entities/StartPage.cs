@@ -7,5 +7,8 @@ public enum StartPage
     Tasks = 1,
 
     /// <summary>Экран «Задачи» с фильтром по себе как исполнителю.</summary>
-    MyTasks = 2
+    MyTasks = 2,
+
+    /// <summary>Дашборд по умолчанию (docs/TZ_task_views.md §8); нет такого — список дашбордов.</summary>
+    Dashboard = 3
 }

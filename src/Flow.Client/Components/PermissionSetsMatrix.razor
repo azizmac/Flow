@@ -1,0 +1,244 @@
+@* «Настройки → Наборы прав» (docs/TZ_project_access.md §7, этап 4E): матрица «право × набор». Встроенные наборы — роли
+   проекта, только для чтения; свой набор — клон с базовой ролью (по ней «не выше своей» и максимум ролей), права
+   правятся галочками и сохраняются сразу. Правит только Owner (CanEdit), остальные Admin+ видят матрицу.
+   Новый набор создаётся формой над таблицей — имя и основа, права берутся у встроенного набора этой роли (то же, что
+   «Клонировать» у встроенного, но без поиска нужной колонки и переименования «… (копия)»). *@
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+
+@if (_sets is null)
+{
+    <Skeleton Kind="rows" Count="6" />
+}
+else
+{
+    <div class="hint ps-hint">
+        Роль участника или группы в проекте можно заменить своим набором прав — в «Доступе» проекта. Права всех ролей и
+        наборов человека в проекте складываются; в открытом проекте к ним добавляется роль во Flow.
+    </div>
+    @* Блоки вкладки — карточки .side-card, как на вкладке «Интерфейс»: форма и таблица читаются отдельными частями. *@
+    @if (CanEdit)
+    {
+        <section class="side-card">
+            <div class="section-title">Новый набор</div>
+            <div class="ps-new">
+                <DsInput Id="ps-new" Label="Название" Placeholder="Например, «Тестировщик»" MaxLength="60" Value="@_newName"
+                         ValueChanged="v => _newName = v" OnKeyDown="OnNewKey" />
+                <DsSelect T="ProjectRole" Label="Основа — права этой роли" Value="_newBase" ValueChanged="v => _newBase = v"
+                          ToStringFunc="@(r => Permissions.ProjectRoleLabel(r))">
+                    @foreach (var role in Enum.GetValues<ProjectRole>())
+                    {
+                        <MudSelectItem T="ProjectRole" Value="role">@Permissions.ProjectRoleLabel(role)</MudSelectItem>
+                    }
+                </DsSelect>
+                <DsButton Variant="primary" Size="sm" Icon="plus" Busy="_busy" Disabled="@(_busy || _newName.Trim().Length == 0)" OnClick="Create">Создать набор</DsButton>
+            </div>
+        </section>
+    }
+    <section class="side-card ps-card">
+    <div class="section-title">Права наборов</div>
+    <div class="ps-wrap">
+        <MudSimpleTable Dense="true" Elevation="0" Class="ps-matrix">
+            <thead>
+                <tr>
+                    <th>Право</th>
+                    @foreach (var set in _sets)
+                    {
+                        <th class="ps-col hover-row" data-set="@set.Name">
+                            @if (!set.IsBuiltIn && CanEdit && _renaming == set.Id)
+                            {
+                                <DsInput Id="ps-rename" Compact="true" Value="@_renameText" ValueChanged="v => _renameText = v" MaxLength="60"
+                                         OnKeyDown="e => OnRenameKey(e, set)" OnBlur="() => Rename(set)" EscapeReverts="true" />
+                            }
+                            else
+                            {
+                                <span class="ps-name" @onclick="() => StartRename(set)">@set.Name</span>
+                            }
+                            <span class="ps-base">@(set.IsBuiltIn ? "встроенный" : $"основа «{Permissions.ProjectRoleLabel(set.BaseRole)}»")</span>
+                            @if (CanEdit)
+                            {
+                                @if (set.IsBuiltIn)
+                                {
+                                    <RowActions Class="ps-actions" Disabled="_busy">
+                                        <DsIconButton Icon="copy" Size="26" Title="Клонировать" Disabled="_busy" OnClick="() => Clone(set)" />
+                                    </RowActions>
+                                }
+                                else
+                                {
+                                    <RowActions Class="ps-actions" Disabled="_busy" DeleteTitle="Удалить набор"
+                                                OnEdit="() => StartRename(set)" OnDelete="() => _deleting = set">
+                                        <DsIconButton Icon="copy" Size="26" Title="Клонировать" Disabled="_busy" OnClick="() => Clone(set)" />
+                                    </RowActions>
+                                }
+                            }
+                        </th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var permission in Enum.GetValues<ProjectPermission>())
+                {
+                    <tr>
+                        <td class="ps-perm">@Permissions.PermissionLabel(permission)</td>
+                        @foreach (var set in _sets)
+                        {
+                            var on = set.Permissions.Contains(permission);
+                            <td class="ps-cell">
+                                @if (set.IsBuiltIn || !CanEdit || permission == ProjectPermission.ViewProject)
+                                {
+                                    <span class="ps-mark @(on ? "on" : "")">@(on ? "✓" : "—")</span>
+                                }
+                                else
+                                {
+                                    <DsCheckbox Value="on" ValueChanged="v => Toggle(set, permission, v)" Disabled="_busy"
+                                                AriaLabel="@($"{set.Name}: {Permissions.PermissionLabel(permission)}")" />
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </div>
+    </section>
+}
+
+@if (_deleting is { } deleting)
+{
+    <ConfirmDialog Title="@($"Удалить набор «{deleting.Name}»?")"
+                   Text="Участники и группы с этим набором останутся в проектах с правами его основы."
+                   OnConfirm="() => ConfirmDelete(deleting)" OnCancel="() => _deleting = null" />
+}
+
+@code {
+    [Parameter] public bool CanEdit { get; set; }
+
+    private List<PermissionSetResponse>? _sets;
+    private bool _busy;
+    private PermissionSetResponse? _deleting;
+    private Guid? _renaming;
+    private string _renameText = "";
+    private string _newName = "";
+    private ProjectRole _newBase = ProjectRole.Member;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Api.GetPermissionSets();
+        _sets = result.Ok ? result.Value!.ToList() : [];
+        if (!result.Ok)
+            Toasts.Error(result.Error ?? "Не удалось загрузить наборы прав");
+    }
+
+    private async Task StartRename(PermissionSetResponse set)
+    {
+        if (!CanEdit || set.IsBuiltIn)
+            return;
+        _renaming = set.Id;
+        _renameText = set.Name;
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync("ps-rename", select: true);
+    }
+
+    /// <summary>Enter и потеря фокуса сохраняют, Esc отменяет — как переименование статуса, типа и группы.</summary>
+    private async Task OnRenameKey(KeyboardEventArgs e, PermissionSetResponse set)
+    {
+        if (e.Key == "Escape")
+            _renaming = null;
+        else if (e.Key == "Enter")
+            await Rename(set);
+    }
+
+    private async Task Rename(PermissionSetResponse set)
+    {
+        if (_renaming != set.Id)
+            return;
+
+        _renaming = null;
+        var name = _renameText.Trim();
+        if (name.Length > 0 && name != set.Name)
+            await Save(set, set with { Name = name });
+    }
+
+    private Task Toggle(PermissionSetResponse set, ProjectPermission permission, bool on) =>
+        Save(set, set with { Permissions = on ? set.Permissions.Append(permission).ToList() : set.Permissions.Where(p => p != permission).ToList() });
+
+    private async Task Save(PermissionSetResponse before, PermissionSetResponse after)
+    {
+        _busy = true;
+        var result = await Api.UpdatePermissionSet(before.Id, new SavePermissionSetRequest(after.Name, after.Description, after.BaseRole, after.Permissions));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось сохранить набор");
+            return;
+        }
+
+        _sets![_sets.FindIndex(s => s.Id == before.Id)] = result.Value!;
+    }
+
+    private async Task OnNewKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Create();
+    }
+
+    /// <summary>Новый набор с правами встроенного набора выбранной основы; дальше права правятся галочками в его колонке.</summary>
+    private async Task Create()
+    {
+        var name = _newName.Trim();
+        if (name.Length == 0 || _busy)
+            return;
+
+        var basis = _sets!.FirstOrDefault(s => s.IsBuiltIn && s.BaseRole == _newBase);
+        _busy = true;
+        var result = await Api.CreatePermissionSet(new SavePermissionSetRequest(name, null, _newBase, basis?.Permissions ?? []));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось создать набор");
+            return;
+        }
+
+        _sets!.Add(result.Value!);
+        _newName = "";
+        Toasts.Ok($"Набор «{name}» создан — отметьте его права в новой колонке");
+    }
+
+    /// <summary>Клон — новый свой набор с теми же правами и базовой ролью; имя «… (копия N)», пока не занято.</summary>
+    private async Task Clone(PermissionSetResponse set)
+    {
+        var name = $"{set.Name} (копия)";
+        for (var n = 2; _sets!.Any(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase)); n++)
+            name = $"{set.Name} (копия {n})";
+
+        _busy = true;
+        var result = await Api.CreatePermissionSet(new SavePermissionSetRequest(name, set.Description, set.BaseRole, set.Permissions));
+        _busy = false;
+        if (result.Ok)
+            _sets!.Add(result.Value!);
+        else
+            Toasts.Error(result.Error ?? "Не удалось склонировать набор");
+    }
+
+    private async Task ConfirmDelete(PermissionSetResponse set)
+    {
+        _deleting = null;
+        await Delete(set);
+    }
+
+    private async Task Delete(PermissionSetResponse set)
+    {
+        _busy = true;
+        var result = await Api.DeletePermissionSet(set.Id);
+        _busy = false;
+        if (result.Ok)
+        {
+            _sets!.Remove(set);
+            Toasts.Ok($"Набор «{set.Name}» удалён: у его участников снова права роли");
+        }
+        else
+            Toasts.Error(result.Error ?? "Не удалось удалить набор");
+    }
+}

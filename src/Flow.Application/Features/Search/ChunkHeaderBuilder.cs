@@ -27,6 +27,9 @@ public static class ChunkHeaderBuilder
     /// <summary>Вложение: <c>PROJ-142 · договор-2026.pdf</c>; имя файла ищут не реже, чем содержимое.</summary>
     public static string ForAttachment(string taskCode, string fileName) => $"{taskCode} · {fileName}";
 
+    /// <summary>PR или коммит задачи (этап 5E): <c>PROJ-142 · acme/web · PR #42</c> — к какой задаче и откуда.</summary>
+    public static string ForDevelopment(string taskCode, string repository, string label) => $"{taskCode} · {repository} · {label}";
+
     /// <summary>Что реально уходит в эмбеддер: шапка, перевод строки, текст чанка.</summary>
     public static string Apply(string header, string content) =>
         header.Length == 0 ? content : $"{header}\n{content}";

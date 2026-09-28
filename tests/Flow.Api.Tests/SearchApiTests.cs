@@ -35,6 +35,17 @@ public sealed class SearchApiTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    /// <summary>Этап 5E: PR и коммиты — тип <c>development</c> в той же строке типов.</summary>
+    [Fact]
+    public async Task Search_Accepts_Development_Source_Type()
+    {
+        using var client = api.CreateClientAs();
+
+        using var response = await client.GetAsync("/api/search?q=экспорт&types=task,development&mode=text");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Fact]
     public async Task Search_Is_Available_To_Any_Role()
     {

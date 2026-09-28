@@ -92,6 +92,14 @@ namespace Flow.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("DefaultRole")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DoneColumnDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(14);
+
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -105,6 +113,12 @@ namespace Flow.Infrastructure.Migrations
                     b.Property<int>("NextTaskNumber")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Visibility")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WorkflowMode")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Key")
@@ -113,14 +127,722 @@ namespace Flow.Infrastructure.Migrations
                     b.ToTable("Boards");
                 });
 
-            modelBuilder.Entity("Flow.Domain.Entities.Status", b =>
+            modelBuilder.Entity("Flow.Domain.Entities.BoardGroup", b =>
+                {
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AddedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PermissionSetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.HasKey("BoardId", "GroupId");
+
+                    b.HasIndex("AddedById");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("PermissionSetId");
+
+                    b.ToTable("BoardGroups");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.BoardMember", b =>
+                {
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AddedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PermissionSetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.HasKey("BoardId", "UserId");
+
+                    b.HasIndex("AddedById");
+
+                    b.HasIndex("PermissionSetId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("BoardMembers");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.BoardTemplate", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.ToTable("BoardTemplates");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.CustomFieldDefinition", b =>
+                {
+                    b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("BoardId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<Guid>>("_taskTypeIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("TaskTypeIds");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoardId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("CustomFields", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.Dashboard", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Visibility")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId");
+
+                    b.HasIndex("Visibility");
+
+                    b.ToTable("Dashboards");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.DashboardWidget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Config")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("DashboardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("H")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("W")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("X")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Y")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DashboardId");
+
+                    b.ToTable("DashboardWidgets", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.Group", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsTeam")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Groups");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.GroupMember", b =>
+                {
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("GroupId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("GroupMembers");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.Milestone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("TargetDate")
+                        .HasColumnType("date");
+
+                    b.PrimitiveCollection<List<Guid>>("_sharedBoardIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("SharedBoardIds");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoardId", "Name")
+                        .IsUnique();
+
+                    b.HasIndex("BoardId", "SortOrder");
+
+                    b.ToTable("Milestones", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.PermissionSet", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BaseRole")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.PrimitiveCollection<int[]>("_permissions")
+                        .IsRequired()
+                        .HasColumnType("integer[]")
+                        .HasColumnName("Permissions");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("PermissionSets");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.SavedFilter", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Query")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("View")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Visibility")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId");
+
+                    b.HasIndex("Visibility");
+
+                    b.ToTable("SavedFilters");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.SavedFilterStar", b =>
+                {
+                    b.Property<Guid>("FilterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("FilterId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("SavedFilterStars");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.ScmConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("AppId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("AuthKind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BaseUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("CheckedLogin")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("InstallationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("LastCheckAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("Provider")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SecretProtected")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.ToTable("ScmConnections", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.ScmDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DeliveryId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Event")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RepositoryId", "DeliveryId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "NextAttemptAt");
+
+                    b.ToTable("ScmDeliveries", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.ScmLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthorLogin")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("AuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceBranch")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int?>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetBranch")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorUserId");
+
+                    b.HasIndex("RepositoryId", "Kind", "ExternalId");
+
+                    b.HasIndex("TaskId", "RepositoryId", "Kind", "ExternalId")
+                        .IsUnique();
+
+                    b.ToTable("ScmLinks", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.ScmRepository", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefaultBranch")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastDeliveryAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WebUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("WebhookId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("WebhookSecretProtected")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectionId", "ExternalId")
+                        .IsUnique();
+
+                    b.ToTable("ScmRepositories", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.ScmRepositoryBoard", b =>
+                {
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("CommentOnPullRequests")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("OnPullRequestMergedStatusId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("OnPullRequestOpenedStatusId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("SmartCommits")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("RepositoryId", "BoardId");
+
+                    b.HasIndex("BoardId");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("OnPullRequestMergedStatusId");
+
+                    b.HasIndex("OnPullRequestOpenedStatusId");
+
+                    b.ToTable("ScmRepositoryBoards", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.Sprint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Goal")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoardId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Sprints_BoardId_Active")
+                        .HasFilter("\"State\" = 1");
+
+                    b.HasIndex("BoardId", "SortOrder");
+
+                    b.ToTable("Sprints", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.Status", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<double?>("GraphX")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("GraphY")
+                        .HasColumnType("double precision");
 
                     b.Property<bool>("IsFinal")
                         .HasColumnType("boolean");
@@ -139,6 +861,9 @@ namespace Flow.Infrastructure.Migrations
                     b.Property<int?>("Type")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("WipLimit")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("BoardId", "Name")
@@ -148,6 +873,60 @@ namespace Flow.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Statuses");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.StatusTransition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FromStatusId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("MinRole")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<bool>("RequireAssignee")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RequireChecklistDone")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RequireChildrenDone")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("TaskTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ToStatusId")
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<List<Guid>>("_requireFields")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("RequireFields");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromStatusId");
+
+                    b.HasIndex("TaskTypeId");
+
+                    b.HasIndex("ToStatusId");
+
+                    b.HasIndex("BoardId", "TaskTypeId", "FromStatusId", "ToStatusId")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("BoardId", "TaskTypeId", "FromStatusId", "ToStatusId"), false);
+
+                    b.ToTable("StatusTransitions", (string)null);
                 });
 
             modelBuilder.Entity("Flow.Domain.Entities.TaskActivity", b =>
@@ -168,6 +947,14 @@ namespace Flow.Infrastructure.Migrations
                     b.Property<string>("OldValue")
                         .HasColumnType("text");
 
+                    b.Property<string>("Source")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<Guid>("TaskId")
                         .HasColumnType("uuid");
 
@@ -181,6 +968,25 @@ namespace Flow.Infrastructure.Migrations
                     b.HasIndex("TaskId", "CreatedAt");
 
                     b.ToTable("TaskActivities");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskCodeAlias", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Code");
+
+                    b.HasIndex("TaskId");
+
+                    b.ToTable("TaskCodeAliases", (string)null);
                 });
 
             modelBuilder.Entity("Flow.Domain.Entities.TaskComment", b =>
@@ -238,6 +1044,13 @@ namespace Flow.Infrastructure.Migrations
                     b.Property<Guid?>("CreatedById")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CustomFieldsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("CustomFields")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
                     b.Property<string>("Description")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
@@ -245,7 +1058,41 @@ namespace Flow.Infrastructure.Migrations
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
 
+                    b.Property<int?>("EstimateMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("MilestoneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Rank")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .UseCollation("C");
+
+                    b.Property<Guid?>("SprintId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("StatusChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("StatusId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("StoryPoints")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+                    b.Property<Guid?>("TeamId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Title")
@@ -253,20 +1100,302 @@ namespace Flow.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<Guid>("TypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AssigneeId");
-
-                    b.HasIndex("BoardId");
 
                     b.HasIndex("Code")
                         .IsUnique();
 
                     b.HasIndex("CreatedById");
 
+                    b.HasIndex("MilestoneId");
+
+                    b.HasIndex("ParentId");
+
+                    b.HasIndex("SprintId");
+
                     b.HasIndex("StatusId");
 
+                    b.HasIndex("TeamId");
+
+                    b.HasIndex("TypeId");
+
+                    b.HasIndex("BoardId", "Rank")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TaskItems_BoardId_Rank");
+
                     b.ToTable("TaskItems");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceTaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TargetTaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("TargetTaskId", "Type");
+
+                    b.HasIndex("SourceTaskId", "TargetTaskId", "Type")
+                        .IsUnique();
+
+                    b.ToTable("TaskLinks");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskRecurrence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("CopyAssignee")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CopyChecklist")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("DueOffsetDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("EndsOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("GeneratedUntil")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("LeadDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("StartsOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("TemplateTaskId")
+                        .HasColumnType("uuid");
+
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "Rule", "Flow.Domain.Entities.TaskRecurrence.Rule#RecurrenceRule", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<int>("Frequency")
+                                .HasColumnType("integer")
+                                .HasColumnName("RuleFrequency");
+
+                            b1.Property<int>("Interval")
+                                .HasColumnType("integer")
+                                .HasColumnName("RuleInterval");
+
+                            b1.Property<int?>("MonthDay")
+                                .HasColumnType("integer")
+                                .HasColumnName("RuleMonthDay");
+
+                            b1.Property<int>("WeekDays")
+                                .HasColumnType("integer")
+                                .HasColumnName("RuleWeekDays");
+                        });
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoardId");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("TemplateTaskId")
+                        .IsUnique();
+
+                    b.ToTable("TaskRecurrences", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskRecurrenceOccurrence", b =>
+                {
+                    b.Property<Guid>("RecurrenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("OccursOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("RecurrenceId", "OccursOn");
+
+                    b.HasIndex("TaskId");
+
+                    b.ToTable("TaskRecurrenceOccurrences", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskScreen", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Context")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TaskTypeId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskTypeId");
+
+                    b.HasIndex("BoardId", "TaskTypeId", "Context")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("BoardId", "TaskTypeId", "Context"), false);
+
+                    b.ToTable("TaskScreens", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CustomFieldsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("CustomFields");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(20000)
+                        .HasColumnType("character varying(20000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SubtasksJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("Subtasks");
+
+                    b.Property<string>("TitlePattern")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("TypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UsageCount")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("_checklist")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("Checklist");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("TypeId");
+
+                    b.HasIndex("BoardId", "SortOrder");
+
+                    b.ToTable("TaskTemplates", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int?>("OwnWorkflowMode")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoardId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("TaskTypes");
                 });
 
             modelBuilder.Entity("Flow.Domain.Entities.User", b =>
@@ -338,6 +1467,10 @@ namespace Flow.Infrastructure.Migrations
                             b1.Property<int>("TasksPageSize")
                                 .HasColumnType("integer")
                                 .HasColumnName("PrefTasksPageSize");
+
+                            b1.Property<int>("TasksView")
+                                .HasColumnType("integer")
+                                .HasColumnName("PrefTasksView");
                         });
 
                     b.HasKey("Id");
@@ -470,11 +1603,309 @@ namespace Flow.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Flow.Domain.Entities.BoardGroup", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("AddedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.Group", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.PermissionSet", null)
+                        .WithMany()
+                        .HasForeignKey("PermissionSetId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.BoardMember", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("AddedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.PermissionSet", null)
+                        .WithMany()
+                        .HasForeignKey("PermissionSetId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.BoardTemplate", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.CustomFieldDefinition", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany("CustomFields")
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsMany("Flow.Domain.Entities.CustomFieldOption", "Options", b1 =>
+                        {
+                            b1.Property<Guid>("CustomFieldDefinitionId");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAdd();
+
+                            b1.Property<string>("Color");
+
+                            b1.Property<Guid>("Id");
+
+                            b1.Property<string>("Label")
+                                .IsRequired();
+
+                            b1.HasKey("CustomFieldDefinitionId", "__synthesizedOrdinal");
+
+                            b1.ToTable("CustomFields");
+
+                            b1.ToJson("Options");
+
+                            b1.WithOwner()
+                                .HasForeignKey("CustomFieldDefinitionId");
+                        });
+
+                    b.Navigation("Options");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.Dashboard", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.DashboardWidget", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Dashboard", null)
+                        .WithMany("Widgets")
+                        .HasForeignKey("DashboardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.GroupMember", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Group", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.Milestone", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.SavedFilter", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.SavedFilterStar", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.SavedFilter", null)
+                        .WithMany()
+                        .HasForeignKey("FilterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.ScmConnection", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.ScmDelivery", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.ScmRepository", null)
+                        .WithMany()
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.ScmLink", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Flow.Domain.Entities.ScmRepository", null)
+                        .WithMany()
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.ScmRepository", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.ScmConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.ScmRepositoryBoard", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.Status", null)
+                        .WithMany()
+                        .HasForeignKey("OnPullRequestMergedStatusId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Flow.Domain.Entities.Status", null)
+                        .WithMany()
+                        .HasForeignKey("OnPullRequestOpenedStatusId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Flow.Domain.Entities.ScmRepository", null)
+                        .WithMany()
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.Sprint", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsMany("Flow.Domain.Entities.SprintCommitment", "Commitments", b1 =>
+                        {
+                            b1.Property<Guid>("SprintId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<Guid>("TaskId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<int>("Kind")
+                                .HasColumnType("integer");
+
+                            b1.Property<decimal?>("StoryPoints")
+                                .HasColumnType("numeric(5,1)");
+
+                            b1.HasKey("SprintId", "TaskId", "Kind");
+
+                            b1.ToTable("SprintCommitments", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("SprintId");
+                        });
+
+                    b.Navigation("Commitments");
+                });
+
             modelBuilder.Entity("Flow.Domain.Entities.Status", b =>
                 {
                     b.HasOne("Flow.Domain.Entities.Board", null)
                         .WithMany("Statuses")
                         .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.StatusTransition", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany("Transitions")
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.Status", null)
+                        .WithMany()
+                        .HasForeignKey("FromStatusId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Flow.Domain.Entities.TaskType", null)
+                        .WithMany()
+                        .HasForeignKey("TaskTypeId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Flow.Domain.Entities.Status", null)
+                        .WithMany()
+                        .HasForeignKey("ToStatusId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -487,6 +1918,15 @@ namespace Flow.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskCodeAlias", b =>
+                {
                     b.HasOne("Flow.Domain.Entities.TaskItem", null)
                         .WithMany()
                         .HasForeignKey("TaskId")
@@ -553,10 +1993,198 @@ namespace Flow.Infrastructure.Migrations
                         .HasForeignKey("CreatedById")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Flow.Domain.Entities.Milestone", null)
+                        .WithMany()
+                        .HasForeignKey("MilestoneId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Flow.Domain.Entities.Sprint", null)
+                        .WithMany()
+                        .HasForeignKey("SprintId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Flow.Domain.Entities.Status", null)
                         .WithMany()
                         .HasForeignKey("StatusId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.Group", null)
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Flow.Domain.Entities.TaskType", null)
+                        .WithMany()
+                        .HasForeignKey("TypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.OwnsMany("Flow.Domain.Entities.TaskChecklistItem", "Checklist", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateTime?>("DoneAt")
+                                .HasColumnType("timestamp with time zone");
+
+                            b1.Property<Guid?>("DoneById")
+                                .HasColumnType("uuid");
+
+                            b1.Property<bool>("IsDone")
+                                .HasColumnType("boolean");
+
+                            b1.Property<int>("SortOrder")
+                                .HasColumnType("integer");
+
+                            b1.Property<Guid>("TaskId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Text")
+                                .IsRequired()
+                                .HasMaxLength(500)
+                                .HasColumnType("character varying(500)");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("TaskId", "SortOrder");
+
+                            b1.ToTable("TaskChecklistItems", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("TaskId");
+                        });
+
+                    b.Navigation("Checklist");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskLink", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("SourceTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("TargetTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskRecurrence", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("TemplateTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskRecurrenceOccurrence", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.TaskRecurrence", null)
+                        .WithMany()
+                        .HasForeignKey("RecurrenceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskScreen", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany("Screens")
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.TaskType", null)
+                        .WithMany()
+                        .HasForeignKey("TaskTypeId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.OwnsMany("Flow.Domain.Entities.ScreenField", "Fields", b1 =>
+                        {
+                            b1.Property<Guid>("TaskScreenId");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAdd();
+
+                            b1.Property<string>("Field")
+                                .IsRequired();
+
+                            b1.Property<bool>("Required");
+
+                            b1.Property<string>("Section");
+
+                            b1.HasKey("TaskScreenId", "__synthesizedOrdinal");
+
+                            b1.ToTable("TaskScreens");
+
+                            b1.ToJson("Fields");
+
+                            b1.WithOwner()
+                                .HasForeignKey("TaskScreenId");
+                        });
+
+                    b.Navigation("Fields");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskTemplate", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.TaskType", null)
+                        .WithMany()
+                        .HasForeignKey("TypeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.TaskType", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany("TaskTypes")
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -588,9 +2216,22 @@ namespace Flow.Infrastructure.Migrations
 
             modelBuilder.Entity("Flow.Domain.Entities.Board", b =>
                 {
+                    b.Navigation("CustomFields");
+
+                    b.Navigation("Screens");
+
                     b.Navigation("Statuses");
 
+                    b.Navigation("TaskTypes");
+
                     b.Navigation("Tasks");
+
+                    b.Navigation("Transitions");
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.Dashboard", b =>
+                {
+                    b.Navigation("Widgets");
                 });
 #pragma warning restore 612, 618
         }

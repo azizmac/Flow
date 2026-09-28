@@ -21,9 +21,44 @@
         }
         @if (ShowRename)
         {
-            <MudMenuItem Class="pop-item" OnClick="OnRename"><Icon Name="edit" Size="15" />Переименовать</MudMenuItem>
+            <MudMenuItem Class="pop-item" OnClick="OnRename"><Icon Name="edit" Size="15" />@RenameLabel</MudMenuItem>
         }
-        <MudMenuItem Class="pop-item" OnClick="OnCopy"><Icon Name="copy" Size="15" />Скопировать код</MudMenuItem>
+        @if (ShowAccess)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnAccess"><Icon Name="users" Size="15" />Доступ</MudMenuItem>
+        }
+        @if (ShowStatuses)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnStatuses"><Icon Name="list" Size="15" />Статусы</MudMenuItem>
+        }
+        @if (ShowStatuses)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnWorkflow"><Icon Name="link" Size="15" />Workflow</MudMenuItem>
+        }
+        @if (ShowTaskTypes)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnTaskTypes"><Icon Name="settings" Size="15" />Типы задач</MudMenuItem>
+        }
+        @if (ShowApplyConfig)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnApplyConfig"><Icon Name="copy" Size="15" />Применить настройки к проектам…</MudMenuItem>
+        }
+        @if (ShowSaveTemplate)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnSaveTemplate"><Icon Name="plus" Size="15" />Сохранить как шаблон…</MudMenuItem>
+        }
+        @Extra
+        @if (ShowCopy)
+        {
+            <MudMenuItem Class="pop-item" OnClick="OnCopy"><Icon Name="copy" Size="15" />Скопировать код</MudMenuItem>
+        }
+        @if (ShowRestructure)
+        {
+            <div class="pop-sep" role="separator"></div>
+            <MudMenuItem Class="pop-item" OnClick="OnSplit"><Icon Name="list" Size="15" />Разделить…</MudMenuItem>
+            <MudMenuItem Class="pop-item" OnClick="OnMerge"><Icon Name="link" Size="15" />Слить с…</MudMenuItem>
+            <MudMenuItem Class="pop-item" OnClick="OnMove"><Icon Name="external" Size="15" />Перенести в проект…</MudMenuItem>
+        }
         @if (ShowDelete)
         {
             <div class="pop-sep" role="separator"></div>
@@ -36,7 +71,34 @@
     [Parameter] public bool ShowOpen { get; set; } = true;
     /// <summary>Пункты, требующие прав (Permissions.CanEditTask / CanManageBoards); без них меню — открыть и скопировать.</summary>
     [Parameter] public bool ShowRename { get; set; } = true;
+    /// <summary>Подпись пункта правки: у дашборда это «Название и доступ».</summary>
+    [Parameter] public string RenameLabel { get; set; } = "Переименовать";
+    [Parameter] public bool ShowCopy { get; set; } = true;
+    /// <summary>Свои пункты строки (MudMenuItem с классом pop-item) — после правки, до «Скопировать код».</summary>
+    [Parameter] public RenderFragment? Extra { get; set; }
     [Parameter] public bool ShowDelete { get; set; } = true;
+    /// <summary>Пункт «Типы задач» — только у проекта и только для тех, кто может им управлять.</summary>
+    [Parameter] public bool ShowTaskTypes { get; set; }
+    [Parameter] public EventCallback OnTaskTypes { get; set; }
+    /// <summary>Пункт «Статусы» — на тех же условиях, что «Типы задач» (право настраивать проект).</summary>
+    [Parameter] public bool ShowStatuses { get; set; }
+    [Parameter] public EventCallback OnStatuses { get; set; }
+    /// <summary>Пункт «Workflow» — рядом со «Статусами», на тех же условиях.</summary>
+    [Parameter] public EventCallback OnWorkflow { get; set; }
+    /// <summary>Перенос настроек проекта в другие проекты (этап 3F) — право настраивать проект.</summary>
+    [Parameter] public bool ShowApplyConfig { get; set; }
+    [Parameter] public EventCallback OnApplyConfig { get; set; }
+    /// <summary>«Сохранить как шаблон» — глобальный Admin+ (тот, кто создаёт проекты) с правом настраивать этот.</summary>
+    [Parameter] public bool ShowSaveTemplate { get; set; }
+    [Parameter] public EventCallback OnSaveTemplate { get; set; }
+    /// <summary>Пункт «Доступ» (участники и роль по умолчанию) — для администратора проекта.</summary>
+    [Parameter] public bool ShowAccess { get; set; }
+    [Parameter] public EventCallback OnAccess { get; set; }
+    /// <summary>Разделить, слить, перенести (docs/TZ_task_model.md §6) — у задачи, которую actor может править.</summary>
+    [Parameter] public bool ShowRestructure { get; set; }
+    [Parameter] public EventCallback OnSplit { get; set; }
+    [Parameter] public EventCallback OnMerge { get; set; }
+    [Parameter] public EventCallback OnMove { get; set; }
     [Parameter] public int Size { get; set; } = 26;
     [Parameter] public string? Style { get; set; }
     [Parameter] public EventCallback OnOpen { get; set; }

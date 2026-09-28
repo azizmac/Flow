@@ -103,6 +103,24 @@ public sealed class Attachment
     }
 
     /// <summary>
+    /// Новый владелец — при слиянии или переносе задачи в другой проект (docs/TZ_task_model.md §6). Ключ объекта
+    /// строится заново: он содержит проект и задачу, а удаление проекта чистит бакет по префиксу — со старым
+    /// ключом удаление исходного проекта унесло бы файл переехавшей задачи. Объект копирует хендлер (до
+    /// транзакции), старый удаляет после коммита. Возвращает прежний ключ.
+    /// </summary>
+    public string Relocate(Guid taskId, Guid boardId)
+    {
+        if (taskId == Guid.Empty || boardId == Guid.Empty)
+            throw new ArgumentException("Task and board ids must not be empty.", nameof(taskId));
+
+        var old = StorageKey;
+        TaskId = taskId;
+        BoardId = boardId;
+        StorageKey = BuildKey(boardId, taskId, Id, FileName);
+        return old;
+    }
+
+    /// <summary>
     /// Ключ объекта: по префиксу видно, к какому проекту и задаче относится файл, а удаление проекта
     /// сводится к удалению префикса. Имя файла в ключ не попадает — кириллица, пробелы и «../» в нём
     /// сделали бы ключ ненадёжным.

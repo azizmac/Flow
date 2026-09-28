@@ -1,4 +1,5 @@
-@* Экран «Настройки» (/settings, ?tab=ui|search|about).
+@* Экран «Настройки» (/settings, ?tab=ui|search|integrations|about).
+   «Интеграции» — подключения к Git-хостингам и репозитории (Admin+, Components/ScmIntegrations).
    «Интерфейс» — личные настройки (GET/PATCH /users/me/preferences): хранятся на сервере и едут за человеком
    на любой компьютер; каждое поле сохраняется сразу по клику, кнопки «Сохранить» нет.
    «Поиск» — состояние индекса (GET /search/status, Admin+) и переиндексация (POST /search/reindex, Owner).
@@ -19,16 +20,10 @@
 </div>
 
 <div class="content profile">
-    <div class="tabs settings-tabs" role="tablist">
-        <button type="button" class="tab @(Tab == "ui" ? "on" : "")" role="tab" @onclick="@(() => SetTab("ui"))">Интерфейс</button>
-        @if (CanViewSearch)
-        {
-            <button type="button" class="tab @(Tab == "search" ? "on" : "")" role="tab" @onclick="@(() => SetTab("search"))">Поиск</button>
-        }
-        <button type="button" class="tab @(Tab == "about" ? "on" : "")" role="tab" @onclick="@(() => SetTab("about"))">О системе</button>
-    </div>
+    <DsTabs Class="settings-tabs" Items="Tabs" Value="@Tab" ValueChanged="SetTab" AriaLabel="Разделы настроек" />
 
-    <div class="settings-body">
+    @* Матрица прав — таблица на все наборы: узкая колонка настроек её обрезала бы, поэтому вкладка во всю ширину. *@
+    <div class="settings-body @(Tab == "permissions" ? "wide" : "")">
         @if (Tab == "ui")
         {
             @if (Preferences.Current is not { } prefs)
@@ -83,7 +78,27 @@
                         }
                     </div>
                 </div>
+
+                <div class="side-card">
+                    <div class="section-title">Вид экрана «Задачи»</div>
+                    <div class="hint">Что открывается, когда в адресе нет вида. Переключатель на самом экране меняет вид только для открытой ссылки. Дерево и бэклог — внутри проекта: в «Все проекты» откроется список.</div>
+                    <div class="seg" role="radiogroup" aria-label="Вид экрана задач">
+                        @foreach (var (view, label) in TaskViews)
+                        {
+                            <button type="button" class="seg-btn @(prefs.TasksView == view ? "on" : "")" role="radio" aria-checked="@(prefs.TasksView == view)"
+                                    disabled="@_saving" @onclick="() => Save(new UpdateUserPreferencesRequest(TasksView: view))">@label</button>
+                        }
+                    </div>
+                </div>
             }
+        }
+        else if (Tab == "integrations")
+        {
+            <ScmIntegrations />
+        }
+        else if (Tab == "permissions")
+        {
+            <PermissionSetsMatrix CanEdit="@(Me?.Role == UserRole.Owner)" />
         }
         else if (Tab == "search")
         {
@@ -161,6 +176,7 @@
                         <div class="meta-k">Задачи</div><div class="meta-v">@s.ChunksByType.Task</div>
                         <div class="meta-k">Комментарии</div><div class="meta-v">@s.ChunksByType.Comment</div>
                         <div class="meta-k">Вложения</div><div class="meta-v">@s.ChunksByType.Attachment</div>
+                        <div class="meta-k">PR и коммиты</div><div class="meta-v">@s.ChunksByType.Development</div>
                         <div class="meta-k">Проекты</div><div class="meta-v">@s.ChunksByType.Board</div>
                         <div class="meta-k">Люди</div><div class="meta-v">@s.ChunksByType.User</div>
                     </div>
@@ -264,11 +280,22 @@
         (SidebarMode.Collapsed, "Иконки")
     ];
 
+    private static readonly (TaskView View, string Label)[] TaskViews =
+    [
+        (TaskView.List, "Список"),
+        (TaskView.Board, "Доска"),
+        (TaskView.Tree, "Дерево"),
+        (TaskView.Backlog, "Бэклог"),
+        (TaskView.Calendar, "Календарь"),
+        (TaskView.Roadmap, "Роадмап")
+    ];
+
     private static readonly (StartPage Page, string Label)[] StartPages =
     [
         (StartPage.Projects, "Проекты"),
         (StartPage.Tasks, "Все задачи"),
-        (StartPage.MyTasks, "Мои задачи")
+        (StartPage.MyTasks, "Мои задачи"),
+        (StartPage.Dashboard, "Дашборд")
     ];
 
     private string? _prefsError;
@@ -289,10 +316,23 @@
 
     private bool CanReindex => Permissions.CanReindex(Me);
 
+    /// <summary>Подключения к Git-хостингам (docs/TZ_scm_integration.md §6) — глобальные Admin и Owner.</summary>
+    private bool CanManageIntegrations => Me?.Role >= UserRole.Admin;
+
     /// <summary>Вкладка «Поиск» без прав не показывается; прямая ссылка на неё открывает «Интерфейс».</summary>
+    private IReadOnlyList<DsTab> Tabs =>
+    [
+        new("ui", "Интерфейс"),
+        .. CanViewSearch ? [new DsTab("search", "Поиск")] : Array.Empty<DsTab>(),
+        .. CanManageIntegrations ? [new DsTab("integrations", "Интеграции"), new DsTab("permissions", "Наборы прав")] : Array.Empty<DsTab>(),
+        new("about", "О системе")
+    ];
+
     private string Tab => TabParam switch
     {
         "search" when CanViewSearch => "search",
+        "integrations" when CanManageIntegrations => "integrations",
+        "permissions" when CanManageIntegrations => "permissions",
         "about" => "about",
         _ => "ui"
     };

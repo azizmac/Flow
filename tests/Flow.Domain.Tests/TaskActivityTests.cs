@@ -68,6 +68,25 @@ public class TaskActivityTests
     }
 
     [Fact]
+    public void PlanningActivities_Should_StoreInvariantStrings()
+    {
+        var typeFrom = Guid.NewGuid();
+        var typeTo = Guid.NewGuid();
+
+        var start = TaskActivity.StartDateChanged(TaskId, ActorId, new DateOnly(2026, 9, 1), null);
+        var priority = TaskActivity.PriorityChanged(TaskId, ActorId, TaskPriority.None, TaskPriority.High);
+        var type = TaskActivity.TypeChanged(TaskId, ActorId, typeFrom, typeTo);
+        var points = TaskActivity.StoryPointsChanged(TaskId, ActorId, null, 3.5m);
+        var estimate = TaskActivity.EstimateChanged(TaskId, ActorId, 90, null);
+
+        Assert.Equal((TaskActivityType.StartDateChanged, "2026-09-01", (string?)null), (start.Type, start.OldValue, start.NewValue));
+        Assert.Equal((TaskActivityType.PriorityChanged, "0", "3"), (priority.Type, priority.OldValue, priority.NewValue));
+        Assert.Equal((TaskActivityType.TypeChanged, typeFrom.ToString(), typeTo.ToString()), (type.Type, type.OldValue, type.NewValue));
+        Assert.Equal((TaskActivityType.StoryPointsChanged, (string?)null, "3.5"), (points.Type, points.OldValue, points.NewValue));
+        Assert.Equal((TaskActivityType.EstimateChanged, "90", (string?)null), (estimate.Type, estimate.OldValue, estimate.NewValue));
+    }
+
+    [Fact]
     public void Comment_Activities_Should_ReferenceCommentId()
     {
         var commentId = Guid.NewGuid();

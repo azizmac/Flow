@@ -289,10 +289,10 @@ public class AttachmentFeatureTests
         await UploadAsync(context, task.Id, "первый.txt", Encoding.UTF8.GetBytes("1"));
         await UploadAsync(context, task.Id, "второй.txt", Encoding.UTF8.GetBytes("2"));
 
-        var list = await context.Mediator.Send(new AttachmentListQuery(task.Id), CancellationToken.None);
+        var list = await context.Mediator.Send(new AttachmentListQuery(TestMediatorFactory.OwnerId, task.Id), CancellationToken.None);
 
         Assert.Equal(2, list!.Count);
-        Assert.Null(await context.Mediator.Send(new AttachmentListQuery(Guid.NewGuid()), CancellationToken.None));
+        Assert.Null(await context.Mediator.Send(new AttachmentListQuery(TestMediatorFactory.OwnerId, Guid.NewGuid()), CancellationToken.None));
     }
 
     [Fact]
@@ -302,7 +302,7 @@ public class AttachmentFeatureTests
         var task = await CreateTaskAsync(context);
         var uploaded = (await UploadAsync(context, task.Id, "снимок.png", Png)).Response!;
 
-        var content = await context.Mediator.Send(new AttachmentContentQuery(uploaded.Id), CancellationToken.None);
+        var content = await context.Mediator.Send(new AttachmentContentQuery(TestMediatorFactory.OwnerId, uploaded.Id), CancellationToken.None);
 
         using var buffer = new MemoryStream();
         await content!.Content.CopyToAsync(buffer);
@@ -322,7 +322,7 @@ public class AttachmentFeatureTests
         var attachment = context.Attachments.All.Single();
         await context.Storage.DeleteAsync(attachment.StorageKey, CancellationToken.None);
 
-        Assert.Null(await context.Mediator.Send(new AttachmentContentQuery(uploaded.Id), CancellationToken.None));
+        Assert.Null(await context.Mediator.Send(new AttachmentContentQuery(TestMediatorFactory.OwnerId, uploaded.Id), CancellationToken.None));
     }
 
     [Fact]

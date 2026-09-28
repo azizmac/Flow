@@ -33,6 +33,31 @@ public sealed class BrowserInterop(IJSRuntime js)
         }
     }
 
+    /// <summary>Позиция курсора в поле; -1 — поля нет или JS недоступен.</summary>
+    public async Task<int> CaretAsync(string elementId)
+    {
+        try
+        {
+            return await js.InvokeAsync<int>("flow.caret", elementId);
+        }
+        catch (JSException)
+        {
+            return -1;
+        }
+    }
+
+    public async Task SetCaretAsync(string elementId, int position)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flow.setCaret", elementId, position);
+        }
+        catch (JSException)
+        {
+            // поле могло исчезнуть между рендерами
+        }
+    }
+
     public async Task FocusAsync(string elementId, bool select = false)
     {
         try
@@ -42,6 +67,35 @@ public sealed class BrowserInterop(IJSRuntime js)
         catch (JSException)
         {
             // элемент мог исчезнуть между рендерами — не критично
+        }
+    }
+
+    /// <summary>
+    /// Элемент toId вырастает из fromId (морф в flow.js). false — JS не достал элемент или circuit отвалился:
+    /// тогда вызывающий сам снимает класс morphing, иначе элемент так и остался бы невидимым.
+    /// </summary>
+    public async Task<bool> MorphInAsync(string fromId, string toId)
+    {
+        try
+        {
+            return await js.InvokeAsync<bool>("flow.morphIn", fromId, toId);
+        }
+        catch (JSException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Обратный морф: элемент toId сворачивается в fromId; возвращается, когда анимация доиграла.</summary>
+    public async Task MorphOutAsync(string fromId, string toId)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flow.morphOut", fromId, toId);
+        }
+        catch (JSException)
+        {
+            // без анимации закроется и так
         }
     }
 
@@ -65,6 +119,56 @@ public sealed class BrowserInterop(IJSRuntime js)
             await js.InvokeVoidAsync("flow.popFocus");
         }
         catch (JSException)
+        {
+        }
+    }
+
+    /// <summary>Перетаскивание на роадмапе: полосы, края, ромбы и «Без дат» (flow.roadmapAttach).</summary>
+    public async Task<bool> RoadmapAttachAsync<T>(string rootId, DotNetObjectReference<T> dotNetRef) where T : class
+    {
+        try
+        {
+            return await js.InvokeAsync<bool>("flow.roadmapAttach", rootId, dotNetRef);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Перенос и размер виджетов дашборда (flow.gridAttach).</summary>
+    public async Task<bool> GridAttachAsync<T>(string rootId, DotNetObjectReference<T> dotNetRef) where T : class
+    {
+        try
+        {
+            return await js.InvokeAsync<bool>("flow.gridAttach", rootId, dotNetRef);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Граф workflow: перетаскивание узлов и протягивание переходов (flow.graphAttach).</summary>
+    public async Task<bool> GraphAttachAsync<T>(string rootId, DotNetObjectReference<T> dotNetRef) where T : class
+    {
+        try
+        {
+            return await js.InvokeAsync<bool>("flow.graphAttach", rootId, dotNetRef);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    public async Task DragDetachAsync(string rootId)
+    {
+        try
+        {
+            await js.InvokeVoidAsync("flow.dragDetach", rootId);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException)
         {
         }
     }

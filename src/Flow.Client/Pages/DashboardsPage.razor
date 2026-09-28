@@ -1,0 +1,93 @@
+@* Дашборды (docs/TZ_task_views.md §8, этап 2G): свои и общие. Стартовый (по умолчанию) помечен — его открывает корень
+   сайта, если в настройках стартовая страница «Дашборд». *@
+@page "/dashboards"
+@inject IFlowApi Api
+@inject NavigationManager Nav
+
+<PageTitle>Дашборды — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        <h1 class="topbar-title">Дашборды</h1>
+    </div>
+    <div class="topbar-right">
+        <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="() => _creating = true">Дашборд</DsButton>
+    </div>
+</div>
+
+<div class="content">
+    @if (_error is not null)
+    {
+        <div class="empty"><div class="empty-title">@_error</div></div>
+    }
+    else if (_dashboards is null)
+    {
+        <Skeleton Kind="rows" Count="3" />
+    }
+    else if (_dashboards.Count == 0)
+    {
+        <div class="empty">
+            <div class="empty-title">Дашбордов пока нет</div>
+            <div>Дашборд собирает на одном экране списки, счётчики и графики по задачам — свои или для всей команды.</div>
+            <DsButton Variant="primary" Size="md" Icon="plus" OnClick="() => _creating = true">Создать дашборд</DsButton>
+        </div>
+    }
+    else
+    {
+        <div class="ms-list">
+            @foreach (var d in _dashboards)
+            {
+                <a class="ms-card panel" href="@($"dashboards/{d.Id}")">
+                    <div class="ms-card-head">
+                        <b>@d.Name</b>
+                        @if (d.IsOwn && d.IsDefault)
+                        {
+                            <span class="ms-state">стартовый</span>
+                        }
+                        <span class="hint">@(d.Shared ? "общий" : "личный")</span>
+                    </div>
+                    <div class="ms-facts">
+                        @if (!d.IsOwn)
+                        {
+                            <span>автор: <UserName Id="d.OwnerId" /></span>
+                        }
+                        else
+                        {
+                            <span>мой</span>
+                        }
+                    </div>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@if (_creating)
+{
+    <DashboardDialog OnSaved="OnCreated" OnClose="() => _creating = false" />
+}
+
+@code {
+    private List<DashboardResponse>? _dashboards;
+    private string? _error;
+    private bool _creating;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Api.GetDashboards();
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось загрузить дашборды";
+            return;
+        }
+
+        // Свои — первыми, стартовый — самым первым.
+        _dashboards = result.Value!.OrderByDescending(d => d.IsOwn).ThenByDescending(d => d.IsDefault).ThenBy(d => d.Name).ToList();
+    }
+
+    private void OnCreated(DashboardResponse dashboard)
+    {
+        _creating = false;
+        Nav.NavigateTo($"dashboards/{dashboard.Id}");
+    }
+}

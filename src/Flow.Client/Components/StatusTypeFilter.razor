@@ -35,14 +35,7 @@
 
     private int CustomCount => Counts.FirstOrDefault(c => c.Type is null)?.Count ?? 0;
 
-    private static string Name(StatusType type) => type switch
-    {
-        StatusType.NotStarted => "Не начата",
-        StatusType.InProgress => "В работе",
-        StatusType.InReview => "На проверке",
-        StatusType.Done => "Сделана",
-        _ => "—"
-    };
+    private static string Name(StatusType type) => StatusColors.TypeLabel(type);
 
     private Task Select(StatusType? type) => ValueChanged.InvokeAsync(type);
 }

@@ -1,0 +1,148 @@
+@* Пилюля-селект «на экране» (docs/TZ_ui_consistency.md, этапы 2–3) — общий каркас для статуса, типа, приоритета, вида
+   статуса, роли в проекте, спринта, вехи, команды и полей-списков задачи: триггер-пилюля (глиф, подпись, шеврон) и
+   MudMenu со списком. Значение свойства на экране — всегда такая пилюля; поле формы в диалоге — DsSelect.
+
+   Открытием управляем сами (@bind-Open): пилюля часто лежит внутри кликабельной строки, и клик по ней не должен
+   всплывать. Enter, пробел и ↓ открывают список, как у нативного select. Фокус остаётся на триггере — перехватчик
+   клавиш MudMenu слушает активатор, перевод фокуса в поповер ломает стрелки.
+
+   Пункт с причиной (DisabledReason) виден, но выключен, причина — второй строкой: без неё человек не поймёт,
+   почему нельзя (запрет перехода по workflow, завершённый спринт). Hint — пояснение второй строкой у разрешённого.
+
+   Multiple — выбор нескольких: у пункта флажок, меню после клика не закрывается (как UserPicker), в пилюле —
+   выбранные через запятую или Placeholder. Изменение уходит целым набором в ValuesChanged, в порядке Items. *@
+@typeparam T
+
+<MudMenu @bind-Open="_open" PopoverClass="@PopoverClasses" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomLeft"
+         TransformOrigin="Origin.TopLeft" Dense="true" DropShadow="false" Ripple="false" AriaLabel="@AriaLabel">
+    <ActivatorContent>
+        <div class="status-sel @(Disabled ? "disabled" : "") @Class" @onclick="Toggle" @onclick:stopPropagation
+             @onkeydown="OnKey" @onkeydown:stopPropagation
+             role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-disabled="@(Disabled ? "true" : "false")"
+             aria-expanded="@(_open ? "true" : "false")" title="@(Disabled ? DisabledTitle : Title ?? AriaLabel)">
+            @if (!Multiple && Glyph is not null)
+            {
+                @Glyph(Value)
+            }
+            <span class="lbl @(IsEmpty ? "muted" : "")">@TriggerLabel</span>
+            <Icon Name="chevrons" Size="12" />
+        </div>
+    </ActivatorContent>
+    <ChildContent>
+        @foreach (var item in Items)
+        {
+            var reason = DisabledReason?.Invoke(item);
+            var second = reason ?? Hint?.Invoke(item);
+            var on = IsCurrent(item);
+            <MudMenuItem Class="@($"pop-item {ItemClass} {(Multiple ? "pick" : "")} {(on ? (Multiple ? "on" : "cur") : "")} {(reason is not null ? "denied" : "")}")"
+                         Disabled="@(reason is not null)" AutoClose="!Multiple" OnClick="() => Select(item)" title="@reason">
+                @if (Multiple)
+                {
+                    <span class="pick-mark" aria-hidden="true">@if (on) { <Icon Name="check" Size="12" /> }</span>
+                }
+                @if (Glyph is not null)
+                {
+                    @Glyph(item)
+                }
+                @if (second is null)
+                {
+                    @Label(item)
+                }
+                else
+                {
+                    <span class="pop-user">
+                        <span class="pop-user-name">@Label(item)</span>
+                        <span class="pop-user-un">@second</span>
+                    </span>
+                }
+            </MudMenuItem>
+        }
+    </ChildContent>
+</MudMenu>
+
+@code {
+    /// <summary>Пункты списка по порядку.</summary>
+    [Parameter, EditorRequired] public IEnumerable<T> Items { get; set; } = [];
+    /// <summary>Текущее значение; может не входить в Items (архивный тип) — пилюля всё равно его показывает.</summary>
+    [Parameter] public T? Value { get; set; }
+    [Parameter] public EventCallback<T> OnChange { get; set; }
+    /// <summary>Подпись пункта и пилюли; получает и null, когда значения нет.</summary>
+    [Parameter, EditorRequired] public Func<T?, string> Label { get; set; } = _ => "";
+    /// <summary>Глиф слева: точка статуса, иконка типа или приоритета.</summary>
+    [Parameter] public RenderFragment<T?>? Glyph { get; set; }
+    [Parameter] public Func<T, string?>? Hint { get; set; }
+    [Parameter] public Func<T, string?>? DisabledReason { get; set; }
+    /// <summary>Какой пункт текущий; по умолчанию — равенство с Value.</summary>
+    [Parameter] public Func<T, bool>? Current { get; set; }
+    /// <summary>Значение «пустое» — подпись в пилюле приглушена («Нет», «Бэклог», «—»).</summary>
+    [Parameter] public Func<T?, bool>? Empty { get; set; }
+    /// <summary>Перед открытием списка (например, спросить у сервера разрешённые переходы).</summary>
+    [Parameter] public Func<Task>? OnOpening { get; set; }
+
+    /// <summary>Выбор нескольких: тогда работают Values/ValuesChanged, а Value/OnChange не используются.</summary>
+    [Parameter] public bool Multiple { get; set; }
+    [Parameter] public IReadOnlyCollection<T> Values { get; set; } = [];
+    [Parameter] public EventCallback<IReadOnlyCollection<T>> ValuesChanged { get; set; }
+    /// <summary>Подпись пилюли, когда в Multiple ничего не выбрано.</summary>
+    [Parameter] public string Placeholder { get; set; } = "—";
+
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string AriaLabel { get; set; } = "Сменить";
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string DisabledTitle { get; set; } = "Сохраняем…";
+    [Parameter] public string? ItemClass { get; set; }
+    [Parameter] public string? Class { get; set; }
+    /// <summary>Класс слоя поверх flow-pop (ширина).</summary>
+    [Parameter] public string? PopoverClass { get; set; }
+
+    private bool _open;
+
+    private string PopoverClasses => string.IsNullOrEmpty(PopoverClass) ? "flow-pop" : $"flow-pop {PopoverClass}";
+
+    private bool IsEmpty => Multiple ? Values.Count == 0 : Empty?.Invoke(Value) ?? false;
+
+    private string TriggerLabel => !Multiple ? Label(Value)
+        : Values.Count == 0 ? Placeholder
+        : string.Join(", ", Items.Where(Values.Contains).Select(i => Label(i)));
+
+    private bool IsCurrent(T item) =>
+        Multiple ? Values.Contains(item) : Current?.Invoke(item) ?? EqualityComparer<T?>.Default.Equals(item, Value);
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (!Disabled && !_open && e.Key is "Enter" or " " or "ArrowDown")
+            await Open();
+    }
+
+    private async Task Toggle()
+    {
+        if (Disabled)
+            return;
+        if (_open)
+            _open = false;
+        else
+            await Open();
+    }
+
+    private async Task Open()
+    {
+        _open = true;
+        if (OnOpening is not null)
+            await OnOpening();
+    }
+
+    private async Task Select(T item)
+    {
+        if (Multiple)
+        {
+            var next = Values.Contains(item) ? Values.Where(v => !EqualityComparer<T>.Default.Equals(v, item)) : Values.Append(item);
+            var set = next.ToHashSet();
+            await ValuesChanged.InvokeAsync(Items.Where(set.Contains).ToList());
+            return;
+        }
+
+        _open = false;
+        if (!IsCurrent(item))
+            await OnChange.InvokeAsync(item);
+    }
+}

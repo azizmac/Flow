@@ -1,0 +1,216 @@
+@* Перенос в другой проект (docs/TZ_task_model.md §6): задача переезжает вместе с подзадачами и получает новый код;
+   прежний продолжит находить её. До подтверждения сервер показывает превью: как отобразятся статусы и типы (их можно
+   поменять — превью пересчитывается), какие значения полей потеряются, что спринт и веха сбросятся, а родитель из
+   этого проекта отвяжется. Проблемы (подзадача не оказалась бы ниже родителя) выключают кнопку. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject ProjectAccessState Access
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal wide"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Перенести @Task.Code в другой проект</h3>
+        <div class="hint">Задача получит новый код, старый продолжит на неё вести.</div>
+    </TitleContent>
+    <DialogContent>
+        <DsSelect T="Guid?" Label="Проект" Value="_boardId" ValueChanged="OnBoardChanged" Class="rs-field"
+                  Placeholder="@(Targets.Count == 0 ? "Нет проектов, где вы можете создавать задачи" : "Выберите проект")">
+            @foreach (var b in Targets)
+            {
+                <MudSelectItem T="Guid?" Value="b.Id">@b.Key · @b.Name</MudSelectItem>
+            }
+        </DsSelect>
+
+        @if (_loading)
+        {
+            <Skeleton Kind="rows" Count="3" />
+        }
+        else if (_preview is { } p && Target is { } target)
+        {
+            <div class="rs-facts">
+                <span>@Ru.Tasks(p.TaskCount)@(p.TaskCount > 1 ? " с подзадачами" : "")</span>
+                @if (p.AttachmentCount > 0)
+                {
+                    <span>вложений: @p.AttachmentCount</span>
+                }
+            </div>
+            <ul class="rs-notes" hidden="@(!p.ParentDropped && !p.SprintReset && !p.MilestoneReset && p.LostFields.Count == 0)">
+                @if (p.ParentDropped)
+                {
+                    <li class="warn">Родитель останется в этом проекте — задача переедет без родителя.</li>
+                }
+                @if (p.SprintReset)
+                {
+                    <li>Спринт сбросится: спринты принадлежат проекту.</li>
+                }
+                @if (p.MilestoneReset)
+                {
+                    <li>Веха сбросится: вехи принадлежат проекту.</li>
+                }
+                @foreach (var lost in p.LostFields.GroupBy(l => l.FieldName))
+                {
+                    <li class="warn">Поле «@lost.Key» потеряется у @string.Join(", ", lost.Select(l => l.TaskCode)): в @target.Key нет такого поля или варианта.</li>
+                }
+            </ul>
+
+            <MudSimpleTable Dense="true" Elevation="0" Class="rs-map">
+                <thead><tr><th>Здесь</th><th></th><th>В @target.Key</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var m in p.Statuses)
+                    {
+                        <tr>
+                            <td>@m.FromName</td>
+                            <td class="hint">→</td>
+                            <td>
+                                <DsSelect T="Guid" Value="MappedStatus(m)" ValueChanged="v => MapStatus(m.FromId, v)" Class="rs-inline"
+                                          AriaLabel="@($"Статус вместо «{m.FromName}»")">
+                                    @foreach (var s in target.Statuses)
+                                    {
+                                        <MudSelectItem T="Guid" Value="s.Id">@s.Name</MudSelectItem>
+                                    }
+                                </DsSelect>
+                            </td>
+                            <td class="hint">статус · @Ru.Tasks(m.TaskCount)</td>
+                        </tr>
+                    }
+                    @foreach (var m in p.Types)
+                    {
+                        <tr>
+                            <td>@m.FromName</td>
+                            <td class="hint">→</td>
+                            <td>
+                                <DsSelect T="Guid" Value="MappedType(m)" ValueChanged="v => MapType(m.FromId, v)" Class="rs-inline"
+                                          AriaLabel="@($"Тип вместо «{m.FromName}»")">
+                                    @foreach (var t in target.TaskTypes.Where(t => !t.IsArchived))
+                                    {
+                                        <MudSelectItem T="Guid" Value="t.Id">@t.Name</MudSelectItem>
+                                    }
+                                </DsSelect>
+                            </td>
+                            <td class="hint">тип · @Ru.Tasks(m.TaskCount)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+
+            @foreach (var problem in p.Problems)
+            {
+                <div class="ds-field-error">@problem</div>
+            }
+        }
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Отмена</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="@(_busy || _preview is not { Problems.Count: 0 })" Busy="_busy">Перенести</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public TaskResponse Task { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
+    [Parameter] public EventCallback<TaskResponse> OnDone { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private bool _loading;
+    private Guid? _boardId;
+    private TaskMovePreviewResponse? _preview;
+    private string? _error;
+    private readonly Dictionary<Guid, Guid> _statusMap = [];
+    private readonly Dictionary<Guid, Guid> _typeMap = [];
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    private IReadOnlyList<BoardResponse> Targets =>
+        Boards.Where(b => b.Id != Task.BoardId && Permissions.CanCreateTask(Access.For(b.Id))).OrderBy(b => b.Name).ToList();
+
+    private BoardResponse? Target => Boards.FirstOrDefault(b => b.Id == _boardId);
+
+    protected override Task OnInitializedAsync() => Access.EnsureLoadedAsync();
+
+    private Guid MappedStatus(MoveMapping m) => _statusMap.GetValueOrDefault(m.FromId, m.ToId);
+
+    private Guid MappedType(MoveMapping m) => _typeMap.GetValueOrDefault(m.FromId, m.ToId);
+
+    private async Task OnBoardChanged(Guid? boardId)
+    {
+        _boardId = boardId;
+        _statusMap.Clear();
+        _typeMap.Clear();
+        await PreviewAsync();
+    }
+
+    private Task MapStatus(Guid from, Guid to)
+    {
+        _statusMap[from] = to;
+        return PreviewAsync();
+    }
+
+    private Task MapType(Guid from, Guid to)
+    {
+        _typeMap[from] = to;
+        return PreviewAsync();
+    }
+
+    private MoveTaskRequest Request() => new(_boardId!.Value, _statusMap.Count > 0 ? _statusMap : null, _typeMap.Count > 0 ? _typeMap : null);
+
+    private async Task PreviewAsync()
+    {
+        _error = null;
+        if (_boardId is null)
+        {
+            _preview = null;
+            return;
+        }
+
+        // Первое превью — со скелетоном; пересчёт после правки карты — без мигания таблицы.
+        _loading = _preview is null || _preview.BoardId != _boardId;
+        var result = await Api.PreviewTaskMove(Task.Id, Request());
+        _loading = false;
+        _preview = result.Ok ? result.Value : null;
+        if (!result.Ok)
+            _error = result.Error ?? "Не удалось подготовить перенос";
+    }
+
+    private async Task Save()
+    {
+        _busy = true;
+        var result = await Api.MoveTask(Task.Id, Request());
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось перенести задачу";
+            return;
+        }
+
+        await CloseDialog();
+        await OnDone.InvokeAsync(result.Value!);
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? System.Threading.Tasks.Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

@@ -1,4 +1,5 @@
-﻿@* Лента задачи: комментарии (карточки) и журнал изменений (компактные строки) в одном хронологическом списке.
+﻿@using System.Globalization
+@* Лента задачи: комментарии (карточки) и журнал изменений (компактные строки) в одном хронологическом списке.
    Данные — GET /tasks/{id}/comments + GET /tasks/{id}/activity параллельно, слияние по CreatedAt.
    Соседние записи журнала одного актора в пределах минуты — одна группа. CommentAdded не показываем:
    сам комментарий уже в ленте. Композер внизу — только Member+ (Permissions.CanComment). *@
@@ -7,6 +8,8 @@
 @inject ToastService Toasts
 @inject AppState State
 @inject UserDirectory Users
+@inject TeamDirectory Teams
+@inject ProjectAccessState Access
 
 <div class="timeline" id="timeline">
     <div class="timeline-head">
@@ -54,11 +57,11 @@
                                 @if (_editingId != c.Id)
                                 {
                                     <span class="tl-card-actions">
-                                        @if (Permissions.CanEditComment(Me, c))
+                                        @if (Permissions.CanEditComment(Me, ProjectAccess, c))
                                         {
                                             <button type="button" class="md-tool" title="Редактировать" @onclick="() => StartEdit(c)"><Icon Name="edit" Size="14" /></button>
                                         }
-                                        @if (Permissions.CanDeleteComment(Me, c))
+                                        @if (Permissions.CanDeleteComment(Me, ProjectAccess, c))
                                         {
                                             <button type="button" class="md-tool danger" title="Удалить" @onclick="() => _deleting = c"><Icon Name="trash" Size="14" /></button>
                                         }
@@ -88,7 +91,7 @@
                                 @if (g.Count == 1)
                                 {
                                     <span class="tl-sep">·</span>
-                                    @Render(first)
+                                    @Render(first)@SourceOf(first)
                                 }
                                 <span class="tl-time" title="@Ru.DateTimeFull(first.CreatedAt)">@Ru.Ago(first.CreatedAt)</span>
                             </span>
@@ -97,7 +100,7 @@
                                 <ul class="tl-event-list">
                                     @foreach (var a in g)
                                     {
-                                        <li @key="a.Id">@Render(a)</li>
+                                        <li @key="a.Id">@Render(a)@SourceOf(a)</li>
                                     }
                                 </ul>
                             }
@@ -108,7 +111,7 @@
         </div>
     }
 
-    @if (Permissions.CanComment(Me))
+    @if (Permissions.CanComment(ProjectAccess))
     {
         <div class="tl-composer">
             <Avatar User="Me" Size="30" />
@@ -151,9 +154,15 @@
     private string _editText = "";
     private TaskCommentResponse? _deleting;
     private Guid? _highlightId;
+
+    /// <summary>Задачи, на которые ссылаются записи об иерархии (родитель, подзадача): код и название для текста. null — удалена или скрыта.</summary>
+    private readonly Dictionary<Guid, TaskResponse?> _taskRefs = [];
     private const string DraftPlaceholder = "Написать комментарий… @username — упомянуть, файл можно перетащить";
 
     private UserResponse? Me => Users.Find(State.CurrentUserId);
+
+    /// <summary>Права в проекте задачи: комментировать может не каждый, кто её видит.</summary>
+    private ProjectAccessResponse? ProjectAccess => Access.For(Board.Id);
 
     private static readonly TimeSpan GroupWindow = TimeSpan.FromSeconds(60);
 
@@ -224,6 +233,124 @@
 
         _comments = comments.Result.Value!.ToList();
         _activity = activity.Result.Value!.ToList();
+        await LoadTaskRefsAsync(cts.Token);
+        await LoadNamesAsync();
+    }
+
+    /// <summary>Имена спринтов и вех для записей SprintChanged/MilestoneChanged — одним запросом по проекту и только когда такие записи есть.</summary>
+    private Dictionary<Guid, string>? _sprintNames;
+
+    private async Task LoadNamesThenRedrawAsync()
+    {
+        await LoadNamesAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadNamesAsync()
+    {
+        if (_sprintNames is null && _activity.Any(a => a.Type == TaskActivityType.SprintChanged))
+        {
+            var result = await Api.GetSprints(Board.Id);
+            _sprintNames = result.Ok ? result.Value!.ToDictionary(s => s.Id, s => s.Name) : new Dictionary<Guid, string>();
+        }
+
+        if (_milestoneNames is null && _activity.Any(a => a.Type == TaskActivityType.MilestoneChanged))
+        {
+            var result = await Api.GetMilestones(Board.Id);
+            _milestoneNames = result.Ok ? result.Value!.ToDictionary(m => m.Id, m => m.Name) : new Dictionary<Guid, string>();
+        }
+    }
+
+    /// <summary>
+    /// «поле «SLA»: Gold → Silver». Определение поля — из проекта (Board.CustomFields); удалённого поля или варианта уже
+    /// нет — пишем, что есть. NewValue — {"field": Id, "value": …}, OldValue — прежнее значение JSON.
+    /// </summary>
+    private RenderFragment CustomField(TaskActivityResponse a)
+    {
+        Guid? fieldId = null;
+        System.Text.Json.JsonElement? next = null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(a.NewValue ?? "{}");
+            if (doc.RootElement.TryGetProperty("field", out var f) && Guid.TryParse(f.GetString(), out var id))
+                fieldId = id;
+            if (doc.RootElement.TryGetProperty("value", out var v) && v.ValueKind != System.Text.Json.JsonValueKind.Null)
+                next = v.Clone();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+
+        var field = Board.CustomFields?.FirstOrDefault(x => x.Id == fieldId);
+        System.Text.Json.JsonElement? old = null;
+        if (a.OldValue is { } raw)
+        {
+            try { using var doc = System.Text.Json.JsonDocument.Parse(raw); old = doc.RootElement.Clone(); }
+            catch (System.Text.Json.JsonException) { }
+        }
+
+        string Show(System.Text.Json.JsonElement? value) => value is not { } v ? "—"
+            : field is null ? v.ToString()
+            : Short(CustomFieldMeta.Display(field, v, id => Users.Find(id)?.FullName));
+
+        return @<span>поле «@(field?.Name ?? "удалённое")»: <s class="tl-old">@Show(old)</s> <span class="tl-arrow">→</span> <b>@Show(next)</b></span>;
+    }
+
+    private static string Short(string text) => text.Length > 80 ? text[..80] + "…" : text;
+
+    /// <summary>Имена вех для MilestoneChanged — так же лениво, как спринты.</summary>
+    private Dictionary<Guid, string>? _milestoneNames;
+
+    /// <summary>«веха: «A» → «B»», null с любой стороны — без вехи.</summary>
+    private RenderFragment Milestones(TaskActivityResponse a) =>
+        @<span>веха: <s class="tl-old">@(a.OldValue is { } o ? MilestoneName(o) : "нет")</s> <span class="tl-arrow">→</span> <b>@(a.NewValue is { } n ? MilestoneName(n) : "нет")</b></span>;
+
+    private string MilestoneName(string value) =>
+        Guid.TryParse(value, out var id) && _milestoneNames?.GetValueOrDefault(id) is { } name ? $"«{name}»" : "удалённая веха";
+
+    /// <summary>«спринт: «A» → «B»», null с любой стороны — бэклог.</summary>
+    private RenderFragment Sprints(TaskActivityResponse a) =>
+        @<span>спринт: <s class="tl-old">@(a.OldValue is { } o ? SprintName(o) : "бэклог")</s> <span class="tl-arrow">→</span> <b>@(a.NewValue is { } n ? SprintName(n) : "бэклог")</b></span>;
+
+    private string SprintName(string value) =>
+        Guid.TryParse(value, out var id) && _sprintNames?.GetValueOrDefault(id) is { } name ? $"«{name}»" : "удалённый спринт";
+
+    /// <summary>Подзадачу создали из блока «Подзадачи» этой же задачи — запись у родителя без перезагрузки ленты.</summary>
+    public void NoteChildAdded(TaskResponse child)
+    {
+        if (State.CurrentUserId is not { } me) return;
+        _taskRefs[child.Id] = child;
+        _activity.Add(new TaskActivityResponse(Guid.NewGuid(), TaskItem.Id, me, TaskActivityType.ChildAdded, null, child.Id.ToString(), DateTime.UtcNow));
+        StateHasChanged();
+    }
+
+    private async Task LoadTaskRefsThenRedrawAsync()
+    {
+        await LoadTaskRefsAsync(CancellationToken.None);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static readonly TaskActivityType[] HierarchyTypes =
+        [TaskActivityType.ParentChanged, TaskActivityType.ChildAdded, TaskActivityType.ChildRemoved,
+         TaskActivityType.LinkAdded, TaskActivityType.LinkRemoved, TaskActivityType.Merged];
+
+    /// <summary>Коды задач из записей об иерархии — по запросу на задачу; таких записей обычно единицы.</summary>
+    private async Task LoadTaskRefsAsync(CancellationToken ct)
+    {
+        var ids = _activity
+            .Where(a => HierarchyTypes.Contains(a.Type))
+            .SelectMany(a => new[] { a.OldValue, a.NewValue })
+            .Select(v => Guid.TryParse(v, out var g) ? g : (Guid?)null)
+            .OfType<Guid>()
+            .Where(g => !_taskRefs.ContainsKey(g))
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+            return;
+
+        var loaded = await Task.WhenAll(ids.Select(async id => (id, result: await Api.GetTask(id, ct))));
+        foreach (var (id, result) in loaded)
+            _taskRefs[id] = result.Ok ? result.Value : null;
     }
 
     /// <summary>
@@ -243,9 +370,53 @@
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.StatusChanged, before.StatusId.ToString(), after.StatusId.ToString(), now));
         if (before.AssigneeId != after.AssigneeId)
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.AssigneeChanged, before.AssigneeId?.ToString(), after.AssigneeId?.ToString(), now));
+        if (before.ParentId != after.ParentId)
+        {
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.ParentChanged, before.ParentId?.ToString(), after.ParentId?.ToString(), now));
+            _ = LoadTaskRefsThenRedrawAsync();
+        }
+        if (before.SprintId != after.SprintId)
+        {
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.SprintChanged, before.SprintId?.ToString(), after.SprintId?.ToString(), now));
+            _sprintNames = null;
+            _ = LoadNamesThenRedrawAsync();
+        }
+        // Пользовательские поля: запись на каждое поле, чьё значение стало другим (в той же форме, что пишет сервер).
+        var oldFields = before.CustomFields ?? new Dictionary<Guid, System.Text.Json.JsonElement>();
+        var newFields = after.CustomFields ?? new Dictionary<Guid, System.Text.Json.JsonElement>();
+        foreach (var fieldId in oldFields.Keys.Union(newFields.Keys))
+        {
+            var was = oldFields.TryGetValue(fieldId, out var o) ? o.GetRawText() : null;
+            var next = newFields.TryGetValue(fieldId, out var n) ? n.GetRawText() : null;
+            if (was != next)
+                _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.CustomFieldChanged, was,
+                    $"{{\"field\":\"{fieldId}\",\"value\":{next ?? "null"}}}", now));
+        }
+        if (before.MilestoneId != after.MilestoneId)
+        {
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.MilestoneChanged, before.MilestoneId?.ToString(), after.MilestoneId?.ToString(), now));
+            _milestoneNames = null;
+            _ = LoadNamesThenRedrawAsync();
+        }
+        if (before.TeamId != after.TeamId)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.TeamChanged, before.TeamId?.ToString(), after.TeamId?.ToString(), now));
         if (before.DueDate != after.DueDate)
             _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.DueDateChanged,
                 before.DueDate?.ToString("yyyy-MM-dd"), after.DueDate?.ToString("yyyy-MM-dd"), now));
+        if (before.StartDate != after.StartDate)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.StartDateChanged,
+                before.StartDate?.ToString("yyyy-MM-dd"), after.StartDate?.ToString("yyyy-MM-dd"), now));
+        if (before.TypeId != after.TypeId)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.TypeChanged, before.TypeId.ToString(), after.TypeId.ToString(), now));
+        if (before.Priority != after.Priority)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.PriorityChanged,
+                ((int)before.Priority).ToString(CultureInfo.InvariantCulture), ((int)after.Priority).ToString(CultureInfo.InvariantCulture), now));
+        if (before.StoryPoints != after.StoryPoints)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.StoryPointsChanged,
+                before.StoryPoints?.ToString(CultureInfo.InvariantCulture), after.StoryPoints?.ToString(CultureInfo.InvariantCulture), now));
+        if (before.EstimateMinutes != after.EstimateMinutes)
+            _activity.Add(new TaskActivityResponse(Guid.NewGuid(), after.Id, me, TaskActivityType.EstimateChanged,
+                before.EstimateMinutes?.ToString(CultureInfo.InvariantCulture), after.EstimateMinutes?.ToString(CultureInfo.InvariantCulture), now));
 
         StateHasChanged();
     }
@@ -282,7 +453,7 @@
 
     private RenderFragment Render(TaskActivityResponse a) => a.Type switch
     {
-        TaskActivityType.Created => Text("задача создана"),
+        TaskActivityType.Created => Text(a.NewValue is { Length: > 0 } how ? $"задача создана {how}" : "задача создана"),
         TaskActivityType.TitleChanged => Titles(a),
         TaskActivityType.DescriptionChanged => Text("описание обновлено"),
         TaskActivityType.StatusChanged => Statuses(a),
@@ -291,10 +462,78 @@
         TaskActivityType.CommentDeleted => Text("комментарий удалён"),
         TaskActivityType.AttachmentAdded => Text("добавлен файл"),
         TaskActivityType.AttachmentRemoved => Text("файл удалён"),
+        TaskActivityType.StartDateChanged => StartDates(a),
+        TaskActivityType.TypeChanged => Types(a),
+        TaskActivityType.PriorityChanged => Priorities(a),
+        TaskActivityType.StoryPointsChanged => Change("story points", a, v => Ru.Points(decimal.Parse(v, CultureInfo.InvariantCulture))),
+        TaskActivityType.EstimateChanged => Change("оценка", a, v => Ru.Duration(int.Parse(v, CultureInfo.InvariantCulture))),
+        TaskActivityType.ParentChanged => Parents(a),
+        TaskActivityType.ChildAdded => @<span>подзадача: @TaskRef(a.NewValue)</span>,
+        TaskActivityType.ChildRemoved => @<span>подзадача убрана: @TaskRef(a.OldValue)</span>,
+        TaskActivityType.LinkAdded => @<span>связь «@LinkSide(a.OldValue)»: @TaskRef(a.NewValue)</span>,
+        TaskActivityType.LinkRemoved => @<span>связь «@LinkSide(a.OldValue)» убрана: @TaskRef(a.NewValue)</span>,
+        TaskActivityType.SprintChanged => Sprints(a),
+        TaskActivityType.MilestoneChanged => Milestones(a),
+        TaskActivityType.TeamChanged => Change("команда", a, v => Teams.Find(Guid.Parse(v))?.Name ?? "удалённая команда"),
+        TaskActivityType.CustomFieldChanged => CustomField(a),
+        TaskActivityType.Merged when a.NewValue == TaskItem.Id.ToString() => @<span>влита задача @TaskRef(a.OldValue)</span>,
+        TaskActivityType.Merged => @<span>влита в @TaskRef(a.NewValue) как дубликат</span>,
+        TaskActivityType.Split => SplitCodes(a.NewValue),
+        TaskActivityType.Moved => @<span>перенос: <s class="tl-old">@a.OldValue</s> <span class="tl-arrow">→</span> <b>@a.NewValue</b></span>,
+        TaskActivityType.ChecklistChanged => @<span>чек-лист: <s class="tl-old">@a.OldValue</s> <span class="tl-arrow">→</span> <b>@a.NewValue</b></span>,
         _ => Text(a.Type.ToString())
     };
 
     private static RenderFragment Text(string text) => @<span>@text</span>;
+
+    /// <summary>Изменение пришло с хостинга (этап 5C): «по PR #42», «по коммиту a1b2c3d» — ссылкой, если она есть.</summary>
+    private static RenderFragment SourceOf(TaskActivityResponse a) => a.Source is not { } source
+        ? _ => { }
+        : a.SourceUrl is { } url
+            ? @<span class="tl-source"> · по <a href="@url" target="_blank" rel="noopener noreferrer">@ScmMeta.SourceLabel(source)</a></span>
+            : @<span class="tl-source"> · по @ScmMeta.SourceLabel(source)</span>;
+
+    /// <summary>Коды выделенных задач — ссылками /tasks/{код}: коды живут дольше Id в тексте журнала.</summary>
+    private static RenderFragment SplitCodes(string? codes) => @<span>выделены задачи:
+        @foreach (var taskCode in (codes ?? "").Split(", ", StringSplitOptions.RemoveEmptyEntries))
+        {
+            <a class="tl-code" href="@($"tasks/{taskCode}")">@taskCode</a>
+        }
+    </span>;
+
+    /// <summary>OldValue связи — имя вида, у входящей стороны с «:in» (см. TaskActivity.LinkAdded в домене).</summary>
+    private static string LinkSide(string? value)
+    {
+        var parts = (value ?? "").Split(':');
+        return Enum.TryParse<TaskLinkType>(parts[0], out var type) ? TaskMeta.LinkLabel(type, parts.Length == 1) : value ?? "";
+    }
+
+    /// <summary>Правка на этой же странице (чек-лист) — запись без перезагрузки ленты; при следующей загрузке её заменит серверная.</summary>
+    public void NoteActivity(TaskActivityType type, string? oldValue, string? newValue)
+    {
+        if (State.CurrentUserId is not { } me) return;
+        _activity.Add(new TaskActivityResponse(Guid.NewGuid(), TaskItem.Id, me, type, oldValue, newValue, DateTime.UtcNow));
+        if (HierarchyTypes.Contains(type))
+            _ = LoadTaskRefsThenRedrawAsync();
+        StateHasChanged();
+    }
+
+    private RenderFragment Parents(TaskActivityResponse a)
+    {
+        if (a.OldValue is null)
+            return @<span>родитель: @TaskRef(a.NewValue)</span>;
+        if (a.NewValue is null)
+            return @<span>родитель снят (был @TaskRef(a.OldValue))</span>;
+        return @<span>родитель: @TaskRef(a.OldValue) <span class="tl-arrow">→</span> @TaskRef(a.NewValue)</span>;
+    }
+
+    private RenderFragment TaskRef(string? id)
+    {
+        var task = Guid.TryParse(id, out var g) ? _taskRefs.GetValueOrDefault(g) : null;
+        return task is null
+            ? @<span class="tl-old">удалённая задача</span>
+            : @<a class="tl-task" href="tasks/@task.Id" title="@task.Title"><span class="code">@task.Code</span> @task.Title</a>;
+    }
 
     private static RenderFragment Titles(TaskActivityResponse a) =>
         @<span>название: <s class="tl-old">@a.OldValue</s> <span class="tl-arrow">→</span> <b>@a.NewValue</b></span>;
@@ -332,6 +571,39 @@
         if (to is null && from is not null)
             return @<span>срок снят (был <s class="tl-old">@Ru.DateOnlyShort(from.Value)</s>)</span>;
         return @<span>срок: <s class="tl-old">@(from is { } f ? Ru.DateOnlyShort(f) : "—")</s> <span class="tl-arrow">→</span> <b>@(to is { } t ? Ru.DateOnlyShort(t) : "—")</b></span>;
+    }
+
+    private static RenderFragment StartDates(TaskActivityResponse a) =>
+        Change("начало", a, v => Ru.ParseDateOnly(v) is { } d ? Ru.DateOnlyShort(d) : v);
+
+    /// <summary>«поле: A → B», «поле: B» (было пусто), «поле снято (было A)» — общий вид для простых значений.</summary>
+    private static RenderFragment Change(string field, TaskActivityResponse a, Func<string, string> format)
+    {
+        if (a.OldValue is null && a.NewValue is { } set)
+            return @<span>@field: <b>@format(set)</b></span>;
+        if (a.NewValue is null && a.OldValue is { } was)
+            return @<span>@field снято (было <s class="tl-old">@format(was)</s>)</span>;
+        return @<span>@field: <s class="tl-old">@(a.OldValue is { } o ? format(o) : "—")</s> <span class="tl-arrow">→</span> <b>@(a.NewValue is { } n ? format(n) : "—")</b></span>;
+    }
+
+    private RenderFragment Types(TaskActivityResponse a) =>
+        @<span>тип: @TypePill(a.OldValue) <span class="tl-arrow">→</span> @TypePill(a.NewValue)</span>;
+
+    private RenderFragment TypePill(string? id)
+    {
+        var type = Guid.TryParse(id, out var g) ? TaskMeta.TypeOf(Board, g) : null;
+        if (type is null)
+            return @<span class="status-pill sm">удалённый тип</span>;
+        return @<span class="status-pill sm"><TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="12" />@type.Name</span>;
+    }
+
+    private static RenderFragment Priorities(TaskActivityResponse a) =>
+        @<span>приоритет: @PriorityPill(a.OldValue) <span class="tl-arrow">→</span> @PriorityPill(a.NewValue)</span>;
+
+    private static RenderFragment PriorityPill(string? value)
+    {
+        var priority = int.TryParse(value, out var n) && Enum.IsDefined((TaskPriority)n) ? (TaskPriority)n : TaskPriority.None;
+        return @<span class="status-pill sm"><PriorityIcon Value="priority" Size="12" ShowNone="true" />@TaskMeta.PriorityLabel(priority)</span>;
     }
 
     // ---- комментарии ----

@@ -6,12 +6,14 @@ using MediatR;
 
 namespace Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
 
-internal sealed class BoardDeleteCommandHandler(IBoardRepository boards, IFileStorage storage, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+internal sealed class BoardDeleteCommandHandler(IBoardRepository boards, IFileStorage storage, ISearchIndexQueue searchIndex, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<BoardDeleteCommand, bool>
 {
     public async Task<bool> Handle(BoardDeleteCommand request, CancellationToken cancellationToken)
     {
-        permissions.EnsureCanManageBoards(await actors.ResolveAsync(request.ActorId, cancellationToken));
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
+        var access = await projectAccess.GetAsync(actor, request.BoardId, cancellationToken);
+        permissions.EnsureCanDeleteBoard(actor, access);
 
         var board = await boards.GetByIdAsync(request.BoardId, cancellationToken);
         if (board is null)

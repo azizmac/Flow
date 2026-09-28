@@ -20,6 +20,9 @@ public sealed class PreferencesState(IFlowApi api, AppState state, Authenticatio
 
     public int TasksPageSize => Current?.TasksPageSize ?? DefaultTasksPageSize;
 
+    /// <summary>Вид экрана «Задачи», когда в адресе нет ?view= (docs/TZ_task_views.md).</summary>
+    public TaskView TasksView => Current?.TasksView ?? TaskView.List;
+
     public event Action? Changed;
 
     /// <summary>Один запрос на circuit; неудача не запоминается — следующий вызов попробует снова.</summary>
@@ -59,6 +62,10 @@ public sealed class PreferencesState(IFlowApi api, AppState state, Authenticatio
                 var user = (await auth.GetAuthenticationStateAsync()).User;
                 var raw = user.FindFirst("sub")?.Value ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 return Guid.TryParse(raw, out var me) ? $"tasks?who={me}" : "tasks";
+            case StartPage.Dashboard:
+                // Свой стартовый дашборд; нет ни одного — список, где его можно создать.
+                var dashboard = await api.GetDefaultDashboard();
+                return dashboard.Ok ? $"dashboards/{dashboard.Value!.Id}" : "dashboards";
             default:
                 return null;
         }

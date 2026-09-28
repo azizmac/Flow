@@ -1,0 +1,37 @@
+@* Поле «Команда» задачи (docs/TZ_project_access.md §1, этап 4D) — пилюля PillSelect: «Нет» (null) и группы-команды.
+   Прежняя команда (флаг снят или группа удалена) у задачи видна выключенным пунктом — новым задачам её не назначить. *@
+@inject TeamDirectory Teams
+
+@if (CanEdit)
+{
+    <PillSelect T="Guid?" Items="Options" Value="Value" OnChange="OnChange" Disabled="Disabled" Empty="@(id => id is null)"
+                Label="LabelFor" DisabledReason="@(id => id is { } t && Teams.Teams.All(x => x.Id != t) ? "уже не команда — новым задачам не назначить" : null)"
+                AriaLabel="Сменить команду" />
+}
+else
+{
+    <span class="meta-v @(Value is null ? "muted" : "")">@(Value is null ? "—" : LabelFor(Value))</span>
+}
+
+@code {
+    [Parameter] public Guid? Value { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<Guid?> OnChange { get; set; }
+
+    protected override Task OnInitializedAsync() => Teams.EnsureLoadedAsync();
+
+    private IEnumerable<Guid?> Options
+    {
+        get
+        {
+            var list = new List<Guid?> { null };
+            list.AddRange(Teams.Teams.Select(t => (Guid?)t.Id));
+            if (Value is { } current && Teams.Teams.All(t => t.Id != current))
+                list.Add(current);
+            return list;
+        }
+    }
+
+    private string LabelFor(Guid? id) => id is null ? "Нет" : Teams.Find(id)?.Name ?? "(удалённая команда)";
+}

@@ -1,0 +1,191 @@
+@* Выбор задачи (docs/TZ_ui_consistency.md, этап 5) — один компонент на родителя, связи и слияние: MudMenu, поиск по
+   коду и названию на сервере (GET /tasks, как фильтр списка) с паузой и отменой предыдущего запроса, строки — TaskOption.
+   Список показывается сразу при открытии (первые задачи), печать его сужает; Enter — первая, Esc — закрыть.
+
+   Триггер — по месту:
+   - пилюля (по умолчанию): код и название выбранной или EmptyLabel — значение свойства на экране (родитель);
+   - FieldLabel: поле формы с подписью, как DsSelect, — для диалога (основная задача при слиянии);
+   - ButtonLabel: кнопка — для «добавить» без текущего значения (связь).
+
+   BoardId сужает поиск одним проектом (родитель — только в своём), без него — все видимые. Иконки типов берутся из
+   Boards; если их не передали, список проектов читается один раз при первом открытии. *@
+@implements IDisposable
+@inject IFlowApi Api
+@inject BrowserInterop Browser
+
+<MudMenu @bind-Open="_open" Class="@(FieldLabel is not null ? "menu-block" : null)" PopoverClass="flow-pop flow-pop-tasks" ListClass="flow-pop-list" AnchorOrigin="Origin.BottomLeft"
+         TransformOrigin="Origin.TopLeft" Dense="true" DropShadow="false" Ripple="false" AriaLabel="@AriaLabel">
+    <ActivatorContent>
+        @if (ButtonLabel is not null)
+        {
+            <DsButton Variant="secondary" Size="sm" Icon="link" Disabled="Disabled" StopPropagation="true" OnClick="Toggle">@ButtonLabel</DsButton>
+        }
+        else if (FieldLabel is not null)
+        {
+            <div class="ds-field ds-select task-field-wrap">
+                <span class="ds-field-label">@FieldLabel</span>
+                <span class="ds-field-row">
+                    <span class="task-field @(Value is null ? "empty-value" : "")" role="button" tabindex="@(Disabled ? -1 : 0)"
+                          aria-haspopup="listbox" aria-expanded="@(_open ? "true" : "false")" @onclick="Toggle" @onclick:stopPropagation
+                          @onkeydown="OnTriggerKey">
+                        @if (Value is { } v)
+                        {
+                            <TaskOption Item="v" Type="TypeOf(v)" />
+                        }
+                        else
+                        {
+                            <span>@Placeholder</span>
+                        }
+                        <Icon Name="chevron-down" Size="14" />
+                    </span>
+                </span>
+            </div>
+        }
+        else
+        {
+            <div class="status-sel parent-sel @(Disabled ? "disabled" : "")" @onclick="Toggle" @onclick:stopPropagation @onkeydown="OnTriggerKey"
+                 role="button" tabindex="@(Disabled ? -1 : 0)" aria-haspopup="listbox" aria-expanded="@(_open ? "true" : "false")"
+                 title="@(Value?.Title ?? AriaLabel)">
+                @if (Value is { } p)
+                {
+                    <span class="code">@p.Code</span><span class="lbl">@p.Title</span>
+                }
+                else
+                {
+                    <span class="lbl muted">@EmptyLabel</span>
+                }
+                <Icon Name="chevrons" Size="12" />
+            </div>
+        }
+    </ActivatorContent>
+    <ChildContent>
+        <label class="pop-search" @onclick:stopPropagation>
+            <Icon Name="search" Size="14" />
+            <input id="@_inputId" placeholder="@Placeholder" value="@_query" autocomplete="off" spellcheck="false"
+                   @oninput="OnInput" @onkeydown="OnKey" />
+        </label>
+        @if (_results is null)
+        {
+            <div class="pop-empty">Загрузка…</div>
+        }
+        else if (_results.Count == 0)
+        {
+            <div class="pop-empty">@EmptyText</div>
+        }
+        else
+        {
+            @foreach (var t in _results)
+            {
+                <MudMenuItem Class="@($"pop-item {(t.Id == Value?.Id ? "cur" : "")}")" OnClick="() => Select(t)">
+                    <TaskOption Item="t" Type="TypeOf(t)" />
+                </MudMenuItem>
+            }
+        }
+        @if (Value is not null && ClearLabel is not null)
+        {
+            <div class="pop-sep"></div>
+            <MudMenuItem Class="pop-item" OnClick="() => Select(null)"><Icon Name="close-simple" Size="14" />@ClearLabel</MudMenuItem>
+        }
+    </ChildContent>
+</MudMenu>
+
+@code {
+    [Parameter] public TaskResponse? Value { get; set; }
+    [Parameter] public EventCallback<TaskResponse?> OnChange { get; set; }
+    /// <summary>Искать только в этом проекте (в порядке ранга); null — во всех видимых.</summary>
+    [Parameter] public Guid? BoardId { get; set; }
+    /// <summary>Проекты для иконок типов; null — прочитать при первом открытии.</summary>
+    [Parameter] public IReadOnlyList<BoardResponse>? Boards { get; set; }
+    /// <summary>Какие задачи предлагать (не саму задачу, только уровнем выше…).</summary>
+    [Parameter] public Func<TaskResponse, bool>? Where { get; set; }
+    [Parameter] public string? ButtonLabel { get; set; }
+    [Parameter] public string? FieldLabel { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Код или название";
+    [Parameter] public string EmptyLabel { get; set; } = "Нет";
+    /// <summary>Пункт «убрать» при выбранном значении; null — пункта нет.</summary>
+    [Parameter] public string? ClearLabel { get; set; }
+    [Parameter] public string EmptyText { get; set; } = "Задач не найдено";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string AriaLabel { get; set; } = "Выбрать задачу";
+
+    private const int DebounceMs = 250;
+    private const int Shown = 12;
+
+    private readonly string _inputId = "tpk-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _open;
+    private string _query = "";
+    private List<TaskResponse>? _results;
+    private IReadOnlyList<BoardResponse>? _loadedBoards;
+    private CancellationTokenSource? _cts;
+
+    private TaskTypeResponse? TypeOf(TaskResponse task) =>
+        TaskMeta.TypeOf((Boards ?? _loadedBoards)?.FirstOrDefault(b => b.Id == task.BoardId), task.TypeId);
+
+    private async Task Toggle()
+    {
+        if (Disabled) return;
+        _open = !_open;
+        if (!_open) return;
+
+        _query = "";
+        _results = null;
+        StateHasChanged();
+        if (Boards is null && _loadedBoards is null && await Api.GetBoards() is { Ok: true } boards)
+            _loadedBoards = boards.Value;
+        _ = SearchAsync("");
+        await Task.Delay(50);
+        await Browser.FocusAsync(_inputId);
+    }
+
+    private async Task OnTriggerKey(KeyboardEventArgs e)
+    {
+        if (!_open && e.Key is "Enter" or " " or "ArrowDown")
+            await Toggle();
+    }
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        _query = e.Value?.ToString() ?? string.Empty;
+        _ = SearchAsync(_query);
+    }
+
+    private async Task SearchAsync(string query)
+    {
+        _cts?.Cancel();
+        var cts = _cts = new CancellationTokenSource();
+        try
+        {
+            if (query.Length > 0)
+                await Task.Delay(DebounceMs, cts.Token);
+
+            var result = await Api.SearchTasks(boardId: BoardId, query: query, limit: 50, offset: 0,
+                sort: BoardId is null ? null : TaskSortField.Rank, ct: cts.Token);
+            if (cts.IsCancellationRequested)
+                return;
+
+            _results = result.Ok ? result.Value!.Items.Where(t => Where?.Invoke(t) != false).Take(Shown).ToList() : [];
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+            // Печатают дальше — ответ на старую строку не нужен.
+        }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && _results is { Count: > 0 } list)
+            await Select(list[0]);
+        else if (e.Key == "Escape")
+            _open = false;
+    }
+
+    private async Task Select(TaskResponse? task)
+    {
+        _open = false;
+        if (task?.Id != Value?.Id)
+            await OnChange.InvokeAsync(task);
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

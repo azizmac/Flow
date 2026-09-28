@@ -39,6 +39,9 @@ public sealed class ApiFixture : IAsyncLifetime
 
     public InMemoryFileStorage Storage { get; } = new();
 
+    /// <summary>Хостинг в памяти: живые GitHub/GitLab тесты не дёргают.</summary>
+    public FakeScmProviderClient Scm { get; } = new();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -53,6 +56,7 @@ public sealed class ApiFixture : IAsyncLifetime
             // и не должны зависеть от того, поднят ли llama-server на машине.
             builder.UseSetting("Search:Indexing:Enabled", "false");
             builder.UseSetting("Search:Embeddings:QueryEndpoint", "http://localhost:1/v1");
+            builder.UseSetting("Scm:PublicBaseUrl", "https://flow.example.com");
 
             builder.ConfigureTestServices(services =>
             {
@@ -60,6 +64,7 @@ public sealed class ApiFixture : IAsyncLifetime
                 // Вложения кладутся в память: поднимать MinIO ради проверки кодов ответа незачем,
                 // сам S3-клиент проверяется отдельным интеграционным тестом.
                 services.AddSingleton<IFileStorage>(Storage);
+                services.AddSingleton<IScmProviderClient>(Scm);
 
                 services
                     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

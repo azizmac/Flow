@@ -5,6 +5,11 @@
 {
     <a class="tl-name" href="users/@u.Id" title="@("@" + u.Username)">@u.FullName</a>
 }
+else if (Id == ScmMeta.BotId)
+{
+    @* Бот появляется при первом автопереходе — справочник, загруженный раньше, его ещё не знает. *@
+    <span class="tl-name" title="@("@flow-bot")">Flow Bot</span>
+}
 else
 {
     <span class="tl-name">…</span>

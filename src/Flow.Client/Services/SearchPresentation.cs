@@ -24,8 +24,13 @@ public static class SearchPresentation
         SearchSourceType.Board => "Проект",
         SearchSourceType.User => "Человек",
         SearchSourceType.Attachment => "Файл",
+        SearchSourceType.Development => "PR / коммит",
         _ => "Источник"
     };
+
+    /// <summary>Пометка рядом с названием: «комментарий», «файл»; у PR и коммита «PR» — аббревиатура, строчной не бывает.</summary>
+    public static string KindLabel(SearchSourceType type) =>
+        type == SearchSourceType.Development ? TypeLabel(type) : TypeLabel(type).ToLowerInvariant();
 
     /// <summary>Множественное число для заголовков групп в выдаче.</summary>
     public static string GroupLabel(SearchSourceType type) => type switch
@@ -35,6 +40,7 @@ public static class SearchPresentation
         SearchSourceType.Board => "Проекты",
         SearchSourceType.User => "Люди",
         SearchSourceType.Attachment => "Файлы",
+        SearchSourceType.Development => "Разработка",
         _ => "Источники"
     };
 
@@ -45,6 +51,7 @@ public static class SearchPresentation
         SearchSourceType.Board => "grid",
         SearchSourceType.User => "user",
         SearchSourceType.Attachment => "file",
+        SearchSourceType.Development => "code",
         _ => "file"
     };
 
@@ -60,6 +67,8 @@ public static class SearchPresentation
         SearchSourceType.User => $"users/{item.SourceId}",
         // У файла своей страницы нет — открывается задача, к которой он приложен.
         SearchSourceType.Attachment => item.ParentId is { } ownerTaskId ? $"tasks/{ownerTaskId}" : null,
+        // PR и коммит (этап 5E) открывают свою задачу: там блок «Разработка» со ссылкой на хостинг.
+        SearchSourceType.Development => item.ParentId is { } linkTaskId ? $"tasks/{linkTaskId}" : null,
         _ => null
     };
 }

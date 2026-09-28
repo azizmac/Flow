@@ -21,7 +21,7 @@ public sealed class FakeSearchQueryRepository : ISearchQueryRepository
         return Task.FromResult(Page);
     }
 
-    public Task<IReadOnlyList<SearchHit>> FindSimilarAsync(Guid taskId, int limit, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<SearchHit>> FindSimilarAsync(Guid taskId, int limit, IReadOnlyCollection<Guid>? visibleBoardIds, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<SearchHit>>(Similar.Take(limit).ToArray());
 }
 

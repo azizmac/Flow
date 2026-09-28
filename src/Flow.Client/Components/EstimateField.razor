@@ -1,0 +1,145 @@
+@* Оценка задачи: story points и время («1д 2ч 30м», 1д = 8ч). Оба значения уходят одним PATCH /estimate
+   (OnChange(points, minutes)) — по отдельности второе поле затирало бы первое устаревшим значением.
+   Сохраняется по Enter и при уходе из поля; Esc возвращает сохранённое. Нераспознанный ввод не отправляется:
+   поле подсвечивается и ждёт исправления. *@
+
+@if (CanEdit)
+{
+    <div class="est-edit">
+        <label class="est-part" title="Story points">
+            <input @key="_revision" class="est-input pts @(_pointsInvalid ? "invalid" : "")" inputmode="decimal" placeholder="—"
+                   value="@_points" disabled="@Disabled" aria-label="Story points"
+                   @oninput="e => _points = e.Value?.ToString() ?? string.Empty"
+                   @onkeydown="OnKey" @onblur="Commit" />
+            <span class="est-unit">SP</span>
+        </label>
+        <label class="est-part" title="Оценка времени: 1д 2ч 30м (1д = 8ч)">
+            <input @key="_revision" class="est-input time @(_timeInvalid ? "invalid" : "")" placeholder="1д 2ч"
+                   value="@_time" disabled="@Disabled" aria-label="Оценка времени"
+                   @oninput="e => _time = e.Value?.ToString() ?? string.Empty"
+                   @onkeydown="OnKey" @onblur="Commit" />
+        </label>
+    </div>
+}
+else if (StoryPoints is null && EstimateMinutes is null)
+{
+    <span class="meta-v" style="color:var(--text-tertiary);">—</span>
+}
+else
+{
+    <span class="meta-v">
+        @if (StoryPoints is { } sp)
+        {
+            <span>@Ru.Points(sp) SP</span>
+        }
+        @if (StoryPoints is not null && EstimateMinutes is not null)
+        {
+            <span style="color:var(--text-tertiary);">·</span>
+        }
+        @if (EstimateMinutes is { } m)
+        {
+            <span>@Ru.Duration(m)</span>
+        }
+    </span>
+}
+
+@code {
+    [Parameter] public decimal? StoryPoints { get; set; }
+    [Parameter] public int? EstimateMinutes { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<(decimal? StoryPoints, int? EstimateMinutes)> OnChange { get; set; }
+
+    private string _points = "";
+    private string _time = "";
+    private bool _pointsInvalid;
+    private bool _timeInvalid;
+    private int _revision;
+    private (decimal?, int?) _shown;
+
+    /// <summary>Последнее отправленное или пришедшее с сервера значение: Enter и следующий за ним blur
+    /// не должны слать один и тот же PATCH дважды, пока родитель ещё не прислал обновлённые параметры.</summary>
+    private (decimal?, int?) _baseline;
+    private bool _committing;
+    private bool _recommit;
+
+    protected override void OnParametersSet()
+    {
+        if (_shown == (StoryPoints, EstimateMinutes))
+            return;
+
+        // Ответ на наш же PATCH приходит, пока в соседнем поле может лежать набранное и ещё не отправленное
+        // значение: перерисовка полей стёрла бы его. Текст не трогаем — его отправит отложенный Commit.
+        if (_committing || _recommit)
+        {
+            _shown = _baseline = (StoryPoints, EstimateMinutes);
+            return;
+        }
+
+        // Сервер прислал новые значения (сохранили здесь или в другом месте) — показываем их.
+        Reset();
+    }
+
+    private void Reset()
+    {
+        _shown = _baseline = (StoryPoints, EstimateMinutes);
+        _points = StoryPoints is { } sp ? Ru.Points(sp) : "";
+        _time = EstimateMinutes is { } m ? Ru.Duration(m) : "";
+        _pointsInvalid = _timeInvalid = false;
+        _revision++;
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Commit();
+        else if (e.Key == "Escape") Reset();
+    }
+
+    private async Task Commit()
+    {
+        // Переход из одного поля в другое даёт blur первого, пока его PATCH ещё летит: второй запрос ждёт
+        // первого, иначе они обгоняют друг друга, а лента задачи сравнивает изменения с устаревшим «до».
+        if (_committing)
+        {
+            _recommit = true;
+            return;
+        }
+
+        _pointsInvalid = !TryParsePoints(_points, out var points);
+        _timeInvalid = !Ru.TryParseDuration(_time, out var minutes);
+        if (_pointsInvalid || _timeInvalid || (points, minutes) == _baseline)
+            return;
+
+        _baseline = (points, minutes);
+        _committing = true;
+        try
+        {
+            await OnChange.InvokeAsync((points, minutes));
+        }
+        finally
+        {
+            _committing = false;
+        }
+
+        if (_recommit)
+        {
+            _recommit = false;
+            await Commit();
+        }
+    }
+
+    // Границы (0…999.9, шаг 0.1) держит сервер; здесь — только «это число».
+    private static bool TryParsePoints(string text, out decimal? points)
+    {
+        points = null;
+        if (string.IsNullOrWhiteSpace(text))
+            return true;
+
+        if (!decimal.TryParse(text.Trim().Replace(',', '.'), System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture, out var value) || value < 0)
+            return false;
+
+        points = value;
+        return true;
+    }
+}

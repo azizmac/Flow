@@ -11,6 +11,161 @@ window.flow = (function () {
     // Зоны приёма файлов: id зоны → { off: снять обработчики, clear: погасить подсветку } (см. attachZone).
     const dropZones = new Map();
 
+    // Перетаскивания роадмапа и сетки дашборда: id корня → функция, снимающая обработчики (см. roadmapAttach, gridAttach).
+    const pointerDrags = new Map();
+
+    // После перетаскивания браузер всё равно пришлёт click по элементу — он открыл бы слайдер или диалог. Гасим ровно один
+    // такой click в фазе перехвата на window: раньше любых обработчиков Blazor.
+    let swallowClick = false;
+    window.addEventListener('click', function (e) {
+        if (!swallowClick) return;
+        swallowClick = false;
+        e.stopPropagation();
+        e.preventDefault();
+    }, true);
+
+    // Морф «кнопка → полоса» (FQL): полоса стоит в раскладке целиком, а в начале анимации обрезана clip-path ровно
+    // по кнопке и сдвинута к ней transform'ом — так кажется, что вытягивается сама кнопка. Ни ширина, ни высота не
+    // анимируются: раскладка не пересчитывается ни разу, соседи под полосой едут тоже transform'ом.
+    function reducedMotion() {
+        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function easeOut() {
+        return getComputedStyle(document.documentElement).getPropertyValue('--ease-out').trim() || 'ease-out';
+    }
+
+    function morphGeometry(from, to) {
+        const f = from.getBoundingClientRect();
+        const t = to.getBoundingClientRect();
+        const bar = to.parentElement;
+        const next = bar && bar.nextElementSibling;
+        const radius = parseFloat(getComputedStyle(to).borderTopLeftRadius) || 0;
+        const inset = [0, Math.max(0, t.right - f.right), Math.max(0, t.height - f.height), Math.max(0, f.left - t.left)];
+        return {
+            pill: {
+                transform: 'translate(0, ' + (f.top - t.top) + 'px)',
+                clipPath: 'inset(' + inset.map(function (v) { return v + 'px'; }).join(' ') + ' round ' + (f.height / 2) + 'px)'
+            },
+            full: { transform: 'none', clipPath: 'inset(0px 0px 0px 0px round ' + radius + 'px)' },
+            next: next,
+            // На сколько полоса сдвинула то, что под ней: верх соседа минус верх полосы (с её отступом).
+            shift: next ? next.getBoundingClientRect().top - bar.getBoundingClientRect().top : 0
+        };
+    }
+
+    // Ответную перерисовку .NET ждём по факту: как только полоса ушла из документа, соседа отпускаем — иначе он
+    // на кадр съехал бы вверх дважды (и полосы уже нет, и transform ещё держит сдвиг). Таймер — если .NET передумал.
+    function releaseWhenGone(el, animations) {
+        let timer = 0;
+        const observer = new MutationObserver(function () { if (!el.isConnected) done(); });
+        function done() {
+            observer.disconnect();
+            clearTimeout(timer);
+            animations.forEach(function (a) { if (a) a.cancel(); });
+        }
+        observer.observe(document.body, { childList: true, subtree: true });
+        timer = setTimeout(done, 1500);
+    }
+
+    // Общий каркас: pointerdown на корне выбирает, что тянуть (pick → состояние или null), движение и отпускание — на
+    // window, чтобы курсор мог уйти за край. Порог 4px отличает перетаскивание от клика. Во время движения элемент
+    // меняет только свой inline-стиль; при отпускании стиль возвращается как был, а итог уходит в .NET одним вызовом —
+    // событие на каждый пиксель по SignalR при серверном рендере не нужно. Blazor потом перерисует элемент с новыми
+    // значениями (или оставит прежние, если сервер отказал).
+    function attachPointerDrag(rootId, pick, move, drop) {
+        const root = document.getElementById(rootId);
+        if (!root) return false;
+        detachPointerDrag(rootId);
+
+        let state = null;
+        const onDown = function (e) {
+            if (e.button !== 0) return;
+            state = pick(e, root);
+            if (!state) return;
+            state.x0 = e.clientX;
+            state.y0 = e.clientY;
+            state.moved = false;
+            state.style = state.el.getAttribute('style');
+        };
+        const onMove = function (e) {
+            if (!state) return;
+            const dx = e.clientX - state.x0, dy = e.clientY - state.y0;
+            if (!state.moved) {
+                if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+                state.moved = true;
+                state.el.classList.add('dragging');
+                document.body.classList.add('pointer-dragging');
+            }
+            e.preventDefault();
+            move(state, dx, dy, e, root);
+        };
+        const onUp = function (e) {
+            if (!state) return;
+            const s = state;
+            state = null;
+            if (!s.moved) return;
+            swallowClick = true;
+            setTimeout(function () { swallowClick = false; }, 0);
+            s.el.classList.remove('dragging');
+            document.body.classList.remove('pointer-dragging');
+            if (s.style === null) s.el.removeAttribute('style'); else s.el.setAttribute('style', s.style);
+            if (s.ghost) s.ghost.remove();
+            drop(s, e.clientX - s.x0, e.clientY - s.y0, e, root);
+        };
+        const onKey = function (e) {
+            if (e.key !== 'Escape' || !state || !state.moved) return;
+            const s = state;
+            state = null;
+            s.el.classList.remove('dragging');
+            document.body.classList.remove('pointer-dragging');
+            if (s.style === null) s.el.removeAttribute('style'); else s.el.setAttribute('style', s.style);
+            if (s.ghost) s.ghost.remove();
+        };
+
+        root.addEventListener('pointerdown', onDown);
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        window.addEventListener('keydown', onKey);
+        pointerDrags.set(rootId, function () {
+            root.removeEventListener('pointerdown', onDown);
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('keydown', onKey);
+        });
+        return true;
+    }
+
+    // Дуга перехода графа workflow — та же формула, что WorkflowPage.EdgePath: от края узла к краю, изгиб по нормали.
+    function graphEdgePath(ax, ay, bx, by, nw, nh) {
+        const dx = bx - ax, dy = by - ay;
+        const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+        const ux = dx / len, uy = dy / len;
+        const trim = function (extra) {
+            return Math.min(ux === 0 ? Infinity : nw / 2 / Math.abs(ux), uy === 0 ? Infinity : nh / 2 / Math.abs(uy)) + extra;
+        };
+        const lift = 26 + len * 0.22;
+        const r = function (v) { return Math.round(v * 10) / 10; };
+        return 'M ' + r(ax + ux * trim(0)) + ' ' + r(ay + uy * trim(0))
+            + ' Q ' + r((ax + bx) / 2 + uy * lift) + ' ' + r((ay + by) / 2 - ux * lift)
+            + ' ' + r(bx - ux * trim(6)) + ' ' + r(by - uy * trim(6));
+    }
+
+    // Точка экрана → координаты холста SVG (viewBox может быть сжат под ширину панели).
+    function svgPoint(svg, clientX, clientY) {
+        const m = svg.getScreenCTM();
+        if (!m) return { x: clientX, y: clientY };
+        const p = new DOMPoint(clientX, clientY).matrixTransform(m.inverse());
+        return { x: p.x, y: p.y };
+    }
+
+    function detachPointerDrag(rootId) {
+        const off = pointerDrags.get(rootId);
+        if (!off) return;
+        pointerDrags.delete(rootId);
+        try { off(); } catch (_) { }
+    }
+
     // Перетаскивание кончилось — гасим подсветку у всех зон сразу. По одной нельзя: вложенная зона
     // (редактор внутри карточки) забирает drop себе и останавливает всплытие, и внешняя иначе
     // так и осталась бы в рамке «Отпустите файлы».
@@ -71,6 +226,22 @@ window.flow = (function () {
         const tag = (el.tagName || '').toLowerCase();
         return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable === true;
     }
+
+    // Esc в поле переименования на месте (DsInput EscapeReverts) отменяет правку, а не закрывает диалог. Перехватчик
+    // MudDialog висит на контейнере диалога нативно, а Blazor разбирает события делегированием у корня документа, так
+    // что @onkeydown:stopPropagation до контейнера не дотягивается. Поэтому клавиша гасится на захвате, полю
+    // возвращается исходное значение событием input, и фокус снимается: переименование сохраняет по blur, а
+    // неизменённое имя — no-op.
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape' || !e.target || typeof e.target.closest !== 'function') return;
+        const field = e.target.closest('[data-esc-revert]');
+        if (!field || !isEditable(e.target)) return;
+        e.stopPropagation();
+        e.preventDefault();
+        e.target.value = field.getAttribute('data-esc-revert');
+        e.target.dispatchEvent(new Event('input', { bubbles: true }));
+        e.target.blur();
+    }, true);
 
     document.addEventListener('keydown', function (e) {
         // Под полем открыт список, которому принадлежат стрелки/Enter/Tab/Esc (строка поиска в
@@ -150,11 +321,66 @@ window.flow = (function () {
             if (el && el.isConnected && typeof el.focus === 'function') el.focus();
         },
 
+        // Позиция курсора в поле ввода — подсказкам FQL нужна она, а не конец строки.
+        caret: function (id) {
+            var el = document.getElementById(id);
+            return el && typeof el.selectionStart === 'number' ? el.selectionStart : -1;
+        },
+
+        setCaret: function (id, pos) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.focus();
+            if (typeof el.setSelectionRange === 'function') el.setSelectionRange(pos, pos);
+        },
+
         focus: function (id, select) {
             const el = document.getElementById(id);
             if (!el) return;
             el.focus();
             if (select && typeof el.select === 'function') el.select();
+        },
+
+        // Полоса вырастает из кнопки. Класс morphing прячет её с первого кадра (рендер приходит раньше этого вызова),
+        // снимаем его в той же задаче, что запускаем анимацию, — полной полосы без анимации не видно ни кадра.
+        morphIn: function (fromId, toId) {
+            const from = document.getElementById(fromId);
+            const to = document.getElementById(toId);
+            if (!to) return false;
+            if (from && !reducedMotion()) {
+                const g = morphGeometry(from, to);
+                const ease = easeOut();
+                to.animate([g.pill, g.full], { duration: 280, easing: ease });
+                // Содержимое проявляется, когда форма уже почти раскрылась: иначе текст мелькал бы в узкой пилюле.
+                Array.prototype.forEach.call(to.children, function (child) {
+                    child.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay: 90, easing: ease, fill: 'backwards' });
+                });
+                if (g.next && g.shift > 0)
+                    g.next.animate([{ transform: 'translateY(' + -g.shift + 'px)' }, { transform: 'none' }], { duration: 280, easing: ease });
+            }
+            to.classList.remove('morphing');
+            return true;
+        },
+
+        // Обратно в кнопку — быстрее, чем раскрытие: закрытие человек уже решил, ждать его незачем.
+        // Промис завершается, когда анимация доиграла; убирать полосу из разметки — дело .NET.
+        morphOut: function (fromId, toId) {
+            const from = document.getElementById(fromId);
+            const to = document.getElementById(toId);
+            if (!from || !to || reducedMotion()) return Promise.resolve();
+            const g = morphGeometry(from, to);
+            const ease = easeOut();
+            const opts = { duration: 200, easing: ease, fill: 'forwards' };
+            const parts = [];
+            Array.prototype.forEach.call(to.children, function (child) {
+                parts.push(child.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 90, easing: ease, fill: 'forwards' }));
+            });
+            const pill = Object.assign({ opacity: 0 }, g.pill);
+            const shape = to.animate([Object.assign({ opacity: 1 }, g.full), Object.assign({ opacity: 1, offset: 0.75 }, g.pill), pill], opts);
+            parts.push(shape);
+            if (g.next && g.shift > 0)
+                parts.push(g.next.animate([{ transform: 'none' }, { transform: 'translateY(' + -g.shift + 'px)' }], opts));
+            return shape.finished.then(function () { releaseWhenGone(to, parts); }, function () { });
         },
 
         scrollIntoView: function (id) {
@@ -242,6 +468,160 @@ window.flow = (function () {
             dropZones.delete(zoneId);
             try { zone.off(); } catch (_) { }
         },
+
+        // Роадмап (docs/TZ_task_views.md §4, этап 2H): тело полосы двигает обе даты, края (.rm-edge-l / .rm-edge-r) —
+        // начало или срок, ромб — единственную дату. Шаг — день (data-px на корне). Задача из «Без дат» тянется
+        // призраком и кладётся на день под курсором. .NET получает только итог: OnBarDragged(id, mode, days) или
+        // OnUndatedDropped(id, dayIndex).
+        roadmapAttach: function (rootId, ref) {
+            const px = function (root) { return Number(root.dataset.px) || 8; };
+            return attachPointerDrag(rootId,
+                function (e, root) {
+                    const bar = e.target.closest('[data-rm-drag]');
+                    if (bar && root.contains(bar)) {
+                        const mode = e.target.closest('.rm-edge-l') ? 'start' : e.target.closest('.rm-edge-r') ? 'end' : 'move';
+                        return { el: bar, id: bar.dataset.task, mode: mode, left: bar.offsetLeft, width: bar.offsetWidth };
+                    }
+                    const item = e.target.closest('[data-rm-undated]');
+                    return item && root.contains(item) ? { el: item, id: item.dataset.task, mode: 'place' } : null;
+                },
+                function (s, dx, dy, e, root) {
+                    const step = px(root);
+                    const days = Math.round(dx / step) * step;
+                    if (s.mode === 'move') {
+                        s.el.style.transform = (s.el.classList.contains('rm-diamond') ? 'rotate(45deg) ' : '') + 'translateX(' + days + 'px)';
+                    } else if (s.mode === 'start') {
+                        const shift = Math.min(days, s.width - step);
+                        s.el.style.left = (s.left + shift) + 'px';
+                        s.el.style.width = (s.width - shift) + 'px';
+                    } else if (s.mode === 'end') {
+                        s.el.style.width = Math.max(step, s.width + days) + 'px';
+                    } else {
+                        if (!s.ghost) {
+                            s.ghost = document.createElement('div');
+                            s.ghost.className = 'rm-ghost';
+                            s.ghost.textContent = s.el.textContent.trim();
+                            document.body.appendChild(s.ghost);
+                        }
+                        s.ghost.style.left = (e.clientX + 12) + 'px';
+                        s.ghost.style.top = (e.clientY + 8) + 'px';
+                    }
+                },
+                function (s, dx, dy, e, root) {
+                    const step = px(root);
+                    if (s.mode === 'place') {
+                        const lanes = root.querySelector('.rm-lanes');
+                        if (!lanes) return;
+                        const r = lanes.getBoundingClientRect();
+                        if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+                        ref.invokeMethodAsync('OnUndatedDropped', s.id, Math.floor((e.clientX - r.left) / step));
+                        return;
+                    }
+                    const days = Math.round(dx / step);
+                    if (days !== 0) ref.invokeMethodAsync('OnBarDragged', s.id, s.mode, days);
+                });
+        },
+
+        // Сетка дашборда (docs/TZ_task_views.md §8, этап 2H): шапка виджета ([data-dw-move]) переносит его, уголок
+        // ([data-dw-resize]) меняет размер; шаг — колонка (12 на ширину сетки) и строка 90px с зазором сетки. .NET получает
+        // только сдвиг в клетках: OnWidgetDragged(id, mode, dCols, dRows).
+        gridAttach: function (rootId, ref) {
+            const cell = function (root) {
+                const cs = getComputedStyle(root);
+                const gap = parseFloat(cs.columnGap) || 12;
+                const rowGap = parseFloat(cs.rowGap) || gap;
+                return { w: (root.clientWidth - gap * 11) / 12 + gap, h: 90 + rowGap };
+            };
+            return attachPointerDrag(rootId,
+                function (e, root) {
+                    const handle = e.target.closest('[data-dw-move], [data-dw-resize]');
+                    if (!handle || !root.contains(handle) || e.target.closest('button, a')) return null;
+                    const widget = handle.closest('[data-widget]');
+                    if (!widget) return null;
+                    return { el: widget, id: widget.dataset.widget, mode: handle.hasAttribute('data-dw-resize') ? 'resize' : 'move',
+                        width: widget.offsetWidth, height: widget.offsetHeight };
+                },
+                function (s, dx, dy, e, root) {
+                    const c = cell(root);
+                    const cols = Math.round(dx / c.w), rows = Math.round(dy / c.h);
+                    if (s.mode === 'move') {
+                        s.el.style.transform = 'translate(' + cols * c.w + 'px, ' + rows * c.h + 'px)';
+                    } else {
+                        s.el.style.width = Math.max(c.w / 2, s.width + cols * c.w) + 'px';
+                        s.el.style.height = Math.max(90, s.height + rows * c.h) + 'px';
+                    }
+                },
+                function (s, dx, dy, e, root) {
+                    const c = cell(root);
+                    const cols = Math.round(dx / c.w), rows = Math.round(dy / c.h);
+                    if (cols !== 0 || rows !== 0) ref.invokeMethodAsync('OnWidgetDragged', s.id, s.mode, cols, rows);
+                });
+        },
+
+        // Граф workflow (docs/TZ_workflow_config.md §2, этап 3D): узел ([data-node]) тянется целиком, стрелки его
+        // переходов перерисовываются следом; от кружка [data-connect] тянется линия к другому узлу. .NET получает
+        // только итог: OnNodeMoved(id, x, y) в координатах холста или OnConnect(from, to).
+        graphAttach: function (rootId, ref) {
+            const size = function (svg) { return { w: Number(svg.dataset.nw) || 128, h: Number(svg.dataset.nh) || 34 }; };
+            return attachPointerDrag(rootId,
+                function (e, root) {
+                    const svg = root.querySelector('svg');
+                    if (!svg) return null;
+                    const connect = e.target.closest('[data-connect]');
+                    if (connect && root.contains(connect)) {
+                        const node = connect.closest('[data-node]');
+                        return { el: node, svg: svg, mode: 'connect', id: connect.dataset.connect,
+                            x: Number(node.dataset.x), y: Number(node.dataset.y), start: svgPoint(svg, e.clientX, e.clientY) };
+                    }
+                    const node = e.target.closest('[data-node]');
+                    if (!node || !root.contains(node)) return null;
+                    const edges = Array.from(svg.querySelectorAll('path[data-from="' + node.dataset.node + '"], path[data-to="' + node.dataset.node + '"]'))
+                        .map(function (p) { return { el: p, d: p.getAttribute('d') }; });
+                    return { el: node, svg: svg, mode: 'move', id: node.dataset.node, x: Number(node.dataset.x), y: Number(node.dataset.y),
+                        start: svgPoint(svg, e.clientX, e.clientY), edges: edges };
+                },
+                function (s, dx, dy, e) {
+                    const p = svgPoint(s.svg, e.clientX, e.clientY);
+                    const mx = p.x - s.start.x, my = p.y - s.start.y;
+                    if (s.mode === 'connect') {
+                        if (!s.line) {
+                            s.line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            s.line.setAttribute('class', 'wf-temp');
+                            s.svg.appendChild(s.line);
+                        }
+                        s.line.setAttribute('x1', s.x);
+                        s.line.setAttribute('y1', s.y);
+                        s.line.setAttribute('x2', p.x);
+                        s.line.setAttribute('y2', p.y);
+                        return;
+                    }
+                    s.el.style.transform = 'translate(' + mx + 'px, ' + my + 'px)';
+                    const nx = s.x + mx, ny = s.y + my, sz = size(s.svg);
+                    s.edges.forEach(function (edge) {
+                        const other = edge.el.dataset.from === s.id ? edge.el.dataset.to : edge.el.dataset.from;
+                        const o = s.svg.querySelector('[data-node="' + other + '"]');
+                        if (!o) return;
+                        const ox = Number(o.dataset.x), oy = Number(o.dataset.y);
+                        edge.el.setAttribute('d', edge.el.dataset.from === s.id
+                            ? graphEdgePath(nx, ny, ox, oy, sz.w, sz.h)
+                            : graphEdgePath(ox, oy, nx, ny, sz.w, sz.h));
+                    });
+                },
+                function (s, dx, dy, e) {
+                    if (s.line) s.line.remove();
+                    if (s.edges) s.edges.forEach(function (edge) { edge.el.setAttribute('d', edge.d); });
+                    const p = svgPoint(s.svg, e.clientX, e.clientY);
+                    if (s.mode === 'connect') {
+                        const hit = document.elementFromPoint(e.clientX, e.clientY);
+                        const target = hit && hit.closest('[data-node]');
+                        if (target && target.dataset.node !== s.id) ref.invokeMethodAsync('OnConnect', s.id, target.dataset.node);
+                        return;
+                    }
+                    ref.invokeMethodAsync('OnNodeMoved', s.id, s.x + p.x - s.start.x, s.y + p.y - s.start.y);
+                });
+        },
+
+        dragDetach: function (rootId) { detachPointerDrag(rootId); },
 
         // Выход должен быть POST: cookie flow.auth объявлена SameSite=Lax, поэтому кросс-сайтовый
         // POST её не донесёт и принудительно разлогинить человека чужой страницей нельзя. Кнопка выхода

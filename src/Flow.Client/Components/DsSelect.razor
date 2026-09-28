@@ -1,0 +1,77 @@
+@* Поле-список формы (docs/TZ_ui_consistency.md): тот же вид, что у DsInput — подпись сверху, значение крупным
+   semibold, линия-подчёркивание, строка ошибки. Для диалогов создания и настройки; значение свойства на экране
+   (панель задачи, тулбар, фильтр) — пилюля на MudMenu, не это поле.
+
+   Фасад над MudSelect: список, стрелки, Esc и поповер — от библиотеки, поповер всегда слой Flow (flow-pop) и не
+   уже поля (Adaptive). Подпись и линию рисует наш .ds-field — у Mud они выключены. Разметка не <label>: клик по
+   label переадресуется в поле ещё раз, и список открывался бы и тут же закрывался. *@
+@typeparam T
+
+<div class="ds-field ds-select @(Compact ? "sm" : "") @(Error is null ? "" : "error") @Class" style="@Style">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <span class="ds-field-label">@Label</span>
+    }
+    <span class="ds-field-row">
+        @if (Multiple)
+        {
+            <MudSelect T="T" MultiSelection="true" SelectedValues="SelectedValues" SelectedValuesChanged="SelectedValuesChanged"
+                       MultiSelectionTextFunc="MultiSelectionTextFunc" ToStringFunc="ToStringFunc"
+                       Placeholder="@Placeholder" Disabled="Disabled" Clearable="Clearable"
+                       Dense="true" Underline="false" Variant="Variant.Text" Margin="Margin.None"
+                       AdornmentIcon="@FlowIcons.Glyphs["chevron-down"]" PopoverClass="@PopoverClasses"
+                       RelativeWidth="DropdownWidth.Adaptive" InputId="@Id" aria-label="@(AriaLabel ?? Label)">
+                @ChildContent
+            </MudSelect>
+        }
+        else
+        {
+            <MudSelect T="T" Value="Value" ValueChanged="ValueChanged" ToStringFunc="ToStringFunc"
+                       Placeholder="@Placeholder" Disabled="Disabled" Clearable="Clearable"
+                       Dense="true" Underline="false" Variant="Variant.Text" Margin="Margin.None"
+                       AdornmentIcon="@FlowIcons.Glyphs["chevron-down"]" PopoverClass="@PopoverClasses"
+                       RelativeWidth="DropdownWidth.Adaptive" InputId="@Id" aria-label="@(AriaLabel ?? Label)">
+                @ChildContent
+            </MudSelect>
+        }
+    </span>
+    @if (Error is not null)
+    {
+        <span class="ds-field-error">@Error</span>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    /// <summary>Подпись для скринридера, когда видимой подписи нет (поле в строке таблицы).</summary>
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool Clearable { get; set; }
+    /// <summary>Значение обычным текстом, а не крупным — для полей в строке списка и плотных формах.</summary>
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+    /// <summary>Дополнительный класс слоя поверх flow-pop (ширина и т. п.).</summary>
+    [Parameter] public string? PopoverClass { get; set; }
+
+    [Parameter] public T? Value { get; set; }
+    [Parameter] public EventCallback<T?> ValueChanged { get; set; }
+
+    /// <summary>Выбор нескольких: тогда работают SelectedValues/SelectedValuesChanged, а Value не используется.</summary>
+    [Parameter] public bool Multiple { get; set; }
+    [Parameter] public IReadOnlyCollection<T>? SelectedValues { get; set; }
+    [Parameter] public EventCallback<IReadOnlyCollection<T>> SelectedValuesChanged { get; set; }
+    /// <summary>
+    /// Тип ровно как у MudSelect 9 (IReadOnlyList, не List): параметры компонента передаются как object, и
+    /// несовпадение типа делегата компилятор не видит — оно падает InvalidCastException на первом рендере.
+    /// </summary>
+    [Parameter] public Func<IReadOnlyList<string?>, string>? MultiSelectionTextFunc { get; set; }
+
+    [Parameter] public Func<T?, string?>? ToStringFunc { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string PopoverClasses => string.IsNullOrEmpty(PopoverClass) ? "flow-pop" : $"flow-pop {PopoverClass}";
+}

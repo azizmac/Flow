@@ -1,0 +1,90 @@
+@* «Сохранить как шаблон» (этап 3F): снимок статусов, workflow, типов, полей и экранов проекта без задач; флажок —
+   до 50 задач верхнего уровня как образец. Шаблон потом выбирают в «Новом проекте». *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Сохранить @Board.Key как шаблон</h3>
+        <div class="hint">Статусы, workflow, типы задач, поля и экраны — новый проект по шаблону получит их такими же</div>
+    </TitleContent>
+    <DialogContent>
+        <DsInput Id="st-name" Label="Название шаблона" MaxLength="80" Value="@_name" ValueChanged="v => _name = v" />
+        <DsInput Label="Описание" Placeholder="Для чего подходит" MaxLength="500" Value="@_description" ValueChanged="v => _description = v" />
+        <DsCheckbox Value="_includeTasks" ValueChanged="v => _includeTasks = v"
+                    Label="С задачами-образцами (до 50 верхнего уровня)" />
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Отмена</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="@(_busy || _name.Trim().Length == 0)" Busy="_busy">Сохранить</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private string _name = "";
+    private string _description = "";
+    private bool _includeTasks;
+    private string? _error;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    protected override void OnInitialized() => _name = Board.Name;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        await Task.Delay(50);
+        await Browser.FocusAsync("st-name", select: true);
+    }
+
+    private async Task Save()
+    {
+        _busy = true;
+        _error = null;
+        var result = await Api.SaveBoardAsTemplate(Board.Id, new SaveBoardTemplateRequest(_name.Trim(), _description, _includeTasks));
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить шаблон";
+            return;
+        }
+
+        Toasts.Ok($"Шаблон «{result.Value!.Name}» сохранён");
+        await Close();
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

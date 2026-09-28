@@ -1,13 +1,25 @@
 ﻿using System.Globalization;
 using System.Text;
 using Flow.Application.Abstractions;
+using Flow.Application.Security;
+using Flow.Application.Features.Boards;
+using Flow.Application.Features.Tasks.Fql;
 using Flow.Shared.Contracts.Tasks;
 using MediatR;
 using DomainStatusType = Flow.Domain.Entities.StatusType;
 
 namespace Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 
-internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCommentRepository comments)
+internal sealed class TaskSearchQueryHandler(
+    ITaskItemRepository tasks,
+    TaskResponses responses,
+    ActorResolver actors,
+    IProjectAccess projectAccess,
+    IBoardRepository boards,
+    IUserRepository users,
+    ITaskLinkRepository links,
+    ISprintRepository sprints,
+    IMilestoneRepository milestones, IGroupRepository groupDirectory)
     : IRequestHandler<TaskSearchQuery, TaskListResponse>
 {
     private const int DefaultLimit = 100;
@@ -17,6 +29,16 @@ internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCom
     {
         var limit = Math.Clamp(request.Limit ?? DefaultLimit, 1, MaxLimit);
         var (beforeCreatedAt, beforeId) = DecodeCursor(request.Cursor);
+
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
+
+        // FQL биндится до запроса: ошибка в строке — 400 с позицией, а не пустая страница.
+        FqlBound? fql = null;
+        if (!string.IsNullOrWhiteSpace(request.Fql))
+        {
+            var lookup = new FqlLookup(actor, boards, users, tasks, links, projectAccess, sprints, milestones, groupDirectory);
+            fql = await FqlBinder.BindAsync(request.Fql, lookup, actor.Id, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
+        }
 
         var filter = new TaskListFilter(
             request.BoardId,
@@ -30,20 +52,26 @@ internal sealed class TaskSearchQueryHandler(ITaskItemRepository tasks, ITaskCom
             limit,
             request.Offset is { } offset ? Math.Max(0, offset) : null,
             request.Sort,
-            request.Descending);
+            request.Descending,
+            request.TypeKind?.ToDomainKind(),
+            request.Priority?.ToDomainPriority(),
+            await projectAccess.VisibleBoardIdsAsync(actor, cancellationToken),
+            request.ParentId,
+            fql?.Filter,
+            fql?.Orders is { Count: > 0 } orders ? orders : null);
 
         var items = await tasks.SearchAsync(filter, cancellationToken);
         var counted = await tasks.CountAsync(filter, cancellationToken);
 
-        // Один GROUP BY на всю страницу, не N+1 (как в TaskListQueryHandler).
-        var counts = await comments.CountByTaskIdsAsync(items.Select(t => t.Id).ToList(), cancellationToken);
+        // Счётчики — по GROUP BY на всю страницу, не N+1.
+        var page = await responses.BuildAsync(items, cancellationToken);
 
         // Страница заполнилась целиком — возможно, есть ещё; неполная страница всегда последняя.
         // В offset-режиме курсор не отдаём: листает таблица номерами страниц, и смешивать два способа нельзя.
         var last = request.Offset is null && items.Count == limit ? items[^1] : null;
 
         return new TaskListResponse(
-            items.Select(t => t.ToResponse(counts.GetValueOrDefault(t.Id))).ToList(),
+            page,
             last is null ? null : EncodeCursor(last.CreatedAt, last.Id),
             counted.Total,
             counted.Matched,

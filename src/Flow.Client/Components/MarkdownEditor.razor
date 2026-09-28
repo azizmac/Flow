@@ -49,11 +49,7 @@
                     var u = _mentionItems[i];
                     <button type="button" class="pop-item user @(idx == _mentionIndex ? "cur" : "")" role="option" aria-selected="@((idx == _mentionIndex).ToString().ToLowerInvariant())"
                             @onmousedown:preventDefault @onclick="() => PickMention(idx)">
-                        <Avatar User="u" Size="22" />
-                        <span class="pop-user">
-                            <span class="pop-user-name">@u.FullName</span>
-                            <span class="pop-user-un">@@@u.Username</span>
-                        </span>
+                        <UserOption User="u" />
                     </button>
                 }
             </div>

@@ -1,0 +1,135 @@
+@* Отчёт спринта (docs/TZ_task_views.md §2): итоги — взято на старте, добавлено, сделано, не сделано (задачи и SP),
+   burndown по дням (MudChart, линия «осталось» и пунктир идеальной), таблица задач как текстовая копия графика.
+   Цвета линий проверены валидатором палитры против тёмной поверхности; у «идеальной» контраст ниже 3:1 — поэтому
+   она пунктиром и с легендой, а цифры продублированы в таблице и подсказках. *@
+@page "/boards/{BoardId:guid}/sprints/{SprintId:guid}/report"
+@inject IFlowApi Api
+@inject NavigationManager Nav
+
+<PageTitle>@(_report?.Sprint.Name ?? "Отчёт спринта") — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        <a class="topbar-back" href="@($"tasks?board={BoardId}&view=backlog")" title="К бэклогу"><Icon Name="arrow-left" Size="18" /></a>
+        <span class="topbar-title">Отчёт спринта</span>
+        @if (_sprints.Count > 1)
+        {
+            <PillSelect T="Guid" Items="_sprints.Where(s => s.State != SprintState.Planned).Select(s => s.Id)" Value="SprintId" OnChange="Switch"
+                        Label="@(id => _sprints.FirstOrDefault(s => s.Id == id)?.Name ?? "—")" AriaLabel="Спринт" />
+        }
+    </div>
+</div>
+
+<div class="content">
+    @if (_notFound)
+    {
+        <div class="empty"><div class="empty-title">Спринт не найден</div></div>
+    }
+    else if (_report is null)
+    {
+        <Skeleton Kind="rows" Count="4" />
+    }
+    else
+    {
+        var sprint = _report.Sprint;
+        <div class="sr-head">
+            <h2>@sprint.Name</h2>
+            <span class="hint">
+                @(sprint.State == SprintState.Active ? "идёт" : "завершён")@(sprint is { StartDate: { } s, EndDate: { } e } ? $" · {Ru.DateOnlyShort(s)} — {Ru.DateOnlyShort(e)}" : "")
+            </span>
+            @if (sprint.Goal is { } goal)
+            {
+                <div class="bl-goal">@goal</div>
+            }
+        </div>
+
+        <div class="sr-tiles">
+            @foreach (var (label, totals) in Tiles)
+            {
+                <div class="sr-tile panel">
+                    <div class="sr-tile-label">@label</div>
+                    <div class="sr-tile-value">@Ru.Points(totals.Points) <small>SP</small></div>
+                    <div class="hint">@Ru.Tasks(totals.Count)</div>
+                </div>
+            }
+        </div>
+
+        <div class="panel sr-chart">
+            <div class="section-title">Burndown — осталось story points</div>
+            @if (_report.Burndown.Count == 0)
+            {
+                <div class="hint">График появится, когда у спринта будут даты и он начнётся.</div>
+            }
+            else
+            {
+                <BurndownChart Points="_report.Burndown" />
+            }
+        </div>
+
+        <div class="panel">
+            <MudSimpleTable Dense="true" Elevation="0" Class="sr-table">
+                <thead>
+                    <tr><th>Код</th><th>Задача</th><th>SP</th><th>На старте</th><th>Итог</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _report.Tasks)
+                    {
+                        <tr>
+                            <td class="code">@(row.Code ?? "—")</td>
+                            <td>
+                                @if (row.Code is not null)
+                                {
+                                    <a href="@($"tasks/{row.TaskId}")">@row.Title</a>
+                                }
+                                else
+                                {
+                                    <span class="hint">задача удалена</span>
+                                }
+                            </td>
+                            <td>@(row.Points is { } p ? Ru.Points(p) : "—")</td>
+                            <td>@(row.Committed ? "да" : "добавлена")</td>
+                            <td><span class="count-chip @(row.Done ? "done" : "")">@(row.Done ? "сделана" : "не сделана")</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid BoardId { get; set; }
+    [Parameter] public Guid SprintId { get; set; }
+
+    private SprintReportResponse? _report;
+    private IReadOnlyList<SprintResponse> _sprints = [];
+    private bool _notFound;
+
+    private IEnumerable<(string Label, SprintReportTotals Totals)> Tiles =>
+    [
+        ("Взято на старте", _report!.Committed),
+        ("Добавлено по ходу", _report.Added),
+        ("Сделано", _report.Done),
+        ("Не сделано", _report.NotDone)
+    ];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _report = null;
+        _notFound = false;
+        var report = Api.GetSprintReport(SprintId);
+        var sprints = Api.GetSprints(BoardId);
+        await Task.WhenAll(report, sprints);
+
+        _sprints = sprints.Result.Ok ? sprints.Result.Value! : [];
+        if (!report.Result.Ok)
+        {
+            _notFound = true;
+            return;
+        }
+
+        _report = report.Result.Value!;
+    }
+
+    private void Switch(Guid sprintId) => Nav.NavigateTo($"boards/{BoardId}/sprints/{sprintId}/report");
+}

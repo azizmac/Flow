@@ -1,0 +1,366 @@
+@* Дерево задач проекта (docs/TZ_task_views.md §3, этап 2C) поверх GET /boards/{id}/tree. Сначала приходят два
+   верхних уровня (maxDepth = 1), глубже ветка догружается при раскрытии (rootId = узел). Фильтры экрана действуют
+   и здесь: подходящие задачи видны как есть, их предки — серым «контекстом», ветки без подходящих скрыты.
+   Прогресс — по всему поддереву: задачи и story points. Таблица — MudDataGrid, как у списка. Родитель меняется полем «Родитель» в слайдере;
+   перетаскивания в дереве пока нет. *@
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+@inject UserDirectory Users
+@inject ProjectAccessState Access
+
+<div class="kb-toolbar">
+    <div class="seg">
+        <button type="button" class="seg-btn" @onclick="ExpandAll" disabled="@_loading">Раскрыть всё</button>
+        <button type="button" class="seg-btn" @onclick="CollapseAll">Свернуть</button>
+    </div>
+    <div class="hint">←/→ — свернуть и раскрыть ветку, ↑/↓ — соседняя строка, Enter — открыть задачу</div>
+</div>
+
+@if (_loading && _nodes.Count == 0)
+{
+    <Skeleton Kind="rows" Count="5" />
+}
+else if (_error is not null)
+{
+    <div class="empty">
+        <div class="empty-title">Не удалось загрузить дерево</div>
+        <div>@_error</div>
+        <DsButton Variant="secondary" Size="sm" OnClick="ReloadAsync">Повторить</DsButton>
+    </div>
+}
+else if (_nodes.Count == 0)
+{
+    <div class="empty">
+        <div class="empty-title">@(Filtered ? "Ничего не найдено" : "Пока нет задач")</div>
+    </div>
+}
+else
+{
+    @* Тот же MudDataGrid, что у списка (flow-grid), только строки — видимые узлы дерева в порядке обхода: отступ
+       по глубине и стрелка раскрытия живут в первой колонке. Данные клиентские (Items): дерево и его раскрытие
+       держит компонент, гриду нужна только готовая последовательность строк. *@
+    <MudDataGrid T="TaskTreeNode" Items="VisibleNodes.ToList()" Class="flow-grid tree-grid panel" Dense="true" Hover="true"
+                 Elevation="0" SortMode="SortMode.None" Filterable="false" RowClass="task-row" RowClassFunc="RowClass"
+                 RowClick="@(args => OnOpen.InvokeAsync(args.Item.Task))">
+        <Columns>
+            <TemplateColumn T="TaskTreeNode" Title="Задача" Sortable="false">
+                <CellTemplate>
+                    @{ var node = context.Item; var task = node.Task; var expanded = _expanded.Contains(task.Id); }
+                    <div class="tree-cell" style="--depth:@node.Depth">
+                        @if (node.VisibleChildCount > 0)
+                        {
+                            <DsIconButton Icon="chevron-down" Size="24" Class="@($"tree-toggle {(expanded ? "open" : "")}")"
+                                          Title="@(expanded ? "Свернуть" : "Раскрыть")" OnClick="() => Toggle(node)" />
+                        }
+                        else
+                        {
+                            <span class="tree-toggle-space"></span>
+                        }
+                        @* Точка входа строки с клавиатуры, как ячейка кода в списке: Tab останавливается здесь. *@
+                        <span id="@RowId(task.Id)" class="row-key" role="treeitem" tabindex="0" aria-level="@(node.Depth + 1)"
+                              aria-expanded="@(node.VisibleChildCount > 0 ? expanded.ToString().ToLowerInvariant() : null)"
+                              aria-label="@($"{task.Code}: {task.Title}")"
+                              @onclick:stopPropagation @onclick="() => OnOpen.InvokeAsync(task)" @onkeydown="e => OnRowKey(e, node)">
+                            @if (TypeFor(task) is { } type)
+                            {
+                                <TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />
+                            }
+                            <span class="code">@task.Code</span>
+                        </span>
+                        <PriorityIcon Value="task.Priority" Size="13" />
+                        <span class="tree-title" title="@(node.IsContextOnly ? "Не подходит под фильтр — показана ради подзадач" : null)">@task.Title</span>
+                        @if (task.BlockedByCount > 0)
+                        {
+                            <span class="count-chip blocked" title="@($"Заблокирована незакрытыми задачами: {task.BlockedByCount}")"><Icon Name="lock" Size="12" /></span>
+                        }
+                        @if (task.DueDate is { } due)
+                        {
+                            <DueChip Value="due" IsDone="IsDone(task)" />
+                        }
+                    </div>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="TaskTreeNode" Title="Прогресс" Sortable="false">
+                <CellTemplate>
+                    @if (context.Item.Progress is { Total: > 0 } p)
+                    {
+                        <div class="tree-progress" title="@($"Поддерево: закрыто {p.Done} из {p.Total}")">
+                            <MudProgressLinear Value="@(100.0 * p.Done / p.Total)" Color="Color.Success" Rounded="true" Size="Size.Small" Class="tree-bar" />
+                            <span class="count-chip @(p.Done == p.Total ? "done" : "")">@p.Done/@p.Total</span>
+                            @if (p.Points > 0)
+                            {
+                                <span class="count-chip" title="Story points поддерева: закрыто / всего">@Ru.Points(p.DonePoints)/@Ru.Points(p.Points) SP</span>
+                            }
+                        </div>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="TaskTreeNode" Title="Кто" Sortable="false">
+                <CellTemplate>
+                    @if (Users.Find(context.Item.Task.AssigneeId) is { } who)
+                    {
+                        <Avatar User="who" Size="22" Title="@who.FullName" />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="TaskTreeNode" Title="Статус" Sortable="false">
+                <CellTemplate>
+                    @{ var task = context.Item.Task; }
+                    <span @onclick:stopPropagation>
+                        @if (Permissions.CanEditTask(Me, Access.For(task.BoardId), task) && Board is { } board)
+                        {
+                            <StatusSelect Statuses="board.Statuses" Value="task.StatusId" TaskId="task.Id"
+                                          Restricted="@(board.WorkflowMode == WorkflowMode.Restricted)" OnChange="id => ChangeStatus(task, id)" />
+                        }
+                        else
+                        {
+                            var st = StatusOf(task);
+                            <span class="status-pill"><span class="sd" style="background:@StatusColors.For(st?.Type)"></span>@(st?.Name ?? "—")</span>
+                        }
+                    </span>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </MudDataGrid>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
+    [Parameter, EditorRequired] public Guid BoardId { get; set; }
+    [Parameter] public Guid? AssigneeId { get; set; }
+    [Parameter] public bool Unassigned { get; set; }
+    [Parameter] public string? Query { get; set; }
+    [Parameter] public string? Fql { get; set; }
+    [Parameter] public UserResponse? Me { get; set; }
+    [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public EventCallback<TaskResponse> OnOpen { get; set; }
+
+    /// <summary>Загруженные задачи в порядке строк — странице для слайдера и ↑↓ между задачами.</summary>
+    [Parameter] public EventCallback<IReadOnlyList<TaskResponse>> OnLoaded { get; set; }
+
+    [Parameter] public EventCallback<FqlErrorResponse?> OnFqlError { get; set; }
+
+    /// <summary>Глубина первой загрузки: два верхних уровня (0 и 1), остальное — по раскрытию.</summary>
+    private const int FirstDepth = 1;
+
+    private List<TaskTreeNode> _nodes = [];
+    private readonly HashSet<Guid> _expanded = [];
+    /// <summary>Узлы, чьи дети уже на клиенте: всё, что пришло выше последнего загруженного уровня, и догруженные ветки.</summary>
+    private readonly HashSet<Guid> _childrenLoaded = [];
+    private bool _loading = true;
+    private string? _error;
+    private string? _loadedKey;
+
+    private BoardResponse? Board => Boards.FirstOrDefault(b => b.Id == BoardId);
+
+    private bool Filtered => AssigneeId is not null || Unassigned || !string.IsNullOrWhiteSpace(Query) || !string.IsNullOrWhiteSpace(Fql);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{BoardId}|{AssigneeId}|{Unassigned}|{Query}|{Fql}";
+        if (_loadedKey == key)
+            return;
+
+        // Другой проект или фильтр — раскрытие прежнего дерева к новому не относится.
+        var boardChanged = _loadedKey?.StartsWith(BoardId.ToString()) != true;
+        _loadedKey = key;
+        if (boardChanged)
+            _expanded.Clear();
+
+        await ReloadAsync();
+    }
+
+    /// <summary>
+    /// Перечитать дерево. Если раскрыты ветки глубже первых двух уровней, грузим всё сразу — иначе они свернулись бы
+    /// после каждой правки. При фильтре ветки с подходящими задачами раскрываются: иначе «контекст» прятал бы найденное.
+    /// </summary>
+    public async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var deep = Filtered || _nodes.Any(n => n.Depth >= FirstDepth && _expanded.Contains(n.Task.Id));
+        var result = await Api.GetTree(BoardId, null, AssigneeId, Unassigned, Query, fql: Fql, maxDepth: deep ? null : FirstDepth);
+        _loading = false;
+
+        await OnFqlError.InvokeAsync(result.FqlError);
+        if (result.FqlError is not null)
+        {
+            _nodes = [];
+            return;
+        }
+
+        if (!result.Ok)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        _nodes = result.Value!.ToList();
+        _childrenLoaded.Clear();
+        foreach (var node in _nodes.Where(n => deep || n.Depth < FirstDepth))
+            _childrenLoaded.Add(node.Task.Id);
+
+        // Первый раз верхний уровень раскрыт; при фильтре раскрыто всё, где есть найденное.
+        if (_expanded.Count == 0 || Filtered)
+        {
+            foreach (var node in _nodes.Where(n => n.VisibleChildCount > 0 && (Filtered || n.Depth == 0)))
+                _expanded.Add(node.Task.Id);
+        }
+
+        await OnLoaded.InvokeAsync(_nodes.Select(n => n.Task).ToList());
+    }
+
+    public void Replace(TaskResponse task)
+    {
+        var i = _nodes.FindIndex(n => n.Task.Id == task.Id);
+        if (i < 0)
+            return;
+
+        _nodes[i] = _nodes[i] with { Task = task.WithCountsOf(_nodes[i].Task) };
+        StateHasChanged();
+    }
+
+    /// <summary>Строки, которые видно: всё, у чего раскрыты все предки (узлы идут в порядке обхода).</summary>
+    private IEnumerable<TaskTreeNode> VisibleNodes
+    {
+        get
+        {
+            var hideBelow = int.MaxValue;
+            foreach (var node in _nodes)
+            {
+                if (node.Depth > hideBelow)
+                    continue;
+
+                hideBelow = _expanded.Contains(node.Task.Id) ? int.MaxValue : node.Depth;
+                yield return node;
+            }
+        }
+    }
+
+    private async Task Toggle(TaskTreeNode node)
+    {
+        if (!_expanded.Remove(node.Task.Id))
+            await ExpandAsync(node);
+    }
+
+    /// <summary>Раскрыть узел; если его детей ещё нет на клиенте — догрузить ветку на уровень вниз.</summary>
+    private async Task ExpandAsync(TaskTreeNode node)
+    {
+        if (node.VisibleChildCount == 0)
+            return;
+
+        if (!_childrenLoaded.Contains(node.Task.Id))
+        {
+            var result = await Api.GetTree(BoardId, node.Task.Id, AssigneeId, Unassigned, Query, fql: Fql, maxDepth: 1);
+            if (!result.Ok)
+            {
+                Toasts.Error(result.Error ?? "Не удалось загрузить подзадачи");
+                return;
+            }
+
+            // Ответ — сам узел (глубина 0) и его дети; глубины сдвигаем к месту узла в общем дереве.
+            var at = _nodes.FindIndex(n => n.Task.Id == node.Task.Id);
+            var branch = result.Value!.Select(n => n with { Depth = n.Depth + node.Depth }).ToList();
+            _nodes[at] = branch[0];
+            _nodes.InsertRange(at + 1, branch.Skip(1));
+            _childrenLoaded.Add(node.Task.Id);
+            await OnLoaded.InvokeAsync(_nodes.Select(n => n.Task).ToList());
+        }
+
+        _expanded.Add(node.Task.Id);
+    }
+
+    private async Task ExpandAll()
+    {
+        _expanded.UnionWith(_nodes.Select(n => n.Task.Id));
+        if (_nodes.Any(n => !_childrenLoaded.Contains(n.Task.Id) && n.VisibleChildCount > 0))
+        {
+            _loading = true;
+            var result = await Api.GetTree(BoardId, null, AssigneeId, Unassigned, Query, fql: Fql);
+            _loading = false;
+            if (!result.Ok)
+            {
+                Toasts.Error(result.Error ?? "Не удалось загрузить дерево");
+                return;
+            }
+
+            _nodes = result.Value!.ToList();
+            _childrenLoaded.UnionWith(_nodes.Select(n => n.Task.Id));
+            await OnLoaded.InvokeAsync(_nodes.Select(n => n.Task).ToList());
+        }
+
+        _expanded.UnionWith(_nodes.Where(n => n.VisibleChildCount > 0).Select(n => n.Task.Id));
+    }
+
+    private void CollapseAll() => _expanded.Clear();
+
+    // ---- строка ----
+
+    private static string RowId(Guid id) => "tree-" + id.ToString("N");
+
+    private string RowClass(TaskTreeNode node, int _)
+    {
+        var classes = new List<string>();
+        if (node.IsContextOnly) classes.Add("ctx");
+        if (IsDone(node.Task)) classes.Add("done");
+        if (node.Task.Id == SelectedId) classes.Add("sel");
+        return string.Join(' ', classes);
+    }
+
+    private StatusResponse? StatusOf(TaskResponse task) => Board?.Statuses.FirstOrDefault(s => s.Id == task.StatusId);
+
+    private bool IsDone(TaskResponse task) => StatusOf(task)?.IsFinal == true;
+
+    private TaskTypeResponse? TypeFor(TaskResponse task) => TaskMeta.TypeOf(Board, task.TypeId);
+
+    /// <summary>Смена статуса меняет прогресс предков — дерево перечитывается, раскрытие сохраняется.</summary>
+    private async Task ChangeStatus(TaskResponse task, Guid statusId)
+    {
+        var result = await Api.UpdateTask(task.Id, new UpdateTaskRequest(null, null, statusId));
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось сменить статус");
+            return;
+        }
+
+        await ReloadAsync();
+    }
+
+    /// <summary>Клавиатура как в деревьях ОС: ↑/↓ — соседняя строка, → раскрыть или к первому ребёнку, ← свернуть или к родителю.</summary>
+    private async Task OnRowKey(KeyboardEventArgs e, TaskTreeNode node)
+    {
+        var rows = VisibleNodes.ToList();
+        var at = rows.FindIndex(n => n.Task.Id == node.Task.Id);
+        switch (e.Key)
+        {
+            case "Enter" or " ":
+                await OnOpen.InvokeAsync(node.Task);
+                return;
+            case "ArrowDown" when at + 1 < rows.Count:
+                await Browser.FocusAsync(RowId(rows[at + 1].Task.Id));
+                return;
+            case "ArrowUp" when at > 0:
+                await Browser.FocusAsync(RowId(rows[at - 1].Task.Id));
+                return;
+            case "ArrowRight" when node.VisibleChildCount > 0:
+                if (!_expanded.Contains(node.Task.Id))
+                {
+                    await ExpandAsync(node);
+                }
+                else if (at + 1 < rows.Count)
+                {
+                    await Browser.FocusAsync(RowId(rows[at + 1].Task.Id));
+                }
+                return;
+            case "ArrowLeft":
+                if (_expanded.Remove(node.Task.Id))
+                    return;
+
+                var parent = rows.Take(at).LastOrDefault(n => n.Depth < node.Depth);
+                if (parent is not null)
+                    await Browser.FocusAsync(RowId(parent.Task.Id));
+                return;
+        }
+    }
+}

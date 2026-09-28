@@ -1,0 +1,292 @@
+@* Модалка «Статусы» проекта (docs/TZ_workflow_config.md §1, этап 3A; право — настройка проекта): порядок
+   стрелками, переименование по клику, вид, флаги «начальный» и «финальный», удаление с переносом задач и добавление.
+   Каждое действие — отдельный запрос; ответ — проект целиком (флаги могли переехать), он уходит наверх через OnChanged.
+
+   Инварианты те же, что в домене, и сервер их проверяет сам: начальный ровно один и не финальный, финальных
+   хотя бы один (их может быть несколько — «Сделана», «Отменена»), имена без учёта регистра не повторяются.
+   Здесь недоступные действия просто выключены, чтобы не ловить 400. Жизненный цикл MudDialog — как у TaskTypesDialog. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject BrowserInterop Browser
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal st-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>Статусы · @_board.Key</h3>
+        <div class="hint">Новые задачи встают в начальный статус. Задача в финальном статусе считается закрытой:
+            уходит из выдачи поиска по умолчанию и не бывает просроченной. Вид — общая группа статуса для фильтров во всех проектах.</div>
+    </TitleContent>
+    <DialogContent>
+        <div class="st-list">
+            @for (var i = 0; i < _board.Statuses.Count; i++)
+            {
+                var s = _board.Statuses[i];
+                var index = i;
+                <div class="st-row hover-row @(_deletingId == s.Id ? "deleting" : "")" @key="s.Id">
+                    <div class="st-main">
+                        <span class="st-move">
+                            <button type="button" class="st-arrow up" title="Выше" aria-label="Выше" disabled="@(_busy || index == 0)"
+                                    @onclick="() => Move(index, -1)"><Icon Name="chevron-down" Size="12" /></button>
+                            <button type="button" class="st-arrow" title="Ниже" aria-label="Ниже" disabled="@(_busy || index == _board.Statuses.Count - 1)"
+                                    @onclick="() => Move(index, 1)"><Icon Name="chevron-down" Size="12" /></button>
+                        </span>
+                        @if (_editingId == s.Id)
+                        {
+                            <DsInput Id="st-edit" Compact="true" Class="tt-name-input" MaxLength="NameMaxLength" Value="@_editName"
+                                     ValueChanged="v => _editName = v" OnKeyDown="OnEditKey" OnBlur="CommitRename" EscapeReverts="true" />
+                        }
+                        else
+                        {
+                            <button type="button" class="tt-name" title="Переименовать" disabled="@_busy" @onclick="() => StartRename(s)">@s.Name</button>
+                        }
+                        <span class="st-actions">
+                            <StatusTypeSelect Value="s.Type" Disabled="_busy"
+                                              OnChange="t => Update(s, t is null ? new UpdateStatusRequest(ClearType: true) : new UpdateStatusRequest(Type: t))" />
+                            <button type="button" class="st-flag @(s.IsInitial ? "on" : "")" role="switch" aria-checked="@(s.IsInitial ? "true" : "false")"
+                                    title="@(s.IsInitial ? "Начальный: сюда встают новые задачи" : s.IsFinal ? "Финальный статус не может быть начальным" : "Сделать начальным")"
+                                    disabled="@(_busy || s.IsInitial || s.IsFinal)"
+                                    @onclick="() => Update(s, new UpdateStatusRequest(IsInitial: true))">начальный</button>
+                            <button type="button" class="st-flag @(s.IsFinal ? "on" : "")" role="switch" aria-checked="@(s.IsFinal ? "true" : "false")"
+                                    title="@FinalTitle(s)" disabled="@(_busy || !CanToggleFinal(s))"
+                                    @onclick="() => Update(s, new UpdateStatusRequest(IsFinal: !s.IsFinal))">финальный</button>
+                            <DsNumber T="int?" Value="s.WipLimit" ValueChanged="v => SetWip(s, v)" Min="1" Max="999" Placeholder="WIP" Compact="true"
+                                      Disabled="_busy" Class="st-wip" AriaLabel="WIP-лимит"
+                                      title="Лимит задач в колонке канбана: превышение подсвечивается, перенос не запрещается. Пусто — без лимита." />
+                            <RowActions Disabled="_busy" OnEdit="() => StartRename(s)" OnDelete="() => StartDelete(s)"
+                                        DeleteTitle="@DeleteTitle(s)" DeleteDisabled="@(!CanDelete(s))" />
+                        </span>
+                    </div>
+                    @if (_deletingId == s.Id)
+                    {
+                        <div class="st-delete">
+                            <span class="hint">Задачи статуса перейдут в</span>
+                            <StatusSelect Statuses="MoveTargets(s)" Value="_moveTo" OnChange="id => _moveTo = id" Disabled="_busy" />
+                            <InlineActions Class="st-delete-actions" SaveLabel="@($"Удалить «{s.Name}»")" SaveVariant="danger" Busy="_busy"
+                                           OnSave="() => Delete(s)" OnCancel="() => _deletingId = null" />
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="tt-add">
+            <DsInput Id="st-new" Label="Новый статус" Placeholder="Например, «Заблокирована»" MaxLength="NameMaxLength"
+                     Value="@_newName" ValueChanged="v => { _newName = v; _error = null; }" OnKeyDown="OnNewKey" />
+            <div class="st-add-opts">
+                <StatusTypeSelect Value="_newType" OnChange="t => _newType = t" />
+                <button type="button" class="st-flag @(_newFinal ? "on" : "")" role="switch" aria-checked="@(_newFinal ? "true" : "false")"
+                        @onclick="() => _newFinal = !_newFinal">финальный</button>
+                <span class="hint">Встанет в конец списка.</span>
+            </div>
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Готово</DsButton>
+        <DsButton Variant="primary" Size="md" OnClick="Add" Disabled="@(_newName.Trim().Length == 0 || _busy)" Busy="_busy">Добавить статус</DsButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter] public EventCallback<BoardResponse> OnChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Как Status.NameMaxLength в домене.</summary>
+    private const int NameMaxLength = 100;
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private BoardResponse _board = default!;
+    private Guid _boardId;
+    private Guid? _editingId;
+    private string _editName = "";
+    private bool _editCancelled;
+    private Guid? _deletingId;
+    private Guid _moveTo;
+    private string _newName = "";
+    private StatusType? _newType = StatusType.InProgress;
+    private bool _newFinal;
+    private string? _error;
+
+    private readonly DialogOptions _options = new()
+    {
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true,
+        CloseButton = false,
+        CloseOnEscapeKey = true,
+        BackdropClick = true
+    };
+
+    private int FinalCount => _board.Statuses.Count(s => s.IsFinal);
+
+    /// <summary>Снять финальность с последнего финального нельзя; сделать финальным начальный — тоже.</summary>
+    private bool CanToggleFinal(StatusResponse s) => s.IsFinal ? FinalCount > 1 : !s.IsInitial;
+
+    private bool CanDelete(StatusResponse s) => !s.IsInitial && !(s.IsFinal && FinalCount == 1);
+
+    private static string FinalTitle(StatusResponse s) => s.IsInitial
+        ? "Начальный статус не может быть финальным"
+        : s.IsFinal ? "Финальный: задачи в нём закрыты" : "Сделать финальным";
+
+    private string DeleteTitle(StatusResponse s) => s.IsInitial
+        ? "Начальный статус не удалить: сначала сделайте начальным другой"
+        : s.IsFinal && FinalCount == 1 ? "Последний финальный статус не удалить" : "Удалить статус";
+
+    private IReadOnlyList<StatusResponse> MoveTargets(StatusResponse s) => _board.Statuses.Where(x => x.Id != s.Id).ToList();
+
+    /// <summary>
+    /// Проект берём из параметра только при открытии (или смене проекта): дальше источник — ответы сервера.
+    /// Иначе перерисовка страницы со старым Board, пришедшая после OnChanged, откатывала бы список.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        if (_boardId == Board.Id)
+            return;
+
+        _boardId = Board.Id;
+        _board = Board;
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing)
+            return;
+
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy)
+            return;
+
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task StartRename(StatusResponse status)
+    {
+        _editingId = status.Id;
+        _editName = status.Name;
+        _editCancelled = false;
+        StateHasChanged();
+        // Содержимое MudDialog рисует провайдер следующим проходом — Yield не дождётся поля (AGENTS.md, «Диалоги»).
+        await Task.Delay(50);
+        await Browser.FocusAsync("st-edit", select: true);
+    }
+
+    private async Task OnEditKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitRename();
+        else if (e.Key == "Escape") { _editCancelled = true; _editingId = null; }
+    }
+
+    private async Task CommitRename()
+    {
+        if (_editingId is not { } id || _editCancelled)
+            return;
+
+        _editingId = null;
+        var status = _board.Statuses.FirstOrDefault(s => s.Id == id);
+        var name = _editName.Trim();
+        if (status is null || name.Length == 0 || name == status.Name || NameTaken(name, status.Id))
+            return;
+
+        await Update(status, new UpdateStatusRequest(Name: name));
+    }
+
+    /// <summary>WIP-лимит колонки канбана (docs/TZ_task_views.md §1): пусто — снять, иначе 1…999.</summary>
+    private Task SetWip(StatusResponse status, int? limit)
+    {
+        if (limit == status.WipLimit)
+            return Task.CompletedTask;
+
+        return limit is null
+            ? Update(status, new UpdateStatusRequest(ClearWipLimit: true))
+            : Update(status, new UpdateStatusRequest(WipLimit: limit));
+    }
+
+    private Task Update(StatusResponse status, UpdateStatusRequest request) =>
+        Send(() => Api.UpdateStatus(_board.Id, status.Id, request));
+
+    private Task Move(int index, int delta)
+    {
+        var order = _board.Statuses.Select(s => s.Id).ToList();
+        (order[index], order[index + delta]) = (order[index + delta], order[index]);
+        return Send(() => Api.ReorderStatuses(_board.Id, new ReorderStatusesRequest(order)));
+    }
+
+    /// <summary>Цель переноса по умолчанию — начальный: задачи возвращаются в очередь, а не закрываются молча.</summary>
+    private void StartDelete(StatusResponse status)
+    {
+        _deletingId = status.Id;
+        _moveTo = _board.Statuses.FirstOrDefault(s => s.IsInitial && s.Id != status.Id)?.Id
+                  ?? MoveTargets(status).First().Id;
+        _error = null;
+    }
+
+    private async Task Delete(StatusResponse status)
+    {
+        if (await Send(() => Api.DeleteStatus(_board.Id, status.Id, _moveTo)))
+            _deletingId = null;
+    }
+
+    private async Task OnNewKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Add();
+    }
+
+    private async Task Add()
+    {
+        var name = _newName.Trim();
+        if (name.Length == 0 || _busy || NameTaken(name, exceptId: null))
+            return;
+
+        if (await Send(() => Api.CreateStatus(_board.Id, new CreateStatusRequest(name, _newType, _newFinal))))
+        {
+            _newName = "";
+            _newFinal = false;
+        }
+    }
+
+    /// <summary>Та же проверка, что в домене (без учёта регистра), — чтобы ответить по-русски до запроса.</summary>
+    private bool NameTaken(string name, Guid? exceptId)
+    {
+        var taken = _board.Statuses.Any(s => s.Id != exceptId && string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+        _error = taken ? $"Статус «{name}» в проекте уже есть" : null;
+        return taken;
+    }
+
+    private async Task<bool> Send(Func<Task<ApiResult<BoardResponse>>> call)
+    {
+        _busy = true;
+        _error = null;
+        var result = await call();
+        _busy = false;
+
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить статус";
+            return false;
+        }
+
+        _board = result.Value!;
+        await OnChanged.InvokeAsync(_board);
+        return true;
+    }
+}

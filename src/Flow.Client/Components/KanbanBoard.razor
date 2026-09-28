@@ -1,0 +1,741 @@
+@* Канбан экрана «Задачи» (docs/TZ_task_views.md §1, этап 2B). Колонки — статусы проекта, в «Все проекты» — виды
+   статусов плюс «Другие». Данные — GET /tasks/board (первые 50 карточек колонки + Count), колонка догружается
+   кнопкой «Ещё». Перетаскивание — MudDropContainer: карточка переезжает сразу, при отказе сервера (workflow,
+   права) возвращается с тостом. Колонки, куда workflow не пускает, тускнеют, пока карточку тащат. Дорожки
+   (исполнитель, родитель, приоритет) раскладываются на клиенте по загруженным карточкам; через дорожки
+   карточку не переносят — перенос меняет только статус и место. *@
+@inject IFlowApi Api
+@inject ToastService Toasts
+@inject BrowserInterop Browser
+@inject UserDirectory Users
+@inject TeamDirectory Teams
+@inject ProjectAccessState Access
+@implements IDisposable
+
+<div class="kb-toolbar">
+    <div class="seg" role="radiogroup" aria-label="Дорожки">
+        @foreach (var (lane, label) in LaneModes)
+        {
+            <button type="button" class="seg-btn @(_lanes == lane ? "on" : "")" role="radio" aria-checked="@(_lanes == lane)"
+                    @onclick="() => SetLanes(lane)">@label</button>
+        }
+    </div>
+    @if (Board is { } board && board.Statuses.Any(s => s.IsFinal))
+    {
+        <div class="kb-window">
+            Закрытые — за
+            @if (Permissions.CanManageConfig(Access.For(board.Id)))
+            {
+                <PillSelect T="int" Items="DoneWindowOptions(board.DoneColumnDays)" Value="board.DoneColumnDays" OnChange="SetDoneDays"
+                            Label="@(d => Ru.Days(d))" AriaLabel="Окно финальной колонки" />
+            }
+            else
+            {
+                <b>@Ru.Days(board.DoneColumnDays)</b>
+            }
+        </div>
+    }
+</div>
+
+@if (_loading && _columns.Count == 0)
+{
+    <Skeleton Kind="rows" Count="4" />
+}
+else if (_error is not null)
+{
+    <div class="empty">
+        <div class="empty-title">Не удалось загрузить доску</div>
+        <div>@_error</div>
+        <DsButton Variant="secondary" Size="sm" OnClick="ReloadAsync">Повторить</DsButton>
+    </div>
+}
+else
+{
+    <div class="kb-scroll">
+        <MudDropContainer T="TaskResponse" @ref="_drop" Items="_cards" ItemsSelector="InZone" ItemDropped="OnDropped"
+                          ItemPicked="OnPicked" CanDrop="CanDrop" ItemDisabled="t => !CanMove(t)" Class="kb">
+            <ChildContent>
+                <div class="kb-heads" style="@GridStyle">
+                    @foreach (var column in _columns)
+                    {
+                        var over = column.WipLimit is { } limit && column.Count > limit;
+                        <div class="kb-head @(over ? "over" : "") @(IsDenied(column) ? "denied" : "")"
+                             title="@(over ? $"Превышен WIP-лимит: {column.Count} при лимите {column.WipLimit}" : null)">
+                            <span class="sd" style="background:@column.Color"></span>
+                            <span class="kb-head-name">@column.Title</span>
+                            <span class="kb-count">@column.Count@(column.WipLimit is { } wip ? $" / {wip}" : "")</span>
+                        </div>
+                    }
+                </div>
+
+                @foreach (var lane in Lanes)
+                {
+                    @if (_lanes != LaneMode.None)
+                    {
+                        <div class="kb-lane-title">
+                            @if (_lanes == LaneMode.Assignee && lane.Key != NoneKey)
+                            {
+                                <Avatar User="Users.Find(Guid.Parse(lane.Key))" Size="18" />
+                            }
+                            else if (_lanes == LaneMode.Priority && Enum.TryParse<TaskPriority>(lane.Key, out var p))
+                            {
+                                <PriorityIcon Value="p" Size="13" ShowNone="true" />
+                            }
+                            @lane.Title <span class="kb-count">@lane.Count</span>
+                        </div>
+                    }
+                    <div class="kb-row" style="@GridStyle">
+                        @foreach (var column in _columns)
+                        {
+                            var zone = ZoneId(column.Key, lane.Key);
+                            <div class="kb-col @(IsDenied(column) ? "denied" : "")">
+                                <MudDropZone T="TaskResponse" Identifier="@zone" AllowReorder="@(BoardId is not null)" Class="kb-zone" />
+                                @if (lane.Key == Lanes[^1].Key)
+                                {
+                                    @if (column.Tasks.Count < column.Count)
+                                    {
+                                        <button type="button" class="icon-lnk kb-more" disabled="@column.Loading"
+                                                @onclick="() => LoadMore(column)">Ещё @(column.Count - column.Tasks.Count)</button>
+                                    }
+                                    @if (CanQuickCreate(column))
+                                    {
+                                        @if (_creatingIn == column.Key)
+                                        {
+                                            <input id="kb-new" class="kb-new" placeholder="Название и Enter" maxlength="500" value="@_newTitle"
+                                                   @oninput="e => _newTitle = e.Value?.ToString() ?? string.Empty"
+                                                   @onkeydown="e => OnNewKey(e, column)" @onblur="() => _creatingIn = null" />
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="icon-lnk kb-add" @onclick="() => StartCreate(column)"><Icon Name="plus" Size="13" />Задача</button>
+                                        }
+                                    }
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </ChildContent>
+            <ItemRenderer>
+                @{ var task = context; }
+                <div id="@CardId(task.Id)" class="kb-card @(task.Id == SelectedId ? "sel" : "") @(IsDone(task) ? "done" : "") @(CanMove(task) ? "" : "locked")"
+                     tabindex="0" role="button" aria-label="@($"{task.Code}: {task.Title}")"
+                     @onclick="() => OnOpen.InvokeAsync(task)" @onkeydown="e => OnCardKey(e, task)">
+                    <div class="kb-card-top">
+                        @if (TypeFor(task) is { } type)
+                        {
+                            <TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />
+                        }
+                        <span class="code">@task.Code</span>
+                        <PriorityIcon Value="task.Priority" Size="13" />
+                        <span class="kb-spacer"></span>
+                        @if (Users.Find(task.AssigneeId) is { } assignee)
+                        {
+                            <Avatar User="assignee" Size="20" Title="@assignee.FullName" />
+                        }
+                    </div>
+                    <div class="kb-card-title">@task.Title</div>
+                    @if (task.DueDate is not null || task.StoryPoints is not null || task.ChildCount > 0 || task.ChecklistTotal > 0 || task.BlockedByCount > 0 || task.CommentCount > 0 || task.PullRequestState is not null)
+                    {
+                        <div class="task-meta-chips">
+                            @if (task.StoryPoints is { } sp)
+                            {
+                                <span class="count-chip" title="Story points">@Ru.Points(sp) SP</span>
+                            }
+                            @if (task.DueDate is { } d)
+                            {
+                                <DueChip Value="d" IsDone="IsDone(task)" />
+                            }
+                            @if (task.PullRequestState is { } prState)
+                            {
+                                <span class="count-chip pr-chip @ScmMeta.StateClass(prState)" title="@($"Последний PR: {ScmMeta.StateLabel(prState)}")"><Icon Name="code" Size="12" />PR</span>
+                            }
+                            @if (task.BlockedByCount > 0)
+                            {
+                                <span class="count-chip blocked" title="@($"Заблокирована незакрытыми задачами: {task.BlockedByCount}")"><Icon Name="lock" Size="12" />заблокирована</span>
+                            }
+                            @if (task.ChildCount > 0)
+                            {
+                                <span class="count-chip @(task.ChildDoneCount == task.ChildCount ? "done" : "")" title="@($"Подзадачи: выполнено {task.ChildDoneCount} из {task.ChildCount}")"><Icon Name="list" Size="12" />@task.ChildDoneCount/@task.ChildCount</span>
+                            }
+                            @if (task.ChecklistTotal > 0)
+                            {
+                                <span class="count-chip @(task.ChecklistDone == task.ChecklistTotal ? "done" : "")" title="@($"Чек-лист: {task.ChecklistDone} из {task.ChecklistTotal}")"><Icon Name="check-square" Size="12" />@task.ChecklistDone/@task.ChecklistTotal</span>
+                            }
+                            @if (task.CommentCount > 0)
+                            {
+                                <span class="count-chip" title="@Ru.Comments(task.CommentCount)"><Icon Name="message" Size="12" />@task.CommentCount</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </ItemRenderer>
+        </MudDropContainer>
+    </div>
+}
+
+@code {
+    private const string NoneKey = "none";
+
+    [Parameter, EditorRequired] public IReadOnlyList<BoardResponse> Boards { get; set; } = [];
+
+    /// <summary>Проект доски; null — «Все проекты» (колонки по видам статусов).</summary>
+    [Parameter] public Guid? BoardId { get; set; }
+
+    [Parameter] public Guid? AssigneeId { get; set; }
+    [Parameter] public bool Unassigned { get; set; }
+    [Parameter] public string? Query { get; set; }
+    [Parameter] public string? Fql { get; set; }
+    [Parameter] public UserResponse? Me { get; set; }
+
+    /// <summary>Открытая в слайдере задача — подсвечена.</summary>
+    [Parameter] public Guid? SelectedId { get; set; }
+
+    [Parameter] public EventCallback<TaskResponse> OnOpen { get; set; }
+
+    /// <summary>Загруженные карточки по порядку колонок — странице для слайдера и ↑↓ между задачами.</summary>
+    [Parameter] public EventCallback<IReadOnlyList<TaskResponse>> OnLoaded { get; set; }
+
+    [Parameter] public EventCallback<FqlErrorResponse?> OnFqlError { get; set; }
+
+    /// <summary>Проект изменился (окно финальной колонки) — странице, чтобы не держать старую копию.</summary>
+    [Parameter] public EventCallback<BoardResponse> OnBoardChanged { get; set; }
+
+    /// <summary>Задача создана быстрым вводом внизу колонки.</summary>
+    [Parameter] public EventCallback<TaskResponse> OnCreated { get; set; }
+
+    private enum LaneMode { None, Assignee, Parent, Priority, Team }
+
+    private static readonly (LaneMode Mode, string Label)[] LaneModes =
+    [
+        (LaneMode.None, "Без дорожек"),
+        (LaneMode.Assignee, "Исполнитель"),
+        (LaneMode.Parent, "Родитель"),
+        (LaneMode.Priority, "Приоритет"),
+        (LaneMode.Team, "Команда")
+    ];
+
+    private sealed class ColumnState
+    {
+        public required string Key { get; init; }
+        public Guid? StatusId { get; init; }
+        public StatusType? StatusType { get; init; }
+        public bool Other { get; init; }
+        public required string Title { get; init; }
+        public required string Color { get; init; }
+        public int? WipLimit { get; init; }
+        public bool IsFinal { get; init; }
+        public int Count { get; set; }
+        public List<TaskResponse> Tasks { get; set; } = [];
+        public bool Loading { get; set; }
+    }
+
+    private sealed record Lane(string Key, string Title, int Count);
+
+    private MudDropContainer<TaskResponse>? _drop;
+    private List<ColumnState> _columns = [];
+    private List<TaskResponse> _cards = [];
+    private LaneMode _lanes = LaneMode.None;
+    private readonly Dictionary<Guid, TaskResponse?> _parents = new();
+    private bool _loading = true;
+    private string? _error;
+    private string? _loadedKey;
+    private HashSet<string> _denied = [];
+    private string? _creatingIn;
+    private string _newTitle = "";
+
+    private BoardResponse? Board => BoardId is { } id ? Boards.FirstOrDefault(b => b.Id == id) : null;
+
+    private string GridStyle => $"grid-template-columns: repeat({Math.Max(1, _columns.Count)}, minmax(240px, 1fr));";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{BoardId}|{AssigneeId}|{Unassigned}|{Query}|{Fql}";
+        if (_loadedKey == key)
+            return;
+
+        _loadedKey = key;
+        await ReloadAsync();
+    }
+
+    /// <summary>Перечитать доску целиком (фильтры, правка статусов, создание из формы).</summary>
+    public async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var result = await Api.GetTaskBoard(BoardId, AssigneeId, Unassigned, Query, fql: Fql);
+        _loading = false;
+
+        await OnFqlError.InvokeAsync(result.FqlError);
+        if (result.FqlError is not null)
+        {
+            _columns = [];
+            Rebuild();
+            return;
+        }
+
+        if (!result.Ok)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        // «Другие» (статусы без вида) — только если в них что-то есть: у большинства проектов их нет вовсе.
+        _columns = result.Value!.Columns.Where(c => !c.Other || c.Count > 0).Select(ToState).ToList();
+        Rebuild();
+        await LoadParentsAsync();
+        await OnLoaded.InvokeAsync(_cards);
+    }
+
+    /// <summary>Карточка изменилась в слайдере: статус мог смениться — карточка переезжает в свою колонку.</summary>
+    public void Replace(TaskResponse task)
+    {
+        var from = _columns.FirstOrDefault(c => c.Tasks.Any(t => t.Id == task.Id));
+        if (from is null)
+            return;
+
+        var to = _columns.FirstOrDefault(c => c.Key == ColumnKeyOf(task)) ?? from;
+        if (to == from)
+        {
+            from.Tasks[from.Tasks.FindIndex(t => t.Id == task.Id)] = task;
+        }
+        else
+        {
+            from.Tasks.RemoveAll(t => t.Id == task.Id);
+            from.Count--;
+            to.Tasks.Insert(0, task);
+            to.Count++;
+        }
+
+        Rebuild();
+        StateHasChanged();
+    }
+
+    public void Remove(Guid taskId)
+    {
+        foreach (var column in _columns.Where(c => c.Tasks.RemoveAll(t => t.Id == taskId) > 0))
+            column.Count--;
+
+        Rebuild();
+        StateHasChanged();
+    }
+
+    private ColumnState ToState(TaskBoardColumn column)
+    {
+        var status = column.StatusId is { } id ? Board?.Statuses.FirstOrDefault(s => s.Id == id) : null;
+        return new ColumnState
+        {
+            Key = ColumnKey(column.StatusId, column.StatusType, column.Other),
+            StatusId = column.StatusId,
+            StatusType = column.StatusType,
+            Other = column.Other,
+            Title = status?.Name ?? (column.Other ? "Другие" : StatusColors.TypeLabel(column.StatusType)),
+            Color = status is not null ? StatusColors.For(status) : StatusColors.For(column.Other ? null : column.StatusType),
+            WipLimit = status?.WipLimit,
+            IsFinal = status?.IsFinal ?? column.StatusType == StatusType.Done,
+            Count = column.Count,
+            Tasks = column.Tasks.ToList()
+        };
+    }
+
+    private static string ColumnKey(Guid? statusId, StatusType? type, bool other) =>
+        statusId?.ToString() ?? (other ? NoneKey : "t" + (int)type!.Value);
+
+    /// <summary>Колонка задачи: в проекте — её статус, в «Все проекты» — вид статуса в её проекте.</summary>
+    private string ColumnKeyOf(TaskResponse task)
+    {
+        if (BoardId is not null)
+            return task.StatusId.ToString();
+
+        var status = StatusOf(task);
+        return status?.Type is { } type ? "t" + (int)type : NoneKey;
+    }
+
+    private StatusResponse? StatusOf(TaskResponse task) =>
+        Boards.FirstOrDefault(b => b.Id == task.BoardId)?.Statuses.FirstOrDefault(s => s.Id == task.StatusId);
+
+    private TaskTypeResponse? TypeFor(TaskResponse task) =>
+        TaskMeta.TypeOf(Boards.FirstOrDefault(b => b.Id == task.BoardId), task.TypeId);
+
+    private bool IsDone(TaskResponse task) => StatusOf(task)?.IsFinal == true;
+
+    private bool CanMove(TaskResponse task) => Permissions.CanEditTask(Me, Access.For(task.BoardId), task);
+
+    /// <summary>
+    /// Зоны MudDropZone — отдельные компоненты: новый список карточек у контейнера их не перерисует, поэтому после
+    /// рендера контейнеру говорят Refresh (<see cref="OnAfterRender"/>).
+    /// </summary>
+    private void Rebuild()
+    {
+        _cards = _columns.SelectMany(c => c.Tasks).ToList();
+        _refreshZones = true;
+    }
+
+    private bool _refreshZones;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Конец переноса узнаём у контейнера: dragend до обработчиков родителя не всплывает (MudBlazor его гасит),
+        // а без этого колонки оставались бы тусклыми после броска в запрещённую.
+        if (_drop is not null && _subscribed != _drop)
+        {
+            if (_subscribed is not null)
+                _subscribed.TransactionEnded -= OnTransactionEnded;
+            _drop.TransactionEnded += OnTransactionEnded;
+            _subscribed = _drop;
+        }
+
+        if (!_refreshZones || _drop is null)
+            return;
+
+        _refreshZones = false;
+        _drop.Refresh();
+    }
+
+    private MudDropContainer<TaskResponse>? _subscribed;
+
+    private void OnTransactionEnded(object? sender, EventArgs e)
+    {
+        if (_denied.Count == 0)
+            return;
+
+        _denied = [];
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        if (_subscribed is not null)
+            _subscribed.TransactionEnded -= OnTransactionEnded;
+    }
+
+    // ---- дорожки ----
+
+    private string LaneKeyOf(TaskResponse task) => _lanes switch
+    {
+        LaneMode.Assignee => task.AssigneeId?.ToString() ?? NoneKey,
+        LaneMode.Parent => task.ParentId?.ToString() ?? NoneKey,
+        LaneMode.Priority => task.Priority == TaskPriority.None ? NoneKey : task.Priority.ToString(),
+        LaneMode.Team => task.TeamId?.ToString() ?? NoneKey,
+        _ => ""
+    };
+
+    /// <summary>Дорожки по загруженным карточкам; «без …» — последней.</summary>
+    private List<Lane> Lanes
+    {
+        get
+        {
+            if (_lanes == LaneMode.None)
+                return [new Lane("", "", _cards.Count)];
+
+            var lanes = _cards.GroupBy(LaneKeyOf)
+                .Select(g => new Lane(g.Key, LaneTitle(g.Key), g.Count()))
+                .OrderBy(l => l.Key == NoneKey)
+                .ThenBy(l => _lanes == LaneMode.Priority ? -(int)Enum.Parse<TaskPriority>(l.Key == NoneKey ? "None" : l.Key) : 0)
+                .ThenBy(l => l.Title, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            return lanes.Count == 0 ? [new Lane(NoneKey, LaneTitle(NoneKey), 0)] : lanes;
+        }
+    }
+
+    private string LaneTitle(string key) => (_lanes, key) switch
+    {
+        (LaneMode.Assignee, NoneKey) => "Без исполнителя",
+        (LaneMode.Assignee, _) => Users.Find(Guid.Parse(key))?.FullName ?? "Неизвестный",
+        (LaneMode.Parent, NoneKey) => "Без родителя",
+        (LaneMode.Parent, _) => _parents.GetValueOrDefault(Guid.Parse(key)) is { } parent ? $"{parent.Code} {parent.Title}" : "Задача недоступна",
+        (LaneMode.Priority, NoneKey) => "Без приоритета",
+        (LaneMode.Priority, _) => TaskMeta.PriorityLabel(Enum.Parse<TaskPriority>(key)),
+        (LaneMode.Team, NoneKey) => "Без команды",
+        (LaneMode.Team, _) => Teams.Find(Guid.Parse(key))?.Name ?? "Удалённая команда",
+        _ => ""
+    };
+
+    private async Task SetLanes(LaneMode mode)
+    {
+        _lanes = mode;
+        if (mode == LaneMode.Team)
+            await Teams.EnsureLoadedAsync();
+        await LoadParentsAsync();
+    }
+
+    /// <summary>Названия родителей для дорожек: родитель может не попасть в отбор доски, поэтому берём его отдельно.</summary>
+    private async Task LoadParentsAsync()
+    {
+        if (_lanes != LaneMode.Parent)
+            return;
+
+        foreach (var id in _cards.Select(t => t.ParentId).OfType<Guid>().Distinct().Where(id => !_parents.ContainsKey(id)).ToList())
+        {
+            var parent = _cards.FirstOrDefault(t => t.Id == id);
+            if (parent is null && await Api.GetTask(id) is { Ok: true } loaded)
+                parent = loaded.Value;
+
+            _parents[id] = parent;
+        }
+    }
+
+    // ---- перетаскивание ----
+
+    private static string ZoneId(string column, string lane) => $"{column}|{lane}";
+
+    private bool InZone(TaskResponse task, string zone) => zone == ZoneId(ColumnKeyOf(task), LaneKeyOf(task));
+
+    private bool IsDenied(ColumnState column) => _denied.Contains(column.Key);
+
+    private bool CanDrop(TaskResponse task, string zone)
+    {
+        var (column, lane) = Split(zone);
+        return lane == LaneKeyOf(task) && !_denied.Contains(column) && (BoardId is not null || column != NoneKey || ColumnKeyOf(task) == NoneKey);
+    }
+
+    private static (string Column, string Lane) Split(string zone)
+    {
+        var at = zone.IndexOf('|');
+        return (zone[..at], zone[(at + 1)..]);
+    }
+
+    /// <summary>
+    /// Карточку взяли: в проекте с workflow спрашиваем, куда её можно (docs/TZ_workflow_config.md §2), и тушим
+    /// остальные колонки. В «Все проекты» колонка «Другие» закрыта всегда: в какой из своих статусов без вида
+    /// переводить, сервер не угадает.
+    /// </summary>
+    private async Task OnPicked(MudDragAndDropItemTransaction<TaskResponse> transaction)
+    {
+        _denied = BoardId is null ? [NoneKey] : [];
+        var task = transaction.Item;
+        if (Boards.FirstOrDefault(b => b.Id == task.BoardId)?.WorkflowMode != WorkflowMode.Restricted)
+            return;
+
+        var result = await Api.GetTransitions(task.Id);
+        // Карточку успели бросить, пока шёл запрос, — тушить уже нечего.
+        if (!result.Ok || _drop?.TransactionInProgress() != true)
+            return;
+
+        var allowed = result.Value!.Where(t => t.Allowed).Select(t => t.StatusId).Append(task.StatusId).ToHashSet();
+        if (BoardId is not null)
+        {
+            _denied = _columns.Where(c => c.StatusId is { } id && !allowed.Contains(id)).Select(c => c.Key).ToHashSet();
+        }
+        else
+        {
+            var statuses = Boards.First(b => b.Id == task.BoardId).Statuses;
+            _denied = _columns.Where(c => c.Other || !statuses.Any(s => s.Type == c.StatusType && allowed.Contains(s.Id))).Select(c => c.Key).ToHashSet();
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnDropped(MudItemDropInfo<TaskResponse> info)
+    {
+        var (columnKey, lane) = Split(info.DropzoneIdentifier);
+        _denied = [];
+        await MoveAsync(info.Item!, columnKey, lane, info.IndexInZone);
+    }
+
+    /// <summary>
+    /// Перенос карточки: сначала на экране, потом запрос. В проекте соседей берём из той же дорожки колонки —
+    /// сервер поставит ранг между ними; в «Все проекты» ранги проектов несравнимы, карточка встаёт первой
+    /// (там порядок — по изменению, и перенесённая задача и есть самая свежая).
+    /// </summary>
+    private async Task MoveAsync(TaskResponse task, string columnKey, string lane, int index)
+    {
+        var from = _columns.FirstOrDefault(c => c.Tasks.Any(t => t.Id == task.Id));
+        var to = _columns.FirstOrDefault(c => c.Key == columnKey);
+        if (from is null || to is null)
+            return;
+
+        Guid? statusId = null;
+        if (to != from)
+        {
+            statusId = to.StatusId ?? Boards.FirstOrDefault(b => b.Id == task.BoardId)?.Statuses.FirstOrDefault(s => s.Type == to.StatusType && !to.Other)?.Id;
+            if (statusId is null)
+            {
+                Toasts.Error($"В проекте задачи {task.Code} нет статуса вида «{to.Title}»");
+                StateHasChanged();
+                return;
+            }
+        }
+
+        var zone = to.Tasks.Where(t => t.Id != task.Id && LaneKeyOf(t) == lane).ToList();
+        index = BoardId is null ? 0 : Math.Clamp(index, 0, zone.Count);
+        var after = index > 0 ? zone[index - 1] : null;
+        var before = index < zone.Count ? zone[index] : null;
+
+        var oldIndex = from.Tasks.FindIndex(t => t.Id == task.Id);
+        var fromZone = from.Tasks.Where(t => LaneKeyOf(t) == lane).ToList();
+        if (to == from && fromZone.IndexOf(fromZone.First(t => t.Id == task.Id)) == index)
+        {
+            StateHasChanged();
+            return;
+        }
+
+        // Снимок для отката — копии списков, карточки неизменяемы.
+        var snapshot = _columns.Select(c => (c, c.Tasks.ToList(), c.Count)).ToList();
+
+        var moved = statusId is { } s ? task with { StatusId = s } : task;
+        from.Tasks.RemoveAt(oldIndex);
+        var at = before is not null ? to.Tasks.FindIndex(t => t.Id == before.Id)
+            : after is not null ? to.Tasks.FindIndex(t => t.Id == after.Id) + 1
+            : BoardId is null ? 0 : to.Tasks.Count;
+        to.Tasks.Insert(Math.Max(0, at), moved);
+        if (to != from)
+        {
+            from.Count--;
+            to.Count++;
+        }
+
+        Rebuild();
+        StateHasChanged();
+
+        var request = BoardId is null
+            ? new RankTaskRequest(null, null, statusId)
+            : new RankTaskRequest(after?.Id, before?.Id, statusId);
+        var result = await Api.RankTask(task.Id, request);
+        if (!result.Ok)
+        {
+            foreach (var (column, tasks, count) in snapshot)
+            {
+                column.Tasks = tasks;
+                column.Count = count;
+            }
+
+            Rebuild();
+            Toasts.Error(result.Error ?? "Не удалось перенести задачу");
+            StateHasChanged();
+            return;
+        }
+
+        var fresh = result.Value!.WithCountsOf(task);
+        to.Tasks[to.Tasks.FindIndex(t => t.Id == task.Id)] = fresh;
+        Rebuild();
+        if (statusId is not null)
+            Toasts.Ok($"{task.Code} → {to.Title}");
+        await OnLoaded.InvokeAsync(_cards);
+    }
+
+    // ---- клавиатура: ←/→ — в соседнюю колонку, ↑/↓ — соседняя карточка, Enter — открыть ----
+
+    private static string CardId(Guid id) => "kb-" + id.ToString("N");
+
+    private async Task OnCardKey(KeyboardEventArgs e, TaskResponse task)
+    {
+        var column = _columns.FirstOrDefault(c => c.Tasks.Any(t => t.Id == task.Id));
+        if (column is null)
+            return;
+
+        var lane = LaneKeyOf(task);
+        switch (e.Key)
+        {
+            case "Enter" or " ":
+                await OnOpen.InvokeAsync(task);
+                return;
+            case "ArrowUp" or "ArrowDown":
+                var zone = column.Tasks.Where(t => LaneKeyOf(t) == lane).ToList();
+                var i = zone.FindIndex(t => t.Id == task.Id) + (e.Key == "ArrowDown" ? 1 : -1);
+                if (i >= 0 && i < zone.Count)
+                    await Browser.FocusAsync(CardId(zone[i].Id));
+                return;
+            case "ArrowLeft" or "ArrowRight" when CanMove(task):
+                var at = _columns.IndexOf(column) + (e.Key == "ArrowRight" ? 1 : -1);
+                if (at < 0 || at >= _columns.Count)
+                    return;
+
+                var target = _columns[at];
+                if (BoardId is null && target.Other)
+                    return;
+
+                await MoveAsync(task, target.Key, lane, 0);
+                await Task.Yield();
+                await Browser.FocusAsync(CardId(task.Id));
+                return;
+        }
+    }
+
+    // ---- колонка: догрузка и быстрое создание ----
+
+    private async Task LoadMore(ColumnState column)
+    {
+        column.Loading = true;
+        var result = await Api.GetTaskBoard(BoardId, AssigneeId, Unassigned, Query, fql: Fql,
+            statusId: column.StatusId, statusType: column.Other ? null : column.StatusType, other: column.Other, offset: column.Tasks.Count);
+        column.Loading = false;
+
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось загрузить задачи");
+            return;
+        }
+
+        var page = result.Value!.Columns.Single();
+        var known = column.Tasks.Select(t => t.Id).ToHashSet();
+        column.Tasks.AddRange(page.Tasks.Where(t => !known.Contains(t.Id)));
+        column.Count = page.Count;
+        Rebuild();
+        await LoadParentsAsync();
+        await OnLoaded.InvokeAsync(_cards);
+    }
+
+    private bool CanQuickCreate(ColumnState column) =>
+        BoardId is { } id && column.StatusId is not null && Permissions.CanCreateTask(Access.For(id));
+
+    private async Task StartCreate(ColumnState column)
+    {
+        _creatingIn = column.Key;
+        _newTitle = "";
+        StateHasChanged();
+        await Task.Yield();
+        await Browser.FocusAsync("kb-new");
+    }
+
+    private async Task OnNewKey(KeyboardEventArgs e, ColumnState column)
+    {
+        if (e.Key == "Escape")
+        {
+            _creatingIn = null;
+            return;
+        }
+
+        if (e.Key != "Enter" || string.IsNullOrWhiteSpace(_newTitle) || BoardId is not { } boardId)
+            return;
+
+        var title = _newTitle.Trim();
+        _newTitle = "";
+        var result = await Api.CreateTask(boardId, new CreateTaskRequest(title, null, column.StatusId));
+        if (!result.Ok)
+        {
+            _newTitle = title;
+            Toasts.Error(result.Error ?? "Не удалось создать задачу");
+            return;
+        }
+
+        // Новая задача — в конце ручного порядка проекта, значит и в конце колонки.
+        column.Tasks.Add(result.Value!);
+        column.Count++;
+        Rebuild();
+        await OnCreated.InvokeAsync(result.Value!);
+        await OnLoaded.InvokeAsync(_cards);
+    }
+
+    // ---- окно финальной колонки ----
+
+    private static IEnumerable<int> DoneWindowOptions(int current) =>
+        new[] { 7, 14, 30, 90, current }.Distinct().Order();
+
+    private async Task SetDoneDays(int days)
+    {
+        if (Board is not { } board || days == board.DoneColumnDays)
+            return;
+
+        var result = await Api.SetDoneColumnDays(board.Id, days);
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось сохранить окно колонки");
+            return;
+        }
+
+        await OnBoardChanged.InvokeAsync(result.Value!);
+        await ReloadAsync();
+    }
+}

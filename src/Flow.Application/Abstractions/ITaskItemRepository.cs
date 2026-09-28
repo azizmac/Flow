@@ -9,6 +9,36 @@ public interface ITaskItemRepository
     /// <summary>assigneeId = null — все задачи доски; иначе только назначенные на этого пользователя.</summary>
     Task<IReadOnlyList<TaskItem>> GetByBoardIdAsync(Guid boardId, Guid? assigneeId, CancellationToken cancellationToken);
 
+    /// <summary>Задачи в статусе — отслеживаемые: их переводят в другой статус при удалении этого (docs/TZ_workflow_config.md §1).</summary>
+    Task<IReadOnlyList<TaskItem>> GetByStatusIdAsync(Guid statusId, CancellationToken cancellationToken);
+
+    /// <summary>Задачи спринта, отслеживаемые — снимок при старте и перенос при завершении.</summary>
+    Task<IReadOnlyList<TaskItem>> GetBySprintIdAsync(Guid sprintId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Разбивка задач под фильтром одним GROUP BY (виджет дашборда). CustomField — по значению поля (Id варианта у
+    /// списков, у MultiSelect — каждый вариант отдельно); <paramref name="customFieldIds"/> — поля с одним ключом в
+    /// разных проектах.
+    /// </summary>
+    Task<IReadOnlyList<TaskGroupCount>> GroupCountAsync(TaskListFilter filter, TaskGroupField field, IReadOnlyList<Guid>? customFieldIds, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Создано по дню CreatedAt и закрыто по дню StatusChangedAt задач в финальном статусе — начиная с <paramref name="since"/>.
+    /// Задача, переоткрытая после закрытия, в «закрыто» не попадает: считается нынешнее состояние.
+    /// </summary>
+    Task<TaskDailyCounts> DailyCountsAsync(TaskListFilter filter, DateTime since, CancellationToken cancellationToken);
+
+    /// <summary>Задачи вехи, отслеживаемые (удаление вехи снимает её с задач с записью в журнале).</summary>
+    Task<IReadOnlyList<TaskItem>> GetByMilestoneIdAsync(Guid milestoneId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Счётчики прогресса вех одним GROUP BY с join статусов (docs/TZ_task_views.md §6). Просроченная — незакрытая
+    /// со сроком раньше <paramref name="today"/>; «закрыта недавно» — финальный статус с StatusChangedAt не раньше
+    /// <paramref name="closedSince"/>. Вехи без задач в ответ не попадают.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, MilestoneCounts>> CountByMilestonesAsync(
+        IReadOnlyCollection<Guid> milestoneIds, DateOnly today, DateTime closedSince, CancellationToken cancellationToken);
+
     /// <summary>
     /// Страница задач по отбору, от новых к старым. Возвращает не больше <see cref="TaskListFilter.Limit"/> задач;
     /// «есть ли ещё» вызывающая сторона определяет по тому, заполнилась ли страница целиком.
@@ -22,6 +52,9 @@ public interface ITaskItemRepository
     /// </summary>
     Task<TaskCounts> CountAsync(TaskListFilter filter, CancellationToken cancellationToken);
 
+    /// <summary>Id всех задач под фильтром, без страниц и порядка — дереву, чтобы отметить подходящие узлы.</summary>
+    Task<IReadOnlyList<Guid>> MatchingIdsAsync(TaskListFilter filter, CancellationToken cancellationToken);
+
     /// <summary>
     /// Количество задач по каждой доске одним запросом (GROUP BY BoardId) — для BoardResponse.TaskCount.
     /// Доски без задач в словаре отсутствуют, вызывающая сторона трактует это как 0.
@@ -33,6 +66,31 @@ public interface ITaskItemRepository
 
     /// <summary>Нужно для валидации ChangeStatus — статус должен принадлежать той же доске, что и задача.</summary>
     Task<bool> StatusBelongsToBoardAsync(Guid statusId, Guid boardId, CancellationToken cancellationToken);
+
+    /// <summary>Прямые подзадачи — отслеживаемые (смена типа родителя проверяет их уровни, каскадное удаление их удаляет).</summary>
+    Task<IReadOnlyList<TaskItem>> GetChildrenAsync(Guid parentId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Число прямых подзадач и сколько из них в финальном статусе — одним GROUP BY (docs/TZ_task_model.md §3),
+    /// как CommentCount. Задачи без детей в словаре отсутствуют.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, ChildCounts>> CountChildrenAsync(IReadOnlyCollection<Guid> parentIds, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Дерево в порядке обхода (родитель, затем его поддерево) с глубиной: <paramref name="rootId"/> = null — весь проект
+    /// от задач верхнего уровня (глубина 0), иначе сама задача (глубина 0) и её поддерево. Внутри уровня — по рангу.
+    /// </summary>
+    Task<IReadOnlyList<TaskTreeEntry>> GetTreeAsync(Guid boardId, Guid? rootId, CancellationToken cancellationToken);
+
+    /// <summary>Максимальный ранг в проекте из БД (не из отслеживаемых сущностей); null — задач нет.</summary>
+    Task<string?> GetMaxRankAsync(Guid boardId, Guid? excludeTaskId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Ближайший ранг в проекте по ту сторону от <paramref name="rank"/>: <paramref name="after"/> = true — наименьший
+    /// больший, false — наибольший меньший. <paramref name="excludeTaskId"/> — перемещаемая задача, её старое место
+    /// соседом не считается. null — край проекта.
+    /// </summary>
+    Task<string?> GetNeighborRankAsync(Guid boardId, string rank, bool after, Guid excludeTaskId, CancellationToken cancellationToken);
 
     void Add(TaskItem task);
 

@@ -1,0 +1,63 @@
+@* Хост диалогов «Разделить / Слить / Перенести» (docs/TZ_task_model.md §6) для карточки задачи и слайдера: открывает
+   нужный по Mode, показывает тост с итогом и отдаёт родителю задачу, которую теперь стоит показать — основную после
+   слияния, ту же (с новым кодом) после переноса, исходную после разделения. *@
+@inject IFlowApi Api
+@inject ToastService Toasts
+
+@switch (Mode)
+{
+    case TaskRestructureMode.Split:
+        <SplitTaskDialog Task="Task" OnDone="Split" OnClose="Close" />
+        break;
+    case TaskRestructureMode.Merge:
+        <MergeTaskDialog Task="Task" OnDone="Merge" OnClose="Close" />
+        break;
+    case TaskRestructureMode.Move when _boards is not null:
+        <MoveTaskDialog Task="Task" Boards="_boards" OnDone="Move" OnClose="Close" />
+        break;
+}
+
+@code {
+    [Parameter, EditorRequired] public TaskResponse Task { get; set; } = default!;
+    [Parameter] public TaskRestructureMode Mode { get; set; }
+    [Parameter] public EventCallback<TaskRestructureMode> ModeChanged { get; set; }
+    /// <summary>Действие выполнено: задача, которую показать дальше.</summary>
+    [Parameter] public EventCallback<TaskResponse> OnDone { get; set; }
+
+    private IReadOnlyList<BoardResponse>? _boards;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Mode == TaskRestructureMode.Move && _boards is null)
+        {
+            var boards = await Api.GetBoards();
+            _boards = boards.Ok ? boards.Value! : [];
+        }
+    }
+
+    private async Task Split(IReadOnlyList<TaskResponse> parts)
+    {
+        Toasts.Ok($"Выделено: {string.Join(", ", parts.Select(p => p.Code))}");
+        await Finish(Task);
+    }
+
+    private async Task Merge(TaskResponse target)
+    {
+        Toasts.Ok($"{Task.Code} влита в {target.Code}");
+        await Finish(target);
+    }
+
+    private async Task Move(TaskResponse moved)
+    {
+        Toasts.Ok($"{Task.Code} → {moved.Code}");
+        await Finish(moved);
+    }
+
+    private async Task Finish(TaskResponse next)
+    {
+        await ModeChanged.InvokeAsync(TaskRestructureMode.None);
+        await OnDone.InvokeAsync(next);
+    }
+
+    private Task Close() => ModeChanged.InvokeAsync(TaskRestructureMode.None);
+}

@@ -111,12 +111,7 @@ else if (_user is not null)
             </div>
         </div>
 
-        <div class="tabs" role="tablist">
-            <button type="button" class="tab @(Tab == "profile" ? "on" : "")" role="tab" @onclick="@(() => SetTab("profile"))">Профиль</button>
-            <button type="button" class="tab @(Tab == "tasks" ? "on" : "")" role="tab" @onclick="@(() => SetTab("tasks"))">
-                Задачи @if (_tasks is not null) { <span class="n">@_tasks.Count</span> }
-            </button>
-        </div>
+        <DsTabs Items="Tabs" Value="@Tab" ValueChanged="SetTab" AriaLabel="Разделы профиля" />
 
         @if (Tab == "tasks")
         {
@@ -180,8 +175,7 @@ else if (_user is not null)
                             {
                                 <div style="display:flex;gap:8px;align-items:center;">
                                     <span class="hint"><span class="kbd">Ctrl Enter</span> сохранить</span>
-                                    <button type="button" class="icon-lnk" @onclick="ResetForm">Отменить</button>
-                                    <DsButton Variant="primary" Size="sm" OnClick="SaveProfile" Busy="_saving">Сохранить</DsButton>
+                                    <InlineActions Busy="_saving" OnSave="SaveProfile" OnCancel="ResetForm" />
                                 </div>
                             }
                         </div>
@@ -379,6 +373,8 @@ else if (_user is not null)
     private bool _tasksLoading;
 
     private string Tab => TabParam == "tasks" ? "tasks" : "profile";
+
+    private IReadOnlyList<DsTab> Tabs => [new("profile", "Профиль"), new("tasks", "Задачи", _tasks?.Count)];
 
     private bool IsMe => _user is not null && State.CurrentUserId == _user.Id;
 

@@ -1,0 +1,129 @@
+@* Блок «Подзадачи» (docs/TZ_task_model.md §3) в слайдере и на странице задачи: прямые дети в ручном порядке (ранг),
+   прогресс «выполнено / всего» по финальным статусам и быстрое создание подзадачи строкой. Тип новой подзадачи —
+   основной тип проекта, если он ниже родителя, иначе ближайший допустимый (TaskMeta.ChildTypeFor). У задачи
+   нижнего уровня без детей блока нет вовсе: подзадачу к ней завести нельзя.
+   Счётчики уходят наверх (OnCountsChanged) — строка списка показывает тот же прогресс. *@
+@inject IFlowApi Api
+@inject ToastService Toasts
+
+@if (Visible)
+{
+    <div class="subtasks">
+        <div class="subtasks-head">
+            <div class="meta-k">Подзадачи</div>
+            @if (_children is { Count: > 0 } list)
+            {
+                var done = DoneCount(list);
+                <span class="subtasks-count">@done/@list.Count</span>
+                <span class="subtasks-bar" role="progressbar" aria-valuemin="0" aria-valuemax="@list.Count" aria-valuenow="@done">
+                    <span style="width:@(Percent(done, list.Count))%"></span>
+                </span>
+            }
+        </div>
+        @if (_children is null)
+        {
+            <Skeleton Kind="rows" Count="2" />
+        }
+        else
+        {
+            @foreach (var child in _children)
+            {
+                var type = TaskMeta.TypeOf(Board, child.TypeId);
+                var status = Board.Statuses.FirstOrDefault(s => s.Id == child.StatusId);
+                <a class="subtask-row @(status?.IsFinal == true ? "done" : "")" href="tasks/@child.Id" @key="child.Id">
+                    @if (type is not null)
+                    {
+                        <TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />
+                    }
+                    <span class="code">@child.Code</span>
+                    <span class="subtask-title">@child.Title</span>
+                    <span class="status-pill sm"><span class="sd" style="background:@StatusColors.For(status)"></span>@(status?.Name ?? "—")</span>
+                </a>
+            }
+            @if (CanCreate && ChildType is { } childType)
+            {
+                <div class="subtask-add">
+                    <TaskTypeIcon Kind="childType.Kind" Name="@childType.Name" Size="13" />
+                    <input id="@_inputId" class="subtask-input" placeholder="@($"Новая подзадача ({childType.Name.ToLowerInvariant()}) — Enter")"
+                           maxlength="200" value="@_draft" disabled="@_busy" autocomplete="off"
+                           @oninput="e => _draft = e.Value?.ToString() ?? string.Empty" @onkeydown="OnKey" />
+                </div>
+            }
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public BoardResponse Board { get; set; } = default!;
+    [Parameter, EditorRequired] public TaskResponse Parent { get; set; } = default!;
+    /// <summary>Право создавать задачи в проекте (Permissions.CanCreateTask).</summary>
+    [Parameter] public bool CanCreate { get; set; }
+    [Parameter] public EventCallback<(int Total, int Done)> OnCountsChanged { get; set; }
+    [Parameter] public EventCallback<TaskResponse> OnCreated { get; set; }
+
+    private readonly string _inputId = "sub-" + Guid.NewGuid().ToString("N")[..8];
+    private List<TaskResponse>? _children;
+    private Guid _loadedFor;
+    private string _draft = "";
+    private bool _busy;
+
+    private int ParentLevel => TaskMeta.LevelOf(Board, Parent.TypeId);
+
+    private TaskTypeResponse? ChildType => TaskMeta.ChildTypeFor(Board, ParentLevel);
+
+    private bool Visible => ChildType is not null || Parent.ChildCount > 0 || _children is { Count: > 0 };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == Parent.Id)
+            return;
+
+        _loadedFor = Parent.Id;
+        _children = null;
+        _draft = "";
+
+        // Без детей по счётчику из списка не ходим: у большинства задач подзадач нет.
+        if (Parent.ChildCount == 0)
+        {
+            _children = [];
+            return;
+        }
+
+        var id = Parent.Id;
+        var result = await Api.SearchTasks(Board.Id, limit: 200, offset: 0, sort: TaskSortField.Rank, parentId: id);
+        if (id != Parent.Id)
+            return;
+
+        _children = result.Ok ? result.Value!.Items.ToList() : [];
+    }
+
+    private int DoneCount(IEnumerable<TaskResponse> list) =>
+        list.Count(t => Board.Statuses.FirstOrDefault(s => s.Id == t.StatusId)?.IsFinal == true);
+
+    private static int Percent(int done, int total) => total == 0 ? 0 : (int)Math.Round(100.0 * done / total);
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter" || _busy)
+            return;
+
+        var title = _draft.Trim();
+        if (title.Length == 0 || ChildType is not { } type)
+            return;
+
+        _busy = true;
+        var result = await Api.CreateTask(Board.Id, new CreateTaskRequest(title, null, null, type.Id, ParentId: Parent.Id));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось создать подзадачу");
+            return;
+        }
+
+        _draft = "";
+        _children ??= [];
+        _children.Add(result.Value!);
+        await OnCreated.InvokeAsync(result.Value!);
+        await OnCountsChanged.InvokeAsync((_children.Count, DoneCount(_children)));
+    }
+}

@@ -1,0 +1,12 @@
+@* Селект приоритета «в строке» — PillSelect. Шкала фиксированная (docs/TZ_task_model.md §2). *@
+
+<PillSelect T="TaskPriority" Items="TaskMeta.Priorities" Value="Value" OnChange="OnChange" Disabled="Disabled"
+            Label="@(p => TaskMeta.PriorityLabel(p))" AriaLabel="Сменить приоритет">
+    <Glyph Context="p"><PriorityIcon Value="p" Size="13" ShowNone="true" /></Glyph>
+</PillSelect>
+
+@code {
+    [Parameter] public TaskPriority Value { get; set; }
+    [Parameter] public EventCallback<TaskPriority> OnChange { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+}

@@ -1,3 +1,4 @@
+using Flow.Application.Security;
 using MediatR;
 
 namespace Flow.Application.Features.Attachments.Queries.AttachmentMetaQuery;
@@ -8,7 +9,7 @@ namespace Flow.Application.Features.Attachments.Queries.AttachmentMetaQuery;
 /// отвечает на вопрос «файл ещё существует», а без неё удаление вложения переставало бы
 /// действовать (браузер получал бы 304 на давно удалённый файл).
 /// </summary>
-public sealed record AttachmentMetaQuery(Guid AttachmentId) : IRequest<AttachmentMeta?>;
+public sealed record AttachmentMetaQuery(Guid ActorId, Guid AttachmentId) : IRequest<AttachmentMeta?>;
 
 /// <param name="ContentHash">SHA-256 содержимого, уже посчитанный при загрузке — из него делается ETag.</param>
 /// <param name="CanInline">

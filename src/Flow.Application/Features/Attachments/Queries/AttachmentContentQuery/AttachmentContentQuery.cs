@@ -1,3 +1,4 @@
+using Flow.Application.Security;
 using MediatR;
 
 namespace Flow.Application.Features.Attachments.Queries.AttachmentContentQuery;
@@ -6,7 +7,7 @@ namespace Flow.Application.Features.Attachments.Queries.AttachmentContentQuery;
 /// Содержимое вложения для скачивания. null — вложения нет или объект пропал из хранилища.
 /// Публичных ссылок нет: файл отдаётся только по авторизованному запросу (docs/TZ_attachments.md).
 /// </summary>
-public sealed record AttachmentContentQuery(Guid AttachmentId) : IRequest<AttachmentContent?>;
+public sealed record AttachmentContentQuery(Guid ActorId, Guid AttachmentId) : IRequest<AttachmentContent?>;
 
 /// <param name="CanInline">
 /// Можно ли показывать файл в браузере. Решает сервер: тип уже проверен по сигнатуре при загрузке,

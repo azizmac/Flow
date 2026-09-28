@@ -1,6 +1,7 @@
 ﻿@* Экран 5 — задача на всю страницу (GET /tasks/{id} → GET /boards/{boardId}). *@
 @page "/tasks/{Id:guid}"
 @implements IDisposable
+@inject TeamDirectory Teams
 @inject IFlowApi Api
 @inject NavigationManager Nav
 @inject ToastService Toasts
@@ -9,6 +10,7 @@
 @inject AppState State
 @inject UserDirectory Users
 @inject AttachmentSizes Sizes
+@inject ProjectAccessState Access
 
 <PageTitle>@(_task?.Code ?? "Задача") — Flow</PageTitle>
 
@@ -29,7 +31,10 @@
         {
             <button type="button" class="icon-lnk" @onclick="CopyLink"><Icon Name="copy" Size="14" />Скопировать ссылку</button>
             <RowMenu ShowOpen="false" ShowRename="CanEdit" ShowDelete="CanEdit" Size="30" Style="color:rgba(255,255,255,0.5)"
-                     OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => _deleting = true" />
+                     OnRename="StartTitleEdit" OnCopy="CopyCode" OnDelete="() => _deleting = true" ShowRestructure="CanEdit"
+                     OnSplit="() => _restructure = TaskRestructureMode.Split" OnMerge="() => _restructure = TaskRestructureMode.Merge"
+                     OnMove="() => _restructure = TaskRestructureMode.Move"
+                     ShowSaveTemplate="Permissions.CanManageTaskTemplates(Access.For(_task!.BoardId))" OnSaveTemplate="() => _saveTemplateOpen = true" />
         }
     </div>
 </div>
@@ -78,15 +83,14 @@ else if (_task is not null && _board is not null)
                          @onclick="StartTitleEdit" @onkeydown="OnTitleActivate">@_task.Title</div>
                 }
             </div>
+            @if (Shows("description"))
+            {
             <div style="display:flex;flex-direction:column;gap:10px;">
                 <div class="desc-head">
                     <div class="section-title">Описание</div>
                     @if (_editingDesc)
                     {
-                        <div class="desc-actions">
-                            <button type="button" class="icon-lnk" @onclick="() => _editingDesc = false">Отмена</button>
-                            <DsButton Variant="primary" Size="sm" OnClick="SaveDesc" Busy="_busy">Сохранить</DsButton>
-                        </div>
+                        <InlineActions Class="desc-actions" Busy="_busy" OnSave="SaveDesc" OnCancel="() => _editingDesc = false" />
                     }
                     else if (CanEdit)
                     {
@@ -103,7 +107,25 @@ else if (_task is not null && _board is not null)
                     <MarkdownView Text="@_task.Description" Class="big" OnClick="OnDescClick" />
                 }
             </div>
-            <AttachmentList TaskId="_task.Id" DropZoneId="tp-drop" />
+            }
+            <SubtaskList Board="_board" Parent="_task" CanCreate="Permissions.CanCreateTask(Access.For(_board.Id))"
+                         OnCountsChanged="c => _task = _task with { ChildCount = c.Total, ChildDoneCount = c.Done }"
+                         OnCreated="child => _timeline?.NoteChildAdded(child)" />
+            @if (Shows("checklist"))
+            {
+                <TaskChecklist TaskId="_task.Id" CanEdit="CanEdit" OnCountsChanged="OnChecklistChanged" />
+            }
+            <TaskRecurrenceBlock TaskId="_task.Id" CanEdit="CanEdit" />
+            <TaskDevelopment Task="_task" />
+            @if (Shows("links"))
+            {
+                <TaskLinks TaskId="_task.Id" CanEdit="CanEdit" OnBlockedChanged="n => _task = _task with { BlockedByCount = n }"
+                           OnJournal="e => _timeline?.NoteActivity(e.Type, e.Old, e.New)" />
+            }
+            @if (Shows("attachments"))
+            {
+                <AttachmentList TaskId="_task.Id" BoardId="_task.BoardId" DropZoneId="tp-drop" />
+            }
             <TaskTimeline @ref="_timeline" TaskItem="_task" Board="_board" OnCommentCountChanged="OnCommentCountChanged" />
         </div>
 
@@ -114,7 +136,8 @@ else if (_task is not null && _board is not null)
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         @if (CanEdit)
                         {
-                            <StatusSelect Statuses="_board.Statuses" Value="_task.StatusId" OnChange="ChangeStatus" Disabled="_busy" />
+                            <StatusSelect Statuses="_board.Statuses" Value="_task.StatusId" OnChange="ChangeStatus" Disabled="_busy"
+                                          TaskId="_task.Id" Restricted="_board.WorkflowMode == WorkflowMode.Restricted" />
                         }
                         else
                         {
@@ -130,10 +153,23 @@ else if (_task is not null && _board is not null)
                             <span class="save-state ok" aria-live="polite"><Icon Name="check" Size="13" />Сохранено</span>
                         }
                     </div>
-                    <div class="meta-k">Исполнитель</div>
-                    <div><AssigneeSelect Value="_task.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" /></div>
-                    <div class="meta-k">Срок</div>
-                    <div><DueDateField Value="_task.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>
+                    @foreach (var field in DetailLayout.Where(f => ScreenLayout.SystemName(f) is not ("description" or "checklist" or "links" or "attachments")))
+                    {
+                        @if (field.Section is { } sectionTitle)
+                        {
+                            <div class="meta-section">@sectionTitle</div>
+                        }
+                        @if (ScreenLayout.CustomId(field) is { } customId)
+                        {
+                            <CustomFieldsEditor Board="_board" TypeId="_task.TypeId" Values="_task.CustomFields" CanEdit="CanEdit" Disabled="_busy"
+                                                FieldIds="[customId]" Required="field.Required" OnChange="c => SetCustomField(c.FieldId, c.Value)" />
+                        }
+                        else if (ScreenLayout.SystemName(field) is { } name)
+                        {
+                            <div class="meta-k @(field.Required && ScreenLayout.IsEmpty(name, _task) ? "req" : "")">@ScreenLayout.Label(name)@(field.Required ? " *" : "")</div>
+                            @SystemValue(name)
+                        }
+                    }
                     <div class="meta-k">Проект</div>
                     <div class="meta-v"><KeyChip Value="@_board.Key" /><a href="@BackHref" style="color:#fff;" title="@_board.Name">@_board.Name</a></div>
                     <div class="meta-k">Создана</div>
@@ -164,22 +200,70 @@ else if (_task is not null && _board is not null)
             <SimilarTasks TaskId="_task.Id" />
             @if (CanEdit)
             {
-                <button type="button" class="icon-lnk danger" style="padding:0 4px;align-self:flex-start;" @onclick="() => _deleting = true">
-                    <Icon Name="trash" Size="14" />Удалить задачу
-                </button>
+                <button type="button" class="icon-lnk danger task-delete" @onclick="() => _deleting = true"><Icon Name="trash" Size="14" />Удалить задачу</button>
             }
         </div>
     </div>
 }
 
+@if (_restructure != TaskRestructureMode.None && _task is not null)
+{
+    <TaskRestructure Task="_task" @bind-Mode="_restructure" OnDone="AfterRestructure" />
+}
+
+@if (_saveTemplateOpen && _task is not null)
+{
+    <SaveTaskTemplateDialog Task="_task" OnClose="() => _saveTemplateOpen = false" />
+}
+
 @if (_deleting && _task is not null)
 {
     <ConfirmDialog Title="@($"Удалить задачу {_task.Code}?")"
-                   Text="@($"«{_task.Title}» будет удалена без возможности восстановления.")"
+                   Text="@TaskMeta.DeleteWarning(_task)"
                    OnConfirm="ConfirmDelete" OnCancel="() => _deleting = false" />
 }
 
 @code {
+    /// <summary>Раскладка карточки по экрану типа задачи (docs/TZ_workflow_config.md §3).</summary>
+    /// <summary>Строка «Команда» (этап 4D) — только когда команды заведены или у задачи она уже есть.</summary>
+    private IReadOnlyList<ScreenFieldDto> DetailLayout => ScreenLayout.Resolve(_board!, _task!.TypeId, ScreenContext.Detail, _task.CustomFields)
+        .Where(f => ScreenLayout.SystemName(f) != "team" || Teams.HasTeams || _task.TeamId is not null).ToList();
+
+    private bool Shows(string name) => DetailLayout.Any(f => ScreenLayout.SystemName(f) == name);
+
+    private RenderFragment SystemValue(string name) => name switch
+    {
+        "type" => @<div>
+                @if (CanEdit)
+                {
+                    <TaskTypeSelect Types="_board!.TaskTypes" Value="_task!.TypeId" OnChange="ChangeType" Disabled="_busy" />
+                }
+                else if (TaskMeta.TypeOf(_board, _task!.TypeId) is { } type)
+                {
+                    <span class="status-pill"><TaskTypeIcon Kind="type.Kind" Name="@type.Name" Size="13" />@type.Name</span>
+                }
+            </div>,
+        "parent" => @<div class="meta-v"><ParentSelect Board="_board" Task="_task" Value="_task!.ParentId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetParent" /></div>,
+        "sprint" => @<div class="meta-v"><SprintSelect BoardId="_board!.Id" Value="_task!.SprintId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetSprint" /></div>,
+        "milestone" => @<div class="meta-v"><MilestoneSelect BoardId="_board!.Id" Value="_task!.MilestoneId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetMilestone" /></div>,
+        "priority" => @<div>
+                @if (CanEdit)
+                {
+                    <PrioritySelect Value="_task!.Priority" OnChange="ChangePriority" Disabled="_busy" />
+                }
+                else
+                {
+                    <span class="status-pill"><PriorityIcon Value="_task!.Priority" Size="13" ShowNone="true" />@TaskMeta.PriorityLabel(_task.Priority)</span>
+                }
+            </div>,
+        "team" => @<div class="meta-v"><TeamSelect Value="_task!.TeamId" CanEdit="CanEdit" Disabled="_busy" OnChange="SetTeam" /></div>,
+        "assignee" => @<div><UserPicker Value="_task!.AssigneeId" Disabled="!CanAssign" OnlyUserId="OnlyAssigneeId" OnChange="Assign" /></div>,
+        "start" => @<div><DueDateField Value="_task!.StartDate" CanEdit="CanEdit" Disabled="_busy" Plain="true" Label="Дата начала" OnChange="SetStartDate" /></div>,
+        "due" => @<div><DueDateField Value="_task!.DueDate" CanEdit="CanEdit" Disabled="_busy" IsDone="IsDone" OnChange="SetDueDate" /></div>,
+        "estimate" => @<div><EstimateField StoryPoints="_task!.StoryPoints" EstimateMinutes="_task.EstimateMinutes" CanEdit="CanEdit" Disabled="_busy" OnChange="SetEstimate" /></div>,
+        _ => @<div class="meta-v muted">—</div>
+    };
+
     [Parameter] public Guid Id { get; set; }
 
     private TaskResponse? _task;
@@ -192,12 +276,15 @@ else if (_task is not null && _board is not null)
     private DateTime? _savedAt;
     private CancellationTokenSource? _savedCts;
     private bool _deleting;
+    private TaskRestructureMode _restructure;
+    private bool _saveTemplateOpen;
 
-    // Права по матрице docs/TZ_user_roles.md — только показ; Flow.Api ответит 403, если что.
+    // Права в проекте задачи (docs/TZ_project_access.md) — только показ; Flow.Api ответит 403, если что.
     private UserResponse? Me => Users.Find(State.CurrentUserId);
-    private bool CanEdit => _task is not null && Permissions.CanEditTask(Me, _task);
-    private bool CanAssign => _task is not null && Permissions.CanAssign(Me, _task);
-    private Guid? OnlyAssigneeId => Permissions.CanAssignAnyone(Me) ? null : Me?.Id;
+    private ProjectAccessResponse? ProjectAccess => Access.For(_task?.BoardId);
+    private bool CanEdit => _task is not null && Permissions.CanEditTask(Me, ProjectAccess, _task);
+    private bool CanAssign => _task is not null && Permissions.CanAssign(Me, ProjectAccess, _task);
+    private Guid? OnlyAssigneeId => Permissions.CanAssignAnyone(ProjectAccess) ? null : Me?.Id;
     private bool _editingTitle;
     private bool _titleCancelled;
     private string _title = "";
@@ -248,6 +335,18 @@ else if (_task is not null && _board is not null)
         });
     }
 
+    /// <summary>После слияния — к основной задаче; после переноса или разделения — перечитать эту (новый код, связи).</summary>
+    private async Task AfterRestructure(TaskResponse next)
+    {
+        if (next.Id != Id)
+        {
+            Nav.NavigateTo($"tasks/{next.Id}");
+            return;
+        }
+
+        await Load();
+    }
+
     private void OnUsersChanged() => InvokeAsync(StateHasChanged);
 
     protected override async Task OnParametersSetAsync()
@@ -255,6 +354,7 @@ else if (_task is not null && _board is not null)
         if (_loadedId != Id)
         {
             _loadedId = Id;
+            await Teams.EnsureLoadedAsync();
             await Load();
         }
     }
@@ -283,6 +383,7 @@ else if (_task is not null && _board is not null)
         }
 
         _task = task.Value!;
+        await Access.EnsureCoversAsync([_task.BoardId]);
 
         // Вложения тянем ДО снятия _loading, хотя рисует их отдельный компонент: из них берутся
         // размеры картинок, а разметка описания и ленты обязана получить их на ПЕРВОМ рендере.
@@ -336,6 +437,10 @@ else if (_task is not null && _board is not null)
 
     private Task ChangeStatus(Guid statusId) => Patch(new UpdateTaskRequest(null, null, statusId));
 
+    private Task ChangeType(Guid typeId) => Patch(new UpdateTaskRequest(null, null, null, typeId));
+
+    private Task ChangePriority(TaskPriority priority) => Patch(new UpdateTaskRequest(null, null, null, Priority: priority));
+
     private async Task Assign(Guid? userId)
     {
         _busy = true;
@@ -348,26 +453,59 @@ else if (_task is not null && _board is not null)
         }
 
         var before = _task!;
-        _task = result.Value!;
+        _task = result.Value!.WithCountsOf(before);
         _whoOpen = false;
         _timeline?.NoteLocalChange(before, _task);
     }
 
-    private async Task SetDueDate(DateOnly? dueDate)
+    private Task SetDueDate(DateOnly? dueDate) =>
+        Apply(id => Api.SetDueDate(id, new SetTaskDueDateRequest(dueDate)), "Не удалось изменить срок");
+
+    private Task SetStartDate(DateOnly? startDate) =>
+        Apply(id => Api.SetSchedule(id, new SetTaskScheduleRequest(startDate, _task!.DueDate)), "Не удалось изменить дату начала");
+
+    private Task SetSprint(Guid? sprintId) =>
+        Apply(id => Api.SetTaskSprint(id, new SetTaskSprintRequest(sprintId)), "Не удалось перенести задачу в спринт");
+
+    private Task SetCustomField(Guid fieldId, System.Text.Json.JsonElement? value) =>
+        Apply(id => Api.SetTaskCustomFields(id, new SetCustomFieldsRequest(new Dictionary<Guid, System.Text.Json.JsonElement?> { [fieldId] = value })),
+            "Не удалось сохранить поле");
+
+    private Task SetTeam(Guid? teamId) =>
+        Apply(id => Api.SetTaskTeam(id, new SetTaskTeamRequest(teamId)), "Не удалось сменить команду");
+
+    private Task SetMilestone(Guid? milestoneId) =>
+        Apply(id => Api.SetTaskMilestone(id, new SetTaskMilestoneRequest(milestoneId)), "Не удалось сменить веху");
+
+    private Task SetParent(Guid? parentId) =>
+        Apply(id => Api.SetParent(id, new SetTaskParentRequest(parentId)), "Не удалось сменить родителя");
+
+    private Task SetEstimate((decimal? StoryPoints, int? EstimateMinutes) value) =>
+        Apply(id => Api.SetEstimate(id, new SetTaskEstimateRequest(value.StoryPoints, value.EstimateMinutes)), "Не удалось изменить оценку");
+
+    /// <summary>Правка отдельным эндпоинтом (срок, начало, оценка): текст ошибки сервера — в тост.</summary>
+    private async Task Apply(Func<Guid, Task<ApiResult<TaskResponse>>> call, string fallbackError)
     {
         _busy = true;
-        var result = await Api.SetDueDate(_task!.Id, new SetTaskDueDateRequest(dueDate));
+        var result = await call(_task!.Id);
         _busy = false;
         if (!result.Ok)
         {
-            Toasts.Error(result.Error ?? "Не удалось изменить срок");
+            Toasts.Error(result.Error ?? fallbackError);
             return;
         }
 
-        var before = _task;
-        _task = result.Value!;
+        var before = _task!;
+        _task = result.Value!.WithCountsOf(before);
         _timeline?.NoteLocalChange(before, _task);
         _ = FlashSaved();
+    }
+
+    private void OnChecklistChanged((int OldDone, int OldTotal, int Done, int Total) c)
+    {
+        _timeline?.NoteActivity(TaskActivityType.ChecklistChanged, $"{c.OldDone}/{c.OldTotal}", $"{c.Done}/{c.Total}");
+        if (_task is not null)
+            _task = _task with { ChecklistDone = c.Done, ChecklistTotal = c.Total };
     }
 
     private void OnCommentCountChanged(int count)
@@ -406,8 +544,8 @@ else if (_task is not null && _board is not null)
             return false;
         }
 
-        var before = _task;
-        _task = result.Value!;
+        var before = _task!;
+        _task = result.Value!.WithCountsOf(before);
         _timeline?.NoteLocalChange(before, _task);
         _ = FlashSaved();
         return true;
@@ -416,7 +554,7 @@ else if (_task is not null && _board is not null)
     private async Task ConfirmDelete()
     {
         var t = _task!;
-        var result = await Api.DeleteTask(t.Id);
+        var result = await Api.DeleteTask(t.Id, cascade: t.ChildCount > 0);
         _deleting = false;
         if (!result.Ok)
         {
