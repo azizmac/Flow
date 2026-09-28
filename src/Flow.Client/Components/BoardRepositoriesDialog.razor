@@ -5,7 +5,7 @@
 @inject IFlowApi Api
 @inject ToastService Toasts
 
-<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal wide"
            TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
     <TitleContent>
         <h3>Репозитории проекта @Board.Key</h3>
@@ -29,6 +29,32 @@
                                  Label="@r.FullName" />
                     <span class="hint">@ScmMeta.Name(r.Provider)</span>
                 </div>
+                @if (r.IsBound)
+                {
+                    <div class="scm-auto">
+                        <MudSelect T="Guid?" Label="PR открыт →" Value="r.OnPullRequestOpenedStatusId" Disabled="_busy" Dense="true" Variant="Variant.Text"
+                                   PopoverClass="flow-pop" ValueChanged="v => Configure(r, v, r.OnPullRequestMergedStatusId, r.SmartCommits)"
+                                   ToStringFunc="StatusName">
+                            <MudSelectItem T="Guid?" Value="null">не менять статус</MudSelectItem>
+                            @foreach (var s in Board.Statuses)
+                            {
+                                <MudSelectItem T="Guid?" Value="s.Id">@s.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudSelect T="Guid?" Label="PR влит в ветку по умолчанию →" Value="r.OnPullRequestMergedStatusId" Disabled="_busy" Dense="true"
+                                   Variant="Variant.Text" PopoverClass="flow-pop" ToStringFunc="StatusName"
+                                   ValueChanged="v => Configure(r, r.OnPullRequestOpenedStatusId, v, r.SmartCommits)">
+                            <MudSelectItem T="Guid?" Value="null">не менять статус</MudSelectItem>
+                            @foreach (var s in Board.Statuses)
+                            {
+                                <MudSelectItem T="Guid?" Value="s.Id">@s.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudCheckBox T="bool" Value="r.SmartCommits" Disabled="_busy" Size="Size.Small" Color="Color.Primary" Dense="true"
+                                     ValueChanged="v => Configure(r, r.OnPullRequestOpenedStatusId, r.OnPullRequestMergedStatusId, v)"
+                                     Class="scm-auto-smart" Label="Смарт-коммиты: #done, #comment, #status в ветке по умолчанию" />
+                    </div>
+                }
             }
         }
     </DialogContent>
@@ -61,6 +87,19 @@
     {
         _busy = true;
         var result = await Api.SetBoardRepository(Board.Id, repository.RepositoryId, bound);
+        _busy = false;
+        if (result.Ok)
+            _repositories = result.Value;
+        else
+            Toasts.Error(result.Error ?? "Не удалось сохранить");
+    }
+
+    private string StatusName(Guid? id) => id is { } v ? Board.Statuses.FirstOrDefault(s => s.Id == v)?.Name ?? "—" : "не менять статус";
+
+    private async Task Configure(ScmBoardRepositoryResponse repository, Guid? opened, Guid? merged, bool smartCommits)
+    {
+        _busy = true;
+        var result = await Api.SetBoardRepository(Board.Id, repository.RepositoryId, true, new UpdateScmBindingRequest(opened, merged, smartCommits));
         _busy = false;
         if (result.Ok)
             _repositories = result.Value;

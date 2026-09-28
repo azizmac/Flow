@@ -4,6 +4,7 @@ using Flow.Application.Features.Scm;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
+using Flow.Application.Features.Boards.Commands.StatusDeleteCommand;
 using Flow.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -98,5 +99,42 @@ public class ScmPersistenceTests(PostgresFixture db)
             Assert.Equal(1, (await store.GetFailedDeliveryCountsAsync(CancellationToken.None))[repository.Id]);
             return 0;
         });
+    }
+
+    /// <summary>
+    /// Этап 5C на Postgres: автопереход от flow-bot — профиль бота создаётся в той же транзакции, что и запись журнала
+    /// (FK Restrict на Users), источник записи сохраняется; удалённый статус автоперехода обнуляет настройку (SetNull).
+    /// </summary>
+    [Fact]
+    public async Task Bot_Transition_Persists_And_Deleted_Status_Turns_Automation_Off()
+    {
+        var board = (await db.SendAsync(new BoardCreateCommand(Owner, "Автопереходы", "SCMA"))).Response!;
+        var task = (await db.SendAsync(new TaskCreateCommand(Owner, board.Id, "Перейти", null, null)))!;
+        var review = board.Statuses.Single(s => s.Name == "На проверке").Id;
+        var connection = ScmConnection.Create(ScmProvider.Gitea, "Gitea", "https://git.example.com", "p:tok", Owner);
+        var repository = ScmRepository.Create(connection.Id, "31", "acme/scma", "https://git.example.com/acme/scma", "main", "p:hooksecret");
+        var binding = ScmRepositoryBoard.Create(repository.Id, board.Id, Owner);
+        binding.Configure(review, null, false);
+        await db.QueryAsync(async ctx =>
+        {
+            ctx.ScmConnections.Add(connection);
+            ctx.ScmRepositories.Add(repository);
+            ctx.ScmRepositoryBoards.Add(binding);
+            return await ctx.SaveChangesAsync();
+        });
+
+        var body = Encoding.UTF8.GetBytes("""{"action":"opened","pull_request":{"number":5,"title":"SCMA-1","state":"open","html_url":"https://git.example.com/acme/scma/pulls/5","user":{"login":"nobody"},"head":{"ref":"f"},"base":{"ref":"main"}}}""");
+        var headers = new Dictionary<string, string> { ["X-Gitea-Event"] = "pull_request", ["X-Gitea-Delivery"] = "a-1", ["X-Gitea-Signature"] = ScmSignatures.Sign(body, "hooksecret") };
+        Assert.Equal(ScmWebhookResult.Accepted, await db.SendAsync(new ScmWebhookReceiveCommand(repository.Id, headers, body)));
+        foreach (var id in await db.SendAsync(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1))))
+            await db.SendAsync(new ScmDeliveryProcessCommand(id));
+
+        Assert.Equal(review, await db.QueryAsync(ctx => ctx.TaskItems.Where(t => t.Id == task.Id).Select(t => t.StatusId).SingleAsync()));
+        var entry = await db.QueryAsync(ctx => ctx.TaskActivities.SingleAsync(a => a.TaskId == task.Id && a.Type == TaskActivityType.StatusChanged));
+        Assert.Equal((ScmBot.Id, "PR #5"), (entry.ActorId, entry.Source));
+        Assert.Equal(UserStatus.Deactivated, await db.QueryAsync(ctx => ctx.Users.Where(u => u.Id == ScmBot.Id).Select(u => u.Status).SingleAsync()));
+
+        await db.SendAsync(new StatusDeleteCommand(Owner, board.Id, review, board.Statuses.Single(s => s.Name == "В работе").Id));
+        Assert.Null(await db.QueryAsync(ctx => ctx.ScmRepositoryBoards.Where(b => b.BoardId == board.Id).Select(b => b.OnPullRequestOpenedStatusId).SingleAsync()));
     }
 }

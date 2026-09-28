@@ -160,7 +160,8 @@ public interface IFlowApi
     Task<ApiResult<ScmDeliveryResponse>> RetryScmDelivery(Guid deliveryId, CancellationToken ct = default);
     Task<ApiResult<bool>> BackfillScmRepository(Guid repositoryId, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> GetBoardRepositories(Guid boardId, CancellationToken ct = default);
-    Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> SetBoardRepository(Guid boardId, Guid repositoryId, bool bound, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> SetBoardRepository(Guid boardId, Guid repositoryId, bool bound,
+        UpdateScmBindingRequest? settings = null, CancellationToken ct = default);
     Task<ApiResult<TaskDevelopmentResponse>> GetTaskDevelopment(Guid taskId, CancellationToken ct = default);
 
     // Дашборды (docs/TZ_task_views.md §8): данные каждого виджета — отдельным вызовом; ошибка виджета — в WidgetDataResponse.Error.

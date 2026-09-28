@@ -86,9 +86,12 @@ public class ScmController(IMediator mediator, IActorAccessor actor) : Controlle
     public async Task<IActionResult> BoardRepositories(Guid boardId, CancellationToken cancellationToken) =>
         Ok(await mediator.Send(new ScmBoardRepositoriesQuery(actor.Require(), boardId), cancellationToken));
 
+    /// <summary>Привязать; тело (автопереходы, смарт-коммиты) необязательно — без него настройки не меняются.</summary>
     [HttpPut("boards/{boardId:guid}/repositories/{repositoryId:guid}")]
-    public Task<IActionResult> Bind(Guid boardId, Guid repositoryId, CancellationToken cancellationToken) =>
-        Send(async () => (object?)await mediator.Send(new ScmBindCommand(actor.Require(), boardId, repositoryId, true), cancellationToken));
+    public Task<IActionResult> Bind(Guid boardId, Guid repositoryId,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] UpdateScmBindingRequest? request,
+        CancellationToken cancellationToken) =>
+        Send(async () => (object?)await mediator.Send(new ScmBindCommand(actor.Require(), boardId, repositoryId, true, request), cancellationToken));
 
     [HttpDelete("boards/{boardId:guid}/repositories/{repositoryId:guid}")]
     public Task<IActionResult> Unbind(Guid boardId, Guid repositoryId, CancellationToken cancellationToken) =>

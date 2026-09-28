@@ -74,4 +74,25 @@ public sealed class ScmWebhookApiTests(ApiFixture api)
         using var retry = await owner.PostAsync($"/api/scm/deliveries/{Guid.NewGuid()}/retry", null);
         Assert.Equal(HttpStatusCode.NotFound, retry.StatusCode);
     }
+
+    /// <summary>Этап 5C: PUT привязки принимает и пустое тело (только привязать), и настройки автоматизации.</summary>
+    [Fact]
+    public async Task Binding_Accepts_An_Empty_Body_Or_Automation_Settings()
+    {
+        using var owner = api.CreateClientAs();
+        using var boardResponse = await owner.PostAsJsonAsync("/api/boards", new Flow.Shared.Contracts.Boards.CreateBoardRequest("Автоматизация", "SCMC"));
+        var board = (await boardResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Boards.BoardResponse>())!;
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(ScmProvider.GitHub, "GitHub 5C", "token"));
+        var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
+        api.Scm.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("305", "acme/auto", "https://github.com/acme/auto", "main"));
+        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "305"));
+        var repository = (await repositoryResponse.Content.ReadFromJsonAsync<ScmRepositoryResponse>())!;
+
+        using var plain = await owner.PutAsync($"/api/boards/{board.Id}/repositories/{repository.Id}", null);
+        Assert.Equal(HttpStatusCode.OK, plain.StatusCode);
+        var done = board.Statuses.Single(s => s.IsFinal).Id;
+        using var configured = await owner.PutAsJsonAsync($"/api/boards/{board.Id}/repositories/{repository.Id}", new UpdateScmBindingRequest(null, done, true));
+        var list = (await configured.Content.ReadFromJsonAsync<List<ScmBoardRepositoryResponse>>())!;
+        Assert.Equal((done, true), (list.Single(r => r.RepositoryId == repository.Id).OnPullRequestMergedStatusId!.Value, list.Single(r => r.RepositoryId == repository.Id).SmartCommits));
+    }
 }

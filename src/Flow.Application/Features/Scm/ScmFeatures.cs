@@ -41,7 +41,9 @@ public sealed record ScmRepositoryDisableCommand(Guid ActorId, Guid RepositoryId
 
 public sealed record ScmBoardRepositoriesQuery(Guid ActorId, Guid BoardId) : IRequest<IReadOnlyList<ScmBoardRepositoryResponse>?>;
 
-public sealed record ScmBindCommand(Guid ActorId, Guid BoardId, Guid RepositoryId, bool Bound) : IRequest<IReadOnlyList<ScmBoardRepositoryResponse>?>;
+/// <summary>Привязать/отвязать; Settings — автоматизация привязки (этап 5C), null — не менять.</summary>
+public sealed record ScmBindCommand(Guid ActorId, Guid BoardId, Guid RepositoryId, bool Bound, UpdateScmBindingRequest? Settings = null)
+    : IRequest<IReadOnlyList<ScmBoardRepositoryResponse>?>;
 
 public sealed record TaskDevelopmentQuery(Guid ActorId, Guid TaskId) : IRequest<TaskDevelopmentResponse?>;
 
@@ -80,7 +82,7 @@ internal static class ScmMapping
     public static ScmLinkResponse ToResponse(this ScmLink l, ScmRepository? repository, DomainProvider provider) =>
         new(l.Id, l.RepositoryId, repository?.FullName ?? "", provider.ToShared(), (Flow.Shared.Contracts.Scm.ScmLinkKind)(int)l.Kind,
             l.ExternalId, l.Url, l.Title, l.State is { } s ? (Flow.Shared.Contracts.Scm.ScmLinkState)(int)s : null, l.AuthorLogin,
-            l.AuthorUserId, l.SourceBranch, l.TargetBranch, l.OccurredAt);
+            l.AuthorUserId, l.SourceBranch, l.TargetBranch, l.OccurredAt, l.Note);
 }
 
 internal sealed class ScmAdminHandlers(
@@ -365,6 +367,7 @@ internal sealed class ScmAdminHandlers(
 internal sealed class ScmProjectHandlers(
     IScmStore store,
     ITaskItemRepository tasks,
+    IBoardRepository boards,
     ActorResolver actors,
     IPermissionService permissions,
     IProjectAccess projectAccess,
@@ -393,9 +396,20 @@ internal sealed class ScmProjectHandlers(
         {
             if (!repository.IsActive)
                 throw new InvalidOperationException("Репозиторий отключён — сначала подключите его заново в интеграциях.");
-            store.Add(ScmRepositoryBoard.Create(repository.Id, request.BoardId, actor.Id));
+            existing = ScmRepositoryBoard.Create(repository.Id, request.BoardId, actor.Id);
+            store.Add(existing);
             // Задачи проекта уже упоминались в PR и коммитах до привязки — их подтянет дозагрузка истории (этап 5B).
             await store.EnqueueBackfillAsync(repository.Id, cancellationToken);
+        }
+
+        if (request.Bound && request.Settings is { } settings)
+        {
+            var board = await boards.GetByIdAsync(request.BoardId, cancellationToken)
+                        ?? throw new InvalidOperationException("Проект не найден.");
+            foreach (var statusId in new[] { settings.OnPullRequestOpenedStatusId, settings.OnPullRequestMergedStatusId }.OfType<Guid>())
+                if (board.Statuses.All(s => s.Id != statusId))
+                    throw new ArgumentException("Статус автоперехода — не из этого проекта.", nameof(request.Settings));
+            existing!.Configure(settings.OnPullRequestOpenedStatusId, settings.OnPullRequestMergedStatusId, settings.SmartCommits);
         }
         else if (!request.Bound && existing is not null)
         {
@@ -433,11 +447,14 @@ internal sealed class ScmProjectHandlers(
 
     private async Task<IReadOnlyList<ScmBoardRepositoryResponse>> ListAsync(Guid boardId, CancellationToken cancellationToken)
     {
-        var bound = (await store.GetBindingsAsync(boardId, null, cancellationToken)).Select(b => b.RepositoryId).ToHashSet();
+        var bound = (await store.GetBindingsAsync(boardId, null, cancellationToken)).ToDictionary(b => b.RepositoryId);
         var providers = (await store.GetConnectionsAsync(cancellationToken)).ToDictionary(c => c.Id, c => c.Provider);
         return (await store.GetRepositoriesAsync(null, cancellationToken))
-            .Where(r => r.IsActive || bound.Contains(r.Id))
-            .Select(r => new ScmBoardRepositoryResponse(r.Id, providers.GetValueOrDefault(r.ConnectionId).ToShared(), r.FullName, r.WebUrl, bound.Contains(r.Id)))
+            .Where(r => r.IsActive || bound.ContainsKey(r.Id))
+            .Select(r => bound.GetValueOrDefault(r.Id) is { } b
+                ? new ScmBoardRepositoryResponse(r.Id, providers.GetValueOrDefault(r.ConnectionId).ToShared(), r.FullName, r.WebUrl, true,
+                    b.OnPullRequestOpenedStatusId, b.OnPullRequestMergedStatusId, b.SmartCommits)
+                : new ScmBoardRepositoryResponse(r.Id, providers.GetValueOrDefault(r.ConnectionId).ToShared(), r.FullName, r.WebUrl, false))
             .ToList();
     }
 }

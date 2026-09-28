@@ -27,6 +27,16 @@ public sealed class TaskActivity
 
     public DateTime CreatedAt { get; private set; }
 
+    public const int SourceMaxLength = 100;
+
+    /// <summary>
+    /// Откуда пришло изменение, если не из интерфейса (этап 5C): «PR #42», «коммит a1b2c3d». Клиент пишет «по PR #42»
+    /// и ведёт по <see cref="SourceUrl"/>. null — обычная правка человеком.
+    /// </summary>
+    public string? Source { get; private set; }
+
+    public string? SourceUrl { get; private set; }
+
     private TaskActivity()
     {
         // EF Core
@@ -46,6 +56,19 @@ public sealed class TaskActivity
         OldValue = oldValue;
         NewValue = newValue;
         CreatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Пометка источника — один раз, сразу после создания записи: журнал append-only.</summary>
+    public TaskActivity FromSource(string source, string? url)
+    {
+        if (Source is not null)
+            throw new InvalidOperationException("Источник записи журнала уже указан.");
+        if (string.IsNullOrWhiteSpace(source))
+            throw new ArgumentException("Источник не может быть пустым.", nameof(source));
+        var trimmed = source.Trim();
+        Source = trimmed.Length <= SourceMaxLength ? trimmed : trimmed[..SourceMaxLength];
+        SourceUrl = string.IsNullOrWhiteSpace(url) ? null : url.Length <= 1000 ? url : null;
+        return this;
     }
 
     public static TaskActivity Created(Guid taskId, Guid actorId) =>

@@ -69,7 +69,9 @@ public static class TaskMappingExtensions
         activity.Type.ToResponseType(),
         activity.OldValue,
         activity.NewValue,
-        activity.CreatedAt);
+        activity.CreatedAt,
+        activity.Source,
+        activity.SourceUrl);
 
     /// <summary>Зеркала с одинаковыми значениями — приведение с проверкой, как у TaskActivityType.</summary>
     public static SharedPriority ToResponsePriority(this DomainPriority priority) =>

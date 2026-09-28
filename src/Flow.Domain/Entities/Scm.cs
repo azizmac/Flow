@@ -266,8 +266,25 @@ public sealed class ScmRepositoryBoard
         // EF Core
     }
 
+    /// <summary>Автопереход (этап 5C): PR открыт → этот статус проекта; null — выключен.</summary>
+    public Guid? OnPullRequestOpenedStatusId { get; private set; }
+
+    /// <summary>Автопереход: PR влит в ветку по умолчанию → этот статус; null — выключен.</summary>
+    public Guid? OnPullRequestMergedStatusId { get; private set; }
+
+    /// <summary>Смарт-коммиты (#done, #comment, #status) в push'ах в ветку по умолчанию.</summary>
+    public bool SmartCommits { get; private set; }
+
     public static ScmRepositoryBoard Create(Guid repositoryId, Guid boardId, Guid createdById) =>
         new() { RepositoryId = repositoryId, BoardId = boardId, CreatedById = createdById, CreatedAt = DateTime.UtcNow };
+
+    /// <summary>Настройки автоматизации привязки. Принадлежность статусов проекту проверяет хендлер — он видит доску.</summary>
+    public void Configure(Guid? onPullRequestOpenedStatusId, Guid? onPullRequestMergedStatusId, bool smartCommits)
+    {
+        OnPullRequestOpenedStatusId = onPullRequestOpenedStatusId;
+        OnPullRequestMergedStatusId = onPullRequestMergedStatusId;
+        SmartCommits = smartCommits;
+    }
 }
 
 /// <summary>
@@ -308,6 +325,14 @@ public sealed class ScmLink
 
     public DateTime UpdatedAt { get; private set; }
 
+    /// <summary>
+    /// Что Flow не сделал по этой связи и почему (этап 5C): «автопереход не разрешён workflow: …», «смарт-коммит не
+    /// выполнен: …». Показывается в блоке «Разработка»; null — пометок нет.
+    /// </summary>
+    public string? Note { get; private set; }
+
+    public const int NoteMaxLength = 500;
+
     private ScmLink()
     {
         // EF Core
@@ -339,6 +364,9 @@ public sealed class ScmLink
         OccurredAt = DateTime.SpecifyKind(occurredAt, DateTimeKind.Utc);
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void SetNote(string? note) =>
+        Note = string.IsNullOrWhiteSpace(note) ? null : note.Length <= NoteMaxLength ? note : note[..NoteMaxLength];
 
     public void SetState(ScmLinkState state)
     {
@@ -459,5 +487,25 @@ public sealed class ScmDelivery
 
         var delay = TimeSpan.FromSeconds(Math.Min(300, 5 * Math.Pow(2, Attempts - 1)));
         NextAttemptAt = utcNow + delay;
+    }
+}
+
+/// <summary>
+/// Профиль бота интеграции (docs/TZ_scm_integration.md, принятые решения): от его имени пишутся автопереходы, когда
+/// автор PR не сопоставлен или не может править задачу. Учётной записи в Auth-модуле нет — войти им нельзя; профиль
+/// сразу деактивирован, поэтому его не назначить исполнителем и не упомянуть. Журнал ссылается на него FK — профиль
+/// создаётся при первой надобности.
+/// </summary>
+public static class ScmBot
+{
+    public static readonly Guid Id = new("00000000-0000-0000-0000-00000000f10b");
+
+    public const string Username = "flow-bot";
+
+    public static User Create()
+    {
+        var bot = User.CreateWithId(Id, Username, "flow-bot@flow.local", "Flow", "Bot");
+        bot.Deactivate();
+        return bot;
     }
 }

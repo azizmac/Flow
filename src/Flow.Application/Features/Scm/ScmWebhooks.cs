@@ -88,6 +88,7 @@ internal sealed class ScmDeliveryHandlers(
     IScmProviderClient client,
     IScmSecretProtector protector,
     ScmOptions options,
+    ScmAutomation automation,
     IUnitOfWork unitOfWork) :
     IRequestHandler<ScmDueDeliveriesQuery, IReadOnlyList<Guid>>,
     IRequestHandler<ScmDeliveryProcessCommand, bool>,
@@ -118,7 +119,7 @@ internal sealed class ScmDeliveryHandlers(
         var connection = repository is null ? null : await store.GetConnectionAsync(repository.ConnectionId, cancellationToken);
         if (repository is not null && connection is not null)
         {
-            var processor = new Processor(store, tasks, users, repository, connection.Provider, cancellationToken);
+            var processor = new Processor(store, tasks, users, automation, repository, connection.Provider, delivery.IsBackfill, cancellationToken);
             if (!delivery.IsBackfill)
             {
                 await processor.RunAsync(ScmEvent.Deserialize(delivery.Payload));
@@ -153,15 +154,18 @@ internal sealed class ScmDeliveryHandlers(
         return true;
     }
 
-    private sealed class Processor(IScmStore store, ITaskItemRepository tasks, IUserRepository users, ScmRepository repository, ScmProvider provider, CancellationToken ct)
+    /// <param name="history">Дозагрузка истории: связи пишутся, но автопереходы и смарт-коммиты не выполняются —
+    /// прошлое не должно двигать задачи сегодня.</param>
+    private sealed class Processor(IScmStore store, ITaskItemRepository tasks, IUserRepository users, ScmAutomation automation,
+        ScmRepository repository, ScmProvider provider, bool history, CancellationToken ct)
     {
         private readonly Dictionary<(Guid, ScmLinkKind, string), ScmLink> _links = [];
-        private HashSet<Guid>? _boards;
+        private Dictionary<Guid, ScmRepositoryBoard>? _boards;
         private IReadOnlyList<User>? _users;
 
         public async Task RunAsync(ScmEvent ev)
         {
-            _boards ??= (await store.GetBindingsAsync(null, repository.Id, ct)).Select(b => b.BoardId).ToHashSet();
+            _boards ??= (await store.GetBindingsAsync(null, repository.Id, ct)).ToDictionary(b => b.BoardId);
             if (_boards.Count == 0)
                 return;
 
@@ -182,8 +186,13 @@ internal sealed class ScmDeliveryHandlers(
                     var codes = TaskCodeDetector.Find(pr.Title, pr.Body).Concat(TaskCodeDetector.FindInBranch(pr.SourceBranch)).Distinct().ToList();
                     var author = await UserByLoginAsync(pr.AuthorLogin);
                     foreach (var task in await TasksAsync(codes))
-                        (await LinkAsync(task, ScmLinkKind.PullRequest, pr.Number))
-                            .Apply(pr.Url, pr.Title, pr.State, pr.AuthorLogin, author, pr.SourceBranch, pr.TargetBranch, pr.UpdatedAt);
+                    {
+                        var link = await LinkAsync(task, ScmLinkKind.PullRequest, pr.Number);
+                        var previous = link.Url.Length == 0 ? (ScmLinkState?)null : link.State;
+                        link.Apply(pr.Url, pr.Title, pr.State, pr.AuthorLogin, author, pr.SourceBranch, pr.TargetBranch, pr.UpdatedAt);
+                        if (!history)
+                            await automation.OnPullRequestAsync(repository, _boards[task.BoardId], task, link, previous, pr, author, ct);
+                    }
                     break;
             }
         }
@@ -203,9 +212,21 @@ internal sealed class ScmDeliveryHandlers(
 
                 var author = await UserByEmailAsync(commit.AuthorEmail) ?? await UserByLoginAsync(commit.AuthorLogin);
                 var title = commit.Message.Split('\n', 2)[0];
+                // Смарт-коммиты — только в ветке по умолчанию: в feature-ветках они срабатывали бы на каждом rebase.
+                var smart = new Dictionary<Guid, List<SmartCommand>>();
+                if (!history && branch == repository.DefaultBranch)
+                    foreach (var command in SmartCommitParser.Parse(commit.Message))
+                        foreach (var target in await TasksAsync([command.Code]))
+                            (smart.TryGetValue(target.Id, out var list) ? list : smart[target.Id] = []).Add(command);
                 foreach (var task in targets)
-                    (await LinkAsync(task, ScmLinkKind.Commit, commit.Sha))
-                        .Apply(commit.Url, title, null, commit.AuthorLogin ?? commit.AuthorEmail, author, branch, null, commit.Timestamp);
+                {
+                    var link = await LinkAsync(task, ScmLinkKind.Commit, commit.Sha);
+                    // Коммит уже видели в ветке по умолчанию (повторный push, merge-коммит) — команды не выполняем второй раз.
+                    var seenOnDefault = link.Url.Length > 0 && link.SourceBranch == repository.DefaultBranch;
+                    link.Apply(commit.Url, title, null, commit.AuthorLogin ?? commit.AuthorEmail, author, branch, null, commit.Timestamp);
+                    if (smart.TryGetValue(task.Id, out var commands) && !seenOnDefault && _boards![task.BoardId].SmartCommits)
+                        await automation.OnSmartCommitAsync(task, link, commit, author, commands, ct);
+                }
             }
         }
 
@@ -247,7 +268,7 @@ internal sealed class ScmDeliveryHandlers(
         {
             var found = new List<TaskItem>();
             foreach (var code in codes)
-                if (await tasks.GetByCodeAsync(code, ct) is { } task && _boards!.Contains(task.BoardId) && found.All(t => t.Id != task.Id))
+                if (await tasks.GetByCodeAsync(code, ct) is { } task && _boards!.ContainsKey(task.BoardId) && found.All(t => t.Id != task.Id))
                     found.Add(task);
             return found;
         }

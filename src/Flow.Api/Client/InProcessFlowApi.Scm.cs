@@ -51,8 +51,9 @@ internal sealed partial class InProcessFlowApi
         Scoped(async mediator => await mediator.Send(new ScmBoardRepositoriesQuery(await ActorAsync(), boardId), ct) is { } list
             ? Ok(list) : NotFound<IReadOnlyList<ScmBoardRepositoryResponse>>());
 
-    public Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> SetBoardRepository(Guid boardId, Guid repositoryId, bool bound, CancellationToken ct = default) =>
-        Scoped(async mediator => await mediator.Send(new ScmBindCommand(await ActorAsync(), boardId, repositoryId, bound), ct) is { } list
+    public Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> SetBoardRepository(Guid boardId, Guid repositoryId, bool bound,
+        UpdateScmBindingRequest? settings = null, CancellationToken ct = default) =>
+        Scoped(async mediator => await mediator.Send(new ScmBindCommand(await ActorAsync(), boardId, repositoryId, bound, settings), ct) is { } list
             ? Ok(list) : NotFound<IReadOnlyList<ScmBoardRepositoryResponse>>());
 
     public Task<ApiResult<TaskDevelopmentResponse>> GetTaskDevelopment(Guid taskId, CancellationToken ct = default) =>

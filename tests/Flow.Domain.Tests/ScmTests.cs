@@ -43,4 +43,27 @@ public class ScmTests
         delivery.Retry(now);
         Assert.Equal((ScmDeliveryStatus.Pending, 0, now, (string?)null), (delivery.Status, delivery.Attempts, delivery.NextAttemptAt, delivery.LastError));
     }
+
+    [Fact]
+    public void Bot_Is_A_Deactivated_Profile_And_Activity_Source_Is_Set_Once()
+    {
+        var bot = ScmBot.Create();
+        Assert.Equal((ScmBot.Id, "flow-bot", UserStatus.Deactivated), (bot.Id, bot.Username, bot.Status));
+
+        var activity = TaskActivity.StatusChanged(Guid.NewGuid(), bot.Id, Guid.NewGuid(), Guid.NewGuid()).FromSource(" PR #42 ", "https://h/pr/42");
+        Assert.Equal(("PR #42", "https://h/pr/42"), (activity.Source, activity.SourceUrl));
+        Assert.Throws<InvalidOperationException>(() => activity.FromSource("коммит a1", null));
+
+        var binding = ScmRepositoryBoard.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        Assert.Equal(((Guid?)null, (Guid?)null, false), (binding.OnPullRequestOpenedStatusId, binding.OnPullRequestMergedStatusId, binding.SmartCommits));
+        var status = Guid.NewGuid();
+        binding.Configure(null, status, true);
+        Assert.Equal(((Guid?)null, (Guid?)status, true), (binding.OnPullRequestOpenedStatusId, binding.OnPullRequestMergedStatusId, binding.SmartCommits));
+
+        var link = ScmLink.Create(Guid.NewGuid(), Guid.NewGuid(), ScmLinkKind.PullRequest, "1");
+        link.SetNote(new string('x', 600));
+        Assert.Equal(ScmLink.NoteMaxLength, link.Note!.Length);
+        link.SetNote(" ");
+        Assert.Null(link.Note);
+    }
 }

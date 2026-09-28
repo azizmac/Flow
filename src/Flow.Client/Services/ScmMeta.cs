@@ -32,6 +32,13 @@ public static class ScmMeta
         _ => "muted"
     };
 
+    /// <summary>Профиль flow-bot (Domain ScmBot.Id): им подписаны автопереходы без сопоставленного автора PR.</summary>
+    public static readonly Guid BotId = new("00000000-0000-0000-0000-00000000f10b");
+
+    /// <summary>«коммит a1b2c3d» → «коммиту a1b2c3d» после «по»; «PR #42» не склоняется.</summary>
+    public static string SourceLabel(string source) =>
+        source.StartsWith("коммит ", StringComparison.Ordinal) ? "коммиту " + source["коммит ".Length..] : source;
+
     public static string AuthName(ScmAuthKind kind) => kind == ScmAuthKind.GitHubApp ? "GitHub App" : "Токен";
 
     public static string DeliveryStatusName(ScmDeliveryStatus status) => status switch

@@ -1,6 +1,6 @@
 # ТЗ: интеграция с Git-хостингами — GitHub, GitLab, Gitea, Forgejo
 
-Статус: **этапы 5A и 5B сделаны** (подключения по токену и GitHub App, репозитории, вебхуки, разбор push/PR/веток, блок «Разработка», дозагрузка истории, диагностика доставок, FQL `development`), 5C–5E — не начаты. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 5). Образец — Windshift
+Статус: **этапы 5A–5C сделаны** (подключения по токену и GitHub App, репозитории, вебхуки, разбор push/PR/веток, блок «Разработка», дозагрузка истории, диагностика доставок, FQL `development`, автопереходы и смарт-коммиты), 5D–5E — по запросу. Часть плана `docs/TZ_roadmap_jira_parity.md` (блок 5). Образец — Windshift
 (`internal/scm/*`, `internal/database/schema/scm_postgres.sql`).
 
 ## Исходное требование
@@ -211,6 +211,31 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
   PullRequest) — узел `TaskFilterPullRequest`, в SQL — `EXISTS` по `ScmLinks`; `!=`, `IN`, `NOT IN` как у прочих
   перечислений. Подсказки значений — из `FqlFields.Development`.
 
+## Как сделано (этап 5C)
+
+- Настройки — колонками у привязки, а не jsonb: `ScmRepositoryBoard.OnPullRequestOpenedStatusId`,
+  `OnPullRequestMergedStatusId` (FK на `Statuses`, SetNull — удалили статус, автопереход выключился) и `SmartCommits`
+  (миграция `AddScmAutomation`). `PUT /boards/{id}/repositories/{repoId}` принимает `{ onPullRequestOpenedStatusId,
+  onPullRequestMergedStatusId, smartCommits }`, пустое тело — только привязать; статус чужого проекта — 400.
+- Всё в `Features/Scm/ScmAutomation` — тот же путь, что правка человеком: `TransitionGuard.CheckAsync` (обхода нет),
+  `TaskActivity.StatusChanged`, `Upsert` в поиске. Отказ не роняет доставку: пишется `ScmLink.Note`
+  («Автопереход в «X» не разрешён workflow: …», «Смарт-коммит не выполнен: …»), блок «Разработка» показывает её под PR
+  или коммитом; успешный переход пометку снимает.
+- Автопереход «PR открыт» — на первом появлении PR в состоянии Open или при выходе из черновика; «влит» — при переходе
+  в Merged и только если целевая ветка = ветка по умолчанию. Задача в финальном статусе не трогается, переоткрытие назад
+  не переводит. Actor — автор PR (логин из ссылок профиля), если он активен и может править задачу, иначе `flow-bot`:
+  `ScmBot` — профиль с фиксированным Id, деактивированный и без учётной записи, создаётся при первой надобности в той же
+  транзакции (FK журнала). Роль бота в проверке workflow — участник проекта (Member): переход с `MinRole` выше он не
+  сделает.
+- Смарт-коммиты — `SmartCommitParser`: построчно, команды строки относятся к кодам до первой команды, аргумент — до
+  следующей команды; коды внутри аргумента — не цели. Выполняются только при `SmartCommits` у привязки, только в push'е
+  в ветку по умолчанию, только от автора, сопоставленного по e-mail/логину с активным пользователем, и только с его
+  правами (`EnsureCanComment`, `EnsureCanEditTask`, workflow). `#done` — первый финальный статус проекта, `#status` — по
+  имени без учёта регистра. Повторно не выполняются: коммит, уже виденный в ветке по умолчанию, пропускается.
+- Журнал: `TaskActivity.Source`/`SourceUrl` («PR #42», «коммит a1b2c3d» и ссылка на хостинг), ставится один раз
+  (`FromSource`). Клиент пишет «· по PR #42» ссылкой, бот — «Flow Bot» даже до перезагрузки справочника людей.
+- Дозагрузка истории (5B) автоматизацию не запускает: прошлое не двигает задачи сегодня.
+
 ## API
 
 | Метод | Путь | Кто |
@@ -218,7 +243,7 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 | GET/POST | `/scm/connections`; PATCH/DELETE `/scm/connections/{id}`; POST `/scm/connections/{id}/check` | Admin+ |
 | GET | `/scm/connections/{id}/available-repositories?q=` | Admin+ |
 | POST/DELETE | `/scm/repositories` `{ connectionId, externalId }`, `/scm/repositories/{id}` | Admin+ |
-| PUT/DELETE | `/boards/{id}/repositories/{repoId}` `{ autoTransitions, smartCommits }` | `ManageScm` |
+| PUT/DELETE | `/boards/{id}/repositories/{repoId}` `{ onPullRequestOpenedStatusId?, onPullRequestMergedStatusId?, smartCommits }` | `ManageScm` |
 | GET | `/tasks/{id}/development` — `ScmLink` задачи, сгруппированные по типу | `ViewProject` |
 | GET | `/scm/repositories/{id}/deliveries?status=` — диагностика доставок | Admin+ |
 | POST | `/scm/deliveries/{id}/retry` — повторить доставку с ошибкой (не Failed — 400) | Admin+ |

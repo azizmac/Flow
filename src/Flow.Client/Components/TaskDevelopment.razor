@@ -1,7 +1,8 @@
 @* Блок «Разработка» (docs/TZ_scm_integration.md §7): ветки, PR (номер, заголовок, состояние чипом, автор, целевая
    ветка) и последние коммиты задачи из привязанных репозиториев. Заголовки и сообщения — недоверенный текст с
    хостинга: выводятся как текст, без Markdown. Ссылки открываются на хостинге в новой вкладке. «Ветка» копирует
-   git checkout -b КОД-название — без обращения к API. Проект без репозиториев — блока нет. *@
+   git checkout -b КОД-название — без обращения к API. Проект без репозиториев — блока нет. Пометка под PR или коммитом —
+   чего Flow не сделал по нему и почему (автопереход запрещён workflow, смарт-коммит без прав; этап 5C). *@
 @inject IFlowApi Api
 @inject BrowserInterop Browser
 @inject ToastService Toasts
@@ -26,6 +27,10 @@
                 <span class="dev-state @ScmMeta.StateClass(pr.State)">@ScmMeta.StateLabel(pr.State)</span>
                 <span class="hint">@Who(pr)@(pr.TargetBranch is { } target ? $" → {target}" : "")</span>
             </a>
+            @if (pr.Note is { } note)
+            {
+                <div class="dev-note">@note</div>
+            }
         }
         @foreach (var branch in d.Branches)
         {
@@ -42,6 +47,10 @@
                 <span class="dev-title">@commit.Title</span>
                 <span class="hint">@Who(commit) · @Ru.DateShort(commit.OccurredAt)</span>
             </a>
+            @if (commit.Note is { } note)
+            {
+                <div class="dev-note">@note</div>
+            }
         }
         @if (d.CommitCount > d.Commits.Count)
         {

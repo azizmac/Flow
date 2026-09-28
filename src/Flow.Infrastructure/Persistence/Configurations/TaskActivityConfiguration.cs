@@ -20,6 +20,9 @@ public sealed class TaskActivityConfiguration : IEntityTypeConfiguration<TaskAct
 
         builder.Property(a => a.CreatedAt).IsRequired();
 
+        builder.Property(a => a.Source).HasMaxLength(TaskActivity.SourceMaxLength);
+        builder.Property(a => a.SourceUrl).HasMaxLength(1000);
+
         builder.HasOne<TaskItem>()
             .WithMany()
             .HasForeignKey(a => a.TaskId)

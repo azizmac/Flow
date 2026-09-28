@@ -51,6 +51,9 @@ internal sealed class ScmRepositoryBoardConfiguration : IEntityTypeConfiguration
         builder.HasOne<Board>().WithMany().HasForeignKey(b => b.BoardId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<User>().WithMany().HasForeignKey(b => b.CreatedById).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(b => b.BoardId);
+        // Статус автоперехода удалили — автопереход просто выключается.
+        builder.HasOne<Status>().WithMany().HasForeignKey(b => b.OnPullRequestOpenedStatusId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<Status>().WithMany().HasForeignKey(b => b.OnPullRequestMergedStatusId).OnDelete(DeleteBehavior.SetNull);
     }
 }
 
@@ -67,6 +70,7 @@ internal sealed class ScmLinkConfiguration : IEntityTypeConfiguration<ScmLink>
         builder.Property(l => l.AuthorLogin).HasMaxLength(100);
         builder.Property(l => l.SourceBranch).HasMaxLength(ScmLink.ExternalIdMaxLength);
         builder.Property(l => l.TargetBranch).HasMaxLength(ScmLink.ExternalIdMaxLength);
+        builder.Property(l => l.Note).HasMaxLength(ScmLink.NoteMaxLength);
         builder.HasIndex(l => new { l.TaskId, l.RepositoryId, l.Kind, l.ExternalId }).IsUnique();
         builder.HasIndex(l => new { l.RepositoryId, l.Kind, l.ExternalId });
         builder.HasOne<TaskItem>().WithMany().HasForeignKey(l => l.TaskId).OnDelete(DeleteBehavior.Cascade);

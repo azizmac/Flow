@@ -2765,4 +2765,9 @@ a.task-row { color: inherit; text-decoration: none; }
 .scm-deliv-state.failed { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
 .scm-deliv-state.pending { color: var(--accent); }
 .scm-deliv-state.done { color: var(--sage); }
+.scm-auto { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; padding: 0 0 12px 30px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.scm-auto .scm-auto-smart { grid-column: 1 / -1; }
+.dev-note { margin: -2px 0 4px 10px; color: var(--accent); font: var(--fw-medium) 12px var(--font-text); }
+.tl-source { color: var(--text-muted); }
+.tl-source a { color: inherit; text-decoration: underline dotted; }
 .scm-bind { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

@@ -134,4 +134,19 @@ public class ScmParsingTests
         var gl = ScmPayloadParser.ParseCommits(ScmProvider.GitLab, gitlabCommits.RootElement).Single();
         Assert.Equal(("f00", new DateTime(2026, 9, 12, 7, 0, 0, DateTimeKind.Utc)), (gl.Sha, gl.Timestamp));
     }
+
+    [Fact]
+    public void Smart_Commit_Commands_Apply_To_Codes_Before_Them()
+    {
+        var commands = SmartCommitParser.Parse("WEB-1 WEB-02 #done\nfix API-3 #comment см. WEB-9 #status \"В работе\"\nWEB-4 no command\nWEB-5 #time 2h\nWEB-6 #comment");
+        Assert.Equal(
+        [
+            new SmartCommand("WEB-1", SmartCommandKind.Done, null),
+            new SmartCommand("WEB-2", SmartCommandKind.Done, null),
+            new SmartCommand("API-3", SmartCommandKind.Comment, "см. WEB-9"),
+            new SmartCommand("API-3", SmartCommandKind.Status, "В работе")
+        ], commands);
+        Assert.Empty(SmartCommitParser.Parse("#done without code"));
+        Assert.Empty(SmartCommitParser.Parse("WEB-1 issue#done"));
+    }
 }

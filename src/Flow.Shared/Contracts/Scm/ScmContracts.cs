@@ -42,13 +42,20 @@ public sealed record ScmRepositoryResponse(
     DateTime? LastDeliveryAt, IReadOnlyList<Guid> BoardIds, string? ManualWebhookUrl = null, string? ManualWebhookSecret = null,
     string? WebhookError = null, int FailedDeliveries = 0);
 
-/// <summary>Репозиторий для вкладки «Разработка» проекта: привязан или можно привязать.</summary>
-public sealed record ScmBoardRepositoryResponse(Guid RepositoryId, ScmProvider Provider, string FullName, string WebUrl, bool IsBound);
+/// <summary>
+/// Репозиторий для вкладки «Разработка» проекта: привязан или можно привязать; у привязанного — автоматизация
+/// (этап 5C): статус при открытии PR, статус при влитии в ветку по умолчанию, смарт-коммиты.
+/// </summary>
+public sealed record ScmBoardRepositoryResponse(Guid RepositoryId, ScmProvider Provider, string FullName, string WebUrl, bool IsBound,
+    Guid? OnPullRequestOpenedStatusId = null, Guid? OnPullRequestMergedStatusId = null, bool SmartCommits = false);
+
+/// <summary>Тело PUT /boards/{id}/repositories/{repoId}: привязать и настроить. Статусы — проекта; null — автопереход выключен.</summary>
+public sealed record UpdateScmBindingRequest(Guid? OnPullRequestOpenedStatusId = null, Guid? OnPullRequestMergedStatusId = null, bool SmartCommits = false);
 
 public sealed record ScmLinkResponse(
     Guid Id, Guid RepositoryId, string RepositoryName, ScmProvider Provider, ScmLinkKind Kind, string ExternalId, string Url,
     string Title, ScmLinkState? State, string? AuthorLogin, Guid? AuthorUserId, string? SourceBranch, string? TargetBranch,
-    DateTime OccurredAt);
+    DateTime OccurredAt, string? Note = null);
 
 /// <summary>
 /// Блок «Разработка» задачи: ветки, PR, последние коммиты и сколько их всего. HasRepositories — проект привязан хотя
