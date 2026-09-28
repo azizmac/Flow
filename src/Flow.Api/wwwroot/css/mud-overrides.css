@@ -503,7 +503,7 @@ a.mud-link:hover {
 }
 
 /* Ширины колонок: код · задача · кто · статус · создана · меню — как в прежней сетке. */
-.flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: 92px; }
+.flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: max(92px, var(--code-col, 0px)); }
 .flow-grid th:nth-child(3), .flow-grid td:nth-child(3) { width: 56px; }
 .flow-grid th:nth-child(4), .flow-grid td:nth-child(4) { width: 170px; }
 .flow-grid th:nth-child(5), .flow-grid td:nth-child(5) { width: 110px; }
@@ -584,7 +584,7 @@ a.mud-link:hover {
 
     /* Колонки ужимаются вслед за окном: при прежних 92 и 170px на 400px ширины название оставалось
        без места и обрезалось на первом слове. */
-    .flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: 76px; }
+    .flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: max(76px, var(--code-col, 0px)); }
     .flow-grid th:nth-child(4), .flow-grid td:nth-child(4) { width: 118px; }
     .flow-grid th:nth-child(6), .flow-grid td:nth-child(6) { width: 34px; }
 
@@ -602,7 +602,7 @@ a.mud-link:hover {
         display: none;
     }
 
-    .flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: 70px; }
+    .flow-grid th:nth-child(1), .flow-grid td:nth-child(1) { width: max(70px, var(--code-col, 0px)); }
 }
 
 /* Пустой список и индикатор загрузки занимают всю ширину таблицы. */

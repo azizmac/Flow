@@ -179,7 +179,7 @@
         {
         @* Страницу и размер страницы, как и сортировку, ведём сами: встроенные переключатели таблицы в
            серверном режиме меняют только подписи пейджера, а повторный запрос не делают. *@
-        <MudDataGrid @ref="_grid" T="TaskResponse" ServerData="LoadTasks" Class="flow-grid panel"
+        <MudDataGrid @ref="_grid" T="TaskResponse" ServerData="LoadTasks" Class="flow-grid panel" Style="@($"--code-col: {_codeColumn}px")"
                      Dense="true" Hover="true" Elevation="0" SortMode="SortMode.None"
                      CurrentPage="_page" CurrentPageChanged="OnPageChanged"
                      RowsPerPage="_pageSize" RowsPerPageChanged="OnPageSizeChanged"
@@ -540,6 +540,17 @@
     private List<BoardResponse> _boards = [];
     private bool _boardsLoading = true;
     private List<TaskResponse> _tasks = [];
+
+    /// <summary>
+    /// Ширина колонки «Код» под самый длинный код страницы: ключ проекта бывает до 10 букв, и в прежние 92px
+    /// «DFRONT-25» уже не помещался — хвост кода наезжал на название. Таблица с table-layout: fixed сама по
+    /// содержимому не растёт, поэтому ширину считает страница и отдаёт гриду переменной --code-col (CSS берёт
+    /// максимум с прежней шириной). 47px — отступы ячейки и глиф типа, ~9.5px — символ кода.
+    /// </summary>
+    private int _codeColumn;
+
+    private static int CodeColumnWidth(IEnumerable<TaskResponse> tasks) =>
+        tasks.Select(t => t.Code.Length).DefaultIfEmpty(0).Max() is var chars and > 0 ? 47 + (int)Math.Ceiling(chars * 9.5) : 0;
     /// <summary>Сколько строк под текущим отбором — им живёт пейджер таблицы.</summary>
     private int _matched;
     /// <summary>Флаг для <see cref="LoadTasks"/>: отдать текущую страницу без запроса (см. Redraw).</summary>
@@ -784,6 +795,12 @@
         var page = result.Value!;
         // Копия страницы нужна слайдеру и хоткеям: они ходят по текущему списку.
         _tasks = page.Items.ToList();
+        // ServerData перерисовывает только сам грид; ширина колонки — атрибут грида у страницы, её надо перерисовать.
+        if (CodeColumnWidth(_tasks) is var codeColumn && codeColumn != _codeColumn)
+        {
+            _codeColumn = codeColumn;
+            StateHasChanged();
+        }
         _total = page.Total;
         _countsByType = page.ByType;
         _countsByStatus = page.ByStatus.ToDictionary(c => c.StatusId, c => c.Count);
