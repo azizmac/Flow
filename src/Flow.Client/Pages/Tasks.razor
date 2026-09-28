@@ -37,28 +37,28 @@
                 var boardAccess = Access.For(CurrentBoard.Id);
                 @if (Permissions.CanRenameBoard(boardAccess))
                 {
-                    <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
+                    <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Class="topbar-tool" OnClick="StartRename" />
                 }
                 @if (Permissions.CanManageConfig(boardAccess))
                 {
-                    <DsIconButton Icon="list" Size="30" Title="Статусы проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _statusesOpen = true" />
-                    <DsIconButton Icon="link" Size="30" Title="Workflow проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/workflow"))" />
-                    <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _typesOpen = true" />
-                    <DsIconButton Icon="check-square" Size="30" Title="Поля проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _fieldsOpen = true" />
-                    <DsIconButton Icon="view" Size="30" Title="Экраны задач" Style="color:rgba(255,255,255,0.45)" OnClick="() => _screensOpen = true" />
+                    <DsIconButton Icon="list" Size="30" Title="Статусы проекта" Class="topbar-tool" OnClick="() => _statusesOpen = true" />
+                    <DsIconButton Icon="link" Size="30" Title="Workflow проекта" Class="topbar-tool" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/workflow"))" />
+                    <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Class="topbar-tool" OnClick="() => _typesOpen = true" />
+                    <DsIconButton Icon="check-square" Size="30" Title="Поля проекта" Class="topbar-tool" OnClick="() => _fieldsOpen = true" />
+                    <DsIconButton Icon="view" Size="30" Title="Экраны задач" Class="topbar-tool" OnClick="() => _screensOpen = true" />
                 }
                 @if (Permissions.CanManageTaskTemplates(boardAccess))
                 {
-                    <DsIconButton Icon="copy" Size="30" Title="Шаблоны задач" Style="color:rgba(255,255,255,0.45)" OnClick="() => _templatesOpen = true" />
+                    <DsIconButton Icon="copy" Size="30" Title="Шаблоны задач" Class="topbar-tool" OnClick="() => _templatesOpen = true" />
                 }
-                <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/milestones"))" />
+                <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Class="topbar-tool" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/milestones"))" />
                 @if (Permissions.CanManageScm(boardAccess))
                 {
-                    <DsIconButton Icon="code" Size="30" Title="Репозитории проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _reposOpen = true" />
+                    <DsIconButton Icon="code" Size="30" Title="Репозитории проекта" Class="topbar-tool" OnClick="() => _reposOpen = true" />
                 }
                 @if (Permissions.CanManageMembers(boardAccess))
                 {
-                    <DsIconButton Icon="users" Size="30" Title="Доступ к проекту" Style="color:rgba(255,255,255,0.45)" OnClick="() => _accessOpen = true" />
+                    <DsIconButton Icon="users" Size="30" Title="Доступ к проекту" Class="topbar-tool" OnClick="() => _accessOpen = true" />
                 }
             }
         }
@@ -94,23 +94,14 @@
     {
         <div class="filter-row">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <div class="seg" role="radiogroup" aria-label="Вид">
-                    <button type="button" class="seg-btn @(CurrentView == TaskView.List ? "on" : "")" role="radio" aria-checked="@(CurrentView == TaskView.List)"
-                            title="Список" @onclick="() => SetView(TaskView.List)"><Icon Name="list" Size="14" />Список</button>
-                    <button type="button" class="seg-btn @(IsBoardView ? "on" : "")" role="radio" aria-checked="@IsBoardView"
-                            title="Доска: колонки по статусам" @onclick="() => SetView(TaskView.Board)"><Icon Name="grid" Size="14" />Доска</button>
-                    <button type="button" class="seg-btn @(IsTreeView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsTreeView" aria-disabled="@(BoardId is null)"
-                            title="@(BoardId is null ? "Дерево — внутри одного проекта: выберите проект" : "Дерево: эпики, истории и подзадачи")"
-                            @onclick="() => SetProjectView(TaskView.Tree)"><Icon Name="list-ordered" Size="14" />Дерево</button>
-                    <button type="button" class="seg-btn @(IsBacklogView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsBacklogView" aria-disabled="@(BoardId is null)"
-                            title="@(BoardId is null ? "Бэклог — внутри одного проекта: выберите проект" : "Бэклог и спринты")"
-                            @onclick="() => SetProjectView(TaskView.Backlog)"><Icon Name="history" Size="14" />Бэклог</button>
-                    <button type="button" class="seg-btn @(IsCalendarView ? "on" : "")" role="radio" aria-checked="@IsCalendarView"
-                            title="Календарь: задачи по датам" @onclick="() => SetView(TaskView.Calendar)"><Icon Name="calendar" Size="14" />Календарь</button>
-                    <button type="button" class="seg-btn @(IsRoadmapView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsRoadmapView" aria-disabled="@(BoardId is null)"
-                            title="@(BoardId is null ? "Роадмап — внутри одного проекта: выберите проект" : "Роадмап: полосы от начала до срока")"
-                            @onclick="() => SetProjectView(TaskView.Roadmap)"><Icon Name="chart" Size="14" />Роадмап</button>
-                </div>
+                @* Вид — одна кнопка; остальные выезжают вправо по клику и сворачиваются после выбора. *@
+                <SegCollapse TItem="ViewOption" Items="ViewOptions" Selected="ViewOptions.First(o => o.View == CurrentView)"
+                             OnSelect="SelectView"
+                             ItemClass="@(o => o.ProjectOnly && BoardId is null ? "needs-project" : null)"
+                             ItemTitle="@(o => o.ProjectOnly && BoardId is null ? $"{o.Label} — внутри одного проекта: выберите проект" : o.Title)"
+                             AriaLabel="Вид">
+                    <ItemTemplate><Icon Name="@context.Icon" Size="14" />@context.Label</ItemTemplate>
+                </SegCollapse>
                 @* В доске фильтр статуса не нужен: колонки и есть статусы. *@
                 @if (CurrentView == TaskView.List && CurrentBoard is { } board)
                 {
@@ -473,6 +464,27 @@
             };
             return view is TaskView.Tree or TaskView.Backlog or TaskView.Roadmap && BoardId is null ? TaskView.List : view;
         }
+    }
+
+    /// <summary>Вариант переключателя вида. ProjectOnly — вид живёт внутри одного проекта (дерево, бэклог, роадмап).</summary>
+    private sealed record ViewOption(TaskView View, string Label, string Icon, string Title, bool ProjectOnly = false);
+
+    private static readonly ViewOption[] ViewOptions =
+    [
+        new(TaskView.List, "Список", "list", "Список"),
+        new(TaskView.Board, "Доска", "grid", "Доска: колонки по статусам"),
+        new(TaskView.Tree, "Дерево", "list-ordered", "Дерево: эпики, истории и подзадачи", ProjectOnly: true),
+        new(TaskView.Backlog, "Бэклог", "history", "Бэклог и спринты", ProjectOnly: true),
+        new(TaskView.Calendar, "Календарь", "calendar", "Календарь: задачи по датам"),
+        new(TaskView.Roadmap, "Роадмап", "chart", "Роадмап: полосы от начала до срока", ProjectOnly: true)
+    ];
+
+    private void SelectView(ViewOption option)
+    {
+        if (option.ProjectOnly)
+            SetProjectView(option.View);
+        else
+            SetView(option.View);
     }
 
     private bool IsBoardView => CurrentView == TaskView.Board;

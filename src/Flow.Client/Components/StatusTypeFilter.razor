@@ -1,30 +1,34 @@
-@* Фильтр статусов для сводного списка задач. Наборы статусов у проектов разные, поэтому кнопки —
+@* Фильтр статусов для сводного списка задач. Наборы статусов у проектов разные, поэтому варианты —
    по типу статуса (Не начата / В работе / На проверке / Сделана), а не по конкретным статусам проекта.
-   «Другие» появляется, только если в отборе есть задачи в статусах, добавленных в проект вручную. *@
+   В покое видна одна кнопка — выбранный вариант, остальные выезжают вправо по клику (SegCollapse).
+   «Другие» появляется в раскрытой группе, только если в отборе есть задачи в статусах, добавленных в проект вручную. *@
 
-<div class="seg" role="tablist">
-    <button type="button" class="seg-btn @(Value is null ? "on" : "")" role="tab"
-            aria-selected="@((Value is null).ToString().ToLowerInvariant())" @onclick="() => Select(null)">
-        Все <span class="n">@Total</span>
-    </button>
-    @foreach (var type in Types)
-    {
-        <button type="button" class="seg-btn @(Value == type ? "on" : "")" role="tab"
-                aria-selected="@((Value == type).ToString().ToLowerInvariant())" @onclick="() => Select(type)">
+<SegCollapse TItem="StatusType?" Items="Options" Selected="Value" OnSelect="Select" Role="radiogroup" AriaLabel="Тип статуса">
+    <ItemTemplate>
+        @if (context is { } type)
+        {
             <span class="sd" style="background:@StatusColors.For(type)"></span>@Name(type) <span class="n">@Count(type)</span>
-        </button>
-    }
-    @if (CustomCount > 0)
-    {
-        <span class="seg-btn muted" title="Задачи в статусах, добавленных в проект вручную">
-            <span class="sd" style="background:@StatusColors.For((StatusType?)null)"></span>Другие <span class="n">@CustomCount</span>
-        </span>
-    }
-</div>
+        }
+        else
+        {
+            @:Все <span class="n">@Total</span>
+        }
+    </ItemTemplate>
+    <Extra>
+        @if (CustomCount > 0)
+        {
+            <span class="seg-btn seg-opt muted" style="--i:@Types.Length" title="Задачи в статусах, добавленных в проект вручную">
+                <span class="sd" style="background:@StatusColors.For((StatusType?)null)"></span>Другие <span class="n">@CustomCount</span>
+            </span>
+        }
+    </Extra>
+</SegCollapse>
 
 @code {
     private static readonly StatusType[] Types =
         [StatusType.NotStarted, StatusType.InProgress, StatusType.InReview, StatusType.Done];
+
+    private static readonly IReadOnlyList<StatusType?> Options = [null, .. Types.Select(t => (StatusType?)t)];
 
     [Parameter] public IReadOnlyList<StatusTypeCount> Counts { get; set; } = [];
     [Parameter] public int Total { get; set; }

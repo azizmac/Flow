@@ -1,16 +1,18 @@
-@* Сегментный фильтр по статусу: «Все N» + по кнопке на статус (точка + имя + счётчик). Один активный. *@
+@* Фильтр по статусу: в покое видна одна кнопка — выбранный вариант («Все N» или статус с точкой и счётчиком),
+   по клику остальные выезжают вправо (SegCollapse). Один активный. *@
 
-<div class="seg" role="tablist">
-    <button type="button" class="seg-btn @(Value is null ? "on" : "")" role="tab" aria-selected="@((Value is null).ToString().ToLowerInvariant())" @onclick="() => Select(null)">
-        Все <span class="n">@Total</span>
-    </button>
-    @foreach (var s in Statuses)
-    {
-        <button type="button" class="seg-btn @(Value == s.Id ? "on" : "")" role="tab" aria-selected="@((Value == s.Id).ToString().ToLowerInvariant())" @onclick="() => Select(s.Id)">
+<SegCollapse TItem="Guid?" Items="Options" Selected="Value" OnSelect="Select" Role="radiogroup" AriaLabel="Статус">
+    <ItemTemplate>
+        @if (context is { } id && Statuses.FirstOrDefault(s => s.Id == id) is { } s)
+        {
             <span class="sd" style="background:@StatusColors.For(s)"></span>@s.Name <span class="n">@Counts.GetValueOrDefault(s.Id)</span>
-        </button>
-    }
-</div>
+        }
+        else
+        {
+            @:Все <span class="n">@Total</span>
+        }
+    </ItemTemplate>
+</SegCollapse>
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<StatusResponse> Statuses { get; set; } = [];
@@ -18,6 +20,8 @@
     [Parameter] public int Total { get; set; }
     [Parameter] public Guid? Value { get; set; }
     [Parameter] public EventCallback<Guid?> ValueChanged { get; set; }
+
+    private IReadOnlyList<Guid?> Options => [null, .. Statuses.Select(s => (Guid?)s.Id)];
 
     private Task Select(Guid? id) => ValueChanged.InvokeAsync(id);
 }
