@@ -5,10 +5,11 @@ using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Scm;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
+using Flow.Domain.Entities.GitIntegration;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
 using Xunit;
-using ScmLinkKind = Flow.Domain.Entities.ScmLinkKind;
+using ScmLinkKind = Flow.Domain.Entities.GitIntegration.ScmLinkKind;
 using SharedProvider = Flow.Shared.Contracts.Scm.ScmProvider;
 
 namespace Flow.Application.Tests.Features;
@@ -99,7 +100,7 @@ public class ScmSearchIndexTests
     {
         var setup = await ConnectAsync();
         setup.Context.Client.History = new ScmHistory(
-            [new ScmPullRequest("7", "WEB-1 старый фикс", null, Flow.Domain.Entities.ScmLinkState.Merged, "https://github.com/acme/web/pull/7", "octocat", "web-1", "main", DateTime.UtcNow.AddDays(-3))],
+            [new ScmPullRequest("7", "WEB-1 старый фикс", null, ScmLinkState.Merged, "https://github.com/acme/web/pull/7", "octocat", "web-1", "main", DateTime.UtcNow.AddDays(-3))],
             []);
         await setup.Context.Mediator.Send(new ScmBackfillCommand(Owner, setup.RepositoryId), CancellationToken.None);
         foreach (var id in await setup.Context.Mediator.Send(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))

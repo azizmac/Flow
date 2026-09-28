@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Flow.Application.Abstractions;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 
 namespace Flow.Infrastructure.Scm;
 

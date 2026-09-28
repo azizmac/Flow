@@ -158,7 +158,7 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 
 ## Как сделано (этап 5A)
 
-- Домен — `Domain/Entities/Scm.cs`: `ScmConnection` (токен только зашифрованным, результат проверки), `ScmRepository`
+- Домен — `Domain/GitIntegration/`: `ScmConnection` (токен только зашифрованным, результат проверки), `ScmRepository`
   (`Reactivate` при повторном подключении — связи задач не теряются), `ScmRepositoryBoard`, `ScmLink` (unique по задаче,
   репозиторию, виду и внешнему id), `ScmDelivery` (backoff 5 с → 5 мин, 8 попыток). `ProjectPermission.ManageScm`
   (администратор проекта), `UserLinkType.Gitea = 6`. Миграция `AddScmIntegration`.

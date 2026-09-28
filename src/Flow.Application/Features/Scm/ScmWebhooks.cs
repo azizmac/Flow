@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Flow.Application.Abstractions;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using MediatR;
 
 namespace Flow.Application.Features.Scm;

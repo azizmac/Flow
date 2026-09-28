@@ -3,12 +3,14 @@ using System.Text.Json;
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Flow.Shared.Contracts.Scm;
 using MediatR;
-using DomainProvider = Flow.Domain.Entities.ScmProvider;
-using DomainState = Flow.Domain.Entities.ScmLinkState;
-using DomainKind = Flow.Domain.Entities.ScmLinkKind;
-using DomainDeliveryStatus = Flow.Domain.Entities.ScmDeliveryStatus;
+using DomainProvider = Flow.Domain.Entities.GitIntegration.ScmProvider;
+using DomainState = Flow.Domain.Entities.GitIntegration.ScmLinkState;
+using DomainKind = Flow.Domain.Entities.GitIntegration.ScmLinkKind;
+using DomainDeliveryStatus = Flow.Domain.Entities.GitIntegration.ScmDeliveryStatus;
+using ScmAuthKind = Flow.Domain.Entities.GitIntegration.ScmAuthKind;
 using SharedProvider = Flow.Shared.Contracts.Scm.ScmProvider;
 using SharedAuthKind = Flow.Shared.Contracts.Scm.ScmAuthKind;
 
@@ -129,7 +131,7 @@ internal sealed class ScmAdminHandlers(
 
         var secret = Secret(request.Token);
         var connection = ScmConnection.Create((DomainProvider)(int)request.Provider, request.Name, request.BaseUrl, protector.Protect(secret), actor.Id,
-            (Flow.Domain.Entities.ScmAuthKind)(int)request.AuthKind, request.AppId, request.InstallationId);
+            (ScmAuthKind)(int)request.AuthKind, request.AppId, request.InstallationId);
         await CheckAsync(connection, secret, cancellationToken);
         store.Add(connection);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -144,8 +146,8 @@ internal sealed class ScmAdminHandlers(
             return null;
 
         var token = string.IsNullOrWhiteSpace(request.Token) ? null : Secret(request.Token);
-        var appChanged = connection.AuthKind == Flow.Domain.Entities.ScmAuthKind.GitHubApp && (request.AppId is not null || request.InstallationId is not null)
-                         && (request.AppId ?? connection.AppId, request.InstallationId ?? connection.InstallationId) != (connection.AppId, connection.InstallationId);
+        var appChanged = connection.AuthKind == ScmAuthKind.GitHubApp && (request.AppId is not null || request.InstallationId is not null)
+                                                                      && (request.AppId ?? connection.AppId, request.InstallationId ?? connection.InstallationId) != (connection.AppId, connection.InstallationId);
         connection.Update(request.Name, request.BaseUrl, token is null ? null : protector.Protect(token));
         if (appChanged)
             connection.SetApp(request.AppId ?? connection.AppId, request.InstallationId ?? connection.InstallationId);

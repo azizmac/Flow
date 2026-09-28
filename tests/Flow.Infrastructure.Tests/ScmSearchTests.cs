@@ -4,6 +4,7 @@ using Flow.Application.Features.Search.Queries.SearchQuery;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Flow.Infrastructure.Persistence;
 using Flow.Shared.Contracts.Search;
 using Microsoft.EntityFrameworkCore;

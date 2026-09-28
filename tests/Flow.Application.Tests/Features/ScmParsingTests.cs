@@ -1,6 +1,7 @@
 using System.Text;
 using Flow.Application.Features.Scm;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Xunit;
 
 namespace Flow.Application.Tests.Features;

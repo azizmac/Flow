@@ -6,6 +6,7 @@ using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Application.Features.Tasks.Queries.TaskSearchQuery;
 using Flow.Application.Features.Boards.Commands.StatusDeleteCommand;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 

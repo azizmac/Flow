@@ -4,6 +4,7 @@ using Flow.Application.Features.Tasks;
 using Flow.Application.Features.Tasks.Mentions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Flow.Shared.Contracts.Search;
 
 namespace Flow.Application.Features.Scm;

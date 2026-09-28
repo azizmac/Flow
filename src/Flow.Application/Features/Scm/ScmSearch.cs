@@ -1,5 +1,6 @@
 using Flow.Application.Abstractions;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Flow.Shared.Contracts.Search;
 
 namespace Flow.Application.Features.Scm;

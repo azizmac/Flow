@@ -6,12 +6,14 @@ using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Queries.TaskActivityListQuery;
 using Flow.Application.Features.Tasks.Queries.TaskCommentListQuery;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Scm;
 using Xunit;
 using SharedMode = Flow.Shared.Contracts.Boards.WorkflowMode;
 using SharedProvider = Flow.Shared.Contracts.Scm.ScmProvider;
-using ScmLinkKind = Flow.Domain.Entities.ScmLinkKind;
+using ScmLinkKind = Flow.Domain.Entities.GitIntegration.ScmLinkKind;
+using ScmLinkState = Flow.Domain.Entities.GitIntegration.ScmLinkState;
 
 namespace Flow.Application.Tests.Features;
 
@@ -159,7 +161,7 @@ public class ScmAutomationTests
         Assert.Equal(setup.Status("Не начата"), (await TaskAsync(setup)).StatusId);
 
         setup.Context.Client.History = new Flow.Application.Abstractions.ScmHistory(
-            [new ScmPullRequest("7", "WEB-1", null, Flow.Domain.Entities.ScmLinkState.Merged, "u", "octocat", "f", "main", DateTime.UtcNow)], []);
+            [new ScmPullRequest("7", "WEB-1", null, ScmLinkState.Merged, "u", "octocat", "f", "main", DateTime.UtcNow)], []);
         await setup.Context.Mediator.Send(new ScmBackfillCommand(Owner, setup.RepositoryId), CancellationToken.None);
         foreach (var id in await setup.Context.Mediator.Send(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
             await setup.Context.Mediator.Send(new ScmDeliveryProcessCommand(id), CancellationToken.None);

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 
 namespace Flow.Application.Features.Scm;
 

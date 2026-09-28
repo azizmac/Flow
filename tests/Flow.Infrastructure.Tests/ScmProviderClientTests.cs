@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Flow.Infrastructure.Scm;
 using Xunit;
 
@@ -194,7 +195,7 @@ public class ScmProviderClientTests
         Assert.Equal("https://api.github.com/repos/acme/web/git/refs", recorder.Requests[^1].Request.RequestUri!.ToString());
         Assert.Contains("\"sha\":\"abc123\"", recorder.Requests[^1].Body);
         var pr = await client.CreatePullRequestAsync(github, "tok", ghRepo, "WEB-1", "main", "WEB-1 x", "body", true, CancellationToken.None);
-        Assert.Equal(("12", Flow.Domain.Entities.ScmLinkState.Open), (pr.Number, pr.State));
+        Assert.Equal(("12", ScmLinkState.Open), (pr.Number, pr.State));
         Assert.Contains("\"draft\":true", recorder.Requests[^1].Body);
         await client.CommentOnPullRequestAsync(github, "tok", ghRepo, "12", "Задача", CancellationToken.None);
         Assert.Equal("https://api.github.com/repos/acme/web/issues/12/comments", recorder.Requests[^1].Request.RequestUri!.ToString());
@@ -204,7 +205,7 @@ public class ScmProviderClientTests
         await client.CreateBranchAsync(gitlab, "tok", glRepo, "WEB-1", "main", CancellationToken.None);
         Assert.Equal("https://gl.example.com/api/v4/projects/7/repository/branches?branch=WEB-1&ref=main", recorder.Requests[^1].Request.RequestUri!.ToString());
         var mr = await client.CreatePullRequestAsync(gitlab, "tok", glRepo, "WEB-1", "main", "WEB-1 x", "body", true, CancellationToken.None);
-        Assert.Equal(("3", Flow.Domain.Entities.ScmLinkState.Draft), (mr.Number, mr.State));
+        Assert.Equal(("3", ScmLinkState.Draft), (mr.Number, mr.State));
         Assert.Contains("Draft: WEB-1 x", recorder.Requests[^1].Body);
         await client.CommentOnPullRequestAsync(gitlab, "tok", glRepo, "3", "Задача", CancellationToken.None);
         Assert.Equal("https://gl.example.com/api/v4/projects/7/merge_requests/3/notes", recorder.Requests[^1].Request.RequestUri!.ToString());

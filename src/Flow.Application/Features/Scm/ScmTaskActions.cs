@@ -1,10 +1,11 @@
 using Flow.Application.Abstractions;
 using Flow.Application.Security;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Flow.Shared.Contracts.Scm;
 using MediatR;
-using ScmLinkKind = Flow.Domain.Entities.ScmLinkKind;
-using ScmLinkState = Flow.Domain.Entities.ScmLinkState;
+using ScmLinkKind = Flow.Domain.Entities.GitIntegration.ScmLinkKind;
+using ScmLinkState = Flow.Domain.Entities.GitIntegration.ScmLinkState;
 
 namespace Flow.Application.Features.Scm;
 

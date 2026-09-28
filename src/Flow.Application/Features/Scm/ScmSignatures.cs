@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 
 namespace Flow.Application.Features.Scm;
 

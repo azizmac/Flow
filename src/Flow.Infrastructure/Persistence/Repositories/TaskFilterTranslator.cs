@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Flow.Application.Abstractions;
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flow.Infrastructure.Persistence.Repositories;

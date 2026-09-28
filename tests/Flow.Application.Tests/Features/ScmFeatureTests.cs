@@ -9,8 +9,8 @@ using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Scm;
 using Xunit;
-using DomainState = Flow.Domain.Entities.ScmLinkState;
-using ScmLinkKind = Flow.Domain.Entities.ScmLinkKind;
+using DomainState = Flow.Domain.Entities.GitIntegration.ScmLinkState;
+using ScmLinkKind = Flow.Domain.Entities.GitIntegration.ScmLinkKind;
 using SharedProvider = Flow.Shared.Contracts.Scm.ScmProvider;
 
 namespace Flow.Application.Tests.Features;

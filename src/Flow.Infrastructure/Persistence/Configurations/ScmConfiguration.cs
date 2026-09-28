@@ -1,4 +1,5 @@
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

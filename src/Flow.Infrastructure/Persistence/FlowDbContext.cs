@@ -1,4 +1,5 @@
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Flow.Infrastructure.Search.Entities;
 using Microsoft.EntityFrameworkCore;
 
