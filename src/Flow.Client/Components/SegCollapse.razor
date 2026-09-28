@@ -1,0 +1,66 @@
+@* Свёрнутый сегмент: в покое видна одна кнопка — выбранный вариант со стрелкой. Клик по ней выдвигает остальные
+   варианты вправо, выбор любого сворачивает группу обратно к нему. Esc и клик мимо — свернуть без выбора.
+   Вид кнопки рисует вызывающий (ItemTemplate): у переключателя вида — иконка и подпись, у фильтра статусов — точка
+   и счётчик. Мимо-клик ловит прозрачная подложка во весь экран, а не JS: слушатель на document пришлось бы снимать
+   на каждом сворачивании.
+   Варианты лежат в разметке и в свёрнутом виде: так CSS плавно разводит ширину и в обе стороны, и при
+   сворачивании, а соседние кнопки строки фильтров едут следом, а не прыгают. inert убирает скрытые варианты из
+   Tab-обхода и от кликов. *@
+@typeparam TItem
+
+@if (_open)
+{
+    <div class="seg-scrim" @onclick="Close"></div>
+}
+<div class="seg seg-collapse @(_open ? "open" : "")" role="@Role" aria-label="@AriaLabel" @onkeydown="OnKey">
+    @* Selected может быть null и при этом осмысленным вариантом («Все» у фильтра статусов), поэтому без is { }. *@
+    <button type="button" class="seg-btn on seg-cur @ItemClass?.Invoke(Selected!)" aria-expanded="@(_open ? "true" : "false")"
+            aria-haspopup="true" title="@(_open ? "Свернуть" : ItemTitle?.Invoke(Selected!))" @onclick="Toggle">
+        @ItemTemplate(Selected!)<span class="seg-caret"><Icon Name="chevron-down" Size="11" /></span>
+    </button>
+    <div class="seg-opts" inert="@(!_open)">
+        <div class="seg-opts-in">
+            @{ var i = 0; }
+            @foreach (var item in Items)
+            {
+                if (Equals(item, Selected))
+                    continue;
+                var captured = item;
+                <button type="button" class="seg-btn seg-opt @ItemClass?.Invoke(item)" style="--i:@(i++)"
+                        title="@ItemTitle?.Invoke(item)" @onclick="() => Pick(captured)">@ItemTemplate(item)</button>
+            }
+            @Extra
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TItem> Items { get; set; } = [];
+    [Parameter] public TItem? Selected { get; set; }
+    [Parameter] public EventCallback<TItem> OnSelect { get; set; }
+    [Parameter, EditorRequired] public RenderFragment<TItem> ItemTemplate { get; set; } = default!;
+    [Parameter] public Func<TItem, string?>? ItemClass { get; set; }
+    [Parameter] public Func<TItem, string?>? ItemTitle { get; set; }
+    /// <summary>Дополнение в конце раскрытой группы — например, неактивная плашка «Другие» у фильтра статусов.</summary>
+    [Parameter] public RenderFragment? Extra { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public string Role { get; set; } = "group";
+
+    private bool _open;
+
+    private void Toggle() => _open = !_open;
+
+    private void Close() => _open = false;
+
+    private async Task Pick(TItem item)
+    {
+        _open = false;
+        await OnSelect.InvokeAsync(item);
+    }
+
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            _open = false;
+    }
+}

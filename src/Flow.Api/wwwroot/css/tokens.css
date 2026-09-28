@@ -84,6 +84,8 @@
     --text-primary: #FFFFFF;
     --text-secondary: rgba(255, 255, 255, 0.68);
     --text-tertiary: rgba(255, 255, 255, 0.42);
+    /* Подписи полей карточки задачи: светлый шалфей — отличим от белых значений и ярче tertiary. */
+    --text-label: #A9CBB0;
     --text-disabled: rgba(255, 255, 255, 0.3);
     --text-on-accent: var(--on-accent);
 
@@ -101,4 +103,6 @@
     /* ── motion ── */
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    /* Пружина с лёгким перелётом — для «живых» появлений (варианты свёрнутого сегмента). */
+    --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 }

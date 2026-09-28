@@ -1,0 +1,23 @@
+@* Ошибка строки FQL под рядом фильтров «Задач»: сама строка живёт в топбаре, где для текста ошибки места нет.
+   Эхо запроса с подчёркнутым местом ошибки. Ошибка относится к применённому запросу (Query — из адреса),
+   а не к тому, что человек уже успел допечатать. *@
+
+<div class="fql-error">
+    <code class="fql-echo">@Slice(0, Error.Position)<mark>@At</mark>@Slice(Error.Position + Error.Length, Text.Length)</code>
+    <span>@Error.Message</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public FqlErrorResponse Error { get; set; } = default!;
+    [Parameter] public string? Query { get; set; }
+
+    private string Text => Query ?? "";
+
+    private string At => Error.Position >= Text.Length ? "␣" : Slice(Error.Position, Error.Length);
+
+    private string Slice(int from, int length)
+    {
+        from = Math.Clamp(from, 0, Text.Length);
+        return Text.Substring(from, Math.Clamp(length, 0, Text.Length - from));
+    }
+}

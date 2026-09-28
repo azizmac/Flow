@@ -35,36 +35,27 @@
             @if (CurrentBoard is not null)
             {
                 var boardAccess = Access.For(CurrentBoard.Id);
+                @* У названия — только «Переименовать»: она правит само название. Остальные настройки проекта
+                   стоят в ряду фильтров (ProjectTools): в топбаре их ряд наезжал на широкую строку FQL. *@
                 @if (Permissions.CanRenameBoard(boardAccess))
                 {
-                    <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Style="color:rgba(255,255,255,0.45)" OnClick="StartRename" />
-                }
-                @if (Permissions.CanManageConfig(boardAccess))
-                {
-                    <DsIconButton Icon="list" Size="30" Title="Статусы проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _statusesOpen = true" />
-                    <DsIconButton Icon="link" Size="30" Title="Workflow проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/workflow"))" />
-                    <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _typesOpen = true" />
-                    <DsIconButton Icon="check-square" Size="30" Title="Поля проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _fieldsOpen = true" />
-                    <DsIconButton Icon="view" Size="30" Title="Экраны задач" Style="color:rgba(255,255,255,0.45)" OnClick="() => _screensOpen = true" />
-                }
-                @if (Permissions.CanManageTaskTemplates(boardAccess))
-                {
-                    <DsIconButton Icon="copy" Size="30" Title="Шаблоны задач" Style="color:rgba(255,255,255,0.45)" OnClick="() => _templatesOpen = true" />
-                }
-                <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Style="color:rgba(255,255,255,0.45)" OnClick="@(() => Nav.NavigateTo($"boards/{CurrentBoard.Id}/milestones"))" />
-                @if (Permissions.CanManageScm(boardAccess))
-                {
-                    <DsIconButton Icon="code" Size="30" Title="Репозитории проекта" Style="color:rgba(255,255,255,0.45)" OnClick="() => _reposOpen = true" />
-                }
-                @if (Permissions.CanManageMembers(boardAccess))
-                {
-                    <DsIconButton Icon="users" Size="30" Title="Доступ к проекту" Style="color:rgba(255,255,255,0.45)" OnClick="() => _accessOpen = true" />
+                    <DsIconButton Icon="edit" Size="30" Title="Переименовать проект" Class="project-tool" OnClick="StartRename" />
                 }
             }
         }
     </div>
     <div class="topbar-right">
-        <SearchBox Placeholder="Найти задачу или код..." Value="@_search" ValueChanged="OnSearchChanged" />
+        @* Поиск один, в двух режимах: подстрока (по названию и коду) или запрос FQL — чип «FQL» в поле
+           меняет его на строку запроса на том же месте, крестик строки возвращает обычный поиск. *@
+        @if (FqlVisible)
+        {
+            <FqlBar Value="@EffectiveFql" Error="_fqlError" Autofocus="_fqlFocus"
+                    OnApply="ApplyFql" OnSave="OpenSave" OnClose="CloseFql" />
+        }
+        else
+        {
+            <SearchBox Placeholder="Найти задачу или код..." Value="@_search" ValueChanged="OnSearchChanged" OnFql="OpenFql" />
+        }
         @if (CanCreateTask)
         {
             <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate" Disabled="_boards.Count == 0">Создать задачу</DsButton>
@@ -94,23 +85,14 @@
     {
         <div class="filter-row">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <div class="seg" role="radiogroup" aria-label="Вид">
-                    <button type="button" class="seg-btn @(CurrentView == TaskView.List ? "on" : "")" role="radio" aria-checked="@(CurrentView == TaskView.List)"
-                            title="Список" @onclick="() => SetView(TaskView.List)"><Icon Name="list" Size="14" />Список</button>
-                    <button type="button" class="seg-btn @(IsBoardView ? "on" : "")" role="radio" aria-checked="@IsBoardView"
-                            title="Доска: колонки по статусам" @onclick="() => SetView(TaskView.Board)"><Icon Name="grid" Size="14" />Доска</button>
-                    <button type="button" class="seg-btn @(IsTreeView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsTreeView" aria-disabled="@(BoardId is null)"
-                            title="@(BoardId is null ? "Дерево — внутри одного проекта: выберите проект" : "Дерево: эпики, истории и подзадачи")"
-                            @onclick="() => SetProjectView(TaskView.Tree)"><Icon Name="list-ordered" Size="14" />Дерево</button>
-                    <button type="button" class="seg-btn @(IsBacklogView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsBacklogView" aria-disabled="@(BoardId is null)"
-                            title="@(BoardId is null ? "Бэклог — внутри одного проекта: выберите проект" : "Бэклог и спринты")"
-                            @onclick="() => SetProjectView(TaskView.Backlog)"><Icon Name="history" Size="14" />Бэклог</button>
-                    <button type="button" class="seg-btn @(IsCalendarView ? "on" : "")" role="radio" aria-checked="@IsCalendarView"
-                            title="Календарь: задачи по датам" @onclick="() => SetView(TaskView.Calendar)"><Icon Name="calendar" Size="14" />Календарь</button>
-                    <button type="button" class="seg-btn @(IsRoadmapView ? "on" : "") @(BoardId is null ? "needs-project" : "")" role="radio" aria-checked="@IsRoadmapView" aria-disabled="@(BoardId is null)"
-                            title="@(BoardId is null ? "Роадмап — внутри одного проекта: выберите проект" : "Роадмап: полосы от начала до срока")"
-                            @onclick="() => SetProjectView(TaskView.Roadmap)"><Icon Name="chart" Size="14" />Роадмап</button>
-                </div>
+                @* Вид — одна кнопка; остальные выезжают вправо по клику и сворачиваются после выбора. *@
+                <SegCollapse TItem="ViewOption" Items="ViewOptions" Selected="ViewOptions.First(o => o.View == CurrentView)"
+                             OnSelect="SelectView"
+                             ItemClass="@(o => o.ProjectOnly && BoardId is null ? "needs-project" : null)"
+                             ItemTitle="@(o => o.ProjectOnly && BoardId is null ? $"{o.Label} — внутри одного проекта: выберите проект" : o.Title)"
+                             AriaLabel="Вид">
+                    <ItemTemplate><Icon Name="@context.Icon" Size="14" />@context.Label</ItemTemplate>
+                </SegCollapse>
                 @* В доске фильтр статуса не нужен: колонки и есть статусы. *@
                 @if (CurrentView == TaskView.List && CurrentBoard is { } board)
                 {
@@ -127,21 +109,24 @@
                             title="Задачи, где я исполнитель" @onclick="ToggleMine">Мои задачи</button>
                 }
                 <FilterMenu Current="CurrentFilter" />
-                <button type="button" id="@FqlToggleId" class="seg-btn solo @(FqlVisible ? "on" : "")" @onclick="OpenFql"
-                        title="@(HasPanelFilters && !FqlVisible ? "Показать фильтры строкой FQL" : "Строка запроса FQL")">FQL</button>
             </div>
-            <div class="meta-line">
-                @if (CurrentView == TaskView.List)
+            <div class="filter-row-end">
+                <div class="meta-line">
+                    @if (CurrentView == TaskView.List)
+                    {
+                        @Ru.Tasks(_total)@(" · ")
+                    }@(CurrentBoard is { } b ? $"создан {Ru.Date(b.CreatedAt)}" : Ru.Projects(_boards.Count))
+                </div>
+                @if (CurrentBoard is { } toolsBoard)
                 {
-                    @Ru.Tasks(_total)@(" · ")
-                }@(CurrentBoard is { } b ? $"создан {Ru.Date(b.CreatedAt)}" : Ru.Projects(_boards.Count))
+                    @ProjectTools(toolsBoard)
+                }
             </div>
         </div>
 
-        @if (FqlVisible)
+        @if (FqlVisible && _fqlError is { } fqlError)
         {
-            <FqlBar Value="@EffectiveFql" Error="_fqlError" MorphFrom="@(_fqlMorph ? FqlToggleId : null)"
-                    OnApply="ApplyFql" OnSave="OpenSave" OnClose="CloseFql" />
+            <FqlErrorLine Error="fqlError" Query="@EffectiveFql" />
         }
 
         @if (IsCalendarView)
@@ -475,6 +460,59 @@
         }
     }
 
+    /// <summary>
+    /// Настройки открытого проекта — ряд иконок на подложках в конце строки фильтров. Раньше стояли в топбаре
+    /// рядом с названием, и широкая строка FQL на них наезжала.
+    /// </summary>
+    private RenderFragment ProjectTools(BoardResponse board)
+    {
+        var access = Access.For(board.Id);
+        return @<div class="project-tools" role="toolbar" aria-label="Настройки проекта">
+            @if (Permissions.CanManageConfig(access))
+            {
+                <DsIconButton Icon="list" Size="30" Title="Статусы проекта" Class="project-tool" OnClick="() => _statusesOpen = true" />
+                <DsIconButton Icon="link" Size="30" Title="Workflow проекта" Class="project-tool" OnClick="@(() => Nav.NavigateTo($"boards/{board.Id}/workflow"))" />
+                <DsIconButton Icon="settings" Size="30" Title="Типы задач проекта" Class="project-tool" OnClick="() => _typesOpen = true" />
+                <DsIconButton Icon="check-square" Size="30" Title="Поля проекта" Class="project-tool" OnClick="() => _fieldsOpen = true" />
+                <DsIconButton Icon="view" Size="30" Title="Экраны задач" Class="project-tool" OnClick="() => _screensOpen = true" />
+            }
+            @if (Permissions.CanManageTaskTemplates(access))
+            {
+                <DsIconButton Icon="copy" Size="30" Title="Шаблоны задач" Class="project-tool" OnClick="() => _templatesOpen = true" />
+            }
+            <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Class="project-tool" OnClick="@(() => Nav.NavigateTo($"boards/{board.Id}/milestones"))" />
+            @if (Permissions.CanManageScm(access))
+            {
+                <DsIconButton Icon="code" Size="30" Title="Репозитории проекта" Class="project-tool" OnClick="() => _reposOpen = true" />
+            }
+            @if (Permissions.CanManageMembers(access))
+            {
+                <DsIconButton Icon="users" Size="30" Title="Доступ к проекту" Class="project-tool" OnClick="() => _accessOpen = true" />
+            }
+        </div>;
+    }
+
+    /// <summary>Вариант переключателя вида. ProjectOnly — вид живёт внутри одного проекта (дерево, бэклог, роадмап).</summary>
+    private sealed record ViewOption(TaskView View, string Label, string Icon, string Title, bool ProjectOnly = false);
+
+    private static readonly ViewOption[] ViewOptions =
+    [
+        new(TaskView.List, "Список", "list", "Список"),
+        new(TaskView.Board, "Доска", "grid", "Доска: колонки по статусам"),
+        new(TaskView.Tree, "Дерево", "list-ordered", "Дерево: эпики, истории и подзадачи", ProjectOnly: true),
+        new(TaskView.Backlog, "Бэклог", "history", "Бэклог и спринты", ProjectOnly: true),
+        new(TaskView.Calendar, "Календарь", "calendar", "Календарь: задачи по датам"),
+        new(TaskView.Roadmap, "Роадмап", "chart", "Роадмап: полосы от начала до срока", ProjectOnly: true)
+    ];
+
+    private void SelectView(ViewOption option)
+    {
+        if (option.ProjectOnly)
+            SetProjectView(option.View);
+        else
+            SetView(option.View);
+    }
+
     private bool IsBoardView => CurrentView == TaskView.Board;
 
     private bool IsTreeView => CurrentView == TaskView.Tree;
@@ -628,9 +666,8 @@
     private string? EffectiveFql => Fql ?? CurrentFilter?.Query;
 
     private bool _fqlOpen;
-    /// <summary>Строку открыли кнопкой — она вырастает из кнопки; по ссылке с ?fql= появляется без анимации.</summary>
-    private bool _fqlMorph;
-    private const string FqlToggleId = "fql-toggle";
+    /// <summary>Строку открыли чипом «FQL» — курсор сразу в неё; по ссылке с ?fql= фокус не трогаем.</summary>
+    private bool _fqlFocus;
     private FqlErrorResponse? _fqlError;
     private string? _saveQuery;
 
@@ -782,6 +819,7 @@
             _total = 0;
             _countsByType = [];
             _countsByStatus = new();
+            StateHasChanged();
             return new GridData<TaskResponse> { Items = [], TotalItems = 0 };
         }
 
@@ -789,26 +827,27 @@
         {
             _loadError = result.Error;
             _tasks = [];
+            StateHasChanged();
             return new GridData<TaskResponse> { Items = [], TotalItems = 0 };
         }
 
         var page = result.Value!;
         // Копия страницы нужна слайдеру и хоткеям: они ходят по текущему списку.
         _tasks = page.Items.ToList();
-        // ServerData перерисовывает только сам грид; ширина колонки — атрибут грида у страницы, её надо перерисовать.
-        if (CodeColumnWidth(_tasks) is var codeColumn && codeColumn != _codeColumn)
-        {
-            _codeColumn = codeColumn;
-            StateHasChanged();
-        }
+        _codeColumn = CodeColumnWidth(_tasks);
         _total = page.Total;
         _countsByType = page.ByType;
         _countsByStatus = page.ByStatus.ToDictionary(c => c.StatusId, c => c.Count);
+        _matched = page.Matched;
 
         if (BoardId is { } boardId)
             State.SetLastBoard(boardId);
 
-        _matched = page.Matched;
+        // ServerData перерисовывает только сам грид, а счётчики фильтра статусов, «N задач» и ширина колонки кода
+        // живут в разметке страницы. Перерисовать её — после того, как записаны все числа: раньше StateHasChanged
+        // стоял до записи счётчиков, и при заходе в список (с доски или прямо по адресу) они оставались нулями,
+        // пока страницу случайно не перерисовывало что-то ещё.
+        StateHasChanged();
         return new GridData<TaskResponse> { Items = _tasks, TotalItems = page.Matched };
     }
 
@@ -1026,22 +1065,13 @@
     // ---- FQL и сохранённые фильтры ----
 
     /// <summary>
-    /// Кнопка «FQL»: при пустой строке и включённой панели — «Показать как FQL»: фильтры панели переезжают в строку
-    /// (проект остаётся в селекторе), дальше их можно править текстом. Иначе просто открывает строку.
+    /// Чип «FQL» в поле поиска: поле становится строкой запроса. При включённой панели — «Показать как FQL»:
+    /// фильтры панели и набранный текст переезжают в строку (проект остаётся в селекторе), дальше их можно
+    /// править текстом — так два поиска не действуют одновременно.
     /// </summary>
-    private async Task OpenFql()
+    private void OpenFql()
     {
-        if (FqlVisible && string.IsNullOrWhiteSpace(EffectiveFql))
-        {
-            await Browser.MorphOutAsync(FqlToggleId, FqlBar.LineId);
-            _fqlOpen = false;
-            _fqlMorph = false;
-            return;
-        }
-
-        // Появляется — вырастет из кнопки и сама возьмёт фокус после морфа; уже открытую только фокусируем.
-        var appearing = !FqlVisible;
-        _fqlMorph = appearing;
+        _fqlFocus = true;
         _fqlOpen = true;
         if (string.IsNullOrWhiteSpace(EffectiveFql) && HasPanelFilters)
         {
@@ -1055,12 +1085,6 @@
                 ["fql"] = fql
             }), replace: true);
         }
-
-        if (appearing)
-            return;
-
-        await Task.Delay(50);
-        await Browser.FocusAsync(FqlBar.InputId);
     }
 
     /// <summary>Панель фильтров строкой FQL — то же условие, что сервер строит из query-параметров.</summary>
@@ -1097,11 +1121,11 @@
         Nav.NavigateTo(Nav.GetUriWithQueryParameter("fql", fql), replace: true);
     }
 
-    private async Task CloseFql()
+    /// <summary>Крестик строки: обратно к обычному поиску — запрос и открытый сохранённый фильтр снимаются.</summary>
+    private void CloseFql()
     {
-        await Browser.MorphOutAsync(FqlToggleId, FqlBar.LineId);
         _fqlOpen = false;
-        _fqlMorph = false;
+        _fqlFocus = false;
         _fqlError = null;
         Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["fql"] = null, ["filter"] = null }), replace: true);
     }

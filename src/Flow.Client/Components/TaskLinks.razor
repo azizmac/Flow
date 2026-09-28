@@ -61,7 +61,9 @@
                     <TaskPicker ButtonLabel="Выбрать задачу" Disabled="_busy" AriaLabel="Связать с задачей"
                                 Where="@(t => t.Id != TaskId && _links!.All(l => l.Other.Id != t.Id))"
                                 OnChange="@(t => t is null ? Task.CompletedTask : Add(t))" />
-                    <DsButton Variant="secondary" Size="sm" OnClick="() => _adding = false">Готово</DsButton>
+                    @* Выбор задачи сразу создаёт связь, так что закрыть режим — единственное действие кнопки. Пока ничего
+                       не добавлено, это отказ — «Отмена»; после первой связи — «Готово». *@
+                    <DsButton Variant="@(_added == 0 ? "tertiary" : "secondary")" Size="sm" OnClick="StopAdd">@(_added == 0 ? "Отмена" : "Готово")</DsButton>
                 </div>
             </div>
         }
@@ -78,6 +80,8 @@
     private List<TaskLinkResponse>? _links;
     private Guid _loadedFor;
     private bool _adding;
+    /// <summary>Сколько связей добавлено в текущем заходе — от этого подпись кнопки «Отмена» / «Готово».</summary>
+    private int _added;
     private bool _busy;
     private (TaskLinkType Type, bool Outward) _kind = TaskMeta.ManualLinkKinds[0];
 
@@ -98,7 +102,13 @@
             _links = result.Ok ? result.Value!.ToList() : [];
     }
 
-    private void StartAdd() => _adding = true;
+    private void StartAdd()
+    {
+        _adding = true;
+        _added = 0;
+    }
+
+    private void StopAdd() => _adding = false;
 
     private async Task Add(TaskResponse target)
     {
@@ -113,6 +123,7 @@
 
         var before = BlockedBy;
         _links!.Add(result.Value!.Link);
+        _added++;
         await OnJournal.InvokeAsync((TaskActivityType.LinkAdded, Side(result.Value.Link), target.Id.ToString()));
         if (result.Value.CycleWarning)
             Toasts.Error($"Связь добавлена, но замкнула цикл блокировок: {target.Code} уже ждёт эту задачу");

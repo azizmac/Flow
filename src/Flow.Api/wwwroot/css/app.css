@@ -233,6 +233,18 @@ input, textarea { font-family: inherit; }
 .search-clear:active { transform: scale(0.88); }
 .search-clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @keyframes clear-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+/* Чип «FQL» в конце поля поиска «Задач»: переключает поле в строку запроса (FqlBar на том же месте). */
+.search-mode {
+    flex: none; margin-right: -8px; padding: 3px 8px; border: 1px solid var(--border); border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.04); color: var(--text-tertiary); cursor: pointer;
+    font: var(--fw-bold) 10.5px var(--font-display); letter-spacing: 0.06em;
+    transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease, transform 140ms var(--ease-out);
+}
+.search-mode:active { transform: scale(0.94); }
+.search-mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+    .search-mode:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+}
 
 .meta-line { font: var(--fw-medium) 13px var(--font-text); color: var(--text-tertiary); }
 
@@ -759,6 +771,11 @@ a.sb-me:active { transform: scale(0.98); }
    Круглая подсветка от .ds-iconbtn в подвале сайдбара читалась как элемент из другого набора.
    Цвет — классом, а не инлайновым style: инлайн перебил бы и наведение, и фокус. */
 .sb-foot .ds-iconbtn { border-radius: var(--r-md); }
+/* Настройки проекта на экране «Задачи» (статусы, workflow, типы, поля…): у каждой кнопки своя подложка,
+   иначе ряд из десяти голых глифов сливается в одну полосу и не читается как набор кнопок. Ряд стоит в конце
+   строки фильтров (.project-tools), у названия проекта в топбаре — только «Переименовать». */
+.project-tool.ds-iconbtn { background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); border-radius: var(--r-md); color: var(--text-secondary); }
+.project-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .sb-logout { color: rgba(255, 255, 255, 0.45); }
 
 /* ---------- Auth screen (вход/выход через Flow.Auth, «нет доступа») ---------- */
@@ -1056,7 +1073,48 @@ a.sb-me:active { transform: scale(0.98); }
 /* Вид только внутри проекта, а выбраны «Все проекты»: кнопка кликается (объясняет тостом), но выглядит выключенной. */
 .seg-btn.needs-project { opacity: 0.4; cursor: not-allowed; }
 .seg-btn.needs-project:active { transform: none; }
+/* Свёрнутый сегмент (SegCollapse): видна выбранная кнопка, остальные выезжают вправо по клику.
+   Подложка ловит клик мимо; группа над ней, иначе клик по варианту закрыл бы её без выбора.
+   Ширина раскрывается через grid 0fr → 1fr — единственное место, где анимируем не transform/opacity:
+   без этого соседние кнопки строки фильтров перепрыгивали бы на новое место рывком. Сами варианты
+   выезжают пружиной (--ease-spring) каскадом по --i, а сворачиваются быстрее и без каскада. */
+.seg-collapse { flex-wrap: nowrap; position: relative; gap: 0; flex-shrink: 0; }
+.seg-collapse.open { z-index: 31; }
+.seg-scrim { position: fixed; inset: 0; z-index: 30; }
+.seg-collapse .seg-cur { animation: none; transition: background-color 200ms ease, color 200ms ease, transform 320ms var(--ease-spring); }
+.seg-collapse.open .seg-cur { transform: scale(1.03); }
+.seg-caret { display: inline-flex; margin-left: -1px; color: var(--text-tertiary); transform: rotate(-90deg); transition: transform 420ms var(--ease-spring), color 200ms ease; }
+.seg-collapse.open .seg-caret { transform: rotate(90deg); color: var(--accent); }
+/* flex-shrink: 0 у обёртки и у группы: обрезка (overflow) обнуляет минимальную ширину, и в тесной строке
+   фильтров раскрытые варианты сжимались бы до обрывка — пусть лучше строка переносится. */
+.seg-opts { display: grid; grid-template-columns: 0fr; flex-shrink: 0; transition: grid-template-columns 300ms var(--ease-drawer); }
+.seg-collapse.open .seg-opts { grid-template-columns: 1fr; transition-duration: 420ms; }
+.seg-opts-in { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+/* Отступ от выбранной кнопки — полем первого варианта, а не padding обёртки: padding не дал бы колонке 0fr
+   схлопнуться до нуля, и в свёрнутом виде после выбранной кнопки оставался бы зазор. */
+.seg-opts-in > :first-child { margin-left: 4px; }
+.seg-collapse .seg-opt {
+    opacity: 0;
+    transform: translateX(-16px) scale(0.92);
+    transition: opacity 180ms ease, transform 240ms var(--ease-out), background-color 150ms ease, color 150ms ease;
+}
+.seg-collapse.open .seg-opt {
+    opacity: 1;
+    transform: none;
+    transition: opacity 280ms ease, transform 460ms var(--ease-spring), background-color 150ms ease, color 150ms ease;
+    transition-delay: calc(var(--i, 0) * 40ms + 40ms), calc(var(--i, 0) * 40ms + 40ms), 0ms, 0ms;
+}
+.seg-collapse.open .seg-opt.muted { opacity: 0.7; }
+.seg-collapse.open .seg-opt.needs-project { opacity: 0.4; }
+.seg-collapse.open .seg-opt:active { transform: scale(0.97); transition-delay: 0ms; }
+@media (prefers-reduced-motion: reduce) {
+    .seg-collapse .seg-opt, .seg-collapse.open .seg-opt { transform: none; transition: opacity 150ms ease; transition-delay: 0ms; }
+    .seg-collapse.open .seg-cur, .seg-caret { transition: none; }
+    .seg-collapse.open .seg-cur { transform: none; }
+    .seg-opts, .seg-collapse.open .seg-opts { transition: none; }
+}
 .filter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.filter-row-end { display: flex; align-items: center; gap: 16px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 /* Вкладки раздела в строке фильтров («Люди») — от края панели, без полосы на всю ширину, как в «Настройках». */
 .filter-row > .tabs { padding: 0; border-bottom: 0; }
 
@@ -1176,7 +1234,7 @@ a.sb-me:active { transform: scale(0.98); }
     .meta-grid.narrow { grid-template-columns: minmax(0, 1fr); row-gap: 6px; }
     .meta-grid.narrow .meta-k { margin-top: 8px; }
 }
-.meta-k { font: var(--fw-semibold) 12.5px var(--font-display); color: var(--text-tertiary); }
+.meta-k { font: var(--fw-semibold) 12.5px var(--font-display); color: var(--text-label); }
 .meta-v { font: var(--fw-semibold) 13.5px var(--font-display); color: #fff; display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* Длинное название проекта или ФИО не должны выходить за карточку: сжимаем значение и режем многоточием
    (полный текст остаётся в title). Чип с ключом проекта не сжимается — он и так короткий. */
@@ -1916,6 +1974,7 @@ a.task-row { color: inherit; text-decoration: none; }
     .avatar-edit:hover .avatar-edit-cover, .avatar-edit:hover .avatar-edit-remove { opacity: 1; }
     .avatar-edit-remove:hover:not(:disabled) { color: #fff; }
     .sb-foot .ds-iconbtn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); color: #fff; }
+    .project-tool.ds-iconbtn:hover:not(:disabled) { background: var(--surface-raised); color: #fff; }
     .ucard-row.lnk:hover { color: #fff; }
     .ucard-link:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
     .ucard-open:hover { color: var(--accent); }
@@ -1960,10 +2019,13 @@ a.task-row { color: inherit; text-decoration: none; }
     transition: background-color 120ms ease, color 120ms ease, transform 160ms var(--ease-out);
 }
 .md-tool:active { transform: scale(0.94); }
-.md-tool.danger { color: var(--danger); }
+/* Удаление в покое того же цвета, что и соседние инструменты: красный только под курсором и в фокусе,
+   иначе пара «править / удалить» над комментарием читается как иконки из разных наборов. */
+.md-tool.danger:focus-visible { color: var(--danger); background: var(--danger-soft); }
 .md-tool:focus-visible { outline: 0; background: rgba(255, 255, 255, 0.1); color: #fff; }
 @media (hover: hover) and (pointer: fine) {
     .md-tool:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+    .md-tool.danger:hover { background: var(--danger-soft); color: var(--danger); }
 }
 .md-sep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
 .md-body { position: relative; }
@@ -2017,8 +2079,9 @@ a.task-row { color: inherit; text-decoration: none; }
 .tl-comment:hover .tl-card-actions, .tl-card:focus-within .tl-card-actions { opacity: 1; }
 @media (hover: none) { .tl-card-actions { opacity: 1; } }
 .tl-body.desc-box { background: transparent; border: 0; padding: 0; min-height: 0; color: var(--text-primary); }
-.tl-event { display: flex; gap: 12px; align-items: flex-start; padding: 0 0 0 4px; }
-.tl-event-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 2px; }
+.tl-event { display: flex; gap: 12px; align-items: flex-start; }
+/* Аватар события того же размера, что у комментария (30px): строку выравниваем по его центру. */
+.tl-event-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 5px; }
 .tl-event-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font: var(--fw-medium) 13px/1.5 var(--font-text); color: var(--text-secondary); }
 .tl-event-line .tl-name { font-size: 13px; }
 .tl-event-list { margin: 0; padding-left: 14px; display: flex; flex-direction: column; gap: 3px; font: var(--fw-medium) 13px/1.5 var(--font-text); color: var(--text-secondary); }
@@ -2232,6 +2295,14 @@ a.task-row { color: inherit; text-decoration: none; }
 .tt-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
 .tt-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: 8px; min-height: 36px; }
 .tt-row.archived .tt-name, .tt-row.archived .type-ico { opacity: 0.5; }
+/* Подложки блоков в модалках настроек проекта (статусы, типы, поля, экраны): каждая строка — своя карточка,
+   блок «Новый …» — тоже, иначе список и форма добавления сливались в один сплошной текст. */
+.tt-list { gap: 6px; }
+.tt-row { padding: 6px 12px; background: rgba(0, 0, 0, 0.14); border: 1px solid var(--border-subtle); border-radius: var(--r-md); transition: background-color 150ms ease, border-color 150ms ease; }
+.tt-add, .cf-form { padding: 14px 16px; background: rgba(0, 0, 0, 0.14); border: 1px solid var(--border-subtle); border-radius: var(--r-md); }
+@media (hover: hover) and (pointer: fine) {
+    .tt-row.hover-row:hover { background: rgba(0, 0, 0, 0.22); border-color: var(--border); }
+}
 .tt-name {
     background: none; border: 0; padding: 0; color: #fff; cursor: text; text-align: left;
     font: var(--fw-semibold) 13.5px var(--font-display); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -2299,7 +2370,7 @@ a.task-row { color: inherit; text-decoration: none; }
 .check-actions { display: inline-flex; gap: 2px; flex: none; opacity: 0; transition: opacity 150ms var(--ease-out); }
 .check-row:focus-within .check-actions { opacity: 1; }
 .link-group { display: flex; flex-direction: column; }
-.link-label { font: var(--fw-semibold) 11px var(--font-display); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 8px 2px; }
+.link-label { font: var(--fw-semibold) 11px var(--font-display); color: var(--text-label); text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 8px 2px; }
 .link-target { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; color: #fff; text-decoration: none; }
 .link-row .subtask-title.muted { color: var(--text-tertiary); display: inline-flex; align-items: center; gap: 6px; }
 .link-add { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.14); }
@@ -2314,15 +2385,23 @@ a.task-row { color: inherit; text-decoration: none; }
 @media (hover: none) { .check-actions { opacity: 1; } }
 
 /* Строка FQL и сохранённые фильтры (docs/TZ_task_views.md §7) */
-.fql-bar { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
+/* Строка FQL стоит в топбаре на месте поля поиска и выглядит как оно, только шире: запросу нужно место.
+   Появляется, раздвигаясь от правого края — оттуда, где был чип «FQL». */
+.fql-bar { width: min(560px, 44vw); min-width: 300px; }
 .fql-line {
-    display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-radius: 12px;
-    background: rgba(0, 0, 0, 0.16); border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 5px 0 14px; border-radius: var(--r-md);
+    background: var(--surface); border: 1px solid var(--border);
+    transform-origin: right center; animation: fql-in 260ms var(--ease-out);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
 }
-.fql-line:focus-within { border-color: var(--accent); }
-/* До запуска морфа из кнопки FQL: рендер приходит раньше вызова JS, полная строка не должна мелькнуть (flow.morphIn). */
-.fql-line.morphing { opacity: 0; }
+@keyframes fql-in { from { opacity: 0; transform: scaleX(0.92); } to { opacity: 1; transform: none; } }
+.fql-line:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .fql-line.error { border-color: var(--danger); }
+.fql-line.error:focus-within { box-shadow: 0 0 0 3px var(--danger-soft); }
+.fql-line .fql-act { color: var(--text-tertiary); border-radius: 7px; }
+@media (hover: hover) and (pointer: fine) {
+    .fql-line .fql-act:hover:not(:disabled) { color: #fff; background: rgba(255, 255, 255, 0.08); }
+}
 .fql-tag { font: var(--fw-bold) 10.5px var(--font-display); color: var(--accent); letter-spacing: 0.06em; flex: none; }
 .fql-input-wrap { position: relative; flex: 1 1 auto; min-width: 0; }
 .fql-input {
@@ -2343,7 +2422,7 @@ a.task-row { color: inherit; text-decoration: none; }
 .fql-kind.value { color: var(--sage); }
 .fql-label { font: var(--fw-medium) 13px var(--font-mono); white-space: nowrap; }
 .fql-hint { margin-left: auto; color: var(--text-tertiary); font: var(--fw-medium) 11.5px var(--font-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fql-error { display: flex; flex-direction: column; gap: 3px; padding: 0 12px; color: var(--danger); font: var(--fw-medium) 12px var(--font-text); }
+.fql-error { display: flex; flex-direction: column; gap: 3px; padding: 0 2px; margin-top: -10px; color: var(--danger); font: var(--fw-medium) 12px var(--font-text); }
 .fql-echo { color: var(--text-tertiary); font: 12px var(--font-mono); white-space: pre-wrap; }
 .fql-echo mark { background: none; color: var(--danger); text-decoration: underline wavy var(--danger); text-underline-offset: 3px; }
 .filter-item { display: flex; align-items: center; gap: 8px; }
@@ -2351,7 +2430,7 @@ a.task-row { color: inherit; text-decoration: none; }
 .filter-star { background: none; border: 0; padding: 0 2px; cursor: pointer; color: rgba(255, 255, 255, 0.3); font-size: 14px; line-height: 1; }
 .filter-star.on { color: var(--accent); }
 .sf-shared { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; color: var(--text-secondary, #cfd8d3); font: var(--fw-medium) 13px var(--font-text); }
-@media (prefers-reduced-motion: reduce) { .fql-suggest { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .fql-suggest, .fql-line { animation: none; } }
 @media (hover: hover) and (pointer: fine) {
     .fql-suggest .pop-item:hover { background: rgba(255, 255, 255, 0.06); }
     .filter-star:hover { color: var(--accent); }
@@ -2402,9 +2481,13 @@ a.task-row { color: inherit; text-decoration: none; }
 @media (hover: hover) and (pointer: fine) { .wf-gear:hover { color: #fff; } }
 
 /* Модалка «Статусы» проекта (docs/TZ_workflow_config.md §1) */
-.st-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
-.st-row { border-radius: 8px; padding: 4px; }
-.st-row.deleting { background: rgba(0, 0, 0, 0.16); }
+.st-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+/* Строка статуса — карточка, как .tt-row у типов и полей (см. «Подложки блоков в модалках»). */
+.st-row { border-radius: var(--r-md); padding: 6px 10px; background: rgba(0, 0, 0, 0.14); border: 1px solid var(--border-subtle); transition: background-color 150ms ease, border-color 150ms ease; }
+.st-row.deleting { background: rgba(0, 0, 0, 0.26); border-color: var(--border); }
+@media (hover: hover) and (pointer: fine) {
+    .st-row.hover-row:hover { background: rgba(0, 0, 0, 0.22); border-color: var(--border); }
+}
 .st-main { display: flex; align-items: center; gap: 8px; min-height: 34px; }
 .st-main .tt-name, .st-main .tt-name-input { flex: 1 1 auto; min-width: 60px; }
 .st-main .tt-name { display: block; text-align: left; }
@@ -2624,7 +2707,7 @@ a.task-row { color: inherit; text-decoration: none; }
 /* ---- Пользовательские поля (docs/TZ_task_model.md §4, этап 1D) ---- */
 .cf-row.on { background: rgba(255, 186, 0, 0.08); }
 .cf-key { font: var(--fw-semibold) 11.5px var(--font-mono); color: var(--text-tertiary); }
-.cf-form { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.cf-form { display: flex; flex-direction: column; gap: 12px; }
 .cf-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: end; }
 .cf-key-fixed { display: flex; flex-direction: column; gap: 6px; padding-bottom: 6px; }
 .cf-options { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
@@ -2921,3 +3004,49 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .ps-cell { text-align: center; }
 .ps-mark { color: var(--text-tertiary); }
 .ps-mark.on { color: var(--sage); font-weight: 700; }
+
+/* ---------- Подложки блоков ----------
+   Каждый самостоятельный блок и каждая строка списка в модалках, слайдере задачи и настройках — на своей
+   карточке, как .tt-row/.st-row в модалках статусов и типов: тёмная подложка, тонкая рамка, радиус --r-md.
+   Не карточкой остаются: секция, в которой строки уже на карточках (иначе карточка в карточке), заголовки
+   страниц и панели инструментов, строки таблиц и основных списков задач/людей (там разделители — норма),
+   события ленты между комментариями (лёгкие намеренно). Правила стоят в конце файла: они перебивают прежние
+   border-top/border-bottom-разделители и отрицательные поля этих блоков. */
+.tpl-row, .pa-row, .scm-remote-row, .scm-repo, .rs-part,
+.subtask-row, .check-row, .links .link-row, .att-row, .dev-row, .similar-row,
+.scm-conn, .gp-group, .link-list .link-row,
+.tt-form, .pa-section:not(:has(.pa-list, .pa-add)), .pa-add, .ac-target, .ac-parts, .scm-manual,
+.rec-preview, .wd-grid, .rs-facts, .rs-notes, .cb-template-hint, .gp-new,
+.recurrence, .drawer-body > .meta-grid {
+    background: rgba(0, 0, 0, 0.14);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-md);
+}
+/* Строки списков */
+.tpl-row, .pa-row, .link-list .link-row { padding: 8px 12px; }
+.tpl-row:last-child, .link-list .link-row:last-child { border-bottom: 1px solid var(--border-subtle); }
+.scm-remote-row { padding: 8px 12px; }
+.subtask-row, .check-row, .links .link-row, .dev-row { padding: 6px 10px; }
+.att-row, .similar-row { margin: 0; padding: 7px 10px; }
+.rs-part { padding: 8px 10px; }
+.pa-list, .checklist, .links, .subtasks, .dev-block, .link-list, .scm-remote { gap: 6px; }
+.tpl-row + .tpl-row { margin-top: 6px; }
+.scm-repo + .scm-repo { margin-top: 8px; }
+/* Самостоятельные блоки */
+.scm-repo { padding: 6px 12px; }
+.scm-repo .scm-auto { border-bottom: 0; margin-bottom: 0; padding-bottom: 8px; }
+.scm-conn, .gp-group { padding: 12px 14px; }
+.scm-conn + .scm-conn, .gp-group + .gp-group { margin-top: 8px; }
+.tt-form, .pa-section:not(:has(.pa-list, .pa-add)), .pa-add, .ac-parts, .scm-manual, .rec-preview, .wd-grid,
+.cb-template-hint, .gp-new, .recurrence, .drawer-body > .meta-grid { padding: 12px 14px; }
+.ac-target { margin-top: 10px; padding: 12px 14px; }
+.rs-facts { padding: 10px 14px; }
+.rs-notes { padding: 10px 14px 10px 32px; }
+/* Наведение на карточку-строку — темнее, а не светлее: светлый налёт прежних строк на тёмной подложке мутнел. */
+@media (hover: hover) and (pointer: fine) {
+    .tpl-row:hover, .pa-row:hover, .scm-remote-row:hover, .subtask-row:hover, .check-row:hover,
+    .links .link-row:hover, .att-row:hover, .dev-row:hover, .similar-row:hover {
+        background: rgba(0, 0, 0, 0.22);
+        border-color: var(--border);
+    }
+}

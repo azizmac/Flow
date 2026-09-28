@@ -13,13 +13,7 @@
 @implements IDisposable
 
 <div class="kb-toolbar">
-    <div class="seg" role="radiogroup" aria-label="Дорожки">
-        @foreach (var (lane, label) in LaneModes)
-        {
-            <button type="button" class="seg-btn @(_lanes == lane ? "on" : "")" role="radio" aria-checked="@(_lanes == lane)"
-                    @onclick="() => SetLanes(lane)">@label</button>
-        }
-    </div>
+    <DsSegmented T="LaneMode" Items="LaneModes" Value="_lanes" ValueChanged="SetLanes" AriaLabel="Дорожки" />
     @if (Board is { } board && board.Statuses.Any(s => s.IsFinal))
     {
         <div class="kb-window">
@@ -206,13 +200,13 @@ else
 
     private enum LaneMode { None, Assignee, Parent, Priority, Team }
 
-    private static readonly (LaneMode Mode, string Label)[] LaneModes =
+    private static readonly DsSegment<LaneMode>[] LaneModes =
     [
-        (LaneMode.None, "Без дорожек"),
-        (LaneMode.Assignee, "Исполнитель"),
-        (LaneMode.Parent, "Родитель"),
-        (LaneMode.Priority, "Приоритет"),
-        (LaneMode.Team, "Команда")
+        new(LaneMode.None, "Без дорожек"),
+        new(LaneMode.Assignee, "Исполнитель"),
+        new(LaneMode.Parent, "Родитель"),
+        new(LaneMode.Priority, "Приоритет"),
+        new(LaneMode.Team, "Команда")
     ];
 
     private sealed class ColumnState
