@@ -7,6 +7,7 @@ namespace Flow.Application.Features.Agents.Commands.AgentTestAskCommand;
 
 internal sealed class AgentTestAskCommandHandler(
     IFlowAgentClient agent,
+    IProjectAccess projectAccess,
     ICodeRepositoryRepository repositories,
     IRepositoryWorkspaceService workspaces,
     ActorResolver actors)
@@ -14,10 +15,13 @@ internal sealed class AgentTestAskCommandHandler(
 {
     public async Task<AgentTestResponse> Handle(AgentTestAskCommand request, CancellationToken cancellationToken)
     {
-        await actors.ResolveAsync(request.ActorId, cancellationToken);
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
 
         var repository = await repositories.GetByIdAsync(request.RepositoryId, cancellationToken)
             ?? throw new ArgumentException("Репозиторий не найден.", nameof(request.RepositoryId));
+
+        if (!(await projectAccess.GetAsync(actor, repository.BoardId, cancellationToken)).CanView)
+            throw new ArgumentException("Репозиторий не найден.", nameof(request.RepositoryId));
 
         if (repository.LastSyncedCommit is null || repository.SyncState is not
             (Flow.Domain.Entities.RepositorySyncState.Ready or Flow.Domain.Entities.RepositorySyncState.Failed))

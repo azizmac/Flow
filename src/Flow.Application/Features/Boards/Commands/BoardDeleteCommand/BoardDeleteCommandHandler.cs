@@ -37,9 +37,6 @@ internal sealed class BoardDeleteCommandHandler(IBoardRepository boards, IFileSt
             // Как и при удалении задачи: строк больше нет, объекты останутся мусором в бакете.
         }
 
-        return true;
-    }
-
         try
         {
             await workspaces.DeleteBoardAsync(board.Id, cancellationToken);
@@ -48,5 +45,7 @@ internal sealed class BoardDeleteCommandHandler(IBoardRepository boards, IFileSt
         {
             // Checkout удаляется после коммита; сбой очистки не отменяет удаление проекта.
         }
+        return true;
+    }
 
 }

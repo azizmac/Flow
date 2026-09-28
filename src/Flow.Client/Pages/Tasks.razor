@@ -56,6 +56,10 @@
         {
             <SearchBox Placeholder="Найти задачу или код..." Value="@_search" ValueChanged="OnSearchChanged" OnFql="OpenFql" />
         }
+        @if (CurrentBoard is { } currentBoard)
+        {
+            <a class="ds-btn secondary sm" href="@($"boards/{currentBoard.Id}/repositories")"><Icon Name="code" Size="16" />Локальные репозитории</a>
+        }
         @if (CanCreateTask)
         {
             <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="OpenCreate" Disabled="_boards.Count == 0">Создать задачу</DsButton>

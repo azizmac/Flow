@@ -18,10 +18,13 @@ using Flow.Application.Features.Boards.Workflow;
 using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
 using Flow.Application.Features.Boards.Queries.BoardListQuery;
+using Flow.Application.Features.CodeRepositories;
 using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Tasks;
+using Microsoft.EntityFrameworkCore;
 using Flow.Shared.Contracts.CodeRepositories;
+using Npgsql;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -355,5 +358,39 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
     {
         var deleted = await mediator.Send(new BoardDeleteCommand(actor.Require(), id), cancellationToken);
         return deleted ? NoContent() : NotFound();
+    }
+
+    [HttpGet("{id:guid}/repositories")]
+    public async Task<IActionResult> GetRepositories(Guid id, CancellationToken cancellationToken)
+    {
+        var repositories = await mediator.Send(new ListCodeRepositoriesQuery(actor.Require(), id), cancellationToken);
+        return repositories is null ? NotFound() : Ok(repositories);
+    }
+
+    [HttpPost("{id:guid}/repositories")]
+    public async Task<IActionResult> AddRepository(Guid id, CreateCodeRepositoryRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var repository = await mediator.Send(
+                new CreateCodeRepositoryCommand(actor.Require(), id, request.Provider, request.Name, request.RemoteUrl, request.Branch), cancellationToken);
+            return repository is null ? NotFound() : StatusCode(StatusCodes.Status201Created, repository);
+        }
+        catch (ArgumentException ex) { return BadRequest(new ApiError(ex.Message)); }
+        catch (InvalidOperationException ex) { return Conflict(new ApiError(ex.Message)); }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        { return Conflict(new ApiError("Репозиторий уже подключён к проекту.")); }
+    }
+
+    [HttpPost("{id:guid}/repositories/{repositoryId:guid}/sync")]
+    public async Task<IActionResult> SynchronizeRepository(Guid id, Guid repositoryId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var repository = await mediator.Send(new SynchronizeCodeRepositoryCommand(actor.Require(), id, repositoryId), cancellationToken);
+            return repository is null ? NotFound() : Ok(repository);
+        }
+        catch (InvalidOperationException ex) { return Conflict(new ApiError(ex.Message)); }
+        catch (DbUpdateConcurrencyException) { return Conflict(new ApiError("Репозиторий уже синхронизируется.")); }
     }
 }

@@ -14,12 +14,14 @@ internal sealed class SynchronizeCodeRepositoryCommandHandler(
     IRepositoryWorkspaceService workspaces,
     ActorResolver actors,
     IPermissionService permissions,
+    IProjectAccess projectAccess,
     IUnitOfWork unitOfWork)
     : IRequestHandler<SynchronizeCodeRepositoryCommand, CodeRepositoryResponse?>
 {
     public async Task<CodeRepositoryResponse?> Handle(SynchronizeCodeRepositoryCommand request, CancellationToken cancellationToken)
     {
-        permissions.EnsureCanManageBoards(await actors.ResolveAsync(request.ActorId, cancellationToken));
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
+        permissions.EnsureCanManageScm(await projectAccess.GetAsync(actor, request.BoardId, cancellationToken));
 
         var repository = await repositories.GetByIdAsync(request.RepositoryId, cancellationToken);
         if (repository is null || repository.BoardId != request.BoardId)

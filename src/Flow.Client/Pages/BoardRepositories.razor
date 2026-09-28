@@ -1,5 +1,6 @@
 @page "/boards/{BoardId:guid}/repositories"
-@inject FlowApi Api
+@inject IFlowApi Api
+@inject ProjectAccessState Access
 
 <PageTitle>Репозитории — Flow</PageTitle>
 
@@ -142,8 +143,8 @@
         else
             _error = repositories.Error;
 
-        var me = await Api.GetMe();
-        _canManage = me.Ok && Permissions.CanManageBoards(me.Value);
+        await Access.EnsureCoversAsync([BoardId]);
+        _canManage = Permissions.CanManageScm(Access.For(BoardId));
         _loading = false;
     }
 

@@ -11,12 +11,13 @@ public sealed record CreateCodeRepositoryCommand(
     : IRequest<CodeRepositoryResponse?>;
 
 internal sealed class CreateCodeRepositoryCommandHandler(
-    IBoardRepository boards, ActorResolver actors, IPermissionService permissions, IUnitOfWork unitOfWork)
+    IBoardRepository boards, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<CreateCodeRepositoryCommand, CodeRepositoryResponse?>
 {
     public async Task<CodeRepositoryResponse?> Handle(CreateCodeRepositoryCommand request, CancellationToken cancellationToken)
     {
-        permissions.EnsureCanManageBoards(await actors.ResolveAsync(request.ActorId, cancellationToken));
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
+        permissions.EnsureCanManageScm(await projectAccess.GetAsync(actor, request.BoardId, cancellationToken));
 
         if (!Enum.TryParse<RepositoryProvider>(request.Provider, true, out var provider) ||
             !Enum.IsDefined(provider))

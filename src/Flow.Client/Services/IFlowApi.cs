@@ -48,6 +48,12 @@ public interface IFlowApi
     Task<ApiResult<IReadOnlyList<BoardResponse>>> GetBoards(CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> GetBoard(Guid id, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> CreateBoard(CreateBoardRequest request, CancellationToken ct = default);
+    // Локальные копии репозиториев и проверка агента.
+    Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.CodeRepositories.CodeRepositoryResponse>>> GetCodeRepositories(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.CodeRepositories.CodeRepositoryResponse>> AddCodeRepository(Guid boardId, Flow.Shared.Contracts.CodeRepositories.CreateCodeRepositoryRequest request, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.CodeRepositories.CodeRepositoryResponse>> SynchronizeCodeRepository(Guid boardId, Guid repositoryId, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Agents.AgentTestResponse>> AskAgent(Flow.Shared.Contracts.Agents.AgentTestRequest request, CancellationToken ct = default);
+
 
     // Шаблоны задач (этап 3G)
     Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Tasks.TaskTemplateResponse>>> GetTaskTemplates(Guid boardId, CancellationToken ct = default);

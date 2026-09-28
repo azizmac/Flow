@@ -82,7 +82,7 @@ Token-signing certificates are generated on first start. Migrations create one `
 1. **`.env`** — copied from `.env.example` if missing. Both stacks read it; without it the compose defaults apply.
 2. **`docker/data/init-env.sh`** — the shared `flow-network` network and the external `flow-postgres-data`, `flow-minio-data`, `flow-repository-workspaces` volumes. `DATA_ROOT` puts the volumes on a directory of your choice: `DATA_ROOT=/mnt/flow sh docker/up.sh` (only honoured when the volumes are created).
 3. **Data stack** — `docker compose -f docker-compose.data.yml up -d`: PostgreSQL and S3. OpenCode is an optional `agent` profile in the same stack.
-4. **Application stack** — `docker compose up -d --build`: api (including authentication) and client.
+4. **Application stack** — `docker compose up -d --build`: one api service hosting authentication and the server-rendered client.
 
 | Flag | What it does |
 |---|---|
