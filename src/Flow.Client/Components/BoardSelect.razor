@@ -41,10 +41,11 @@
     <ChildContent>
         @if (Boards.Count > PopoverSearchFrom)
         {
-            <div class="pop-search" @onclick:stopPropagation>
-                <input id="@_searchId" class="ds-input sm" placeholder="Найти проект…" value="@_search"
+            <label class="pop-search" @onclick:stopPropagation>
+                <Icon Name="search" Size="14" />
+                <input id="@_searchId" placeholder="Найти проект…" value="@_search" autocomplete="off" spellcheck="false"
                        @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
-            </div>
+            </label>
         }
         @if (AllowAll)
         {

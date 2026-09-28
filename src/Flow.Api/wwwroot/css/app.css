@@ -1015,18 +1015,6 @@ a.sb-me:active { transform: scale(0.98); }
 .pop-item .n { margin-left: auto; font: var(--fw-bold) 11px var(--font-display); color: var(--text-tertiary); }
 .pop-board-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pop-empty { padding: 10px; font: var(--fw-medium) 12.5px var(--font-text); color: var(--text-tertiary); }
-.pop-search { padding: 2px 2px 6px; }
-.pop-search input {
-    width: 100%;
-    padding: 7px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: rgba(0, 0, 0, 0.12);
-    color: #fff;
-    font: var(--fw-medium) 12.5px var(--font-text);
-    outline: 0;
-}
-.pop-search input:focus { border-color: var(--accent); }
 
 /* ---------- Segmented status filter ---------- */
 .seg {
@@ -1405,7 +1393,8 @@ a.sb-me:active { transform: scale(0.98); }
 .status-sel .n, .pop-n { font: var(--fw-bold) 11px var(--font-display); color: var(--text-tertiary); }
 .pop-n { margin-left: auto; padding-left: 8px; }
 
-/* Поповер выбора: поле поиска + пункты-люди */
+/* Поле поиска в поповере выбора (исполнитель, люди, родитель, проект): рамка и лупа — у label, у самого input рамки
+   нет. Правило одно на все поповеры: прежние два набора давали рамку и label, и input — два поля одно в другом. */
 .pop-search {
     display: flex;
     align-items: center;
@@ -1419,7 +1408,7 @@ a.sb-me:active { transform: scale(0.98); }
     color: var(--text-tertiary);
     transition: border-color 150ms ease;
 }
-.pop-search:focus-within { border-color: var(--border-strong); }
+.pop-search:focus-within { border-color: var(--accent); }
 .pop-search input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: #fff; font: var(--fw-medium) 12.5px var(--font-text); }
 .pop-search input::placeholder { color: var(--text-tertiary); }
 .pop-empty { padding: 10px 10px 8px; font: var(--fw-medium) 12px/1.45 var(--font-text); color: var(--text-tertiary); white-space: normal; }
