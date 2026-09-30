@@ -1,6 +1,6 @@
 @* Корневой документ приложения — замена wwwroot/index.html, который обслуживал WebAssembly.
    Отличия, которые важно не потерять при правках:
-   - порядок стилей: MudBlazor → tokens → app → mud-overrides. Наши файлы перебивают библиотеку,
+   - порядок стилей: MudBlazor → tokens → app → изолированные стили → mud-overrides. Наши файлы перебивают библиотеку,
      переставишь — поедет форма контролов (pill-кнопки, круглые icon-кнопки, поля на подложке);
    - blazor.web.js вместо blazor.webassembly.js;
    - AuthenticationService.js больше нет: он обслуживал браузерный OIDC (292 КБ в критическом пути);
@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="_content/MudBlazor/MudBlazor.min.css" />
     <link rel="stylesheet" href="css/tokens.css" />
     <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="Flow.Api.styles.css" />
     <link rel="stylesheet" href="css/mud-overrides.css" />
     <link rel="icon" type="image/svg+xml" href="brand/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon.png" />
