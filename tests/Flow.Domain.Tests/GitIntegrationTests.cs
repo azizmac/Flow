@@ -5,7 +5,7 @@ using Xunit;
 namespace Flow.Domain.Tests;
 
 /// <summary>Инварианты интеграции с Git этапа 5B: подключение GitHub App, пауза и ручной повтор доставки, задание дозагрузки.</summary>
-public class ScmTests
+public class GitIntegrationTests
 {
     [Fact]
     public void GitHub_App_Needs_Ids_And_Is_GitHub_Only()

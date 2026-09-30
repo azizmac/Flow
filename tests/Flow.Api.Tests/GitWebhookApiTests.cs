@@ -12,7 +12,7 @@ namespace Flow.Api.Tests;
 /// неверная подпись 401, чужой репозиторий 404, большое тело 413; подключение и репозиторий — 201 и Admin-API.
 /// </summary>
 [Collection(ApiCollection.Name)]
-public sealed class ScmWebhookApiTests(ApiFixture api)
+public sealed class GitWebhookApiTests(ApiFixture api)
 {
     [Fact]
     public async Task Webhook_Is_Anonymous_Outside_Api_And_Checks_Signature()
@@ -23,7 +23,7 @@ public sealed class ScmWebhookApiTests(ApiFixture api)
         using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "101"));
         Assert.Equal(HttpStatusCode.Created, repositoryResponse.StatusCode);
         var repository = (await repositoryResponse.Content.ReadFromJsonAsync<ScmRepositoryResponse>())!;
-        var secret = api.Scm.CreatedHooks[^1].Secret;
+        var secret = api.Git.CreatedHooks[^1].Secret;
 
         using var anonymous = api.CreateClient();
         var body = Encoding.UTF8.GetBytes("""{"ref":"refs/heads/main","after":"x","commits":[]}""");
@@ -63,7 +63,7 @@ public sealed class ScmWebhookApiTests(ApiFixture api)
         using var owner = api.CreateClientAs();
         using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(GitProvider.GitHub, "GitHub 5B", "token"));
         var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
-        api.Scm.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("205", "acme/backfill", "https://github.com/acme/backfill", "main"));
+        api.Git.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("205", "acme/backfill", "https://github.com/acme/backfill", "main"));
         using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "205"));
         var repository = (await repositoryResponse.Content.ReadFromJsonAsync<ScmRepositoryResponse>())!;
 
@@ -84,7 +84,7 @@ public sealed class ScmWebhookApiTests(ApiFixture api)
         var board = (await boardResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Boards.BoardResponse>())!;
         using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(GitProvider.GitHub, "GitHub 5C", "token"));
         var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
-        api.Scm.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("305", "acme/auto", "https://github.com/acme/auto", "main"));
+        api.Git.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("305", "acme/auto", "https://github.com/acme/auto", "main"));
         using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "305"));
         var repository = (await repositoryResponse.Content.ReadFromJsonAsync<ScmRepositoryResponse>())!;
 
@@ -107,7 +107,7 @@ public sealed class ScmWebhookApiTests(ApiFixture api)
         var task = (await taskResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Tasks.TaskResponse>())!;
         using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(GitProvider.GitHub, "GitHub 5D", "token"));
         var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
-        api.Scm.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("405", "acme/act", "https://github.com/acme/act", "main"));
+        api.Git.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("405", "acme/act", "https://github.com/acme/act", "main"));
         using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "405"));
         var repository = (await repositoryResponse.Content.ReadFromJsonAsync<ScmRepositoryResponse>())!;
         using var bind = await owner.PutAsync($"/api/boards/{board.Id}/repositories/{repository.Id}", null);

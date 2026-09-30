@@ -51,7 +51,11 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<ITaskCodeAliasRepository, TaskCodeAliasRepository>();
         services.AddScoped<ITaskRecurrenceRepository, TaskRecurrenceRepository>();
-        services.AddScoped<IScmStore, ScmStore>();
+        services.AddScoped<IGitHostConnectionRepository, GitHostConnectionRepository>();
+        services.AddScoped<IGitRepositoryCatalog, GitRepositoryCatalog>();
+        services.AddScoped<IGitRepositoryBoardRepository, GitRepositoryBoardRepository>();
+        services.AddScoped<IGitDevelopmentLinkRepository, GitDevelopmentLinkRepository>();
+        services.AddScoped<IGitIntegrationJobRepository, GitIntegrationJobRepository>();
 
         // Git-хостинги (docs/TZ_scm_integration.md): клиенты API, настройки секции Scm и разбор доставок вебхуков.
         var scm = configuration.GetSection(ScmOptions.SectionName).Get<ScmOptions>() ?? new ScmOptions();

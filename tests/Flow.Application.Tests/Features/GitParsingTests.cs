@@ -10,7 +10,7 @@ namespace Flow.Application.Tests.Features;
 /// Чистые функции интеграции с Git (docs/TZ_scm_integration.md §2–3): детектор кодов, подписи каждого провайдера,
 /// разбор payload'ов в нормализованное событие. Payload'ы — по форме документации хостингов.
 /// </summary>
-public class ScmParsingTests
+public class GitParsingTests
 {
     private static Func<string, string?> Headers(params (string Name, string Value)[] headers) =>
         name => headers.FirstOrDefault(h => string.Equals(h.Name, name, StringComparison.OrdinalIgnoreCase)).Value;

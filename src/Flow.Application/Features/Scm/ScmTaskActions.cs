@@ -20,7 +20,10 @@ public sealed record TaskScmPullRequestCreateCommand(Guid ActorId, Guid TaskId, 
     : IRequest<TaskDevelopmentResponse?>;
 
 internal sealed class ScmTaskActionHandlers(
-    IScmStore store,
+    IGitHostConnectionRepository connections,
+    IGitRepositoryCatalog catalog,
+    IGitRepositoryBoardRepository repositoryBoards,
+    IGitDevelopmentLinkRepository developmentLinks,
     ITaskItemRepository tasks,
     IScmProviderClient client,
     IScmSecretProtector protector,
@@ -87,11 +90,11 @@ internal sealed class ScmTaskActionHandlers(
             return null;
         permissions.EnsureCanWriteScm(await projectAccess.GetAsync(actor, task.BoardId, cancellationToken));
 
-        var repository = await store.GetRepositoryAsync(repositoryId, cancellationToken);
-        var binding = repository is null ? null : (await store.GetBindingsAsync(task.BoardId, repository.Id, cancellationToken)).SingleOrDefault();
+        var repository = await catalog.GetByIdAsync(repositoryId, cancellationToken);
+        var binding = repository is null ? null : (await repositoryBoards.GetAsync(task.BoardId, repository.Id, cancellationToken)).SingleOrDefault();
         if (repository is not { IsActive: true } || binding is null)
             throw new InvalidOperationException("Репозиторий не привязан к проекту задачи или отключён.");
-        var connection = await store.GetConnectionAsync(repository.ConnectionId, cancellationToken)
+        var connection = await connections.GetByIdAsync(repository.ConnectionId, cancellationToken)
                          ?? throw new InvalidOperationException("Подключение репозитория не найдено.");
         var token = protector.TryUnprotect(connection.SecretProtected)
                     ?? throw new InvalidOperationException("Токен подключения не расшифровывается — введите его заново в интеграциях.");
@@ -112,11 +115,11 @@ internal sealed class ScmTaskActionHandlers(
 
     private async Task<GitDevelopmentLink> LinkAsync(Context ctx, GitDevelopmentLinkKind kind, string externalId, CancellationToken cancellationToken)
     {
-        var link = await store.FindLinkAsync(ctx.Task.Id, ctx.Repository.Id, kind, externalId, cancellationToken);
+        var link = await developmentLinks.FindAsync(ctx.Task.Id, ctx.Repository.Id, kind, externalId, cancellationToken);
         if (link is null)
         {
             link = GitDevelopmentLink.Create(ctx.Task.Id, ctx.Repository.Id, kind, externalId);
-            store.Add(link);
+            developmentLinks.Add(link);
         }
 
         return link;

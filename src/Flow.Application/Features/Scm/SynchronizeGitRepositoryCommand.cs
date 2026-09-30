@@ -9,7 +9,9 @@ public sealed record SynchronizeGitRepositoryCommand(Guid ActorId, Guid BoardId,
     : IRequest<bool?>;
 
 internal sealed class SynchronizeGitRepositoryCommandHandler(
-    IScmStore store,
+    IGitHostConnectionRepository connections,
+    IGitRepositoryCatalog catalog,
+    IGitRepositoryBoardRepository repositoryBoards,
     IRepositoryWorkspaceService workspaces,
     ActorResolver actors,
     IPermissionService permissions,
@@ -22,11 +24,11 @@ internal sealed class SynchronizeGitRepositoryCommandHandler(
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
         permissions.EnsureCanManageScm(await projectAccess.GetAsync(actor, request.BoardId, cancellationToken));
 
-        var repository = await store.GetRepositoryAsync(request.RepositoryId, cancellationToken);
-        if (repository is null || !(await store.GetBindingsAsync(request.BoardId, request.RepositoryId, cancellationToken)).Any())
+        var repository = await catalog.GetByIdAsync(request.RepositoryId, cancellationToken);
+        if (repository is null || !(await repositoryBoards.GetAsync(request.BoardId, request.RepositoryId, cancellationToken)).Any())
             return null;
 
-        var connection = await store.GetConnectionAsync(repository.ConnectionId, cancellationToken);
+        var connection = await connections.GetByIdAsync(repository.ConnectionId, cancellationToken);
         if (connection is null || !CanClonePublicRepository(connection.Provider, repository.WebUrl))
             throw new InvalidOperationException("Локальная синхронизация пока доступна только для публичных репозиториев GitHub и GitLab.");
 

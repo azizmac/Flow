@@ -11,7 +11,7 @@ namespace Flow.Infrastructure.Tests;
 /// Клиенты хостингов на записанных ответах (HttpMessageHandler-заглушка): адреса API, заголовки токена, тело
 /// вебхука, разбор списков и понятные ошибки. Живые хостинги в тестах не дёргаются.
 /// </summary>
-public class ScmProviderClientTests
+public class GitProviderClientTests
 {
     private sealed class Recorder(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {

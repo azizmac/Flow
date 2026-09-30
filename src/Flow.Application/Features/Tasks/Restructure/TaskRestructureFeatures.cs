@@ -338,7 +338,7 @@ internal sealed class TaskMoveCommandHandler(
     ITaskActivityRepository activities,
     IFileStorage storage,
     ISearchIndexQueue searchIndex,
-    IScmStore scm,
+    IGitDevelopmentLinkRepository developmentLinks,
     TaskResponses responses,
     ActorResolver actors,
     IPermissionService permissions,
@@ -391,7 +391,7 @@ internal sealed class TaskMoveCommandHandler(
                 foreach (var comment in await comments.GetByTaskIdAsync(moved.Id, cancellationToken))
                     searchIndex.Enqueue(SearchSourceType.Comment, comment.Id, target.Id, SearchIndexOperation.Upsert);
                 // PR и коммиты задачи (этап 5E) остаются при ней, но их чанки несут проект — для фильтра видимости.
-                foreach (var link in await scm.GetLinksByTaskAsync(moved.Id, cancellationToken))
+                foreach (var link in await developmentLinks.GetByTaskIdAsync(moved.Id, cancellationToken))
                     Flow.Application.Features.Scm.ScmSearch.Upsert(searchIndex, link, target.Id);
 
                 // Ранг — временный: настоящий выставит AssignRanks ниже, по свежему максимуму целевого проекта.

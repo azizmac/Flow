@@ -9,7 +9,8 @@ namespace Flow.Application.Features.Agents.Commands.AgentTestAskCommand;
 internal sealed class AgentTestAskCommandHandler(
     IFlowAgentClient agent,
     IProjectAccess projectAccess,
-    IScmStore store,
+    IGitRepositoryCatalog catalog,
+    IGitRepositoryBoardRepository repositoryBoards,
     IRepositoryWorkspaceService workspaces,
     ActorResolver actors)
     : IRequestHandler<AgentTestAskCommand, AgentTestResponse>
@@ -18,10 +19,10 @@ internal sealed class AgentTestAskCommandHandler(
     {
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
 
-        var repository = await store.GetRepositoryAsync(request.RepositoryId, cancellationToken)
+        var repository = await catalog.GetByIdAsync(request.RepositoryId, cancellationToken)
             ?? throw new ArgumentException("Репозиторий не найден.", nameof(request.RepositoryId));
 
-        var bindings = await store.GetBindingsAsync(null, repository.Id, cancellationToken);
+        var bindings = await repositoryBoards.GetAsync(null, repository.Id, cancellationToken);
         var canView = false;
         foreach (var binding in bindings)
         {

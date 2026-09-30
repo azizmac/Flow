@@ -18,15 +18,15 @@ namespace Flow.Application.Tests.Features;
 /// Этап 5E: PR и коммиты попадают в очередь поиска — новая связь и изменившийся заголовок; повтор того же события,
 /// ветки и не изменившийся текст — нет; дозагрузка истории — фоновым приоритетом; удаление задачи убирает связи.
 /// </summary>
-public class ScmSearchIndexTests
+public class GitSearchIndexTests
 {
     private static readonly Guid Owner = TestMediatorFactory.OwnerId;
 
-    private sealed record Setup(ScmTestContext Context, BoardResponse Board, Guid RepositoryId, string Secret, Guid TaskId);
+    private sealed record Setup(GitTestContext Context, BoardResponse Board, Guid RepositoryId, string Secret, Guid TaskId);
 
     private static async Task<Setup> ConnectAsync()
     {
-        var context = TestMediatorFactory.CreateScmContext();
+        var context = TestMediatorFactory.CreateGitContext();
         var board = (await context.Mediator.Send(new BoardCreateCommand(Owner, "Сайт", "WEB"), CancellationToken.None)).Response!;
         var connection = await context.Mediator.Send(new ScmConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "token", null), CancellationToken.None);
         var repository = (await context.Mediator.Send(new ScmRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
@@ -79,7 +79,7 @@ public class ScmSearchIndexTests
         await DeliverAsync(setup, "push", Push("WEB-1-forma", "aaa111", "поправил вёрстку"), "d-1");
         var commit = Assert.Single(Development(setup));
         Assert.Equal((SearchIndexOperation.Upsert, setup.Board.Id, 0), (commit.Operation, commit.BoardId, commit.Priority));
-        var links = await setup.Context.Scm.GetLinksByTaskAsync(setup.TaskId, CancellationToken.None);
+        var links = await setup.Context.Git.DevelopmentLinks.GetByTaskIdAsync(setup.TaskId, CancellationToken.None);
         Assert.Equal(links.Single(l => l.Kind == GitDevelopmentLinkKind.Commit).Id, commit.SourceId);
 
         // Тот же коммит повторным push'ем в ту же ветку — текст не изменился, в очередь не идёт.

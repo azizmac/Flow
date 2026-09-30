@@ -17,18 +17,18 @@ namespace Flow.Application.Tests.Features;
 /// репозиторий, связь сразу в «Разработке», автопереход «PR открыт»; комментарий «задача Flow» в новом PR по флагу
 /// привязки, без повтора, если ссылка уже в описании, отказ хостинга — пометка у связи.
 /// </summary>
-public class ScmTaskActionTests
+public class GitTaskActionTests
 {
     private static readonly Guid Owner = TestMediatorFactory.OwnerId;
 
-    private sealed record Setup(ScmTestContext Context, BoardResponse Board, Guid RepositoryId, string Secret, Guid TaskId)
+    private sealed record Setup(GitTestContext Context, BoardResponse Board, Guid RepositoryId, string Secret, Guid TaskId)
     {
         public Guid Status(string name) => Board.Statuses.Single(s => s.Name == name).Id;
     }
 
     private static async Task<Setup> ConnectAsync(bool bind = true, UpdateScmBindingRequest? settings = null)
     {
-        var context = TestMediatorFactory.CreateScmContext();
+        var context = TestMediatorFactory.CreateGitContext();
         var board = (await context.Mediator.Send(new BoardCreateCommand(Owner, "Сайт", "WEB"), CancellationToken.None)).Response!;
         var connection = await context.Mediator.Send(new ScmConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "token", null), CancellationToken.None);
         var repository = (await context.Mediator.Send(new ScmRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;

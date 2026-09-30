@@ -27,16 +27,21 @@ public sealed record ScmDeliveryFailCommand(Guid DeliveryId, string Error) : IRe
 /// <summary>Удалить обработанные доставки старше срока хранения.</summary>
 public sealed record ScmPurgeDeliveriesCommand(DateTime OlderThan) : IRequest<int>;
 
-internal sealed class ScmWebhookReceiveCommandHandler(IScmStore store, IScmSecretProtector protector, IUnitOfWork unitOfWork)
+internal sealed class ScmWebhookReceiveCommandHandler(
+    IGitHostConnectionRepository connections,
+    IGitRepositoryCatalog catalog,
+    IGitIntegrationJobRepository jobs,
+    IScmSecretProtector protector,
+    IUnitOfWork unitOfWork)
     : IRequestHandler<ScmWebhookReceiveCommand, ScmWebhookResult>
 {
     public async Task<ScmWebhookResult> Handle(ScmWebhookReceiveCommand request, CancellationToken cancellationToken)
     {
-        var repository = await store.GetRepositoryAsync(request.RepositoryId, cancellationToken);
+        var repository = await catalog.GetByIdAsync(request.RepositoryId, cancellationToken);
         if (repository is not { IsActive: true })
             return ScmWebhookResult.NotFound;
 
-        var connection = await store.GetConnectionAsync(repository.ConnectionId, cancellationToken);
+        var connection = await connections.GetByIdAsync(repository.ConnectionId, cancellationToken);
         var secret = protector.TryUnprotect(repository.WebhookSecretProtected);
         if (connection is null || secret is null)
             return ScmWebhookResult.Unauthorized;
@@ -53,7 +58,7 @@ internal sealed class ScmWebhookReceiveCommandHandler(IScmStore store, IScmSecre
 
         // Старые GitLab не присылают Id доставки — тогда им служит хеш тела: повтор того же тела не обработается дважды.
         var deliveryId = ScmPayloadParser.DeliveryId(connection.Provider, Header) ?? Convert.ToHexStringLower(SHA256.HashData(request.Body));
-        if (await store.DeliveryExistsAsync(repository.Id, deliveryId, cancellationToken))
+        if (await jobs.ExistsAsync(repository.Id, deliveryId, cancellationToken))
             return ScmWebhookResult.Duplicate;
 
         ScmEvent? parsed;
@@ -66,7 +71,7 @@ internal sealed class ScmWebhookReceiveCommandHandler(IScmStore store, IScmSecre
             return ScmWebhookResult.BadRequest;
         }
 
-        store.Add(GitIntegrationJob.Create(repository.Id, deliveryId, eventName, parsed?.Serialize()));
+        jobs.Add(GitIntegrationJob.Create(repository.Id, deliveryId, eventName, parsed?.Serialize()));
         repository.MarkDelivery(DateTime.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return parsed is null ? ScmWebhookResult.Ignored : ScmWebhookResult.Accepted;
@@ -83,7 +88,11 @@ internal sealed class ScmWebhookReceiveCommandHandler(IScmStore store, IScmSecre
 /// сброса без траты попытки.
 /// </summary>
 internal sealed class ScmDeliveryHandlers(
-    IScmStore store,
+    IGitHostConnectionRepository connections,
+    IGitRepositoryCatalog catalog,
+    IGitRepositoryBoardRepository repositoryBoards,
+    IGitDevelopmentLinkRepository developmentLinks,
+    IGitIntegrationJobRepository jobs,
     ITaskItemRepository tasks,
     IUserRepository users,
     IScmProviderClient client,
@@ -98,30 +107,30 @@ internal sealed class ScmDeliveryHandlers(
     IRequestHandler<ScmPurgeDeliveriesCommand, int>
 {
     public Task<IReadOnlyList<Guid>> Handle(ScmDueDeliveriesQuery request, CancellationToken cancellationToken) =>
-        store.GetDueDeliveryIdsAsync(request.UtcNow, request.Limit, cancellationToken);
+        jobs.GetDueIdsAsync(request.UtcNow, request.Limit, cancellationToken);
 
     public async Task Handle(ScmDeliveryFailCommand request, CancellationToken cancellationToken)
     {
-        if (await store.GetDeliveryAsync(request.DeliveryId, cancellationToken) is not { } delivery)
+        if (await jobs.GetByIdAsync(request.DeliveryId, cancellationToken) is not { } delivery)
             return;
         delivery.MarkFailed(request.Error, DateTime.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     public Task<int> Handle(ScmPurgeDeliveriesCommand request, CancellationToken cancellationToken) =>
-        store.PurgeDeliveriesAsync(request.OlderThan, cancellationToken);
+        jobs.PurgeProcessedAsync(request.OlderThan, cancellationToken);
 
     public async Task<bool> Handle(ScmDeliveryProcessCommand request, CancellationToken cancellationToken)
     {
-        var delivery = await store.GetDeliveryAsync(request.DeliveryId, cancellationToken);
+        var delivery = await jobs.GetByIdAsync(request.DeliveryId, cancellationToken);
         if (delivery is not { Status: GitIntegrationJobStatus.Pending })
             return false;
 
-        var repository = await store.GetRepositoryAsync(delivery.RepositoryId, cancellationToken);
-        var connection = repository is null ? null : await store.GetConnectionAsync(repository.ConnectionId, cancellationToken);
+        var repository = await catalog.GetByIdAsync(delivery.RepositoryId, cancellationToken);
+        var connection = repository is null ? null : await connections.GetByIdAsync(repository.ConnectionId, cancellationToken);
         if (repository is not null && connection is not null)
         {
-            var processor = new Processor(store, tasks, users, automation, searchIndex, repository, connection.Provider, delivery.IsBackfill, cancellationToken);
+            var processor = new Processor(repositoryBoards, developmentLinks, tasks, users, automation, searchIndex, repository, connection.Provider, delivery.IsBackfill, cancellationToken);
             if (!delivery.IsBackfill)
             {
                 await processor.RunAsync(ScmEvent.Deserialize(delivery.Payload));
@@ -186,7 +195,8 @@ internal sealed class ScmDeliveryHandlers(
 
     /// <param name="history">Дозагрузка истории: связи пишутся, но автопереходы и смарт-коммиты не выполняются —
     /// прошлое не должно двигать задачи сегодня.</param>
-    private sealed class Processor(IScmStore store, ITaskItemRepository tasks, IUserRepository users, ScmAutomation automation,
+    private sealed class Processor(IGitRepositoryBoardRepository repositoryBoards,
+        IGitDevelopmentLinkRepository developmentLinks, ITaskItemRepository tasks, IUserRepository users, ScmAutomation automation,
         ISearchIndexQueue searchIndex, GitRepository repository, GitProvider provider, bool history, CancellationToken ct)
     {
         private readonly Dictionary<(Guid, GitDevelopmentLinkKind, string), GitDevelopmentLink> _links = [];
@@ -198,7 +208,7 @@ internal sealed class ScmDeliveryHandlers(
 
         public async Task RunAsync(ScmEvent ev)
         {
-            _boards ??= (await store.GetBindingsAsync(null, repository.Id, ct)).ToDictionary(b => b.BoardId);
+            _boards ??= (await repositoryBoards.GetAsync(null, repository.Id, ct)).ToDictionary(b => b.BoardId);
             if (_boards.Count == 0)
                 return;
 
@@ -209,7 +219,7 @@ internal sealed class ScmDeliveryHandlers(
                         await BranchAsync(task, ev.Branch!);
                     break;
                 case ScmEventKind.BranchDeleted:
-                    foreach (var link in await store.GetBranchLinksAsync(repository.Id, ev.Branch!, ct))
+                    foreach (var link in await developmentLinks.GetByBranchAsync(repository.Id, ev.Branch!, ct))
                         link.SetState(GitDevelopmentLinkState.Closed);
                     break;
                 case ScmEventKind.Push:
@@ -295,11 +305,11 @@ internal sealed class ScmDeliveryHandlers(
             if (_links.TryGetValue(key, out var cached))
                 return cached;
 
-            var link = await store.FindLinkAsync(task.Id, repository.Id, kind, externalId, ct);
+            var link = await developmentLinks.FindAsync(task.Id, repository.Id, kind, externalId, ct);
             if (link is null)
             {
                 link = GitDevelopmentLink.Create(task.Id, repository.Id, kind, externalId);
-                store.Add(link);
+                developmentLinks.Add(link);
             }
 
             return _links[key] = link;

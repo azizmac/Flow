@@ -17,7 +17,7 @@ namespace Flow.Infrastructure.Tests;
 /// с тем же Id не пишется, связи уникальны и уходят с задачей, отключение репозитория оставляет связи.
 /// </summary>
 [Collection(PostgresCollection.Name)]
-public class ScmPersistenceTests(PostgresFixture db)
+public class GitPersistenceTests(PostgresFixture db)
 {
     private static readonly Guid Owner = PostgresFixture.OwnerId;
 
@@ -42,8 +42,9 @@ public class ScmPersistenceTests(PostgresFixture db)
         Assert.Equal(ScmWebhookResult.Accepted, await db.SendAsync(new ScmWebhookReceiveCommand(repository.Id, headers, body)));
         Assert.Equal(ScmWebhookResult.Duplicate, await db.SendAsync(new ScmWebhookReceiveCommand(repository.Id, headers, body)));
 
-        foreach (var id in await db.SendAsync(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1))))
-            await db.SendAsync(new ScmDeliveryProcessCommand(id));
+        var deliveryId = await db.QueryAsync(ctx => ctx.ScmDeliveries.Where(d => d.RepositoryId == repository.Id).Select(d => d.Id).SingleAsync());
+        Assert.Contains(deliveryId, await db.SendAsync(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1))));
+        await db.SendAsync(new ScmDeliveryProcessCommand(deliveryId));
         // Повторная обработка той же доставки не плодит связь.
         Assert.Equal(1, await db.QueryAsync(ctx => ctx.ScmLinks.CountAsync(l => l.TaskId == task.Id)));
         Assert.Equal(GitIntegrationJobStatus.Done, await db.QueryAsync(ctx => ctx.ScmDeliveries.Where(d => d.RepositoryId == repository.Id).Select(d => d.Status).SingleAsync()));
@@ -94,10 +95,10 @@ public class ScmPersistenceTests(PostgresFixture db)
 
         await db.QueryAsync(async ctx =>
         {
-            var store = new Flow.Infrastructure.Persistence.Repositories.ScmStore(ctx);
-            Assert.True(await store.HasPendingDeliveryAsync(repository.Id, GitIntegrationJob.BackfillEvent, CancellationToken.None));
-            Assert.False(await store.HasPendingDeliveryAsync(repository.Id, "push", CancellationToken.None));
-            Assert.Equal(1, (await store.GetFailedDeliveryCountsAsync(CancellationToken.None))[repository.Id]);
+            var store = new Flow.Infrastructure.Persistence.Repositories.GitIntegrationJobRepository(ctx);
+            Assert.True(await store.HasPendingAsync(repository.Id, GitIntegrationJob.BackfillEvent, CancellationToken.None));
+            Assert.False(await store.HasPendingAsync(repository.Id, "push", CancellationToken.None));
+            Assert.Equal(1, (await store.GetFailedCountsAsync(CancellationToken.None))[repository.Id]);
             return 0;
         });
     }

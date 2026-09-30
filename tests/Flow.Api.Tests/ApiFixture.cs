@@ -40,7 +40,7 @@ public sealed class ApiFixture : IAsyncLifetime
     public InMemoryFileStorage Storage { get; } = new();
 
     /// <summary>Хостинг в памяти: живые GitHub/GitLab тесты не дёргают.</summary>
-    public FakeScmProviderClient Scm { get; } = new();
+    public FakeGitProviderClient Git { get; } = new();
 
     public async Task InitializeAsync()
     {
@@ -64,7 +64,7 @@ public sealed class ApiFixture : IAsyncLifetime
                 // Вложения кладутся в память: поднимать MinIO ради проверки кодов ответа незачем,
                 // сам S3-клиент проверяется отдельным интеграционным тестом.
                 services.AddSingleton<IFileStorage>(Storage);
-                services.AddSingleton<IScmProviderClient>(Scm);
+                services.AddSingleton<IScmProviderClient>(Git);
 
                 services
                     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

@@ -75,10 +75,10 @@ internal static class ScmMapping
             d.Status == DomainDeliveryStatus.Pending ? d.NextAttemptAt : null, d.IsBackfill);
 
     /// <summary>Поставить дозагрузку истории, если такой ещё нет в очереди.</summary>
-    public static async Task EnqueueBackfillAsync(this IScmStore store, Guid repositoryId, CancellationToken cancellationToken)
+    public static async Task EnqueueBackfillAsync(this IGitIntegrationJobRepository jobs, Guid repositoryId, CancellationToken cancellationToken)
     {
-        if (!await store.HasPendingDeliveryAsync(repositoryId, GitIntegrationJob.BackfillEvent, cancellationToken))
-            store.Add(GitIntegrationJob.CreateBackfill(repositoryId));
+        if (!await jobs.HasPendingAsync(repositoryId, GitIntegrationJob.BackfillEvent, cancellationToken))
+            jobs.Add(GitIntegrationJob.CreateBackfill(repositoryId));
     }
 
     public static ScmLinkResponse ToResponse(this GitDevelopmentLink l, GitRepository? repository, DomainProvider provider) =>
@@ -88,7 +88,10 @@ internal static class ScmMapping
 }
 
 internal sealed class ScmAdminHandlers(
-    IScmStore store,
+    IGitHostConnectionRepository connections,
+    IGitRepositoryCatalog catalog,
+    IGitRepositoryBoardRepository repositoryBoards,
+    IGitIntegrationJobRepository jobs,
     IScmProviderClient client,
     IScmSecretProtector protector,
     ScmOptions options,
@@ -117,10 +120,10 @@ internal sealed class ScmAdminHandlers(
     public async Task<IReadOnlyList<ScmConnectionResponse>> Handle(ScmConnectionListQuery request, CancellationToken cancellationToken)
     {
         await AdminAsync(request.ActorId, cancellationToken);
-        var repositories = await store.GetRepositoriesAsync(null, cancellationToken);
-        var bindings = await store.GetBindingsAsync(null, null, cancellationToken);
-        var failed = await store.GetFailedDeliveryCountsAsync(cancellationToken);
-        return (await store.GetConnectionsAsync(cancellationToken)).Select(c => Response(c, repositories, bindings, failed)).ToList();
+        var repositories = await catalog.GetAllAsync(null, cancellationToken);
+        var bindings = await repositoryBoards.GetAsync(null, null, cancellationToken);
+        var failed = await jobs.GetFailedCountsAsync(cancellationToken);
+        return (await connections.GetAllAsync(cancellationToken)).Select(c => Response(c, repositories, bindings, failed)).ToList();
     }
 
     public async Task<ScmConnectionResponse> Handle(ScmConnectionCreateCommand request, CancellationToken cancellationToken)
@@ -133,7 +136,7 @@ internal sealed class ScmAdminHandlers(
         var connection = GitHostConnection.Create((DomainProvider)(int)request.Provider, request.Name, request.BaseUrl, protector.Protect(secret), actor.Id,
             (GitAuthenticationKind)(int)request.AuthKind, request.AppId, request.InstallationId);
         await CheckAsync(connection, secret, cancellationToken);
-        store.Add(connection);
+        connections.Add(connection);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Response(connection, [], [], new Dictionary<Guid, int>());
     }
@@ -141,7 +144,7 @@ internal sealed class ScmAdminHandlers(
     public async Task<ScmConnectionResponse?> Handle(ScmConnectionUpdateCommand request, CancellationToken cancellationToken)
     {
         await AdminAsync(request.ActorId, cancellationToken);
-        var connection = await store.GetConnectionAsync(request.ConnectionId, cancellationToken);
+        var connection = await connections.GetByIdAsync(request.ConnectionId, cancellationToken);
         if (connection is null)
             return null;
 
@@ -160,15 +163,15 @@ internal sealed class ScmAdminHandlers(
     public async Task<bool> Handle(ScmConnectionDeleteCommand request, CancellationToken cancellationToken)
     {
         await AdminAsync(request.ActorId, cancellationToken);
-        var connection = await store.GetConnectionAsync(request.ConnectionId, cancellationToken);
+        var connection = await connections.GetByIdAsync(request.ConnectionId, cancellationToken);
         if (connection is null)
             return false;
 
         var token = protector.TryUnprotect(connection.SecretProtected);
-        foreach (var repository in await store.GetRepositoriesAsync(connection.Id, cancellationToken))
+        foreach (var repository in await catalog.GetAllAsync(connection.Id, cancellationToken))
             await TryDeleteWebhookAsync(connection, token, repository, cancellationToken);
 
-        store.Remove(connection);
+        connections.Remove(connection);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return true;
     }
@@ -176,7 +179,7 @@ internal sealed class ScmAdminHandlers(
     public async Task<ScmConnectionResponse?> Handle(ScmConnectionCheckCommand request, CancellationToken cancellationToken)
     {
         await AdminAsync(request.ActorId, cancellationToken);
-        var connection = await store.GetConnectionAsync(request.ConnectionId, cancellationToken);
+        var connection = await connections.GetByIdAsync(request.ConnectionId, cancellationToken);
         if (connection is null)
             return null;
 
@@ -188,12 +191,12 @@ internal sealed class ScmAdminHandlers(
     public async Task<IReadOnlyList<ScmRemoteRepositoryResponse>?> Handle(ScmAvailableRepositoriesQuery request, CancellationToken cancellationToken)
     {
         await AdminAsync(request.ActorId, cancellationToken);
-        var connection = await store.GetConnectionAsync(request.ConnectionId, cancellationToken);
+        var connection = await connections.GetByIdAsync(request.ConnectionId, cancellationToken);
         if (connection is null)
             return null;
 
         var token = Token(connection);
-        var added = (await store.GetRepositoriesAsync(connection.Id, cancellationToken)).Where(r => r.IsActive).Select(r => r.ExternalId).ToHashSet();
+        var added = (await catalog.GetAllAsync(connection.Id, cancellationToken)).Where(r => r.IsActive).Select(r => r.ExternalId).ToHashSet();
         var remote = await Call(() => client.ListRepositoriesAsync(connection, token, request.Query, cancellationToken));
         return remote.Select(r => new ScmRemoteRepositoryResponse(r.ExternalId, r.FullName, r.WebUrl, r.DefaultBranch, added.Contains(r.ExternalId))).ToList();
     }
@@ -201,7 +204,7 @@ internal sealed class ScmAdminHandlers(
     public async Task<ScmRepositoryResponse?> Handle(ScmRepositoryAddCommand request, CancellationToken cancellationToken)
     {
         await AdminAsync(request.ActorId, cancellationToken);
-        var connection = await store.GetConnectionAsync(request.ConnectionId, cancellationToken);
+        var connection = await connections.GetByIdAsync(request.ConnectionId, cancellationToken);
         if (connection is null)
             return null;
 
@@ -211,13 +214,13 @@ internal sealed class ScmAdminHandlers(
 
         // Свежий секрет — и при повторном включении: старый мог утечь вместе с настройками хостинга.
         var secret = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
-        var repository = await store.FindRepositoryAsync(connection.Id, remote.ExternalId, cancellationToken);
+        var repository = await catalog.FindAsync(connection.Id, remote.ExternalId, cancellationToken);
         if (repository is { IsActive: true })
             throw new InvalidOperationException($"Репозиторий {remote.FullName} уже подключён.");
         if (repository is null)
         {
             repository = GitRepository.Create(connection.Id, remote.ExternalId, remote.FullName, remote.WebUrl, remote.DefaultBranch, protector.Protect(secret));
-            store.Add(repository);
+            catalog.Add(repository);
         }
         else
         {
@@ -247,7 +250,7 @@ internal sealed class ScmAdminHandlers(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        var response = repository.ToResponse(await store.GetBindingsAsync(null, repository.Id, cancellationToken));
+        var response = repository.ToResponse(await repositoryBoards.GetAsync(null, repository.Id, cancellationToken));
         // Адрес и секрет для ручной настройки — только если вебхук не создался, и только в этом ответе.
         return repository.WebhookId is null ? response with { ManualWebhookUrl = url, ManualWebhookSecret = secret, WebhookError = webhookError } : response;
     }
@@ -255,11 +258,11 @@ internal sealed class ScmAdminHandlers(
     public async Task<bool> Handle(ScmRepositoryDisableCommand request, CancellationToken cancellationToken)
     {
         await AdminAsync(request.ActorId, cancellationToken);
-        var repository = await store.GetRepositoryAsync(request.RepositoryId, cancellationToken);
+        var repository = await catalog.GetByIdAsync(request.RepositoryId, cancellationToken);
         if (repository is null)
             return false;
 
-        var connection = (await store.GetConnectionAsync(repository.ConnectionId, cancellationToken))!;
+        var connection = (await connections.GetByIdAsync(repository.ConnectionId, cancellationToken))!;
         await TryDeleteWebhookAsync(connection, protector.TryUnprotect(connection.SecretProtected), repository, cancellationToken);
         repository.SetWebhook(null);
         repository.Deactivate();
@@ -270,10 +273,10 @@ internal sealed class ScmAdminHandlers(
     public async Task<IReadOnlyList<ScmDeliveryResponse>?> Handle(ScmDeliveriesQuery request, CancellationToken cancellationToken)
     {
         await AdminAsync(request.ActorId, cancellationToken);
-        if (await store.GetRepositoryAsync(request.RepositoryId, cancellationToken) is null)
+        if (await catalog.GetByIdAsync(request.RepositoryId, cancellationToken) is null)
             return null;
 
-        return (await store.GetDeliveriesAsync(request.RepositoryId, request.Status is { } s ? (DomainDeliveryStatus)(int)s : null, 100, cancellationToken))
+        return (await jobs.GetByRepositoryIdAsync(request.RepositoryId, request.Status is { } s ? (DomainDeliveryStatus)(int)s : null, 100, cancellationToken))
             .Select(d => d.ToResponse())
             .ToList();
     }
@@ -281,7 +284,7 @@ internal sealed class ScmAdminHandlers(
     public async Task<ScmDeliveryResponse?> Handle(ScmDeliveryRetryCommand request, CancellationToken cancellationToken)
     {
         await AdminAsync(request.ActorId, cancellationToken);
-        if (await store.GetDeliveryAsync(request.DeliveryId, cancellationToken) is not { } delivery)
+        if (await jobs.GetByIdAsync(request.DeliveryId, cancellationToken) is not { } delivery)
             return null;
 
         delivery.Retry(DateTime.UtcNow);
@@ -292,12 +295,12 @@ internal sealed class ScmAdminHandlers(
     public async Task<bool> Handle(ScmBackfillCommand request, CancellationToken cancellationToken)
     {
         await AdminAsync(request.ActorId, cancellationToken);
-        if (await store.GetRepositoryAsync(request.RepositoryId, cancellationToken) is not { } repository)
+        if (await catalog.GetByIdAsync(request.RepositoryId, cancellationToken) is not { } repository)
             return false;
         if (!repository.IsActive)
             throw new InvalidOperationException("Репозиторий отключён — сначала подключите его заново.");
 
-        await store.EnqueueBackfillAsync(repository.Id, cancellationToken);
+        await jobs.EnqueueBackfillAsync(repository.Id, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return true;
     }
@@ -355,8 +358,8 @@ internal sealed class ScmAdminHandlers(
     }
 
     private async Task<ScmConnectionResponse> ResponseAsync(GitHostConnection connection, CancellationToken cancellationToken) =>
-        Response(connection, await store.GetRepositoriesAsync(connection.Id, cancellationToken), await store.GetBindingsAsync(null, null, cancellationToken),
-            await store.GetFailedDeliveryCountsAsync(cancellationToken));
+        Response(connection, await catalog.GetAllAsync(connection.Id, cancellationToken), await repositoryBoards.GetAsync(null, null, cancellationToken),
+            await jobs.GetFailedCountsAsync(cancellationToken));
 
     private ScmConnectionResponse Response(GitHostConnection c, IEnumerable<GitRepository> repositories, IReadOnlyList<GitRepositoryBoard> bindings,
         IReadOnlyDictionary<Guid, int> failed) =>
@@ -367,7 +370,11 @@ internal sealed class ScmAdminHandlers(
 }
 
 internal sealed class ScmProjectHandlers(
-    IScmStore store,
+    IGitHostConnectionRepository connections,
+    IGitRepositoryCatalog catalog,
+    IGitRepositoryBoardRepository repositoryBoards,
+    IGitDevelopmentLinkRepository developmentLinks,
+    IGitIntegrationJobRepository jobs,
     ITaskItemRepository tasks,
     IBoardRepository boards,
     ActorResolver actors,
@@ -389,19 +396,19 @@ internal sealed class ScmProjectHandlers(
     {
         var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
         permissions.EnsureCanManageScm(await projectAccess.GetAsync(actor, request.BoardId, cancellationToken));
-        var repository = await store.GetRepositoryAsync(request.RepositoryId, cancellationToken);
+        var repository = await catalog.GetByIdAsync(request.RepositoryId, cancellationToken);
         if (repository is null)
             return null;
 
-        var existing = (await store.GetBindingsAsync(request.BoardId, repository.Id, cancellationToken)).SingleOrDefault();
+        var existing = (await repositoryBoards.GetAsync(request.BoardId, repository.Id, cancellationToken)).SingleOrDefault();
         if (request.Bound && existing is null)
         {
             if (!repository.IsActive)
                 throw new InvalidOperationException("Репозиторий отключён — сначала подключите его заново в интеграциях.");
             existing = GitRepositoryBoard.Create(repository.Id, request.BoardId, actor.Id);
-            store.Add(existing);
+            repositoryBoards.Add(existing);
             // Задачи проекта уже упоминались в PR и коммитах до привязки — их подтянет дозагрузка истории (этап 5B).
-            await store.EnqueueBackfillAsync(repository.Id, cancellationToken);
+            await jobs.EnqueueBackfillAsync(repository.Id, cancellationToken);
         }
 
         if (request.Bound && request.Settings is { } settings)
@@ -415,7 +422,7 @@ internal sealed class ScmProjectHandlers(
         }
         else if (!request.Bound && existing is not null)
         {
-            store.Remove(existing);
+            repositoryBoards.Remove(existing);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -429,9 +436,9 @@ internal sealed class ScmProjectHandlers(
         if (task is null || !(await projectAccess.GetAsync(actor, task.BoardId, cancellationToken)).CanView)
             return null;
 
-        var links = await store.GetLinksByTaskAsync(task.Id, cancellationToken);
-        var repositories = (await store.GetRepositoriesAsync(null, cancellationToken)).ToDictionary(r => r.Id);
-        var providers = (await store.GetConnectionsAsync(cancellationToken)).ToDictionary(c => c.Id, c => c.Provider);
+        var links = await developmentLinks.GetByTaskIdAsync(task.Id, cancellationToken);
+        var repositories = (await catalog.GetAllAsync(null, cancellationToken)).ToDictionary(r => r.Id);
+        var providers = (await connections.GetAllAsync(cancellationToken)).ToDictionary(c => c.Id, c => c.Provider);
         ScmLinkResponse Map(GitDevelopmentLink l)
         {
             var repository = repositories.GetValueOrDefault(l.RepositoryId);
@@ -439,7 +446,7 @@ internal sealed class ScmProjectHandlers(
         }
 
         var commits = links.Where(l => l.Kind == DomainKind.Commit).ToList();
-        var bindings = await store.GetBindingsAsync(task.BoardId, null, cancellationToken);
+        var bindings = await repositoryBoards.GetAsync(task.BoardId, null, cancellationToken);
         var targets = bindings.Select(b => repositories.GetValueOrDefault(b.RepositoryId)).OfType<GitRepository>().Where(r => r.IsActive)
             .Select(r => new ScmTaskRepositoryResponse(r.Id, r.FullName, r.DefaultBranch, providers.GetValueOrDefault(r.ConnectionId).ToShared()))
             .ToList();
@@ -455,9 +462,9 @@ internal sealed class ScmProjectHandlers(
 
     private async Task<IReadOnlyList<ScmBoardRepositoryResponse>> ListAsync(Guid boardId, CancellationToken cancellationToken)
     {
-        var bound = (await store.GetBindingsAsync(boardId, null, cancellationToken)).ToDictionary(b => b.RepositoryId);
-        var providers = (await store.GetConnectionsAsync(cancellationToken)).ToDictionary(c => c.Id, c => c.Provider);
-        return (await store.GetRepositoriesAsync(null, cancellationToken))
+        var bound = (await repositoryBoards.GetAsync(boardId, null, cancellationToken)).ToDictionary(b => b.RepositoryId);
+        var providers = (await connections.GetAllAsync(cancellationToken)).ToDictionary(c => c.Id, c => c.Provider);
+        return (await catalog.GetAllAsync(null, cancellationToken))
             .Where(r => r.IsActive || bound.ContainsKey(r.Id))
             .Select(r => bound.GetValueOrDefault(r.Id) is { } b
                 ? new ScmBoardRepositoryResponse(r.Id, providers.GetValueOrDefault(r.ConnectionId).ToShared(), r.FullName, r.WebUrl, true,

@@ -18,17 +18,17 @@ namespace Flow.Application.Tests.Features;
 /// <summary>
 /// Интеграция с Git в Application (docs/TZ_scm_integration.md, этап 5A): подключения и вебхук (Admin+), ручная
 /// настройка при отказе хостинга, приём доставки (подпись, повтор, лишние события), разбор push/PR/веток только в
-/// привязанных проектах, алиас кода, авторы, блок «Разработка» и значок PR. Разбор payload — ScmParsingTests.
+/// привязанных проектах, алиас кода, авторы, блок «Разработка» и значок PR. Разбор payload — GitParsingTests.
 /// </summary>
-public class ScmFeatureTests
+public class GitFeatureTests
 {
     private static readonly Guid Owner = TestMediatorFactory.OwnerId;
 
-    private sealed record Setup(ScmTestContext Context, BoardResponse Board, Guid RepositoryId, string Secret);
+    private sealed record Setup(GitTestContext Context, BoardResponse Board, Guid RepositoryId, string Secret);
 
     private static async Task<Setup> ConnectAsync(string key = "WEB", bool bind = true)
     {
-        var context = TestMediatorFactory.CreateScmContext();
+        var context = TestMediatorFactory.CreateGitContext();
         var board = (await context.Mediator.Send(new BoardCreateCommand(Owner, "Сайт", key), CancellationToken.None)).Response!;
         var connection = await context.Mediator.Send(new ScmConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "token", null), CancellationToken.None);
         var repository = (await context.Mediator.Send(new ScmRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
@@ -79,13 +79,13 @@ public class ScmFeatureTests
         Assert.Equal($"https://flow.example.com/hooks/scm/{setup.RepositoryId}", hook.Url);
         Assert.Equal(64, hook.Secret.Length);
         // Токен хранится только зашифрованным.
-        Assert.StartsWith("p:", setup.Context.Scm.Connections.Single().SecretProtected);
+        Assert.StartsWith("p:", setup.Context.Git.Connections.Single().SecretProtected);
     }
 
     [Fact]
     public async Task Failed_Webhook_Returns_Manual_Settings_And_Bad_Token_Is_Reported()
     {
-        var context = TestMediatorFactory.CreateScmContext();
+        var context = TestMediatorFactory.CreateGitContext();
         var connection = await context.Mediator.Send(new ScmConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "bad", null), CancellationToken.None);
         Assert.NotNull(connection.LastError);
 
@@ -100,7 +100,7 @@ public class ScmFeatureTests
     [Fact]
     public async Task Only_Admins_Manage_Integrations()
     {
-        var context = TestMediatorFactory.CreateScmContext();
+        var context = TestMediatorFactory.CreateGitContext();
         var member = User.Create("member", "member@example.com", "Имя", "Фамилия");
         member.MarkActive();
         context.Users.Add(member);
@@ -153,11 +153,11 @@ public class ScmFeatureTests
              "updated_at":"2026-09-22T10:00:00Z"}}
             """, "pr-2");
         Assert.Equal(Flow.Shared.Contracts.Scm.GitDevelopmentLinkState.Merged, (await mediator.Send(new TaskGetQuery(Owner, task.Id), CancellationToken.None))!.PullRequestState);
-        Assert.Single(setup.Context.Scm.Links, l => l.Kind == GitDevelopmentLinkKind.PullRequest);
+        Assert.Single(setup.Context.Git.Links, l => l.Kind == GitDevelopmentLinkKind.PullRequest);
 
         // Удалённая ветка закрывает связь, но не удаляет её.
         await DeliverAsync(setup, "delete", """{"ref":"web-1-login","ref_type":"branch"}""", "del-1");
-        Assert.Equal(DomainState.Closed, setup.Context.Scm.Links.Single(l => l.Kind == GitDevelopmentLinkKind.Branch).State);
+        Assert.Equal(DomainState.Closed, setup.Context.Git.Links.Single(l => l.Kind == GitDevelopmentLinkKind.Branch).State);
     }
 
     [Fact]

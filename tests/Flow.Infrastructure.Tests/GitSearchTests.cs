@@ -18,7 +18,7 @@ namespace Flow.Infrastructure.Tests;
 /// выдача несёт код задачи и саму задачу как родителя; удаление задачи убирает их чанки.
 /// </summary>
 [Collection(SearchCollection.Name)]
-public class ScmSearchTests(SearchFixture fixture)
+public class GitSearchTests(SearchFixture fixture)
 {
     private static readonly Guid Owner = SearchFixture.OwnerId;
 

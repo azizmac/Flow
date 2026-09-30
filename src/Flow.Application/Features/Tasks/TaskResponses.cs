@@ -9,7 +9,7 @@ namespace Flow.Application.Features.Tasks;
 /// сколько бы задач ни было (не N+1). Один сборщик на все запросы: новый счётчик не забудется ни в одном из них.
 /// В ответах команд счётчиков нет намеренно (0) — клиент берёт их из того, что уже показывает.
 /// </summary>
-internal sealed class TaskResponses(ITaskItemRepository tasks, ITaskCommentRepository comments, ITaskLinkRepository links, IScmStore scm)
+internal sealed class TaskResponses(ITaskItemRepository tasks, ITaskCommentRepository comments, ITaskLinkRepository links, IGitDevelopmentLinkRepository developmentLinks)
 {
     public async Task<IReadOnlyList<TaskResponse>> BuildAsync(IReadOnlyList<TaskItem> items, CancellationToken cancellationToken)
     {
@@ -21,7 +21,7 @@ internal sealed class TaskResponses(ITaskItemRepository tasks, ITaskCommentRepos
         var children = await tasks.CountChildrenAsync(ids, cancellationToken);
         var blockers = await links.CountBlockersAsync(ids, cancellationToken);
         // Значок последнего PR задачи (docs/TZ_scm_integration.md §7) — тем же приёмом, один запрос на все задачи.
-        var pullRequests = await scm.GetLatestPullRequestStatesAsync(ids, cancellationToken);
+        var pullRequests = await developmentLinks.GetLatestPullRequestStatesAsync(ids, cancellationToken);
 
         return items
             .Select(t => t.ToResponse(commentCounts.GetValueOrDefault(t.Id), children.GetValueOrDefault(t.Id), blockers.GetValueOrDefault(t.Id)) with

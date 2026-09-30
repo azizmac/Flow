@@ -22,18 +22,18 @@ namespace Flow.Application.Tests.Features;
 /// закрыта / переоткрытие), actor — автор PR или flow-bot, смарт-коммиты (только ветка по умолчанию, только
 /// сопоставленный автор с правами, флаг привязки, без повтора), дозагрузка истории задачи не двигает.
 /// </summary>
-public class ScmAutomationTests
+public class GitAutomationTests
 {
     private static readonly Guid Owner = TestMediatorFactory.OwnerId;
 
-    private sealed record Setup(ScmTestContext Context, BoardResponse Board, Guid RepositoryId, string Secret, Guid TaskId)
+    private sealed record Setup(GitTestContext Context, BoardResponse Board, Guid RepositoryId, string Secret, Guid TaskId)
     {
         public Guid Status(string name) => Board.Statuses.Single(s => s.Name == name).Id;
     }
 
     private static async Task<Setup> ConnectAsync(bool smartCommits = true)
     {
-        var context = TestMediatorFactory.CreateScmContext();
+        var context = TestMediatorFactory.CreateGitContext();
         var board = (await context.Mediator.Send(new BoardCreateCommand(Owner, "Сайт", "WEB"), CancellationToken.None)).Response!;
         var connection = await context.Mediator.Send(new ScmConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "token", null), CancellationToken.None);
         var repository = (await context.Mediator.Send(new ScmRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
@@ -114,7 +114,7 @@ public class ScmAutomationTests
 
         await DeliverAsync(setup, "pull_request", Pr("opened", "open"), "pr-1");
         Assert.Equal(setup.Status("Не начата"), (await TaskAsync(setup)).StatusId);
-        var link = setup.Context.Scm.Links.Single(l => l.Kind == GitDevelopmentLinkKind.PullRequest);
+        var link = setup.Context.Git.Links.Single(l => l.Kind == GitDevelopmentLinkKind.PullRequest);
         Assert.Contains("не разрешён workflow", link.Note);
 
         await DeliverAsync(setup, "pull_request", Pr("closed", "closed", merged: true), "pr-2");
@@ -145,9 +145,9 @@ public class ScmAutomationTests
         // Автор не сопоставлен — пометка на коммите, задача не тронута; неизвестный статус — тоже пометка.
         await DeliverAsync(setup, "push", Push("main", "c3", "WEB-1 #done", "stranger@example.com"), "p-4");
         Assert.Equal(setup.Status("На проверке"), (await TaskAsync(setup)).StatusId);
-        Assert.Contains("не сопоставлен", setup.Context.Scm.Links.Single(l => l.ExternalId == "c3").Note);
+        Assert.Contains("не сопоставлен", setup.Context.Git.Links.Single(l => l.ExternalId == "c3").Note);
         await DeliverAsync(setup, "push", Push("main", "d4", "WEB-1 #status Архив"), "p-5");
-        Assert.Contains("«Архив» нет", setup.Context.Scm.Links.Single(l => l.ExternalId == "d4").Note);
+        Assert.Contains("«Архив» нет", setup.Context.Git.Links.Single(l => l.ExternalId == "d4").Note);
 
         await DeliverAsync(setup, "push", Push("main", "e5", "WEB-1 #done"), "p-6");
         Assert.Equal(setup.Status("Сделана"), (await TaskAsync(setup)).StatusId);
@@ -165,7 +165,7 @@ public class ScmAutomationTests
         await setup.Context.Mediator.Send(new ScmBackfillCommand(Owner, setup.RepositoryId), CancellationToken.None);
         foreach (var id in await setup.Context.Mediator.Send(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
             await setup.Context.Mediator.Send(new ScmDeliveryProcessCommand(id), CancellationToken.None);
-        Assert.Contains(setup.Context.Scm.Links, l => l.ExternalId == "7");
+        Assert.Contains(setup.Context.Git.Links, l => l.ExternalId == "7");
         Assert.Equal(setup.Status("Не начата"), (await TaskAsync(setup)).StatusId);
 
         // Статус автоперехода — только своего проекта.
