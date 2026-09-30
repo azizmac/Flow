@@ -1,33 +1,18 @@
 using System.Net;
 using Flow.Application.Features.Agents.Commands.AgentTestAskCommand;
-using Flow.Application.Features.CodeRepositories;
+using Flow.Application.Features.Scm;
 using Flow.Client.Services;
 using Flow.Shared.Contracts.Agents;
-using Flow.Shared.Contracts.CodeRepositories;
 
 namespace Flow.Api.Client;
 
 internal sealed partial class InProcessFlowApi
 {
-    public Task<ApiResult<IReadOnlyList<CodeRepositoryResponse>>> GetCodeRepositories(Guid boardId, CancellationToken ct = default) =>
+    public Task<ApiResult<bool>> SynchronizeGitRepository(Guid boardId, Guid repositoryId, CancellationToken ct = default) =>
         Scoped(async mediator =>
         {
-            var items = await mediator.Send(new ListCodeRepositoriesQuery(await ActorAsync(), boardId), ct);
-            return items is null ? NotFound<IReadOnlyList<CodeRepositoryResponse>>() : Ok(items);
-        });
-
-    public Task<ApiResult<CodeRepositoryResponse>> AddCodeRepository(Guid boardId, CreateCodeRepositoryRequest request, CancellationToken ct = default) =>
-        Scoped(async mediator =>
-        {
-            var item = await mediator.Send(new CreateCodeRepositoryCommand(await ActorAsync(), boardId, request.Provider, request.Name, request.RemoteUrl, request.Branch), ct);
-            return item is null ? NotFound<CodeRepositoryResponse>() : Ok(item);
-        });
-
-    public Task<ApiResult<CodeRepositoryResponse>> SynchronizeCodeRepository(Guid boardId, Guid repositoryId, CancellationToken ct = default) =>
-        Scoped(async mediator =>
-        {
-            var item = await mediator.Send(new SynchronizeCodeRepositoryCommand(await ActorAsync(), boardId, repositoryId), ct);
-            return item is null ? NotFound<CodeRepositoryResponse>() : Ok(item);
+            var result = await mediator.Send(new SynchronizeGitRepositoryCommand(await ActorAsync(), boardId, repositoryId), ct);
+            return result is null ? NotFound<bool>() : Ok(result.Value);
         });
 
     public Task<ApiResult<AgentTestResponse>> AskAgent(AgentTestRequest request, CancellationToken ct = default) =>

@@ -4,8 +4,8 @@ using Flow.Domain.Entities;
 using Flow.Domain.Entities.GitIntegration;
 using Flow.Shared.Contracts.Scm;
 using MediatR;
-using ScmLinkKind = Flow.Domain.Entities.GitIntegration.ScmLinkKind;
-using ScmLinkState = Flow.Domain.Entities.GitIntegration.ScmLinkState;
+using GitDevelopmentLinkKind = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkKind;
+using GitDevelopmentLinkState = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkState;
 
 namespace Flow.Application.Features.Scm;
 
@@ -44,8 +44,8 @@ internal sealed class ScmTaskActionHandlers(
         var from = string.IsNullOrWhiteSpace(request.FromBranch) ? ctx.Repository.DefaultBranch : ScmUrls.ValidateBranch(request.FromBranch);
         await CallAsync(() => client.CreateBranchAsync(ctx.Connection, ctx.Token, ctx.Repository, name, from, cancellationToken));
 
-        var link = await LinkAsync(ctx, ScmLinkKind.Branch, name, cancellationToken);
-        link.Apply(ScmUrls.Branch(ctx.Connection.Provider, ctx.Repository.WebUrl, name), name, ScmLinkState.Open, null, ctx.Actor.Id, name, null, DateTime.UtcNow);
+        var link = await LinkAsync(ctx, GitDevelopmentLinkKind.Branch, name, cancellationToken);
+        link.Apply(ScmUrls.Branch(ctx.Connection.Provider, ctx.Repository.WebUrl, name), name, GitDevelopmentLinkState.Open, null, ctx.Actor.Id, name, null, DateTime.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return await sender.Send(new TaskDevelopmentQuery(request.ActorId, request.TaskId), cancellationToken);
     }
@@ -67,8 +67,8 @@ internal sealed class ScmTaskActionHandlers(
         await CallAsync(async () => pr = await client.CreatePullRequestAsync(ctx.Connection, ctx.Token, ctx.Repository, source, target, title, body, request.Draft,
             cancellationToken));
 
-        var link = await LinkAsync(ctx, ScmLinkKind.PullRequest, pr.Number, cancellationToken);
-        var previous = link.Url.Length == 0 ? (ScmLinkState?)null : link.State;
+        var link = await LinkAsync(ctx, GitDevelopmentLinkKind.PullRequest, pr.Number, cancellationToken);
+        var previous = link.Url.Length == 0 ? (GitDevelopmentLinkState?)null : link.State;
         link.Apply(pr.Url, pr.Title, pr.State, pr.AuthorLogin, ctx.Actor.Id, pr.SourceBranch ?? source, pr.TargetBranch ?? target, pr.UpdatedAt);
         searchIndex.Upsert(link, ctx.Task.BoardId);
         // Автопереход «PR открыт» — как если бы PR пришёл вебхуком: через workflow, от имени создавшего.
@@ -77,7 +77,7 @@ internal sealed class ScmTaskActionHandlers(
         return await sender.Send(new TaskDevelopmentQuery(request.ActorId, request.TaskId), cancellationToken);
     }
 
-    private sealed record Context(User Actor, TaskItem Task, ScmRepository Repository, ScmRepositoryBoard Binding, ScmConnection Connection, string Token);
+    private sealed record Context(User Actor, TaskItem Task, GitRepository Repository, GitRepositoryBoard Binding, GitHostConnection Connection, string Token);
 
     private async Task<Context?> PrepareAsync(Guid actorId, Guid taskId, Guid repositoryId, CancellationToken cancellationToken)
     {
@@ -110,12 +110,12 @@ internal sealed class ScmTaskActionHandlers(
         }
     }
 
-    private async Task<ScmLink> LinkAsync(Context ctx, ScmLinkKind kind, string externalId, CancellationToken cancellationToken)
+    private async Task<GitDevelopmentLink> LinkAsync(Context ctx, GitDevelopmentLinkKind kind, string externalId, CancellationToken cancellationToken)
     {
         var link = await store.FindLinkAsync(ctx.Task.Id, ctx.Repository.Id, kind, externalId, cancellationToken);
         if (link is null)
         {
-            link = ScmLink.Create(ctx.Task.Id, ctx.Repository.Id, kind, externalId);
+            link = GitDevelopmentLink.Create(ctx.Task.Id, ctx.Repository.Id, kind, externalId);
             store.Add(link);
         }
 

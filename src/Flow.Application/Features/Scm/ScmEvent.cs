@@ -7,7 +7,7 @@ namespace Flow.Application.Features.Scm;
 
 /// <summary>
 /// Событие хостинга, нормализованное до полей, которые разбирает Flow (docs/TZ_scm_integration.md §1): его JSON и
-/// хранится в ScmDelivery.Payload — не мегабайтный push целиком. Разные провайдеры дают одну форму.
+/// хранится в GitIntegrationJob.Payload — не мегабайтный push целиком. Разные провайдеры дают одну форму.
 /// </summary>
 public sealed record ScmEvent(
     ScmEventKind Kind,
@@ -32,5 +32,5 @@ public enum ScmEventKind { Push, PullRequest, BranchCreated, BranchDeleted }
 public sealed record ScmCommit(string Sha, string Message, string Url, string? AuthorEmail, string? AuthorLogin, DateTime Timestamp);
 
 public sealed record ScmPullRequest(
-    string Number, string Title, string? Body, ScmLinkState State, string Url, string? AuthorLogin,
+    string Number, string Title, string? Body, GitDevelopmentLinkState State, string Url, string? AuthorLogin,
     string? SourceBranch, string? TargetBranch, DateTime UpdatedAt);

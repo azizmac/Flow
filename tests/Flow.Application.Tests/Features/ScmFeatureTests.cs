@@ -9,9 +9,9 @@ using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Scm;
 using Xunit;
-using DomainState = Flow.Domain.Entities.GitIntegration.ScmLinkState;
-using ScmLinkKind = Flow.Domain.Entities.GitIntegration.ScmLinkKind;
-using SharedProvider = Flow.Shared.Contracts.Scm.ScmProvider;
+using DomainState = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkState;
+using GitDevelopmentLinkKind = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkKind;
+using SharedProvider = Flow.Shared.Contracts.Scm.GitProvider;
 
 namespace Flow.Application.Tests.Features;
 
@@ -141,7 +141,7 @@ public class ScmFeatureTests
         Assert.Equal(["web-1-login"], development.Branches.Select(b => b.ExternalId));
         // Оба коммита — в ветке задачи; второй упоминает задачу непривязанного проекта, ей связь не достаётся.
         Assert.Equal(2, development.CommitCount);
-        Assert.Equal(("42", Flow.Shared.Contracts.Scm.ScmLinkState.Open, "acme/web"),
+        Assert.Equal(("42", Flow.Shared.Contracts.Scm.GitDevelopmentLinkState.Open, "acme/web"),
             (development.PullRequests.Single().ExternalId, development.PullRequests.Single().State, development.PullRequests.Single().RepositoryName));
         Assert.Equal(Owner, development.Commits.First().AuthorUserId);
         Assert.Empty((await mediator.Send(new TaskDevelopmentQuery(Owner, foreign.Id), CancellationToken.None))!.Commits);
@@ -152,12 +152,12 @@ public class ScmFeatureTests
              "html_url":"https://github.com/acme/web/pull/42","user":{"login":"octocat"},"head":{"ref":"web-1-login"},"base":{"ref":"main"},
              "updated_at":"2026-09-22T10:00:00Z"}}
             """, "pr-2");
-        Assert.Equal(Flow.Shared.Contracts.Scm.ScmLinkState.Merged, (await mediator.Send(new TaskGetQuery(Owner, task.Id), CancellationToken.None))!.PullRequestState);
-        Assert.Single(setup.Context.Scm.Links, l => l.Kind == ScmLinkKind.PullRequest);
+        Assert.Equal(Flow.Shared.Contracts.Scm.GitDevelopmentLinkState.Merged, (await mediator.Send(new TaskGetQuery(Owner, task.Id), CancellationToken.None))!.PullRequestState);
+        Assert.Single(setup.Context.Scm.Links, l => l.Kind == GitDevelopmentLinkKind.PullRequest);
 
         // Удалённая ветка закрывает связь, но не удаляет её.
         await DeliverAsync(setup, "delete", """{"ref":"web-1-login","ref_type":"branch"}""", "del-1");
-        Assert.Equal(DomainState.Closed, setup.Context.Scm.Links.Single(l => l.Kind == ScmLinkKind.Branch).State);
+        Assert.Equal(DomainState.Closed, setup.Context.Scm.Links.Single(l => l.Kind == GitDevelopmentLinkKind.Branch).State);
     }
 
     [Fact]

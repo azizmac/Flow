@@ -12,11 +12,11 @@ namespace Flow.Application.Features.Scm;
 /// <summary>
 /// Автоматизация по событиям хостинга (docs/TZ_scm_integration.md §4–5, этап 5C). Всё, что меняет задачу, идёт тем же
 /// путём, что правка человеком: проверка workflow через <see cref="TransitionGuard"/> (обхода нет), журнал, очередь
-/// поиска. Отказ — не ошибка доставки, а пометка на связи (<see cref="ScmLink.Note"/>): её видно в блоке «Разработка».
+/// поиска. Отказ — не ошибка доставки, а пометка на связи (<see cref="GitDevelopmentLink.Note"/>): её видно в блоке «Разработка».
 /// <list type="bullet">
 /// <item>Автопереход: PR открыт (новый или вышел из черновика) или влит в ветку по умолчанию → статус из настроек
 /// привязки. Задача уже в финальном статусе — не трогаем; переоткрытый PR назад не переводит. Actor — автор PR, если он
-/// сопоставлен, активен и может править задачу, иначе <see cref="ScmBot"/>.</item>
+/// сопоставлен, активен и может править задачу, иначе <see cref="GitIntegrationBot"/>.</item>
 /// <item>Смарт-коммиты — только в push'ах в ветку по умолчанию, только от сопоставленного активного автора с правами
 /// на действие; бот их не выполняет, иначе любой с правом push закрывал бы задачи.</item>
 /// </list>
@@ -35,13 +35,13 @@ internal sealed class ScmAutomation(
     private readonly Dictionary<Guid, Board?> _boards = [];
     private User? _bot;
 
-    public async Task OnPullRequestAsync(ScmRepository repository, ScmRepositoryBoard binding, TaskItem task, ScmLink link,
-        ScmLinkState? previous, ScmPullRequest pr, Guid? authorId, CancellationToken ct)
+    public async Task OnPullRequestAsync(GitRepository repository, GitRepositoryBoard binding, TaskItem task, GitDevelopmentLink link,
+        GitDevelopmentLinkState? previous, ScmPullRequest pr, Guid? authorId, CancellationToken ct)
     {
         Guid? target = null;
-        if (pr.State == ScmLinkState.Open && previous is null or ScmLinkState.Draft)
+        if (pr.State == GitDevelopmentLinkState.Open && previous is null or GitDevelopmentLinkState.Draft)
             target = binding.OnPullRequestOpenedStatusId;
-        else if (pr.State == ScmLinkState.Merged && previous != ScmLinkState.Merged && pr.TargetBranch == repository.DefaultBranch)
+        else if (pr.State == GitDevelopmentLinkState.Merged && previous != GitDevelopmentLinkState.Merged && pr.TargetBranch == repository.DefaultBranch)
             target = binding.OnPullRequestMergedStatusId;
         if (target is not { } statusId || await BoardAsync(task.BoardId, ct) is not { } board)
             return;
@@ -64,7 +64,7 @@ internal sealed class ScmAutomation(
     }
 
     /// <summary>Команды одного коммита для одной задачи; commands уже отобраны по коду этой задачи.</summary>
-    public async Task OnSmartCommitAsync(TaskItem task, ScmLink link, ScmCommit commit, Guid? authorId,
+    public async Task OnSmartCommitAsync(TaskItem task, GitDevelopmentLink link, ScmCommit commit, Guid? authorId,
         IReadOnlyList<SmartCommand> commands, CancellationToken ct)
     {
         if (commands.Count == 0)
@@ -156,10 +156,10 @@ internal sealed class ScmAutomation(
 
         if (_bot is null)
         {
-            _bot = await users.GetByIdAsync(ScmBot.Id, ct);
+            _bot = await users.GetByIdAsync(GitIntegrationBot.Id, ct);
             if (_bot is null)
             {
-                _bot = ScmBot.Create();
+                _bot = GitIntegrationBot.Create();
                 users.Add(_bot);
             }
         }

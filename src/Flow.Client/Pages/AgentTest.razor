@@ -49,7 +49,7 @@
                         <select value="@_repositoryId" @onchange="SelectRepository">
                             @foreach (var repository in _repositories)
                             {
-                                <option value="@repository.Id">@repository.Name · @repository.Branch (@repository.SyncState)</option>
+                                <option value="@repository.RepositoryId">@repository.FullName · @repository.DefaultBranch (@repository.SyncState)</option>
                             }
                         </select>
                     </label>
@@ -129,7 +129,7 @@
     [SupplyParameterFromQuery(Name = "repositoryId")] public Guid? RepositoryIdParam { get; set; }
 
     private IReadOnlyList<BoardResponse> _boards = [];
-    private IReadOnlyList<CodeRepositoryResponse> _repositories = [];
+    private IReadOnlyList<ScmBoardRepositoryResponse> _repositories = [];
     private Guid _boardId;
     private Guid _repositoryId;
     private string _question = "Что хранится в этом репозитории?";
@@ -137,7 +137,7 @@
     private string? _error;
     private bool _sending;
 
-    private CodeRepositoryResponse? SelectedRepository => _repositories.FirstOrDefault(repository => repository.Id == _repositoryId);
+    private ScmBoardRepositoryResponse? SelectedRepository => _repositories.FirstOrDefault(repository => repository.RepositoryId == _repositoryId);
 
     private bool CanAsk => !_sending && !string.IsNullOrWhiteSpace(_question) &&
         SelectedRepository is { LastSyncedCommit: not null, SyncState: "Ready" or "Failed" };
@@ -154,7 +154,7 @@
         _boards = boards.Value!;
         _boardId = BoardIdParam is { } id && _boards.Any(board => board.Id == id) ? id : _boards.FirstOrDefault()?.Id ?? Guid.Empty;
         await LoadRepositories();
-        if (RepositoryIdParam is { } repositoryId && _repositories.Any(repository => repository.Id == repositoryId))
+        if (RepositoryIdParam is { } repositoryId && _repositories.Any(repository => repository.RepositoryId == repositoryId))
             _repositoryId = repositoryId;
     }
 
@@ -173,11 +173,11 @@
         _repositoryId = Guid.Empty;
         if (_boardId == Guid.Empty) return;
 
-        var result = await Api.GetCodeRepositories(_boardId);
+        var result = await Api.GetBoardRepositories(_boardId);
         if (result.Ok)
         {
-            _repositories = result.Value!;
-            _repositoryId = _repositories.FirstOrDefault(repository => repository.LastSyncedCommit is not null && repository.SyncState is "Ready" or "Failed")?.Id ?? Guid.Empty;
+            _repositories = result.Value!.Where(repository => repository.IsBound).ToList();
+            _repositoryId = _repositories.FirstOrDefault(repository => repository.LastSyncedCommit is not null && repository.SyncState is "Ready" or "Failed")?.RepositoryId ?? Guid.Empty;
             _error = null;
         }
         else

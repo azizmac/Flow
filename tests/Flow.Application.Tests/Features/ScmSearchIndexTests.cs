@@ -9,8 +9,8 @@ using Flow.Domain.Entities.GitIntegration;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
 using Xunit;
-using ScmLinkKind = Flow.Domain.Entities.GitIntegration.ScmLinkKind;
-using SharedProvider = Flow.Shared.Contracts.Scm.ScmProvider;
+using GitDevelopmentLinkKind = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkKind;
+using SharedProvider = Flow.Shared.Contracts.Scm.GitProvider;
 
 namespace Flow.Application.Tests.Features;
 
@@ -80,7 +80,7 @@ public class ScmSearchIndexTests
         var commit = Assert.Single(Development(setup));
         Assert.Equal((SearchIndexOperation.Upsert, setup.Board.Id, 0), (commit.Operation, commit.BoardId, commit.Priority));
         var links = await setup.Context.Scm.GetLinksByTaskAsync(setup.TaskId, CancellationToken.None);
-        Assert.Equal(links.Single(l => l.Kind == ScmLinkKind.Commit).Id, commit.SourceId);
+        Assert.Equal(links.Single(l => l.Kind == GitDevelopmentLinkKind.Commit).Id, commit.SourceId);
 
         // Тот же коммит повторным push'ем в ту же ветку — текст не изменился, в очередь не идёт.
         setup.Context.SearchIndex.Clear();
@@ -100,7 +100,7 @@ public class ScmSearchIndexTests
     {
         var setup = await ConnectAsync();
         setup.Context.Client.History = new ScmHistory(
-            [new ScmPullRequest("7", "WEB-1 старый фикс", null, ScmLinkState.Merged, "https://github.com/acme/web/pull/7", "octocat", "web-1", "main", DateTime.UtcNow.AddDays(-3))],
+            [new ScmPullRequest("7", "WEB-1 старый фикс", null, GitDevelopmentLinkState.Merged, "https://github.com/acme/web/pull/7", "octocat", "web-1", "main", DateTime.UtcNow.AddDays(-3))],
             []);
         await setup.Context.Mediator.Send(new ScmBackfillCommand(Owner, setup.RepositoryId), CancellationToken.None);
         foreach (var id in await setup.Context.Mediator.Send(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))

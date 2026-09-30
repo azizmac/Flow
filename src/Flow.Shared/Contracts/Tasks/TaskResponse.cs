@@ -37,7 +37,7 @@ public sealed record TaskResponse(
     Guid? SprintId = null,
     Guid? MilestoneId = null,
     IReadOnlyDictionary<Guid, System.Text.Json.JsonElement>? CustomFields = null,
-    Flow.Shared.Contracts.Scm.ScmLinkState? PullRequestState = null,
+    Flow.Shared.Contracts.Scm.GitDevelopmentLinkState? PullRequestState = null,
     Guid? TeamId = null);
 
 /// <summary>Календарь (docs/TZ_task_views.md §5): задачи окна [From, To]; Truncated — лимит сработал, показано не всё.</summary>

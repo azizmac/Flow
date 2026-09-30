@@ -36,7 +36,7 @@ public sealed class BoardConfiguration : IEntityTypeConfiguration<Board>
         builder.Navigation(b => b.Transitions).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(b => b.CustomFields).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(b => b.Screens).UsePropertyAccessMode(PropertyAccessMode.Field);
-        builder.Navigation(b => b.CodeRepositories).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(b => b.RepositoryBindings).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // Free = 0 — у всех существующих проектов: после миграции статус меняется как раньше.
         builder.Property(b => b.WorkflowMode).IsRequired();

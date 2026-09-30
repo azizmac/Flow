@@ -66,7 +66,7 @@ internal sealed class ScmWebhookReceiveCommandHandler(IScmStore store, IScmSecre
             return ScmWebhookResult.BadRequest;
         }
 
-        store.Add(ScmDelivery.Create(repository.Id, deliveryId, eventName, parsed?.Serialize()));
+        store.Add(GitIntegrationJob.Create(repository.Id, deliveryId, eventName, parsed?.Serialize()));
         repository.MarkDelivery(DateTime.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return parsed is null ? ScmWebhookResult.Ignored : ScmWebhookResult.Accepted;
@@ -78,7 +78,7 @@ internal sealed class ScmWebhookReceiveCommandHandler(IScmStore store, IScmSecre
 /// молча пропускаются. Коммиты без кода в ветке с кодом связываются с задачей ветки (кроме ветки по умолчанию).
 /// Удалённая ветка закрывает свои связи, но не удаляет их. Связь уникальна — повтор обновляет, не плодит.
 /// Автор — по e-mail коммита или по логину из ссылок профиля (GitHub, GitLab, Gitea).
-/// Дозагрузка истории (этап 5B) — та же очередь: задание <see cref="ScmDelivery.BackfillEvent"/> тянет PR и коммиты
+/// Дозагрузка истории (этап 5B) — та же очередь: задание <see cref="GitIntegrationJob.BackfillEvent"/> тянет PR и коммиты
 /// ветки по умолчанию через API и прогоняет их тем же разбором, что вебхуки. Исчерпанный лимит запросов — пауза до
 /// сброса без траты попытки.
 /// </summary>
@@ -114,7 +114,7 @@ internal sealed class ScmDeliveryHandlers(
     public async Task<bool> Handle(ScmDeliveryProcessCommand request, CancellationToken cancellationToken)
     {
         var delivery = await store.GetDeliveryAsync(request.DeliveryId, cancellationToken);
-        if (delivery is not { Status: ScmDeliveryStatus.Pending })
+        if (delivery is not { Status: GitIntegrationJobStatus.Pending })
             return false;
 
         var repository = await store.GetRepositoryAsync(delivery.RepositoryId, cancellationToken);
@@ -161,10 +161,10 @@ internal sealed class ScmDeliveryHandlers(
     /// Комментарий «задача Flow» в PR, впервые связанном с задачей (этап 5D), — если привязка это просит и ссылки на
     /// задачу в описании ещё нет (PR, созданный из Flow, её уже несёт). Сбой хостинга — пометка у связи, не ошибка доставки.
     /// </summary>
-    private async Task CommentOnNewPullRequestsAsync(ScmConnection connection, ScmRepository repository,
-        IReadOnlyList<(TaskItem Task, ScmLink Link, ScmPullRequest Pr, ScmRepositoryBoard Binding)> created, CancellationToken cancellationToken)
+    private async Task CommentOnNewPullRequestsAsync(GitHostConnection connection, GitRepository repository,
+        IReadOnlyList<(TaskItem Task, GitDevelopmentLink Link, ScmPullRequest Pr, GitRepositoryBoard Binding)> created, CancellationToken cancellationToken)
     {
-        var wanted = created.Where(c => c.Binding.CommentOnPullRequests && c.Pr.State is ScmLinkState.Open or ScmLinkState.Draft).ToList();
+        var wanted = created.Where(c => c.Binding.CommentOnPullRequests && c.Pr.State is GitDevelopmentLinkState.Open or GitDevelopmentLinkState.Draft).ToList();
         if (wanted.Count == 0 || protector.TryUnprotect(connection.SecretProtected) is not { } token)
             return;
 
@@ -187,13 +187,13 @@ internal sealed class ScmDeliveryHandlers(
     /// <param name="history">Дозагрузка истории: связи пишутся, но автопереходы и смарт-коммиты не выполняются —
     /// прошлое не должно двигать задачи сегодня.</param>
     private sealed class Processor(IScmStore store, ITaskItemRepository tasks, IUserRepository users, ScmAutomation automation,
-        ISearchIndexQueue searchIndex, ScmRepository repository, ScmProvider provider, bool history, CancellationToken ct)
+        ISearchIndexQueue searchIndex, GitRepository repository, GitProvider provider, bool history, CancellationToken ct)
     {
-        private readonly Dictionary<(Guid, ScmLinkKind, string), ScmLink> _links = [];
+        private readonly Dictionary<(Guid, GitDevelopmentLinkKind, string), GitDevelopmentLink> _links = [];
 
         /// <summary>PR, впервые связанные с задачей этим разбором (не дозагрузкой) — для комментария со ссылкой (этап 5D).</summary>
-        public List<(TaskItem Task, ScmLink Link, ScmPullRequest Pr, ScmRepositoryBoard Binding)> NewPullRequests { get; } = [];
-        private Dictionary<Guid, ScmRepositoryBoard>? _boards;
+        public List<(TaskItem Task, GitDevelopmentLink Link, ScmPullRequest Pr, GitRepositoryBoard Binding)> NewPullRequests { get; } = [];
+        private Dictionary<Guid, GitRepositoryBoard>? _boards;
         private IReadOnlyList<User>? _users;
 
         public async Task RunAsync(ScmEvent ev)
@@ -210,7 +210,7 @@ internal sealed class ScmDeliveryHandlers(
                     break;
                 case ScmEventKind.BranchDeleted:
                     foreach (var link in await store.GetBranchLinksAsync(repository.Id, ev.Branch!, ct))
-                        link.SetState(ScmLinkState.Closed);
+                        link.SetState(GitDevelopmentLinkState.Closed);
                     break;
                 case ScmEventKind.Push:
                     await PushAsync(ev);
@@ -220,8 +220,8 @@ internal sealed class ScmDeliveryHandlers(
                     var author = await UserByLoginAsync(pr.AuthorLogin);
                     foreach (var task in await TasksAsync(codes))
                     {
-                        var link = await LinkAsync(task, ScmLinkKind.PullRequest, pr.Number);
-                        var previous = link.Url.Length == 0 ? (ScmLinkState?)null : link.State;
+                        var link = await LinkAsync(task, GitDevelopmentLinkKind.PullRequest, pr.Number);
+                        var previous = link.Url.Length == 0 ? (GitDevelopmentLinkState?)null : link.State;
                         if (link.Url.Length == 0 && !history)
                             NewPullRequests.Add((task, link, pr, _boards[task.BoardId]));
                         var indexed = link.Url.Length == 0 ? default : ScmSearch.Snapshot(link);
@@ -257,7 +257,7 @@ internal sealed class ScmDeliveryHandlers(
                             (smart.TryGetValue(target.Id, out var list) ? list : smart[target.Id] = []).Add(command);
                 foreach (var task in targets)
                 {
-                    var link = await LinkAsync(task, ScmLinkKind.Commit, commit.Sha);
+                    var link = await LinkAsync(task, GitDevelopmentLinkKind.Commit, commit.Sha);
                     // Коммит уже видели в ветке по умолчанию (повторный push, merge-коммит) — команды не выполняем второй раз.
                     var seenOnDefault = link.Url.Length > 0 && link.SourceBranch == repository.DefaultBranch;
                     var indexed = link.Url.Length == 0 ? default : ScmSearch.Snapshot(link);
@@ -274,7 +274,7 @@ internal sealed class ScmDeliveryHandlers(
         /// коммита индекс не трогает. Ветку коммита текст чанка не содержит, но снимок сравнивает и её — лишний upsert
         /// дешёвый: неизменившийся чанк воркер отсекает по ContentHash.
         /// </summary>
-        private void Reindex(ScmLink link, TaskItem task, (string Title, string? Source, string? Target) before)
+        private void Reindex(GitDevelopmentLink link, TaskItem task, (string Title, string? Source, string? Target) before)
         {
             if (before == default || ScmSearch.Snapshot(link) != before)
                 searchIndex.Upsert(link, task.BoardId, history ? 1 : 0);
@@ -282,14 +282,14 @@ internal sealed class ScmDeliveryHandlers(
 
         private async Task BranchAsync(TaskItem task, string branch)
         {
-            var link = await LinkAsync(task, ScmLinkKind.Branch, branch);
-            if (link.Url.Length == 0 || link.State == ScmLinkState.Closed)
-                link.Apply(BranchUrl(branch), branch, ScmLinkState.Open, null, null, branch, null, DateTime.UtcNow);
+            var link = await LinkAsync(task, GitDevelopmentLinkKind.Branch, branch);
+            if (link.Url.Length == 0 || link.State == GitDevelopmentLinkState.Closed)
+                link.Apply(BranchUrl(branch), branch, GitDevelopmentLinkState.Open, null, null, branch, null, DateTime.UtcNow);
         }
 
         private string BranchUrl(string branch) => ScmUrls.Branch(provider, repository.WebUrl, branch);
 
-        private async Task<ScmLink> LinkAsync(TaskItem task, ScmLinkKind kind, string externalId)
+        private async Task<GitDevelopmentLink> LinkAsync(TaskItem task, GitDevelopmentLinkKind kind, string externalId)
         {
             var key = (task.Id, kind, externalId);
             if (_links.TryGetValue(key, out var cached))
@@ -298,7 +298,7 @@ internal sealed class ScmDeliveryHandlers(
             var link = await store.FindLinkAsync(task.Id, repository.Id, kind, externalId, ct);
             if (link is null)
             {
-                link = ScmLink.Create(task.Id, repository.Id, kind, externalId);
+                link = GitDevelopmentLink.Create(task.Id, repository.Id, kind, externalId);
                 store.Add(link);
             }
 
@@ -326,8 +326,8 @@ internal sealed class ScmDeliveryHandlers(
                 return null;
             var type = provider switch
             {
-                ScmProvider.GitHub => UserLinkType.GitHub,
-                ScmProvider.GitLab => UserLinkType.GitLab,
+                GitProvider.GitHub => UserLinkType.GitHub,
+                GitProvider.GitLab => UserLinkType.GitLab,
                 _ => UserLinkType.Gitea
             };
             return (await UsersAsync()).FirstOrDefault(u => u.Links.Any(l => l.Type == type

@@ -79,7 +79,6 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<ITaskTemplateRepository, TaskTemplateRepository>();
         services.AddScoped<ITaskActivityRepository, TaskActivityRepository>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
-        services.AddScoped<ICodeRepositoryRepository, CodeRepositoryRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.Configure<RepositoryWorkspaceOptions>(configuration.GetSection(RepositoryWorkspaceOptions.SectionName));

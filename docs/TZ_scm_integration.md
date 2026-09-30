@@ -32,21 +32,25 @@
 ## 1. Модель
 
 ```
-ScmConnection: Id, Provider : GitHub|GitLab|Gitea|Forgejo, Name, BaseUrl (для self-hosted; GitHub.com — null),
+GitHostConnection: Id, Provider : GitHub|GitLab|Gitea|Forgejo, Name, BaseUrl (для self-hosted; GitHub.com — null),
   AuthKind : Token|GitHubApp, SecretProtected (DataProtection), AppId?, InstallationId?,
   CreatedById, CreatedAt, LastCheckAt?, LastError?
-ScmRepository: Id, ConnectionId, ExternalId, FullName (org/repo), WebUrl, DefaultBranch,
-  WebhookId?, WebhookSecretProtected, IsActive, LastDeliveryAt?
-ScmRepositoryBoard: (RepositoryId, BoardId) PK, AutoTransitions : jsonb?
-ScmLink: Id, TaskId (FK cascade), RepositoryId (FK cascade), Kind : Branch|Commit|PullRequest,
+GitRepository: Id, ConnectionId, ExternalId, FullName (org/repo), WebUrl, DefaultBranch,
+  WebhookId?, WebhookSecretProtected, IsActive, LastDeliveryAt?,
+  SyncState : Pending|Syncing|Ready|Failed, LastSyncedCommit?, LastSyncedAt?, LastSyncError?
+GitRepositoryBoard: (RepositoryId, BoardId) PK, CreatedById, CreatedAt,
+  OnPullRequestOpenedStatusId?, OnPullRequestMergedStatusId?, SmartCommits, CommentOnPullRequests
+GitDevelopmentLink: Id, TaskId (FK cascade), RepositoryId (FK cascade), Kind : Branch|Commit|PullRequest,
   ExternalId (sha / номер PR / имя ветки), Url, Title, State : Open|Draft|Merged|Closed|null,
   AuthorLogin, AuthorUserId?, SourceBranch?, TargetBranch?, OccurredAt, UpdatedAt
   unique (TaskId, RepositoryId, Kind, ExternalId)
-ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, ReceivedAt, Status : Pending|Done|Failed|Ignored,
+GitIntegrationJob: Id, RepositoryId, DeliveryId (из заголовка), Event, ReceivedAt, Status : Pending|Done|Failed|Ignored,
   Attempts, NextAttemptAt, LastError, Payload : jsonb (обрезанный до нужных полей)
   unique (RepositoryId, DeliveryId)
 ```
 
+- `Board.RepositoryBindings` показывает связи с репозиториями. Один `GitRepository` может быть привязан к нескольким проектам; локальная копия хранится по Id репозитория и не удаляется при удалении одного Board.
+- Локальная синхронизация пока работает с публичными HTTPS-репозиториями github.com и gitlab.com; `IsActive` относится к вебхукам и не заменяет `SyncState`.
 - Секреты (токены, ключ GitHub App, секрет вебхука) шифруются `IDataProtector` с purpose `Flow.Scm`. Ключи
   DataProtection уже хранятся на диске (`DataProtection:KeysPath`, том `auth-keys`). Если путь не задан, ключи
   эфемерные и после рестарта секреты не расшифруются. Тогда подключение помечается «нужно переподключить»
@@ -84,25 +88,25 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 
 | Событие | Где ищем коды | Что делаем |
 |---|---|---|
-| Ветка создана | имя ветки | `ScmLink(Branch)` |
+| Ветка создана | имя ветки | `GitDevelopmentLink(Branch)` |
 | Ветка удалена | — | у связи `State = Closed`; связь остаётся (в истории видно, что работа была) |
-| Push | сообщения коммитов (до 100 на push, остальное — ссылкой «ещё N») и имя ветки | `ScmLink(Commit)` на каждый коммит с кодом; коммиты без кода, но в ветке с кодом, связываются с задачей ветки |
-| PR открыт / изменён | заголовок, описание, исходная ветка | `ScmLink(PullRequest)`, `State` |
+| Push | сообщения коммитов (до 100 на push, остальное — ссылкой «ещё N») и имя ветки | `GitDevelopmentLink(Commit)` на каждый коммит с кодом; коммиты без кода, но в ветке с кодом, связываются с задачей ветки |
+| PR открыт / изменён | заголовок, описание, исходная ветка | `GitDevelopmentLink(PullRequest)`, `State` |
 | PR смёржен / закрыт / переоткрыт | те же | обновить `State`; автопереход (§4) |
 
-- Коды ищутся только в проектах, привязанных к репозиторию (`ScmRepositoryBoard`). Код, не найденный в этих
+- Коды ищутся только в проектах, привязанных к репозиторию (`GitRepositoryBoard`). Код, не найденный в этих
   проектах, игнорируется молча.
 - `AuthorUserId` — сопоставление по e-mail коммита с `Users.Email` или по логину с `UserLink` типа `GitHub`/`GitLab`
   (`UserLinkType` уже есть; для Gitea/Forgejo добавить `Gitea = 6` в конец enum). Не нашли — показываем логин
   без аватара.
-- Force-push, который переписал коммиты: старые `ScmLink(Commit)` не удаляются. Сопоставлять историю ради их
+- Force-push, который переписал коммиты: старые `GitDevelopmentLink(Commit)` не удаляются. Сопоставлять историю ради их
   удаления не стоит — коммит по ссылке на хостинге всё равно откроется или покажет 404.
 - Заголовки PR и сообщения коммитов — **недоверенный текст**: показываются как текст, без Markdown и без HTML,
   в индекс поиска попадают с этапа 5E — тоже как текст.
 
 ## 4. Автопереходы статусов
 
-- Настройка на связку «репозиторий × проект» (`ScmRepositoryBoard.AutoTransitions`), по умолчанию выключены:
+- Настройка на связку «репозиторий × проект» (`GitRepositoryBoard.OnPullRequestOpenedStatusId и OnPullRequestMergedStatusId`), по умолчанию выключены:
   «PR открыт → статус X», «PR смёржен в ветку по умолчанию → статус Y».
 - Переход проходит **через проверку workflow** (`docs/TZ_workflow_config.md` §2). Запрещённый переход не
   выполняется, в блоке «Разработка» появляется пометка «автопереход не разрешён workflow». Обхода нет.
@@ -140,7 +144,7 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 - Дозагрузка истории при привязке (этап 5B): последние 100 PR и 30 дней коммитов ветки по умолчанию через API,
   фоновой задачей, с учётом rate limit (`X-RateLimit-Remaining` / `RateLimit-Remaining`; при исчерпании — пауза
   до сброса).
-- Отключение репозитория удаляет вебхук на хостинге (best-effort) и выключает приём. `ScmLink` остаются.
+- Отключение репозитория удаляет вебхук на хостинге (best-effort) и выключает приём. `GitDevelopmentLink` остаются.
 
 ## 7. Клиент
 
@@ -158,9 +162,9 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 
 ## Как сделано (этап 5A)
 
-- Домен — `Domain/GitIntegration/`: `ScmConnection` (токен только зашифрованным, результат проверки), `ScmRepository`
-  (`Reactivate` при повторном подключении — связи задач не теряются), `ScmRepositoryBoard`, `ScmLink` (unique по задаче,
-  репозиторию, виду и внешнему id), `ScmDelivery` (backoff 5 с → 5 мин, 8 попыток). `ProjectPermission.ManageScm`
+- Домен — `Domain/GitIntegration/`: `GitHostConnection` (токен только зашифрованным, результат проверки), `GitRepository`
+  (`Reactivate` при повторном подключении — связи задач не теряются), `GitRepositoryBoard`, `GitDevelopmentLink` (unique по задаче,
+  репозиторию, виду и внешнему id), `GitIntegrationJob` (backoff 5 с → 5 мин, 8 попыток). `ProjectPermission.ManageScm`
   (администратор проекта), `UserLinkType.Gitea = 6`. Миграция `AddScmIntegration`.
 - Чистые функции Application (`Features/Scm`): `TaskCodeDetector` (коды на границах слова; в имени ветки — без учёта
   регистра, `web-12-login` тоже WEB-12), `ScmSignatures` (HMAC-SHA256 и токен GitLab, `FixedTimeEquals`),
@@ -183,8 +187,8 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 
 ## Как сделано (этап 5B)
 
-- **Дозагрузка истории** живёт в той же очереди, что вебхуки: задание — `ScmDelivery` с событием `flow:backfill`
-  (`ScmDelivery.CreateBackfill`). Отдельной таблицы и воркера нет — повторы, backoff, диагностика и срок хранения общие.
+- **Дозагрузка истории** живёт в той же очереди, что вебхуки: задание — `GitIntegrationJob` с событием `flow:backfill`
+  (`GitIntegrationJob.CreateBackfill`). Отдельной таблицы и воркера нет — повторы, backoff, диагностика и срок хранения общие.
   Ставится при каждой новой привязке репозитория к проекту (задачи проекта уже упоминались в PR до привязки) и вручную —
   `POST /scm/repositories/{id}/backfill`; второе задание поверх стоящего в очереди не ставится (`HasPendingDeliveryAsync`).
   Разбор: `IScmProviderClient.GetHistoryAsync` → PR по возрастанию даты изменения (последнее состояние пишется
@@ -194,9 +198,9 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
   значила бы конец). Старые Gitea параметр `since` не знают — клиент останавливается на первом коммите старше даты сам.
 - **Лимит запросов**: 429 всегда, 403 — если `X-RateLimit-Remaining`/`RateLimit-Remaining` = 0 или есть `Retry-After`
   (вторичный лимит GitHub). Клиент бросает `ScmRateLimitException(ResetAt)` — `Retry-After`, иначе `*-RateLimit-Reset`
-  (unix-время), иначе минута. Задание откладывается `ScmDelivery.Postpone` **без траты попытки** — это пауза, а не сбой.
+  (unix-время), иначе минута. Задание откладывается `GitIntegrationJob.Postpone` **без траты попытки** — это пауза, а не сбой.
   Обычный 403 без нулевого остатка — по-прежнему «не хватает прав».
-- **GitHub App**: `ScmConnection.AuthKind` (Token | GitHubApp), `AppId`, `InstallationId` (миграция `AddScmGitHubApp`),
+- **GitHub App**: `GitHostConnection.AuthKind` (Token | GitHubApp), `AppId`, `InstallationId` (миграция `AddScmGitHubApp`),
   в `SecretProtected` — закрытый ключ PEM (переводы строк сохраняются). Клиент подписывает JWT RS256
   (`GitHubAppJwt`: iat на минуту в прошлом, exp через 9 минут, iss — App ID), меняет его на токен установки
   (`POST /app/installations/{id}/access_tokens`) и держит в singleton-кэше `GitHubAppTokens` до истечения минус 5 минут;
@@ -204,7 +208,7 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
   репозиториев — `GET /installation/repositories`. Вебхуки — по-прежнему на репозиторий (право приложения Webhooks: write),
   а не общий вебхук приложения: секрет остаётся свой у каждого репозитория. Способ входа после создания не меняется.
 - **Диагностика доставок**: `ScmRepositoryResponse.FailedDeliveries` (один GROUP BY), `ScmDeliveryResponse.NextAttemptAt`
-  (у Pending — когда воркер возьмёт снова) и `IsBackfill`; повтор — `POST /scm/deliveries/{id}/retry` (`ScmDelivery.Retry`:
+  (у Pending — когда воркер возьмёт снова) и `IsBackfill`; повтор — `POST /scm/deliveries/{id}/retry` (`GitIntegrationJob.Retry`:
   только из Failed, попытки с нуля). Клиент: в «Настройки → Интеграции» у репозитория ссылка «доставки» (или «N ошибок»
   красным) → `Components/ScmDeliveriesDialog` — фильтр по состоянию, текст ошибки, «Повторить», «Дозагрузить историю».
 - **FQL `development`**: `openPR` (есть PR в состоянии Open или Draft), `mergedPR`, `noPR` (ни одной связи вида
@@ -213,18 +217,18 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 
 ## Как сделано (этап 5C)
 
-- Настройки — колонками у привязки, а не jsonb: `ScmRepositoryBoard.OnPullRequestOpenedStatusId`,
+- Настройки — колонками у привязки, а не jsonb: `GitRepositoryBoard.OnPullRequestOpenedStatusId`,
   `OnPullRequestMergedStatusId` (FK на `Statuses`, SetNull — удалили статус, автопереход выключился) и `SmartCommits`
   (миграция `AddScmAutomation`). `PUT /boards/{id}/repositories/{repoId}` принимает `{ onPullRequestOpenedStatusId,
   onPullRequestMergedStatusId, smartCommits }`, пустое тело — только привязать; статус чужого проекта — 400.
 - Всё в `Features/Scm/ScmAutomation` — тот же путь, что правка человеком: `TransitionGuard.CheckAsync` (обхода нет),
-  `TaskActivity.StatusChanged`, `Upsert` в поиске. Отказ не роняет доставку: пишется `ScmLink.Note`
+  `TaskActivity.StatusChanged`, `Upsert` в поиске. Отказ не роняет доставку: пишется `GitDevelopmentLink.Note`
   («Автопереход в «X» не разрешён workflow: …», «Смарт-коммит не выполнен: …»), блок «Разработка» показывает её под PR
   или коммитом; успешный переход пометку снимает.
 - Автопереход «PR открыт» — на первом появлении PR в состоянии Open или при выходе из черновика; «влит» — при переходе
   в Merged и только если целевая ветка = ветка по умолчанию. Задача в финальном статусе не трогается, переоткрытие назад
   не переводит. Actor — автор PR (логин из ссылок профиля), если он активен и может править задачу, иначе `flow-bot`:
-  `ScmBot` — профиль с фиксированным Id, деактивированный и без учётной записи, создаётся при первой надобности в той же
+  `GitIntegrationBot` — профиль с фиксированным Id, деактивированный и без учётной записи, создаётся при первой надобности в той же
   транзакции (FK журнала). Роль бота в проверке workflow — участник проекта (Member): переход с `MinRole` выше он не
   сделает.
 - Смарт-коммиты — `SmartCommitParser`: построчно, команды строки относятся к кодам до первой команды, аргумент — до
@@ -251,7 +255,7 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 - Провайдеры (`IScmProviderClient`): GitHub — sha головы исходной ветки и `POST git/refs`, `POST pulls`, комментарий
   через `issues/{n}/comments`; GitLab — `POST repository/branches?branch=&ref=`, `merge_requests`, `merge_requests/{n}/notes`;
   Gitea/Forgejo — `POST branches {new_branch_name, old_branch_name}`, `pulls`, `issues/{n}/comments`.
-- Комментарий в PR — флаг привязки `ScmRepositoryBoard.CommentOnPullRequests` (миграция `AddScmPullRequestComments`,
+- Комментарий в PR — флаг привязки `GitRepositoryBoard.CommentOnPullRequests` (миграция `AddScmPullRequestComments`,
   по умолчанию выключен, настраивается в «Репозитории проекта»). Ставится после разбора доставки на каждую **новую**
   связь PR (не при дозагрузке истории, не на закрытый PR), кроме PR, в описании которого адрес задачи уже есть (так
   PR, созданный из Flow, не получает дубль). Адрес задачи — `{Scm:PublicBaseUrl}/tasks/{КОД}`. Отказ хостинга не
@@ -286,7 +290,7 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 | GET | `/scm/connections/{id}/available-repositories?q=` | Admin+ |
 | POST/DELETE | `/scm/repositories` `{ connectionId, externalId }`, `/scm/repositories/{id}` | Admin+ |
 | PUT/DELETE | `/boards/{id}/repositories/{repoId}` `{ onPullRequestOpenedStatusId?, onPullRequestMergedStatusId?, smartCommits, commentOnPullRequests }` | `ManageScm` |
-| GET | `/tasks/{id}/development` — `ScmLink` задачи, сгруппированные по типу | `ViewProject` |
+| GET | `/tasks/{id}/development` — `GitDevelopmentLink` задачи, сгруппированные по типу | `ViewProject` |
 | POST | `/tasks/{id}/development/branch` `{ repositoryId, name, fromBranch? }`, `/tasks/{id}/development/pull-request` `{ repositoryId, sourceBranch, targetBranch?, title?, draft }` — ответ «Разработка»; 400 — имя, непривязанный репозиторий, отказ хостинга | `WriteScm` |
 | GET | `/scm/repositories/{id}/deliveries?status=` — диагностика доставок | Admin+ |
 | POST | `/scm/deliveries/{id}/retry` — повторить доставку с ошибкой (не Failed — 400) | Admin+ |
@@ -298,7 +302,7 @@ ScmDelivery: Id, RepositoryId, DeliveryId (из заголовка), Event, Rece
 - Application: детектор кодов (границы слова, `WEB-12a`, коды в URL, алиасы после переноса, только привязанные
   проекты), сопоставление авторов, автопереходы через workflow (разрешён / запрещён / задача уже закрыта),
   смарт-коммиты (права, только ветка по умолчанию, бот не выполняет).
-- Infrastructure: очередь доставок (`SKIP LOCKED`, повтор, backoff), идемпотентность `ScmLink` и
+- Infrastructure: очередь доставок (`SKIP LOCKED`, повтор, backoff), идемпотентность `GitDevelopmentLink` и
   `(RepositoryId, DeliveryId)`, шифрование секретов на DataProtection.
 - Api: подпись каждого провайдера — фикстуры с настоящими payload'ами и заголовками из документации
   (верная подпись → 202, неверная → 401, повтор доставки → 200, 413 на большом теле); маршрут анонимен

@@ -6,13 +6,13 @@ using Flow.Domain.Entities;
 using Flow.Domain.Entities.GitIntegration;
 using Flow.Shared.Contracts.Scm;
 using MediatR;
-using DomainProvider = Flow.Domain.Entities.GitIntegration.ScmProvider;
-using DomainState = Flow.Domain.Entities.GitIntegration.ScmLinkState;
-using DomainKind = Flow.Domain.Entities.GitIntegration.ScmLinkKind;
-using DomainDeliveryStatus = Flow.Domain.Entities.GitIntegration.ScmDeliveryStatus;
-using ScmAuthKind = Flow.Domain.Entities.GitIntegration.ScmAuthKind;
-using SharedProvider = Flow.Shared.Contracts.Scm.ScmProvider;
-using SharedAuthKind = Flow.Shared.Contracts.Scm.ScmAuthKind;
+using DomainProvider = Flow.Domain.Entities.GitIntegration.GitProvider;
+using DomainState = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkState;
+using DomainKind = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkKind;
+using DomainDeliveryStatus = Flow.Domain.Entities.GitIntegration.GitIntegrationJobStatus;
+using GitAuthenticationKind = Flow.Domain.Entities.GitIntegration.GitAuthenticationKind;
+using SharedProvider = Flow.Shared.Contracts.Scm.GitProvider;
+using SharedAuthKind = Flow.Shared.Contracts.Scm.GitAuthenticationKind;
 
 namespace Flow.Application.Features.Scm;
 
@@ -49,7 +49,7 @@ public sealed record ScmBindCommand(Guid ActorId, Guid BoardId, Guid RepositoryI
 
 public sealed record TaskDevelopmentQuery(Guid ActorId, Guid TaskId) : IRequest<TaskDevelopmentResponse?>;
 
-public sealed record ScmDeliveriesQuery(Guid ActorId, Guid RepositoryId, Flow.Shared.Contracts.Scm.ScmDeliveryStatus? Status) : IRequest<IReadOnlyList<ScmDeliveryResponse>?>;
+public sealed record ScmDeliveriesQuery(Guid ActorId, Guid RepositoryId, Flow.Shared.Contracts.Scm.GitIntegrationJobStatus? Status) : IRequest<IReadOnlyList<ScmDeliveryResponse>?>;
 
 /// <summary>Повторить доставку с ошибкой (диагностика, этап 5B): снова в очередь, попытки с нуля. null — нет такой.</summary>
 public sealed record ScmDeliveryRetryCommand(Guid ActorId, Guid DeliveryId) : IRequest<ScmDeliveryResponse?>;
@@ -66,24 +66,24 @@ internal static class ScmMapping
 
     public static SharedProvider ToShared(this DomainProvider provider) => (SharedProvider)(int)provider;
 
-    public static ScmRepositoryResponse ToResponse(this ScmRepository r, IEnumerable<ScmRepositoryBoard> bindings, IReadOnlyDictionary<Guid, int>? failed = null) =>
+    public static ScmRepositoryResponse ToResponse(this GitRepository r, IEnumerable<GitRepositoryBoard> bindings, IReadOnlyDictionary<Guid, int>? failed = null) =>
         new(r.Id, r.ConnectionId, r.FullName, r.WebUrl, r.DefaultBranch, r.IsActive, r.WebhookId is not null, r.LastDeliveryAt,
             bindings.Where(b => b.RepositoryId == r.Id).Select(b => b.BoardId).ToList(), FailedDeliveries: failed?.GetValueOrDefault(r.Id) ?? 0);
 
-    public static ScmDeliveryResponse ToResponse(this ScmDelivery d) =>
-        new(d.Id, d.DeliveryId, d.Event, d.ReceivedAt, (Flow.Shared.Contracts.Scm.ScmDeliveryStatus)(int)d.Status, d.Attempts, d.LastError,
+    public static ScmDeliveryResponse ToResponse(this GitIntegrationJob d) =>
+        new(d.Id, d.DeliveryId, d.Event, d.ReceivedAt, (Flow.Shared.Contracts.Scm.GitIntegrationJobStatus)(int)d.Status, d.Attempts, d.LastError,
             d.Status == DomainDeliveryStatus.Pending ? d.NextAttemptAt : null, d.IsBackfill);
 
     /// <summary>Поставить дозагрузку истории, если такой ещё нет в очереди.</summary>
     public static async Task EnqueueBackfillAsync(this IScmStore store, Guid repositoryId, CancellationToken cancellationToken)
     {
-        if (!await store.HasPendingDeliveryAsync(repositoryId, ScmDelivery.BackfillEvent, cancellationToken))
-            store.Add(ScmDelivery.CreateBackfill(repositoryId));
+        if (!await store.HasPendingDeliveryAsync(repositoryId, GitIntegrationJob.BackfillEvent, cancellationToken))
+            store.Add(GitIntegrationJob.CreateBackfill(repositoryId));
     }
 
-    public static ScmLinkResponse ToResponse(this ScmLink l, ScmRepository? repository, DomainProvider provider) =>
-        new(l.Id, l.RepositoryId, repository?.FullName ?? "", provider.ToShared(), (Flow.Shared.Contracts.Scm.ScmLinkKind)(int)l.Kind,
-            l.ExternalId, l.Url, l.Title, l.State is { } s ? (Flow.Shared.Contracts.Scm.ScmLinkState)(int)s : null, l.AuthorLogin,
+    public static ScmLinkResponse ToResponse(this GitDevelopmentLink l, GitRepository? repository, DomainProvider provider) =>
+        new(l.Id, l.RepositoryId, repository?.FullName ?? "", provider.ToShared(), (Flow.Shared.Contracts.Scm.GitDevelopmentLinkKind)(int)l.Kind,
+            l.ExternalId, l.Url, l.Title, l.State is { } s ? (Flow.Shared.Contracts.Scm.GitDevelopmentLinkState)(int)s : null, l.AuthorLogin,
             l.AuthorUserId, l.SourceBranch, l.TargetBranch, l.OccurredAt, l.Note);
 }
 
@@ -130,8 +130,8 @@ internal sealed class ScmAdminHandlers(
             throw new ArgumentException("Нужен токен доступа.", nameof(request.Token));
 
         var secret = Secret(request.Token);
-        var connection = ScmConnection.Create((DomainProvider)(int)request.Provider, request.Name, request.BaseUrl, protector.Protect(secret), actor.Id,
-            (ScmAuthKind)(int)request.AuthKind, request.AppId, request.InstallationId);
+        var connection = GitHostConnection.Create((DomainProvider)(int)request.Provider, request.Name, request.BaseUrl, protector.Protect(secret), actor.Id,
+            (GitAuthenticationKind)(int)request.AuthKind, request.AppId, request.InstallationId);
         await CheckAsync(connection, secret, cancellationToken);
         store.Add(connection);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -146,7 +146,7 @@ internal sealed class ScmAdminHandlers(
             return null;
 
         var token = string.IsNullOrWhiteSpace(request.Token) ? null : Secret(request.Token);
-        var appChanged = connection.AuthKind == ScmAuthKind.GitHubApp && (request.AppId is not null || request.InstallationId is not null)
+        var appChanged = connection.AuthKind == GitAuthenticationKind.GitHubApp && (request.AppId is not null || request.InstallationId is not null)
                                                                       && (request.AppId ?? connection.AppId, request.InstallationId ?? connection.InstallationId) != (connection.AppId, connection.InstallationId);
         connection.Update(request.Name, request.BaseUrl, token is null ? null : protector.Protect(token));
         if (appChanged)
@@ -216,7 +216,7 @@ internal sealed class ScmAdminHandlers(
             throw new InvalidOperationException($"Репозиторий {remote.FullName} уже подключён.");
         if (repository is null)
         {
-            repository = ScmRepository.Create(connection.Id, remote.ExternalId, remote.FullName, remote.WebUrl, remote.DefaultBranch, protector.Protect(secret));
+            repository = GitRepository.Create(connection.Id, remote.ExternalId, remote.FullName, remote.WebUrl, remote.DefaultBranch, protector.Protect(secret));
             store.Add(repository);
         }
         else
@@ -306,11 +306,11 @@ internal sealed class ScmAdminHandlers(
     private static string Secret(string? value) =>
         string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Нужен токен доступа или закрытый ключ приложения.", nameof(value)) : value.Trim();
 
-    private string Token(ScmConnection connection) =>
+    private string Token(GitHostConnection connection) =>
         protector.TryUnprotect(connection.SecretProtected)
         ?? throw new InvalidOperationException("Токен подключения не расшифровывается (сменились ключи DataProtection) — введите его заново.");
 
-    private async Task CheckAsync(ScmConnection connection, string? token, CancellationToken cancellationToken)
+    private async Task CheckAsync(GitHostConnection connection, string? token, CancellationToken cancellationToken)
     {
         if (token is null)
         {
@@ -340,7 +340,7 @@ internal sealed class ScmAdminHandlers(
         }
     }
 
-    private async Task TryDeleteWebhookAsync(ScmConnection connection, string? token, ScmRepository repository, CancellationToken cancellationToken)
+    private async Task TryDeleteWebhookAsync(GitHostConnection connection, string? token, GitRepository repository, CancellationToken cancellationToken)
     {
         if (token is null || repository.WebhookId is null)
             return;
@@ -354,11 +354,11 @@ internal sealed class ScmAdminHandlers(
         }
     }
 
-    private async Task<ScmConnectionResponse> ResponseAsync(ScmConnection connection, CancellationToken cancellationToken) =>
+    private async Task<ScmConnectionResponse> ResponseAsync(GitHostConnection connection, CancellationToken cancellationToken) =>
         Response(connection, await store.GetRepositoriesAsync(connection.Id, cancellationToken), await store.GetBindingsAsync(null, null, cancellationToken),
             await store.GetFailedDeliveryCountsAsync(cancellationToken));
 
-    private ScmConnectionResponse Response(ScmConnection c, IEnumerable<ScmRepository> repositories, IReadOnlyList<ScmRepositoryBoard> bindings,
+    private ScmConnectionResponse Response(GitHostConnection c, IEnumerable<GitRepository> repositories, IReadOnlyList<GitRepositoryBoard> bindings,
         IReadOnlyDictionary<Guid, int> failed) =>
         new(c.Id, c.Provider.ToShared(), c.Name, c.BaseUrl, c.CreatedAt, c.LastCheckAt, c.CheckedLogin, c.LastError,
             protector.TryUnprotect(c.SecretProtected) is null,
@@ -398,7 +398,7 @@ internal sealed class ScmProjectHandlers(
         {
             if (!repository.IsActive)
                 throw new InvalidOperationException("Репозиторий отключён — сначала подключите его заново в интеграциях.");
-            existing = ScmRepositoryBoard.Create(repository.Id, request.BoardId, actor.Id);
+            existing = GitRepositoryBoard.Create(repository.Id, request.BoardId, actor.Id);
             store.Add(existing);
             // Задачи проекта уже упоминались в PR и коммитах до привязки — их подтянет дозагрузка истории (этап 5B).
             await store.EnqueueBackfillAsync(repository.Id, cancellationToken);
@@ -432,7 +432,7 @@ internal sealed class ScmProjectHandlers(
         var links = await store.GetLinksByTaskAsync(task.Id, cancellationToken);
         var repositories = (await store.GetRepositoriesAsync(null, cancellationToken)).ToDictionary(r => r.Id);
         var providers = (await store.GetConnectionsAsync(cancellationToken)).ToDictionary(c => c.Id, c => c.Provider);
-        ScmLinkResponse Map(ScmLink l)
+        ScmLinkResponse Map(GitDevelopmentLink l)
         {
             var repository = repositories.GetValueOrDefault(l.RepositoryId);
             return l.ToResponse(repository, repository is null ? DomainProvider.GitHub : providers.GetValueOrDefault(repository.ConnectionId));
@@ -440,7 +440,7 @@ internal sealed class ScmProjectHandlers(
 
         var commits = links.Where(l => l.Kind == DomainKind.Commit).ToList();
         var bindings = await store.GetBindingsAsync(task.BoardId, null, cancellationToken);
-        var targets = bindings.Select(b => repositories.GetValueOrDefault(b.RepositoryId)).OfType<ScmRepository>().Where(r => r.IsActive)
+        var targets = bindings.Select(b => repositories.GetValueOrDefault(b.RepositoryId)).OfType<GitRepository>().Where(r => r.IsActive)
             .Select(r => new ScmTaskRepositoryResponse(r.Id, r.FullName, r.DefaultBranch, providers.GetValueOrDefault(r.ConnectionId).ToShared()))
             .ToList();
         return new TaskDevelopmentResponse(
@@ -461,8 +461,11 @@ internal sealed class ScmProjectHandlers(
             .Where(r => r.IsActive || bound.ContainsKey(r.Id))
             .Select(r => bound.GetValueOrDefault(r.Id) is { } b
                 ? new ScmBoardRepositoryResponse(r.Id, providers.GetValueOrDefault(r.ConnectionId).ToShared(), r.FullName, r.WebUrl, true,
-                    b.OnPullRequestOpenedStatusId, b.OnPullRequestMergedStatusId, b.SmartCommits, b.CommentOnPullRequests)
-                : new ScmBoardRepositoryResponse(r.Id, providers.GetValueOrDefault(r.ConnectionId).ToShared(), r.FullName, r.WebUrl, false))
+                    b.OnPullRequestOpenedStatusId, b.OnPullRequestMergedStatusId, b.SmartCommits, b.CommentOnPullRequests,
+                    r.DefaultBranch, r.SyncState.ToString(), r.LastSyncedCommit, r.LastSyncedAt, r.LastSyncError)
+                : new ScmBoardRepositoryResponse(r.Id, providers.GetValueOrDefault(r.ConnectionId).ToShared(), r.FullName, r.WebUrl, false,
+                    DefaultBranch: r.DefaultBranch, SyncState: r.SyncState.ToString(), LastSyncedCommit: r.LastSyncedCommit,
+                    LastSyncedAt: r.LastSyncedAt, LastSyncError: r.LastSyncError))
             .ToList();
     }
 }

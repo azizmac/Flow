@@ -4,7 +4,7 @@ namespace Flow.Domain.Entities.GitIntegration;
 /// Привязка репозитория к проекту: коды задач связываются только в привязанных проектах — иначе публичный
 /// репозиторий с «fix WEB-12» прицепил бы чужой текст к задаче приватного проекта. Монорепозиторий — несколько привязок.
 /// </summary>
-public sealed class ScmRepositoryBoard
+public sealed class GitRepositoryBoard
 {
     public Guid RepositoryId { get; private set; }
 
@@ -14,7 +14,7 @@ public sealed class ScmRepositoryBoard
 
     public DateTime CreatedAt { get; private set; }
 
-    private ScmRepositoryBoard()
+    private GitRepositoryBoard()
     {
         // EF Core
     }
@@ -31,7 +31,7 @@ public sealed class ScmRepositoryBoard
     /// <summary>Комментарий в новом PR со ссылкой на задачу (этап 5D) — от имени токена подключения.</summary>
     public bool CommentOnPullRequests { get; private set; }
 
-    public static ScmRepositoryBoard Create(Guid repositoryId, Guid boardId, Guid createdById) =>
+    public static GitRepositoryBoard Create(Guid repositoryId, Guid boardId, Guid createdById) =>
         new() { RepositoryId = repositoryId, BoardId = boardId, CreatedById = createdById, CreatedAt = DateTime.UtcNow };
 
     /// <summary>Настройки автоматизации привязки. Принадлежность статусов проекту проверяет хендлер — он видит доску.</summary>

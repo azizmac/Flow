@@ -6,11 +6,11 @@ using Flow.Application.Abstractions;
 using Flow.Domain.Entities;
 using Flow.Domain.Entities.GitIntegration;
 using Xunit;
-using DomainState = Flow.Domain.Entities.GitIntegration.ScmLinkState;
-using ScmLinkKind = Flow.Domain.Entities.GitIntegration.ScmLinkKind;
-using SharedProvider = Flow.Shared.Contracts.Scm.ScmProvider;
-using SharedAuthKind = Flow.Shared.Contracts.Scm.ScmAuthKind;
-using SharedDeliveryStatus = Flow.Shared.Contracts.Scm.ScmDeliveryStatus;
+using DomainState = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkState;
+using GitDevelopmentLinkKind = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkKind;
+using SharedProvider = Flow.Shared.Contracts.Scm.GitProvider;
+using SharedAuthKind = Flow.Shared.Contracts.Scm.GitAuthenticationKind;
+using SharedDeliveryStatus = Flow.Shared.Contracts.Scm.GitIntegrationJobStatus;
 
 namespace Flow.Application.Tests.Features;
 
@@ -61,13 +61,13 @@ public class ScmBackfillTests
                 new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Utc))]);
         await RunQueueAsync(context);
 
-        Assert.Equal(ScmDeliveryStatus.Done, backfill.Status);
+        Assert.Equal(GitIntegrationJobStatus.Done, backfill.Status);
         var call = Assert.Single(context.Client.HistoryCalls);
         Assert.Equal((100, 1000), (call.MaxPullRequests, call.MaxCommits));
         Assert.Equal(backfill.ReceivedAt.AddDays(-30), call.Since);
 
         var development = (await mediator.Send(new TaskDevelopmentQuery(Owner, task.Id), CancellationToken.None))!;
-        Assert.Equal(("7", Flow.Shared.Contracts.Scm.ScmLinkState.Merged), (development.PullRequests.Single().ExternalId, development.PullRequests.Single().State));
+        Assert.Equal(("7", Flow.Shared.Contracts.Scm.GitDevelopmentLinkState.Merged), (development.PullRequests.Single().ExternalId, development.PullRequests.Single().State));
         Assert.Equal("abc", development.Commits.Single().ExternalId);
         Assert.Equal(Owner, development.Commits.Single().AuthorUserId);
 
@@ -88,14 +88,14 @@ public class ScmBackfillTests
 
         await RunQueueAsync(context);
         var backfill = context.Scm.Deliveries.Single();
-        Assert.Equal((ScmDeliveryStatus.Pending, 0, reset), (backfill.Status, backfill.Attempts, backfill.NextAttemptAt));
+        Assert.Equal((GitIntegrationJobStatus.Pending, 0, reset), (backfill.Status, backfill.Attempts, backfill.NextAttemptAt));
         Assert.Contains("лимит", backfill.LastError);
 
         // До сброса воркер его не берёт, после — доделывает.
         await RunQueueAsync(context);
         Assert.Single(context.Client.HistoryCalls);
         await RunQueueAsync(context, reset.AddSeconds(1));
-        Assert.Equal(ScmDeliveryStatus.Done, backfill.Status);
+        Assert.Equal(GitIntegrationJobStatus.Done, backfill.Status);
     }
 
     [Fact]
@@ -104,9 +104,9 @@ public class ScmBackfillTests
         var (context, boardId, repositoryId) = await ConnectAsync();
         await context.Mediator.Send(new ScmBindCommand(Owner, boardId, repositoryId, true), CancellationToken.None);
         var backfill = context.Scm.Deliveries.Single();
-        for (var i = 0; i < ScmDelivery.MaxAttempts; i++)
+        for (var i = 0; i < GitIntegrationJob.MaxAttempts; i++)
             await context.Mediator.Send(new ScmDeliveryFailCommand(backfill.Id, "Хостинг недоступен"), CancellationToken.None);
-        Assert.Equal(ScmDeliveryStatus.Failed, backfill.Status);
+        Assert.Equal(GitIntegrationJobStatus.Failed, backfill.Status);
 
         var connections = await context.Mediator.Send(new ScmConnectionListQuery(Owner), CancellationToken.None);
         Assert.Equal(1, connections.Single().Repositories.Single().FailedDeliveries);

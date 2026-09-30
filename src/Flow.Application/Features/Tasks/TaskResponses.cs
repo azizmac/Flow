@@ -26,7 +26,7 @@ internal sealed class TaskResponses(ITaskItemRepository tasks, ITaskCommentRepos
         return items
             .Select(t => t.ToResponse(commentCounts.GetValueOrDefault(t.Id), children.GetValueOrDefault(t.Id), blockers.GetValueOrDefault(t.Id)) with
             {
-                PullRequestState = pullRequests.TryGetValue(t.Id, out var state) ? (Flow.Shared.Contracts.Scm.ScmLinkState)(int)state : null
+                PullRequestState = pullRequests.TryGetValue(t.Id, out var state) ? (Flow.Shared.Contracts.Scm.GitDevelopmentLinkState)(int)state : null
             })
             .ToList();
     }

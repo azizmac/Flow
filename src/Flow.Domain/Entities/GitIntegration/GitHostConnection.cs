@@ -1,7 +1,7 @@
 namespace Flow.Domain.Entities.GitIntegration;
 
 /// <summary>Подключение к хостингу: адрес (для self-hosted), токен (зашифрован), результат последней проверки.</summary>
-public sealed class ScmConnection
+public sealed class GitHostConnection
 {
     public const int NameMaxLength = 80;
     public const int UrlMaxLength = 500;
@@ -9,14 +9,14 @@ public sealed class ScmConnection
 
     public Guid Id { get; private set; }
 
-    public ScmProvider Provider { get; private set; }
+    public GitProvider Provider { get; private set; }
 
     public string Name { get; private set; } = string.Empty;
 
     /// <summary>Адрес self-hosted экземпляра; для GitHub.com — null.</summary>
     public string? BaseUrl { get; private set; }
 
-    public ScmAuthKind AuthKind { get; private set; }
+    public GitAuthenticationKind AuthKind { get; private set; }
 
     /// <summary>
     /// Токен (или закрытый ключ GitHub App в PEM), зашифрованный IDataProtector: в БД и в логах открытого текста нет.
@@ -40,32 +40,32 @@ public sealed class ScmConnection
 
     public string? LastError { get; private set; }
 
-    private ScmConnection()
+    private GitHostConnection()
     {
         // EF Core
     }
 
-    public static ScmConnection Create(ScmProvider provider, string name, string? baseUrl, string secretProtected, Guid createdById,
-        ScmAuthKind authKind = ScmAuthKind.Token, long? appId = null, long? installationId = null)
+    public static GitHostConnection Create(GitProvider provider, string name, string? baseUrl, string secretProtected, Guid createdById,
+        GitAuthenticationKind authKind = GitAuthenticationKind.Token, long? appId = null, long? installationId = null)
     {
         if (!Enum.IsDefined(provider))
             throw new ArgumentException($"Unknown provider {provider}.", nameof(provider));
         if (createdById == Guid.Empty)
             throw new ArgumentException("Author id must not be empty.", nameof(createdById));
-        if (provider != ScmProvider.GitHub && string.IsNullOrWhiteSpace(baseUrl))
+        if (provider != GitProvider.GitHub && string.IsNullOrWhiteSpace(baseUrl))
             throw new ArgumentException("Для self-hosted хостинга нужен адрес.", nameof(baseUrl));
 
         if (!Enum.IsDefined(authKind))
             throw new ArgumentException($"Unknown auth kind {authKind}.", nameof(authKind));
-        if (authKind == ScmAuthKind.GitHubApp && provider != ScmProvider.GitHub)
+        if (authKind == GitAuthenticationKind.GitHubApp && provider != GitProvider.GitHub)
             throw new ArgumentException("GitHub App — только для GitHub.", nameof(authKind));
 
-        var connection = new ScmConnection
+        var connection = new GitHostConnection
         {
             Id = Guid.NewGuid(), Provider = provider, AuthKind = authKind, CreatedById = createdById, CreatedAt = DateTime.UtcNow
         };
         connection.Update(name, baseUrl, secretProtected);
-        if (authKind == ScmAuthKind.GitHubApp)
+        if (authKind == GitAuthenticationKind.GitHubApp)
             connection.SetApp(appId, installationId);
         return connection;
     }
@@ -73,7 +73,7 @@ public sealed class ScmConnection
     /// <summary>Id приложения и установки GitHub App. Смена сбрасывает результат проверки: токен выдаст уже другая установка.</summary>
     public void SetApp(long? appId, long? installationId)
     {
-        if (AuthKind != ScmAuthKind.GitHubApp)
+        if (AuthKind != GitAuthenticationKind.GitHubApp)
             throw new InvalidOperationException("Подключение входит по токену, а не как GitHub App.");
         if (appId is not > 0 || installationId is not > 0)
             throw new ArgumentException("Для GitHub App нужны Id приложения и Id установки — положительные числа.", nameof(appId));

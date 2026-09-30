@@ -49,9 +49,7 @@ public interface IFlowApi
     Task<ApiResult<BoardResponse>> GetBoard(Guid id, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> CreateBoard(CreateBoardRequest request, CancellationToken ct = default);
     // Локальные копии репозиториев и проверка агента.
-    Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.CodeRepositories.CodeRepositoryResponse>>> GetCodeRepositories(Guid boardId, CancellationToken ct = default);
-    Task<ApiResult<Flow.Shared.Contracts.CodeRepositories.CodeRepositoryResponse>> AddCodeRepository(Guid boardId, Flow.Shared.Contracts.CodeRepositories.CreateCodeRepositoryRequest request, CancellationToken ct = default);
-    Task<ApiResult<Flow.Shared.Contracts.CodeRepositories.CodeRepositoryResponse>> SynchronizeCodeRepository(Guid boardId, Guid repositoryId, CancellationToken ct = default);
+    Task<ApiResult<bool>> SynchronizeGitRepository(Guid boardId, Guid repositoryId, CancellationToken ct = default);
     Task<ApiResult<Flow.Shared.Contracts.Agents.AgentTestResponse>> AskAgent(Flow.Shared.Contracts.Agents.AgentTestRequest request, CancellationToken ct = default);
 
 
@@ -179,7 +177,7 @@ public interface IFlowApi
     Task<ApiResult<IReadOnlyList<ScmRemoteRepositoryResponse>>> GetAvailableRepositories(Guid connectionId, string? query, CancellationToken ct = default);
     Task<ApiResult<ScmRepositoryResponse>> AddScmRepository(AddScmRepositoryRequest request, CancellationToken ct = default);
     Task<ApiResult<bool>> DisableScmRepository(Guid repositoryId, CancellationToken ct = default);
-    Task<ApiResult<IReadOnlyList<ScmDeliveryResponse>>> GetScmDeliveries(Guid repositoryId, ScmDeliveryStatus? status = null, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<ScmDeliveryResponse>>> GetScmDeliveries(Guid repositoryId, GitIntegrationJobStatus? status = null, CancellationToken ct = default);
     Task<ApiResult<ScmDeliveryResponse>> RetryScmDelivery(Guid deliveryId, CancellationToken ct = default);
     Task<ApiResult<bool>> BackfillScmRepository(Guid repositoryId, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> GetBoardRepositories(Guid boardId, CancellationToken ct = default);

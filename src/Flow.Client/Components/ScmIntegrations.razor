@@ -29,11 +29,11 @@
             <div class="scm-conn">
                 <div class="scm-conn-head">
                     <b>@c.Name</b>
-                    <span class="hint">@ScmMeta.Name(c.Provider)@(c.AuthKind == ScmAuthKind.GitHubApp ? " App" : "")@(c.BaseUrl is { } url ? $" · {url}" : "")</span>
+                    <span class="hint">@ScmMeta.Name(c.Provider)@(c.AuthKind == GitAuthenticationKind.GitHubApp ? " App" : "")@(c.BaseUrl is { } url ? $" · {url}" : "")</span>
                     <span class="scm-check">
                         @if (c.NeedsReconnect)
                         {
-                            <OnOff On="false" Problem="true" Label="@(c.AuthKind == ScmAuthKind.GitHubApp ? "нужно ввести ключ заново" : "нужно ввести токен заново")" />
+                            <OnOff On="false" Problem="true" Label="@(c.AuthKind == GitAuthenticationKind.GitHubApp ? "нужно ввести ключ заново" : "нужно ввести токен заново")" />
                         }
                         else if (c.LastError is { } error)
                         {
@@ -41,7 +41,7 @@
                         }
                         else if (c.CheckedLogin is { } login)
                         {
-                            <OnOff On="true" Label="@(c.AuthKind == ScmAuthKind.GitHubApp ? $"приложение {login}" : $"токен {login}")" />
+                            <OnOff On="true" Label="@(c.AuthKind == GitAuthenticationKind.GitHubApp ? $"приложение {login}" : $"токен {login}")" />
                         }
                     </span>
                     <DsIconButton Icon="check-circle" Size="26" Title="Проверить подключение" OnClick="() => Check(c)" />
@@ -102,7 +102,7 @@
 }
 
 @code {
-    private static readonly ScmConnectionResponse NewConnection = new(Guid.Empty, ScmProvider.GitHub, "", null, default, null, null, null, false, []);
+    private static readonly ScmConnectionResponse NewConnection = new(Guid.Empty, GitProvider.GitHub, "", null, default, null, null, null, false, []);
 
     private List<ScmConnectionResponse>? _connections;
     private ScmConnectionResponse? _editing;

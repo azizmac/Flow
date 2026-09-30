@@ -80,14 +80,14 @@
     protected override void OnInitialized()
     {
         // Для PR — репозиторий, где у задачи уже есть открытая ветка: PR почти всегда из неё.
-        var open = Branches.FirstOrDefault(b => b.State != ScmLinkState.Closed && Repositories.Any(r => r.Id == b.RepositoryId));
+        var open = Branches.FirstOrDefault(b => b.State != GitDevelopmentLinkState.Closed && Repositories.Any(r => r.Id == b.RepositoryId));
         _repositoryId = PullRequest && open is not null ? open.RepositoryId : Repositories.FirstOrDefault()?.Id ?? Guid.Empty;
         _title = $"{Task.Code} {Task.Title}";
         _branch = DefaultBranch();
     }
 
     private string DefaultBranch() =>
-        PullRequest && Branches.FirstOrDefault(b => b.RepositoryId == _repositoryId && b.State != ScmLinkState.Closed) is { } branch
+        PullRequest && Branches.FirstOrDefault(b => b.RepositoryId == _repositoryId && b.State != GitDevelopmentLinkState.Closed) is { } branch
             ? branch.ExternalId
             : Ru.BranchName(Task.Code, Task.Title);
 

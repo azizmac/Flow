@@ -11,9 +11,9 @@ using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Scm;
 using Xunit;
 using SharedMode = Flow.Shared.Contracts.Boards.WorkflowMode;
-using SharedProvider = Flow.Shared.Contracts.Scm.ScmProvider;
-using ScmLinkKind = Flow.Domain.Entities.GitIntegration.ScmLinkKind;
-using ScmLinkState = Flow.Domain.Entities.GitIntegration.ScmLinkState;
+using SharedProvider = Flow.Shared.Contracts.Scm.GitProvider;
+using GitDevelopmentLinkKind = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkKind;
+using GitDevelopmentLinkState = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkState;
 
 namespace Flow.Application.Tests.Features;
 
@@ -86,8 +86,8 @@ public class ScmAutomationTests
         await DeliverAsync(setup, "pull_request", Pr("opened", "open"), "pr-1");
         Assert.Equal(setup.Status("В работе"), (await TaskAsync(setup)).StatusId);
         var moved = (await JournalAsync(setup)).Last(a => a.Type == Flow.Shared.Contracts.Tasks.TaskActivityType.StatusChanged);
-        Assert.Equal((ScmBot.Id, "PR #42", "https://github.com/acme/web/pull/42"), (moved.ActorId, moved.Source, moved.SourceUrl));
-        Assert.NotNull(await setup.Context.Users.GetByIdAsync(ScmBot.Id, CancellationToken.None));
+        Assert.Equal((GitIntegrationBot.Id, "PR #42", "https://github.com/acme/web/pull/42"), (moved.ActorId, moved.Source, moved.SourceUrl));
+        Assert.NotNull(await setup.Context.Users.GetByIdAsync(GitIntegrationBot.Id, CancellationToken.None));
 
         // Влит в другую ветку — не переводит; в ветку по умолчанию — в «Сделана».
         await DeliverAsync(setup, "pull_request", Pr("closed", "closed", merged: true, target: "release"), "pr-2");
@@ -114,7 +114,7 @@ public class ScmAutomationTests
 
         await DeliverAsync(setup, "pull_request", Pr("opened", "open"), "pr-1");
         Assert.Equal(setup.Status("Не начата"), (await TaskAsync(setup)).StatusId);
-        var link = setup.Context.Scm.Links.Single(l => l.Kind == ScmLinkKind.PullRequest);
+        var link = setup.Context.Scm.Links.Single(l => l.Kind == GitDevelopmentLinkKind.PullRequest);
         Assert.Contains("не разрешён workflow", link.Note);
 
         await DeliverAsync(setup, "pull_request", Pr("closed", "closed", merged: true), "pr-2");
@@ -161,7 +161,7 @@ public class ScmAutomationTests
         Assert.Equal(setup.Status("Не начата"), (await TaskAsync(setup)).StatusId);
 
         setup.Context.Client.History = new Flow.Application.Abstractions.ScmHistory(
-            [new ScmPullRequest("7", "WEB-1", null, ScmLinkState.Merged, "u", "octocat", "f", "main", DateTime.UtcNow)], []);
+            [new ScmPullRequest("7", "WEB-1", null, GitDevelopmentLinkState.Merged, "u", "octocat", "f", "main", DateTime.UtcNow)], []);
         await setup.Context.Mediator.Send(new ScmBackfillCommand(Owner, setup.RepositoryId), CancellationToken.None);
         foreach (var id in await setup.Context.Mediator.Send(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
             await setup.Context.Mediator.Send(new ScmDeliveryProcessCommand(id), CancellationToken.None);

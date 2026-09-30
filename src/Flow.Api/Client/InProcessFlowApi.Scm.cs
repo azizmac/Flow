@@ -36,7 +36,7 @@ internal sealed partial class InProcessFlowApi
     public Task<ApiResult<bool>> DisableScmRepository(Guid repositoryId, CancellationToken ct = default) =>
         Scoped(async mediator => await mediator.Send(new ScmRepositoryDisableCommand(await ActorAsync(), repositoryId), ct) ? Ok(true) : NotFound<bool>());
 
-    public Task<ApiResult<IReadOnlyList<ScmDeliveryResponse>>> GetScmDeliveries(Guid repositoryId, ScmDeliveryStatus? status = null, CancellationToken ct = default) =>
+    public Task<ApiResult<IReadOnlyList<ScmDeliveryResponse>>> GetScmDeliveries(Guid repositoryId, GitIntegrationJobStatus? status = null, CancellationToken ct = default) =>
         Scoped(async mediator => await mediator.Send(new ScmDeliveriesQuery(await ActorAsync(), repositoryId, status), ct) is { } list
             ? Ok(list) : NotFound<IReadOnlyList<ScmDeliveryResponse>>());
 

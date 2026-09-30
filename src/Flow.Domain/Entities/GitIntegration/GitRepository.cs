@@ -1,9 +1,17 @@
+using System.Text.RegularExpressions;
+
 namespace Flow.Domain.Entities.GitIntegration;
 
 /// <summary>Репозиторий подключения, с которого Flow принимает вебхуки. Секрет вебхука зашифрован.</summary>
-public sealed class ScmRepository
+public sealed partial class GitRepository
 {
+    public const int CommitMaxLength = 128;
+    public const int SyncErrorMaxLength = 1000;
+
     public const int NameMaxLength = 300;
+
+    [GeneratedRegex("^[0-9a-fA-F]{7,128}$")]
+    private static partial Regex CommitPattern();
 
     public Guid Id { get; private set; }
 
@@ -30,12 +38,21 @@ public sealed class ScmRepository
 
     public DateTime? LastDeliveryAt { get; private set; }
 
-    private ScmRepository()
+    /// <summary>Состояние локальной копии; не влияет на приём вебхуков.</summary>
+    public GitWorkspaceSyncState SyncState { get; private set; } = GitWorkspaceSyncState.Pending;
+
+    public string? LastSyncedCommit { get; private set; }
+
+    public DateTime? LastSyncedAt { get; private set; }
+
+    public string? LastSyncError { get; private set; }
+
+    private GitRepository()
     {
         // EF Core
     }
 
-    public static ScmRepository Create(Guid connectionId, string externalId, string fullName, string webUrl, string? defaultBranch, string webhookSecretProtected)
+    public static GitRepository Create(Guid connectionId, string externalId, string fullName, string webUrl, string? defaultBranch, string webhookSecretProtected)
     {
         if (connectionId == Guid.Empty)
             throw new ArgumentException("Connection id must not be empty.", nameof(connectionId));
@@ -44,13 +61,13 @@ public sealed class ScmRepository
         if (string.IsNullOrWhiteSpace(webhookSecretProtected))
             throw new ArgumentException("Нужен секрет вебхука.", nameof(webhookSecretProtected));
 
-        return new ScmRepository
+        return new GitRepository
         {
             Id = Guid.NewGuid(),
             ConnectionId = connectionId,
             ExternalId = externalId.Trim(),
             FullName = fullName.Trim(),
-            WebUrl = ScmConnection.NormalizeUrl(webUrl) ?? throw new ArgumentException("Нет адреса репозитория.", nameof(webUrl)),
+            WebUrl = GitHostConnection.NormalizeUrl(webUrl) ?? throw new ArgumentException("Нет адреса репозитория.", nameof(webUrl)),
             DefaultBranch = string.IsNullOrWhiteSpace(defaultBranch) ? "main" : defaultBranch.Trim(),
             WebhookSecretProtected = webhookSecretProtected,
             IsActive = true,
@@ -62,8 +79,14 @@ public sealed class ScmRepository
 
     public void SetDefaultBranch(string? branch)
     {
-        if (!string.IsNullOrWhiteSpace(branch))
-            DefaultBranch = branch.Trim();
+        if (string.IsNullOrWhiteSpace(branch) || DefaultBranch == branch.Trim())
+            return;
+
+        DefaultBranch = branch.Trim();
+        SyncState = GitWorkspaceSyncState.Pending;
+        LastSyncedCommit = null;
+        LastSyncedAt = null;
+        LastSyncError = null;
     }
 
     public void Deactivate() => IsActive = false;
@@ -79,4 +102,31 @@ public sealed class ScmRepository
     }
 
     public void MarkDelivery(DateTime utcNow) => LastDeliveryAt = utcNow;
+
+    public void StartSync()
+    {
+        if (SyncState == GitWorkspaceSyncState.Syncing)
+            throw new InvalidOperationException("Repository is already synchronizing.");
+        SyncState = GitWorkspaceSyncState.Syncing;
+        LastSyncError = null;
+    }
+
+    public void CompleteSync(string commit)
+    {
+        var normalized = commit?.Trim() ?? string.Empty;
+        if (!CommitPattern().IsMatch(normalized))
+            throw new ArgumentException("Commit hash is invalid.", nameof(commit));
+        LastSyncedCommit = normalized.ToLowerInvariant();
+        LastSyncedAt = DateTime.UtcNow;
+        LastSyncError = null;
+        SyncState = GitWorkspaceSyncState.Ready;
+    }
+
+    public void FailSync(string error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+            throw new ArgumentException("Sync error must not be empty.", nameof(error));
+        LastSyncError = error.Trim()[..Math.Min(error.Trim().Length, SyncErrorMaxLength)];
+        SyncState = GitWorkspaceSyncState.Failed;
+    }
 }

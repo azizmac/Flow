@@ -17,29 +17,29 @@ public static class ScmPayloadParser
     private const string ZeroSha = "0000000000000000000000000000000000000000";
 
     /// <summary>Имя события из заголовков провайдера.</summary>
-    public static string? EventName(ScmProvider provider, Func<string, string?> header) => provider switch
+    public static string? EventName(GitProvider provider, Func<string, string?> header) => provider switch
     {
-        ScmProvider.GitHub => header("X-GitHub-Event"),
-        ScmProvider.GitLab => header("X-Gitlab-Event"),
+        GitProvider.GitHub => header("X-GitHub-Event"),
+        GitProvider.GitLab => header("X-Gitlab-Event"),
         _ => header("X-Forgejo-Event") ?? header("X-Gitea-Event")
     };
 
     /// <summary>Id доставки из заголовков: повтор с тем же Id не обрабатывается дважды.</summary>
-    public static string? DeliveryId(ScmProvider provider, Func<string, string?> header) => provider switch
+    public static string? DeliveryId(GitProvider provider, Func<string, string?> header) => provider switch
     {
-        ScmProvider.GitHub => header("X-GitHub-Delivery"),
-        ScmProvider.GitLab => header("X-Gitlab-Event-UUID") ?? header("X-Gitlab-Webhook-UUID"),
+        GitProvider.GitHub => header("X-GitHub-Delivery"),
+        GitProvider.GitLab => header("X-Gitlab-Event-UUID") ?? header("X-Gitlab-Webhook-UUID"),
         _ => header("X-Forgejo-Delivery") ?? header("X-Gitea-Delivery")
     };
 
-    public static ScmEvent? Parse(ScmProvider provider, string eventName, ReadOnlySpan<byte> body)
+    public static ScmEvent? Parse(GitProvider provider, string eventName, ReadOnlySpan<byte> body)
     {
         using var document = JsonDocument.Parse(body.ToArray());
         var root = document.RootElement;
-        return provider == ScmProvider.GitLab ? ParseGitLab(eventName, root) : ParseGitHubLike(provider, eventName, root);
+        return provider == GitProvider.GitLab ? ParseGitLab(eventName, root) : ParseGitHubLike(provider, eventName, root);
     }
 
-    private static ScmEvent? ParseGitHubLike(ScmProvider provider, string eventName, JsonElement root)
+    private static ScmEvent? ParseGitHubLike(GitProvider provider, string eventName, JsonElement root)
     {
         switch (eventName)
         {
@@ -108,29 +108,29 @@ public static class ScmPayloadParser
     /// <summary>PR GitHub/Gitea — одна форма у вебхука и у REST. В списке REST GitHub нет поля merged — смотрим merged_at.</summary>
     private static ScmPullRequest GitHubPullRequest(JsonElement pr)
     {
-        var state = Bool(pr, "merged") || Str(pr, "merged_at") is not null ? ScmLinkState.Merged
-            : Str(pr, "state") == "closed" ? ScmLinkState.Closed
-            : Bool(pr, "draft") ? ScmLinkState.Draft
-            : ScmLinkState.Open;
+        var state = Bool(pr, "merged") || Str(pr, "merged_at") is not null ? GitDevelopmentLinkState.Merged
+            : Str(pr, "state") == "closed" ? GitDevelopmentLinkState.Closed
+            : Bool(pr, "draft") ? GitDevelopmentLinkState.Draft
+            : GitDevelopmentLinkState.Open;
         return new ScmPullRequest(
             Num(pr, "number"), Str(pr, "title") ?? "", Str(pr, "body"), state, Str(pr, "html_url") ?? "",
             Str(Obj(pr, "user"), "login"), Str(Obj(pr, "head"), "ref"), Str(Obj(pr, "base"), "ref"),
             Date(Str(pr, "updated_at") ?? Str(pr, "created_at")));
     }
 
-    private static ScmLinkState GitLabState(JsonElement mr) => Str(mr, "state") switch
+    private static GitDevelopmentLinkState GitLabState(JsonElement mr) => Str(mr, "state") switch
     {
-        "merged" => ScmLinkState.Merged,
-        "closed" or "locked" => ScmLinkState.Closed,
-        _ => Bool(mr, "draft") || Bool(mr, "work_in_progress") ? ScmLinkState.Draft : ScmLinkState.Open
+        "merged" => GitDevelopmentLinkState.Merged,
+        "closed" or "locked" => GitDevelopmentLinkState.Closed,
+        _ => Bool(mr, "draft") || Bool(mr, "work_in_progress") ? GitDevelopmentLinkState.Draft : GitDevelopmentLinkState.Open
     };
 
     /// <summary>Список PR/MR из REST API (дозагрузка истории, этап 5B). У GitLab форма MR в REST своя, не как в вебхуке.</summary>
-    public static IReadOnlyList<ScmPullRequest> ParsePullRequests(ScmProvider provider, JsonElement array)
+    public static IReadOnlyList<ScmPullRequest> ParsePullRequests(GitProvider provider, JsonElement array)
     {
         if (array.ValueKind != JsonValueKind.Array)
             return [];
-        return provider == ScmProvider.GitLab
+        return provider == GitProvider.GitLab
             ? array.EnumerateArray().Select(mr => new ScmPullRequest(
                 Num(mr, "iid"), Str(mr, "title") ?? "", Str(mr, "description"), GitLabState(mr), Str(mr, "web_url") ?? "",
                 Str(Obj(mr, "author"), "username"), Str(mr, "source_branch"), Str(mr, "target_branch"),
@@ -139,11 +139,11 @@ public static class ScmPayloadParser
     }
 
     /// <summary>Список коммитов из REST API. GitHub и Gitea: sha + commit.{message, author}; GitLab: плоский объект.</summary>
-    public static IReadOnlyList<ScmCommit> ParseCommits(ScmProvider provider, JsonElement array)
+    public static IReadOnlyList<ScmCommit> ParseCommits(GitProvider provider, JsonElement array)
     {
         if (array.ValueKind != JsonValueKind.Array)
             return [];
-        return provider == ScmProvider.GitLab
+        return provider == GitProvider.GitLab
             ? array.EnumerateArray().Select(c => new ScmCommit(
                 Str(c, "id") ?? "", Str(c, "message") ?? "", Str(c, "web_url") ?? "", Str(c, "author_email"), null,
                 Date(Str(c, "committed_date") ?? Str(c, "authored_date")))).ToList()

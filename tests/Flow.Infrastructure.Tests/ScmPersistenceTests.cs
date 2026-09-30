@@ -26,13 +26,13 @@ public class ScmPersistenceTests(PostgresFixture db)
     {
         var board = (await db.SendAsync(new BoardCreateCommand(Owner, "Git", "SCMP"))).Response!;
         var task = (await db.SendAsync(new TaskCreateCommand(Owner, board.Id, "Связать", null, null)))!;
-        var connection = ScmConnection.Create(ScmProvider.Gitea, "Gitea", "https://git.example.com", "p:tok", Owner);
-        var repository = ScmRepository.Create(connection.Id, "9", "acme/scmp", "https://git.example.com/acme/scmp", "main", "p:hooksecret");
+        var connection = GitHostConnection.Create(GitProvider.Gitea, "Gitea", "https://git.example.com", "p:tok", Owner);
+        var repository = GitRepository.Create(connection.Id, "9", "acme/scmp", "https://git.example.com/acme/scmp", "main", "p:hooksecret");
         await db.QueryAsync(async ctx =>
         {
             ctx.ScmConnections.Add(connection);
             ctx.ScmRepositories.Add(repository);
-            ctx.ScmRepositoryBoards.Add(ScmRepositoryBoard.Create(repository.Id, board.Id, Owner));
+            ctx.ScmRepositoryBoards.Add(GitRepositoryBoard.Create(repository.Id, board.Id, Owner));
             return await ctx.SaveChangesAsync();
         });
 
@@ -46,7 +46,7 @@ public class ScmPersistenceTests(PostgresFixture db)
             await db.SendAsync(new ScmDeliveryProcessCommand(id));
         // Повторная обработка той же доставки не плодит связь.
         Assert.Equal(1, await db.QueryAsync(ctx => ctx.ScmLinks.CountAsync(l => l.TaskId == task.Id)));
-        Assert.Equal(ScmDeliveryStatus.Done, await db.QueryAsync(ctx => ctx.ScmDeliveries.Where(d => d.RepositoryId == repository.Id).Select(d => d.Status).SingleAsync()));
+        Assert.Equal(GitIntegrationJobStatus.Done, await db.QueryAsync(ctx => ctx.ScmDeliveries.Where(d => d.RepositoryId == repository.Id).Select(d => d.Status).SingleAsync()));
 
         await db.SendAsync(new TaskDeleteCommand(Owner, task.Id));
         Assert.False(await db.QueryAsync(ctx => ctx.ScmLinks.AnyAsync(l => l.TaskId == task.Id)));
@@ -61,26 +61,26 @@ public class ScmPersistenceTests(PostgresFixture db)
         var merged = (await db.SendAsync(new TaskCreateCommand(Owner, board.Id, "Смёржена", null, null)))!;
         var none = (await db.SendAsync(new TaskCreateCommand(Owner, board.Id, "Без PR", null, null)))!;
         var branchOnly = (await db.SendAsync(new TaskCreateCommand(Owner, board.Id, "Только ветка", null, null)))!;
-        var connection = ScmConnection.Create(ScmProvider.GitHub, "GitHub", null, "p:tok", Owner);
-        var repository = ScmRepository.Create(connection.Id, "77", "acme/scmd", "https://github.com/acme/scmd", "main", "p:s");
+        var connection = GitHostConnection.Create(GitProvider.GitHub, "GitHub", null, "p:tok", Owner);
+        var repository = GitRepository.Create(connection.Id, "77", "acme/scmd", "https://github.com/acme/scmd", "main", "p:s");
 
-        ScmLink Pr(Guid taskId, string number, ScmLinkState state)
+        GitDevelopmentLink Pr(Guid taskId, string number, GitDevelopmentLinkState state)
         {
-            var link = ScmLink.Create(taskId, repository.Id, ScmLinkKind.PullRequest, number);
+            var link = GitDevelopmentLink.Create(taskId, repository.Id, GitDevelopmentLinkKind.PullRequest, number);
             link.Apply("https://github.com/acme/scmd/pull/" + number, "PR", state, "octocat", null, "b", "main", DateTime.UtcNow);
             return link;
         }
 
-        var failed = ScmDelivery.Create(repository.Id, "f-1", "push", "{}");
-        for (var i = 0; i < ScmDelivery.MaxAttempts; i++)
+        var failed = GitIntegrationJob.Create(repository.Id, "f-1", "push", "{}");
+        for (var i = 0; i < GitIntegrationJob.MaxAttempts; i++)
             failed.MarkFailed("сбой", DateTime.UtcNow);
         await db.QueryAsync(async ctx =>
         {
             ctx.ScmConnections.Add(connection);
             ctx.ScmRepositories.Add(repository);
-            ctx.ScmLinks.AddRange(Pr(draft.Id, "1", ScmLinkState.Draft), Pr(merged.Id, "2", ScmLinkState.Merged), Pr(merged.Id, "3", ScmLinkState.Closed),
-                ScmLink.Create(branchOnly.Id, repository.Id, ScmLinkKind.Branch, "scmd-4"));
-            ctx.ScmDeliveries.AddRange(failed, ScmDelivery.CreateBackfill(repository.Id));
+            ctx.ScmLinks.AddRange(Pr(draft.Id, "1", GitDevelopmentLinkState.Draft), Pr(merged.Id, "2", GitDevelopmentLinkState.Merged), Pr(merged.Id, "3", GitDevelopmentLinkState.Closed),
+                GitDevelopmentLink.Create(branchOnly.Id, repository.Id, GitDevelopmentLinkKind.Branch, "scmd-4"));
+            ctx.ScmDeliveries.AddRange(failed, GitIntegrationJob.CreateBackfill(repository.Id));
             return await ctx.SaveChangesAsync();
         });
 
@@ -95,7 +95,7 @@ public class ScmPersistenceTests(PostgresFixture db)
         await db.QueryAsync(async ctx =>
         {
             var store = new Flow.Infrastructure.Persistence.Repositories.ScmStore(ctx);
-            Assert.True(await store.HasPendingDeliveryAsync(repository.Id, ScmDelivery.BackfillEvent, CancellationToken.None));
+            Assert.True(await store.HasPendingDeliveryAsync(repository.Id, GitIntegrationJob.BackfillEvent, CancellationToken.None));
             Assert.False(await store.HasPendingDeliveryAsync(repository.Id, "push", CancellationToken.None));
             Assert.Equal(1, (await store.GetFailedDeliveryCountsAsync(CancellationToken.None))[repository.Id]);
             return 0;
@@ -112,9 +112,9 @@ public class ScmPersistenceTests(PostgresFixture db)
         var board = (await db.SendAsync(new BoardCreateCommand(Owner, "Автопереходы", "SCMA"))).Response!;
         var task = (await db.SendAsync(new TaskCreateCommand(Owner, board.Id, "Перейти", null, null)))!;
         var review = board.Statuses.Single(s => s.Name == "На проверке").Id;
-        var connection = ScmConnection.Create(ScmProvider.Gitea, "Gitea", "https://git.example.com", "p:tok", Owner);
-        var repository = ScmRepository.Create(connection.Id, "31", "acme/scma", "https://git.example.com/acme/scma", "main", "p:hooksecret");
-        var binding = ScmRepositoryBoard.Create(repository.Id, board.Id, Owner);
+        var connection = GitHostConnection.Create(GitProvider.Gitea, "Gitea", "https://git.example.com", "p:tok", Owner);
+        var repository = GitRepository.Create(connection.Id, "31", "acme/scma", "https://git.example.com/acme/scma", "main", "p:hooksecret");
+        var binding = GitRepositoryBoard.Create(repository.Id, board.Id, Owner);
         binding.Configure(review, null, false);
         await db.QueryAsync(async ctx =>
         {
@@ -132,8 +132,8 @@ public class ScmPersistenceTests(PostgresFixture db)
 
         Assert.Equal(review, await db.QueryAsync(ctx => ctx.TaskItems.Where(t => t.Id == task.Id).Select(t => t.StatusId).SingleAsync()));
         var entry = await db.QueryAsync(ctx => ctx.TaskActivities.SingleAsync(a => a.TaskId == task.Id && a.Type == TaskActivityType.StatusChanged));
-        Assert.Equal((ScmBot.Id, "PR #5"), (entry.ActorId, entry.Source));
-        Assert.Equal(UserStatus.Deactivated, await db.QueryAsync(ctx => ctx.Users.Where(u => u.Id == ScmBot.Id).Select(u => u.Status).SingleAsync()));
+        Assert.Equal((GitIntegrationBot.Id, "PR #5"), (entry.ActorId, entry.Source));
+        Assert.Equal(UserStatus.Deactivated, await db.QueryAsync(ctx => ctx.Users.Where(u => u.Id == GitIntegrationBot.Id).Select(u => u.Status).SingleAsync()));
 
         await db.SendAsync(new StatusDeleteCommand(Owner, board.Id, review, board.Statuses.Single(s => s.Name == "В работе").Id));
         Assert.Null(await db.QueryAsync(ctx => ctx.ScmRepositoryBoards.Where(b => b.BoardId == board.Id).Select(b => b.OnPullRequestOpenedStatusId).SingleAsync()));
@@ -144,9 +144,9 @@ public class ScmPersistenceTests(PostgresFixture db)
     public async Task Comment_On_Pull_Requests_Flag_Is_Stored_On_The_Binding()
     {
         var board = (await db.SendAsync(new BoardCreateCommand(Owner, "Комментарии PR", "SCMPC"))).Response!;
-        var connection = ScmConnection.Create(ScmProvider.GitHub, "GitHub", null, "p:tok", Owner);
-        var repository = ScmRepository.Create(connection.Id, "41", "acme/scmd", "https://github.com/acme/scmd", "main", "p:hooksecret");
-        var plain = ScmRepositoryBoard.Create(repository.Id, board.Id, Owner);
+        var connection = GitHostConnection.Create(GitProvider.GitHub, "GitHub", null, "p:tok", Owner);
+        var repository = GitRepository.Create(connection.Id, "41", "acme/scmd", "https://github.com/acme/scmd", "main", "p:hooksecret");
+        var plain = GitRepositoryBoard.Create(repository.Id, board.Id, Owner);
         await db.QueryAsync(async ctx =>
         {
             ctx.ScmConnections.Add(connection);

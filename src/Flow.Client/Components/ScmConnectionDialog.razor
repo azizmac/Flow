@@ -14,20 +14,20 @@
     </TitleContent>
     <DialogContent>
         <div class="wd-row">
-            <DsSelect T="ScmProvider" Label="Хостинг" Value="_provider" ValueChanged="SetProvider" Disabled="@(Connection is not null)" Class="wd-field">
+            <DsSelect T="GitProvider" Label="Хостинг" Value="_provider" ValueChanged="SetProvider" Disabled="@(Connection is not null)" Class="wd-field">
                 @foreach (var p in ScmMeta.Providers)
                 {
-                    <MudSelectItem T="ScmProvider" Value="p">@ScmMeta.Name(p)</MudSelectItem>
+                    <MudSelectItem T="GitProvider" Value="p">@ScmMeta.Name(p)</MudSelectItem>
                 }
             </DsSelect>
             <DsInput Id="scm-name" Label="Название" MaxLength="80" Value="@_name" ValueChanged="v => _name = v" />
         </div>
-        <DsInput Label="@(_provider == ScmProvider.GitHub ? "Адрес GitHub Enterprise (пусто — github.com)" : "Адрес сервера")"
+        <DsInput Label="@(_provider == GitProvider.GitHub ? "Адрес GitHub Enterprise (пусто — github.com)" : "Адрес сервера")"
                  Placeholder="https://git.example.com" MaxLength="500" Value="@_baseUrl" ValueChanged="v => _baseUrl = v" />
-        @if (_provider == ScmProvider.GitHub)
+        @if (_provider == GitProvider.GitHub)
         {
             <div class="seg scm-auth" role="radiogroup" aria-label="Способ входа">
-                @foreach (var kind in new[] { ScmAuthKind.Token, ScmAuthKind.GitHubApp })
+                @foreach (var kind in new[] { GitAuthenticationKind.Token, GitAuthenticationKind.GitHubApp })
                 {
                     var k = kind;
                     <button type="button" class="seg-btn @(_auth == k ? "on" : "")" role="radio" aria-checked="@(_auth == k)"
@@ -82,15 +82,15 @@
     private bool _closing;
     private bool _busy;
     private string? _error;
-    private ScmProvider _provider = ScmProvider.GitHub;
+    private GitProvider _provider = GitProvider.GitHub;
     private string _name = "GitHub";
     private string _baseUrl = "";
     private string _token = "";
-    private ScmAuthKind _auth = ScmAuthKind.Token;
+    private GitAuthenticationKind _auth = GitAuthenticationKind.Token;
     private long? _appId;
     private long? _installationId;
 
-    private bool IsApp => _provider == ScmProvider.GitHub && _auth == ScmAuthKind.GitHubApp;
+    private bool IsApp => _provider == GitProvider.GitHub && _auth == GitAuthenticationKind.GitHubApp;
 
     private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
 
@@ -102,10 +102,10 @@
         await Browser.FocusAsync("scm-name", select: true);
     }
 
-    private void SetProvider(ScmProvider provider)
+    private void SetProvider(GitProvider provider)
     {
-        if (provider != ScmProvider.GitHub)
-            _auth = ScmAuthKind.Token;
+        if (provider != GitProvider.GitHub)
+            _auth = GitAuthenticationKind.Token;
         if (_name == ScmMeta.Name(_provider))
             _name = ScmMeta.Name(provider);
         _provider = provider;
@@ -126,7 +126,7 @@
             return;
         }
 
-        var auth = IsApp ? ScmAuthKind.GitHubApp : ScmAuthKind.Token;
+        var auth = IsApp ? GitAuthenticationKind.GitHubApp : GitAuthenticationKind.Token;
         var secret = string.IsNullOrWhiteSpace(_token) ? null : _token.Trim();
         _busy = true;
         var result = Connection is null

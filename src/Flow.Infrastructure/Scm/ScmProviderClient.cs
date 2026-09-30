@@ -25,9 +25,9 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
 
     private static readonly string[] GitHubEvents = ["push", "pull_request", "create", "delete"];
 
-    public async Task<string> CheckAsync(ScmConnection connection, string token, CancellationToken cancellationToken)
+    public async Task<string> CheckAsync(GitHostConnection connection, string token, CancellationToken cancellationToken)
     {
-        if (connection.AuthKind == ScmAuthKind.GitHubApp)
+        if (connection.AuthKind == GitAuthenticationKind.GitHubApp)
         {
             // Токен установки проверяет и ключ, и установку; имя приложения — по JWT самого приложения.
             await InstallationTokenAsync(connection, token, cancellationToken);
@@ -41,14 +41,14 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
                ?? "?";
     }
 
-    public async Task<IReadOnlyList<ScmRemoteRepository>> ListRepositoriesAsync(ScmConnection connection, string token, string? query, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ScmRemoteRepository>> ListRepositoriesAsync(GitHostConnection connection, string token, string? query, CancellationToken cancellationToken)
     {
         var q = Uri.EscapeDataString(query?.Trim() ?? "");
         var path = connection.Provider switch
         {
-            ScmProvider.GitHub when connection.AuthKind == ScmAuthKind.GitHubApp => "installation/repositories?per_page=100",
-            ScmProvider.GitHub => "user/repos?per_page=100&sort=updated",
-            ScmProvider.GitLab => $"projects?membership=true&simple=true&per_page=50&order_by=last_activity_at&search={q}",
+            GitProvider.GitHub when connection.AuthKind == GitAuthenticationKind.GitHubApp => "installation/repositories?per_page=100",
+            GitProvider.GitHub => "user/repos?per_page=100&sort=updated",
+            GitProvider.GitLab => $"projects?membership=true&simple=true&per_page=50&order_by=last_activity_at&search={q}",
             _ => $"repos/search?limit=50&q={q}"
         };
         using var json = await SendAsync(connection, token, HttpMethod.Get, path, null, cancellationToken);
@@ -64,12 +64,12 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
             : result.Where(r => r.FullName.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
-    public async Task<ScmRemoteRepository?> GetRepositoryAsync(ScmConnection connection, string token, string externalId, CancellationToken cancellationToken)
+    public async Task<ScmRemoteRepository?> GetRepositoryAsync(GitHostConnection connection, string token, string externalId, CancellationToken cancellationToken)
     {
         var path = connection.Provider switch
         {
-            ScmProvider.GitHub => $"repositories/{Uri.EscapeDataString(externalId)}",
-            ScmProvider.GitLab => $"projects/{Uri.EscapeDataString(externalId)}",
+            GitProvider.GitHub => $"repositories/{Uri.EscapeDataString(externalId)}",
+            GitProvider.GitLab => $"projects/{Uri.EscapeDataString(externalId)}",
             _ => $"repositories/{Uri.EscapeDataString(externalId)}"
         };
         try
@@ -83,18 +83,18 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
         }
     }
 
-    public async Task<string> CreateWebhookAsync(ScmConnection connection, string token, ScmRepository repository, string url, string secret, CancellationToken cancellationToken)
+    public async Task<string> CreateWebhookAsync(GitHostConnection connection, string token, GitRepository repository, string url, string secret, CancellationToken cancellationToken)
     {
         (string Path, object Body) request = connection.Provider switch
         {
-            ScmProvider.GitHub => ($"repos/{repository.FullName}/hooks", new
+            GitProvider.GitHub => ($"repos/{repository.FullName}/hooks", new
             {
                 name = "web",
                 active = true,
                 events = GitHubEvents,
                 config = new { url, content_type = "json", secret, insecure_ssl = "0" }
             }),
-            ScmProvider.GitLab => ($"projects/{Uri.EscapeDataString(repository.ExternalId)}/hooks", new
+            GitProvider.GitLab => ($"projects/{Uri.EscapeDataString(repository.ExternalId)}/hooks", new
             {
                 url,
                 token = secret,
@@ -104,7 +104,7 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
             }),
             _ => ($"repos/{repository.FullName}/hooks", new
             {
-                type = connection.Provider == ScmProvider.Forgejo ? "forgejo" : "gitea",
+                type = connection.Provider == GitProvider.Forgejo ? "forgejo" : "gitea",
                 active = true,
                 events = GitHubEvents,
                 config = new { url, content_type = "json", secret }
@@ -115,15 +115,15 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
         return json.RootElement.GetProperty("id").GetRawText();
     }
 
-    public async Task DeleteWebhookAsync(ScmConnection connection, string token, ScmRepository repository, string webhookId, CancellationToken cancellationToken)
+    public async Task DeleteWebhookAsync(GitHostConnection connection, string token, GitRepository repository, string webhookId, CancellationToken cancellationToken)
     {
-        var path = connection.Provider == ScmProvider.GitLab
+        var path = connection.Provider == GitProvider.GitLab
             ? $"projects/{Uri.EscapeDataString(repository.ExternalId)}/hooks/{webhookId}"
             : $"repos/{repository.FullName}/hooks/{webhookId}";
         using var _ = await SendAsync(connection, token, HttpMethod.Delete, path, null, cancellationToken);
     }
 
-    public async Task<ScmHistory> GetHistoryAsync(ScmConnection connection, string token, ScmRepository repository, DateTime commitsSince,
+    public async Task<ScmHistory> GetHistoryAsync(GitHostConnection connection, string token, GitRepository repository, DateTime commitsSince,
         int maxPullRequests, int maxCommits, CancellationToken cancellationToken)
     {
         var since = Uri.EscapeDataString(DateTime.SpecifyKind(commitsSince, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
@@ -131,18 +131,18 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
         var project = Uri.EscapeDataString(repository.ExternalId);
         // Gitea по умолчанию отдаёт не больше 50 на страницу (MAX_RESPONSE_ITEMS) — просим столько же, иначе «страница
         // короче запрошенной» ложно означала бы конец списка.
-        var pageSize = connection.Provider is ScmProvider.Gitea or ScmProvider.Forgejo ? 50 : 100;
+        var pageSize = connection.Provider is GitProvider.Gitea or GitProvider.Forgejo ? 50 : 100;
 
         Func<int, string> prs = connection.Provider switch
         {
-            ScmProvider.GitHub => page => $"repos/{repository.FullName}/pulls?state=all&sort=updated&direction=desc&per_page={pageSize}&page={page}",
-            ScmProvider.GitLab => page => $"projects/{project}/merge_requests?state=all&order_by=updated_at&sort=desc&per_page={pageSize}&page={page}",
+            GitProvider.GitHub => page => $"repos/{repository.FullName}/pulls?state=all&sort=updated&direction=desc&per_page={pageSize}&page={page}",
+            GitProvider.GitLab => page => $"projects/{project}/merge_requests?state=all&order_by=updated_at&sort=desc&per_page={pageSize}&page={page}",
             _ => page => $"repos/{repository.FullName}/pulls?state=all&sort=recentupdate&limit={pageSize}&page={page}"
         };
         Func<int, string> commits = connection.Provider switch
         {
-            ScmProvider.GitLab => page => $"projects/{project}/repository/commits?ref_name={branch}&since={since}&per_page={pageSize}&page={page}",
-            ScmProvider.GitHub => page => $"repos/{repository.FullName}/commits?sha={branch}&since={since}&per_page={pageSize}&page={page}",
+            GitProvider.GitLab => page => $"projects/{project}/repository/commits?ref_name={branch}&since={since}&per_page={pageSize}&page={page}",
+            GitProvider.GitHub => page => $"repos/{repository.FullName}/commits?sha={branch}&since={since}&per_page={pageSize}&page={page}",
             _ => page => $"repos/{repository.FullName}/commits?sha={branch}&since={since}&limit={pageSize}&page={page}"
         };
 
@@ -154,12 +154,12 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
         return new ScmHistory(pullRequests, history);
     }
 
-    public async Task CreateBranchAsync(ScmConnection connection, string token, ScmRepository repository, string name, string fromBranch,
+    public async Task CreateBranchAsync(GitHostConnection connection, string token, GitRepository repository, string name, string fromBranch,
         CancellationToken cancellationToken)
     {
         switch (connection.Provider)
         {
-            case ScmProvider.GitHub:
+            case GitProvider.GitHub:
                 // У GitHub нет «ветки от ветки»: берём sha головы исходной и создаём ref.
                 using (var head = await SendAsync(connection, token, HttpMethod.Get,
                            $"repos/{repository.FullName}/git/ref/heads/{Uri.EscapeDataString(fromBranch)}", null, cancellationToken))
@@ -169,7 +169,7 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
                         new { @ref = $"refs/heads/{name}", sha }, cancellationToken);
                 }
                 break;
-            case ScmProvider.GitLab:
+            case GitProvider.GitLab:
                 using (var _ = await SendAsync(connection, token, HttpMethod.Post,
                            $"projects/{Uri.EscapeDataString(repository.ExternalId)}/repository/branches?branch={Uri.EscapeDataString(name)}&ref={Uri.EscapeDataString(fromBranch)}",
                            null, cancellationToken))
@@ -185,14 +185,14 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
         }
     }
 
-    public async Task<ScmPullRequest> CreatePullRequestAsync(ScmConnection connection, string token, ScmRepository repository, string sourceBranch,
+    public async Task<ScmPullRequest> CreatePullRequestAsync(GitHostConnection connection, string token, GitRepository repository, string sourceBranch,
         string targetBranch, string title, string body, bool draft, CancellationToken cancellationToken)
     {
         (string Path, object Body) request = connection.Provider switch
         {
-            ScmProvider.GitHub => ($"repos/{repository.FullName}/pulls", new { title, head = sourceBranch, @base = targetBranch, body, draft }),
+            GitProvider.GitHub => ($"repos/{repository.FullName}/pulls", new { title, head = sourceBranch, @base = targetBranch, body, draft }),
             // У GitLab черновик — префикс заголовка «Draft:».
-            ScmProvider.GitLab => ($"projects/{Uri.EscapeDataString(repository.ExternalId)}/merge_requests", new
+            GitProvider.GitLab => ($"projects/{Uri.EscapeDataString(repository.ExternalId)}/merge_requests", new
             {
                 source_branch = sourceBranch, target_branch = targetBranch, title = draft ? $"Draft: {title}" : title, description = body
             }),
@@ -205,16 +205,16 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
                ?? throw new ScmProviderException("Хостинг не вернул созданный PR.");
     }
 
-    public async Task CommentOnPullRequestAsync(ScmConnection connection, string token, ScmRepository repository, string number, string body,
+    public async Task CommentOnPullRequestAsync(GitHostConnection connection, string token, GitRepository repository, string number, string body,
         CancellationToken cancellationToken)
     {
-        var path = connection.Provider == ScmProvider.GitLab
+        var path = connection.Provider == GitProvider.GitLab
             ? $"projects/{Uri.EscapeDataString(repository.ExternalId)}/merge_requests/{number}/notes"
             : $"repos/{repository.FullName}/issues/{number}/comments";
         using var _ = await SendAsync(connection, token, HttpMethod.Post, path, new { body }, cancellationToken);
     }
 
-    private async Task<List<T>> PagesAsync<T>(ScmConnection connection, string token, Func<int, string> path, int pageSize, int max,
+    private async Task<List<T>> PagesAsync<T>(GitHostConnection connection, string token, Func<int, string> path, int pageSize, int max,
         Func<JsonElement, IReadOnlyList<T>> parse, Func<T, bool>? tooOld, CancellationToken cancellationToken)
     {
         var result = new List<T>();
@@ -239,7 +239,7 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
     }
 
     /// <summary>Токен установки GitHub App: из кэша, пока до истечения больше 5 минут, иначе новый по JWT приложения.</summary>
-    private async Task<string> InstallationTokenAsync(ScmConnection connection, string privateKey, CancellationToken cancellationToken)
+    private async Task<string> InstallationTokenAsync(GitHostConnection connection, string privateKey, CancellationToken cancellationToken)
     {
         if (_appTokens.TryGet(connection, privateKey, DateTime.UtcNow) is { } cached)
             return cached;
@@ -256,14 +256,14 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
     }
 
     /// <summary>Корень API провайдера.</summary>
-    public static string ApiRoot(ScmConnection connection) => connection.Provider switch
+    public static string ApiRoot(GitHostConnection connection) => connection.Provider switch
     {
-        ScmProvider.GitHub => connection.BaseUrl is null ? "https://api.github.com/" : $"{connection.BaseUrl}/api/v3/",
-        ScmProvider.GitLab => $"{connection.BaseUrl}/api/v4/",
+        GitProvider.GitHub => connection.BaseUrl is null ? "https://api.github.com/" : $"{connection.BaseUrl}/api/v3/",
+        GitProvider.GitLab => $"{connection.BaseUrl}/api/v4/",
         _ => $"{connection.BaseUrl}/api/v1/"
     };
 
-    private static ScmRemoteRepository Map(ScmProvider provider, JsonElement e) => provider == ScmProvider.GitLab
+    private static ScmRemoteRepository Map(GitProvider provider, JsonElement e) => provider == GitProvider.GitLab
         ? new ScmRemoteRepository(e.GetProperty("id").GetRawText(), Str(e, "path_with_namespace") ?? "", Str(e, "web_url") ?? "", Str(e, "default_branch"))
         : new ScmRemoteRepository(e.GetProperty("id").GetRawText(), Str(e, "full_name") ?? "", Str(e, "html_url") ?? "", Str(e, "default_branch"));
 
@@ -271,10 +271,10 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
         e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
     /// <param name="bearer">Готовый Bearer (JWT приложения) — мимо обычной подстановки токена.</param>
-    private async Task<JsonDocument> SendAsync(ScmConnection connection, string token, HttpMethod method, string path, object? body,
+    private async Task<JsonDocument> SendAsync(GitHostConnection connection, string token, HttpMethod method, string path, object? body,
         CancellationToken cancellationToken, string? bearer = null)
     {
-        if (bearer is null && connection.AuthKind == ScmAuthKind.GitHubApp)
+        if (bearer is null && connection.AuthKind == GitAuthenticationKind.GitHubApp)
             bearer = await InstallationTokenAsync(connection, token, cancellationToken);
 
         using var request = new HttpRequestMessage(method, new Uri(new Uri(ApiRoot(connection)), path));
@@ -282,10 +282,10 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         switch (connection.Provider)
         {
-            case ScmProvider.GitHub:
+            case GitProvider.GitHub:
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer ?? token);
                 break;
-            case ScmProvider.GitLab:
+            case GitProvider.GitLab:
                 request.Headers.Add("PRIVATE-TOKEN", token);
                 break;
             default:
@@ -318,7 +318,7 @@ internal sealed class ScmProviderClient(IHttpClientFactory httpClients, GitHubAp
                     throw new ScmRateLimitException(reset);
                 var reason = response.StatusCode switch
                 {
-                    HttpStatusCode.Unauthorized when bearer is not null && connection.AuthKind == ScmAuthKind.GitHubApp && path.StartsWith("app", StringComparison.Ordinal) =>
+                    HttpStatusCode.Unauthorized when bearer is not null && connection.AuthKind == GitAuthenticationKind.GitHubApp && path.StartsWith("app", StringComparison.Ordinal) =>
                         "GitHub не принял приложение: проверьте Id приложения и закрытый ключ.",
                     HttpStatusCode.NotFound when path.StartsWith("app/installations", StringComparison.Ordinal) =>
                         "Установка приложения не найдена — проверьте Id установки.",

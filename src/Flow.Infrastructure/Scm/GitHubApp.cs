@@ -48,12 +48,12 @@ internal sealed class GitHubAppTokens
 
     private readonly ConcurrentDictionary<string, (string Token, DateTime ExpiresAt)> _tokens = new();
 
-    public string? TryGet(ScmConnection connection, string privateKey, DateTime utcNow) =>
+    public string? TryGet(GitHostConnection connection, string privateKey, DateTime utcNow) =>
         _tokens.TryGetValue(Key(connection, privateKey), out var entry) && entry.ExpiresAt - Margin > utcNow ? entry.Token : null;
 
-    public void Put(ScmConnection connection, string privateKey, string token, DateTime expiresAt) =>
+    public void Put(GitHostConnection connection, string privateKey, string token, DateTime expiresAt) =>
         _tokens[Key(connection, privateKey)] = (token, expiresAt);
 
-    private static string Key(ScmConnection connection, string privateKey) =>
+    private static string Key(GitHostConnection connection, string privateKey) =>
         $"{connection.Id:N}:{connection.AppId}:{connection.InstallationId}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(privateKey)))[..16]}";
 }

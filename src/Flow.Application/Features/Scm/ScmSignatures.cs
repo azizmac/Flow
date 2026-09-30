@@ -12,16 +12,16 @@ namespace Flow.Application.Features.Scm;
 /// </summary>
 public static class ScmSignatures
 {
-    public static bool Verify(ScmProvider provider, Func<string, string?> header, ReadOnlySpan<byte> body, string secret)
+    public static bool Verify(GitProvider provider, Func<string, string?> header, ReadOnlySpan<byte> body, string secret)
     {
         switch (provider)
         {
-            case ScmProvider.GitLab:
+            case GitProvider.GitLab:
             {
                 var token = header("X-Gitlab-Token");
                 return token is not null && FixedEquals(Encoding.UTF8.GetBytes(token), Encoding.UTF8.GetBytes(secret));
             }
-            case ScmProvider.GitHub:
+            case GitProvider.GitHub:
             {
                 var signature = header("X-Hub-Signature-256");
                 return signature is not null && signature.StartsWith("sha256=", StringComparison.Ordinal) && HexEquals(signature[7..], body, secret);

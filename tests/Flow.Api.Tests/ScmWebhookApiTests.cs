@@ -18,7 +18,7 @@ public sealed class ScmWebhookApiTests(ApiFixture api)
     public async Task Webhook_Is_Anonymous_Outside_Api_And_Checks_Signature()
     {
         using var owner = api.CreateClientAs();
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(ScmProvider.GitHub, "GitHub", "token"));
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(GitProvider.GitHub, "GitHub", "token"));
         var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
         using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "101"));
         Assert.Equal(HttpStatusCode.Created, repositoryResponse.StatusCode);
@@ -61,7 +61,7 @@ public sealed class ScmWebhookApiTests(ApiFixture api)
     public async Task Backfill_Is_Accepted_And_Unknown_Ids_Are_404()
     {
         using var owner = api.CreateClientAs();
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(ScmProvider.GitHub, "GitHub 5B", "token"));
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(GitProvider.GitHub, "GitHub 5B", "token"));
         var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
         api.Scm.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("205", "acme/backfill", "https://github.com/acme/backfill", "main"));
         using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "205"));
@@ -82,7 +82,7 @@ public sealed class ScmWebhookApiTests(ApiFixture api)
         using var owner = api.CreateClientAs();
         using var boardResponse = await owner.PostAsJsonAsync("/api/boards", new Flow.Shared.Contracts.Boards.CreateBoardRequest("Автоматизация", "SCMC"));
         var board = (await boardResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Boards.BoardResponse>())!;
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(ScmProvider.GitHub, "GitHub 5C", "token"));
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(GitProvider.GitHub, "GitHub 5C", "token"));
         var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
         api.Scm.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("305", "acme/auto", "https://github.com/acme/auto", "main"));
         using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "305"));
@@ -105,7 +105,7 @@ public sealed class ScmWebhookApiTests(ApiFixture api)
         var board = (await boardResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Boards.BoardResponse>())!;
         using var taskResponse = await owner.PostAsJsonAsync($"/api/boards/{board.Id}/tasks", new Flow.Shared.Contracts.Tasks.CreateTaskRequest("Кнопка", null, null));
         var task = (await taskResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Tasks.TaskResponse>())!;
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(ScmProvider.GitHub, "GitHub 5D", "token"));
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(GitProvider.GitHub, "GitHub 5D", "token"));
         var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
         api.Scm.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("405", "acme/act", "https://github.com/acme/act", "main"));
         using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "405"));

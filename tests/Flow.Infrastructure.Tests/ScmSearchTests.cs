@@ -28,14 +28,14 @@ public class ScmSearchTests(SearchFixture fixture)
         var board = (await fixture.SendAsync(new BoardCreateCommand(Owner, "Разработка", "SCMS"))).Response!;
         var task = (await fixture.SendAsync(new TaskCreateCommand(Owner, board.Id, "Форма входа", null, null)))!;
 
-        var connection = ScmConnection.Create(ScmProvider.GitHub, "GitHub", null, "p:tok", Owner);
-        var repository = ScmRepository.Create(connection.Id, "51", "acme/scms", "https://github.com/acme/scms", "main", "p:secret");
-        var pr = ScmLink.Create(task.Id, repository.Id, ScmLinkKind.PullRequest, "42");
-        pr.Apply("https://github.com/acme/scms/pull/42", "Капча на форме входа", ScmLinkState.Open, "octocat", null, "SCMS-1-kapcha", "main", DateTime.UtcNow);
-        var commit = ScmLink.Create(task.Id, repository.Id, ScmLinkKind.Commit, "a1b2c3d4e5f6");
+        var connection = GitHostConnection.Create(GitProvider.GitHub, "GitHub", null, "p:tok", Owner);
+        var repository = GitRepository.Create(connection.Id, "51", "acme/scms", "https://github.com/acme/scms", "main", "p:secret");
+        var pr = GitDevelopmentLink.Create(task.Id, repository.Id, GitDevelopmentLinkKind.PullRequest, "42");
+        pr.Apply("https://github.com/acme/scms/pull/42", "Капча на форме входа", GitDevelopmentLinkState.Open, "octocat", null, "SCMS-1-kapcha", "main", DateTime.UtcNow);
+        var commit = GitDevelopmentLink.Create(task.Id, repository.Id, GitDevelopmentLinkKind.Commit, "a1b2c3d4e5f6");
         commit.Apply("https://github.com/acme/scms/commit/a1b2c3d4e5f6", "SCMS-1 поправил валидацию телефона", null, "octocat", null, "main", null, DateTime.UtcNow);
-        var branch = ScmLink.Create(task.Id, repository.Id, ScmLinkKind.Branch, "SCMS-1-kapcha");
-        branch.Apply("https://github.com/acme/scms/tree/SCMS-1-kapcha", "SCMS-1-kapcha", ScmLinkState.Open, null, null, "SCMS-1-kapcha", null, DateTime.UtcNow);
+        var branch = GitDevelopmentLink.Create(task.Id, repository.Id, GitDevelopmentLinkKind.Branch, "SCMS-1-kapcha");
+        branch.Apply("https://github.com/acme/scms/tree/SCMS-1-kapcha", "SCMS-1-kapcha", GitDevelopmentLinkState.Open, null, null, "SCMS-1-kapcha", null, DateTime.UtcNow);
         await using (var scope = fixture.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<FlowDbContext>();

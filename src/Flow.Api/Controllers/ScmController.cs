@@ -60,7 +60,7 @@ public class ScmController(IMediator mediator, IActorAccessor actor) : Controlle
         await mediator.Send(new ScmRepositoryDisableCommand(actor.Require(), id), cancellationToken) ? NoContent() : NotFound();
 
     [HttpGet("scm/repositories/{id:guid}/deliveries")]
-    public async Task<IActionResult> Deliveries(Guid id, [FromQuery] ScmDeliveryStatus? status, CancellationToken cancellationToken) =>
+    public async Task<IActionResult> Deliveries(Guid id, [FromQuery] GitIntegrationJobStatus? status, CancellationToken cancellationToken) =>
         await mediator.Send(new ScmDeliveriesQuery(actor.Require(), id, status), cancellationToken) is { } list ? Ok(list) : NotFound();
 
     /// <summary>Повторить доставку с ошибкой; не Failed — 400.</summary>

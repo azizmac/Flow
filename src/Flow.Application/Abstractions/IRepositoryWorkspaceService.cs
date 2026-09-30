@@ -1,12 +1,10 @@
-using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 
 namespace Flow.Application.Abstractions;
 
 public interface IRepositoryWorkspaceService
 {
-    Task<string> SynchronizeAsync(CodeRepository repository, CancellationToken cancellationToken);
+    Task<string> SynchronizeAsync(GitRepository repository, CancellationToken cancellationToken);
 
-    string GetAgentDirectory(CodeRepository repository);
-
-    Task DeleteBoardAsync(Guid boardId, CancellationToken cancellationToken);
+    string GetAgentDirectory(GitRepository repository);
 }

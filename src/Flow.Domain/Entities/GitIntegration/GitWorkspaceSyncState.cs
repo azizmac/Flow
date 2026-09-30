@@ -1,7 +1,7 @@
-namespace Flow.Domain.Entities;
+namespace Flow.Domain.Entities.GitIntegration;
 
 /// <summary>Состояние локальной синхронизации Git-репозитория.</summary>
-public enum RepositorySyncState
+public enum GitWorkspaceSyncState
 {
     /// <summary>Репозиторий создан, но первая ревизия ещё не подготовлена.</summary>
     Pending = 0,
@@ -16,8 +16,5 @@ public enum RepositorySyncState
     /// Последняя попытка синхронизации не удалась. Предыдущая успешная ревизия, если есть,
     /// остаётся доступной и не удаляется.
     /// </summary>
-    Failed = 3,
-
-    /// <summary>Репозиторий отключён пользователем; синхронизация и анализ запрещены.</summary>
-    Disabled = 4
+    Failed = 3
 }

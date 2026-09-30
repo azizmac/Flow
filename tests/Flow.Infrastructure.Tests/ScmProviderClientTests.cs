@@ -42,8 +42,8 @@ public class ScmProviderClientTests
             _ => Json("""{"id":555}""", HttpStatusCode.Created)
         });
         var client = new ScmProviderClient(new Factory(recorder));
-        var connection = ScmConnection.Create(ScmProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
-        var repository = ScmRepository.Create(connection.Id, "101", "acme/web", "https://github.com/acme/web", "main", "p");
+        var connection = GitHostConnection.Create(GitProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
+        var repository = GitRepository.Create(connection.Id, "101", "acme/web", "https://github.com/acme/web", "main", "p");
 
         Assert.Equal("octocat", await client.CheckAsync(connection, "tok", CancellationToken.None));
         Assert.Equal(["acme/api"], (await client.ListRepositoriesAsync(connection, "tok", "api", CancellationToken.None)).Select(r => r.FullName));
@@ -62,12 +62,12 @@ public class ScmProviderClientTests
         var recorder = new Recorder(_ => Json("""{"id":7,"username":"dev","path_with_namespace":"g/p","web_url":"https://gl.example.com/g/p"}"""));
         var client = new ScmProviderClient(new Factory(recorder));
 
-        var gitlab = ScmConnection.Create(ScmProvider.GitLab, "GitLab", "https://gl.example.com/", "p", Guid.NewGuid());
+        var gitlab = GitHostConnection.Create(GitProvider.GitLab, "GitLab", "https://gl.example.com/", "p", Guid.NewGuid());
         Assert.Equal("dev", await client.CheckAsync(gitlab, "glpat", CancellationToken.None));
         Assert.Equal("https://gl.example.com/api/v4/user", recorder.Requests[^1].Request.RequestUri!.ToString());
         Assert.Equal("glpat", recorder.Requests[^1].Request.Headers.GetValues("PRIVATE-TOKEN").Single());
 
-        var forgejo = ScmConnection.Create(ScmProvider.Forgejo, "Forgejo", "https://git.example.com", "p", Guid.NewGuid());
+        var forgejo = GitHostConnection.Create(GitProvider.Forgejo, "Forgejo", "https://git.example.com", "p", Guid.NewGuid());
         await client.CheckAsync(forgejo, "fj", CancellationToken.None);
         Assert.Equal("https://git.example.com/api/v1/user", recorder.Requests[^1].Request.RequestUri!.ToString());
         Assert.Equal("token fj", recorder.Requests[^1].Request.Headers.Authorization!.ToString());
@@ -77,7 +77,7 @@ public class ScmProviderClientTests
     public async Task Errors_Become_Readable_Reasons()
     {
         var client = new ScmProviderClient(new Factory(new Recorder(_ => Json("{}", HttpStatusCode.Unauthorized))));
-        var connection = ScmConnection.Create(ScmProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
+        var connection = GitHostConnection.Create(GitProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
 
         var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmProviderException>(() => client.CheckAsync(connection, "x", CancellationToken.None));
         Assert.Contains("Токен", error.Message);
@@ -100,8 +100,8 @@ public class ScmProviderClientTests
                 : Json("[" + fresh + "," + fresh.Replace("2026-09-20T00:00:00Z", old) + "]");
         });
         var client = new ScmProviderClient(new Factory(recorder));
-        var connection = ScmConnection.Create(ScmProvider.Gitea, "Gitea", "https://git.example.com", "p", Guid.NewGuid());
-        var repository = ScmRepository.Create(connection.Id, "9", "acme/web", "https://git.example.com/acme/web", "dev", "p");
+        var connection = GitHostConnection.Create(GitProvider.Gitea, "Gitea", "https://git.example.com", "p", Guid.NewGuid());
+        var repository = GitRepository.Create(connection.Id, "9", "acme/web", "https://git.example.com/acme/web", "dev", "p");
 
         var history = await client.GetHistoryAsync(connection, "tok", repository, new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), 2, 500, CancellationToken.None);
 
@@ -123,8 +123,8 @@ public class ScmProviderClientTests
             response.Headers.Add("X-RateLimit-Reset", reset.ToString());
             return response;
         })));
-        var connection = ScmConnection.Create(ScmProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
-        var repository = ScmRepository.Create(connection.Id, "1", "acme/web", "https://github.com/acme/web", "main", "p");
+        var connection = GitHostConnection.Create(GitProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
+        var repository = GitRepository.Create(connection.Id, "1", "acme/web", "https://github.com/acme/web", "main", "p");
 
         var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmRateLimitException>(() =>
             client.GetHistoryAsync(connection, "tok", repository, DateTime.UtcNow.AddDays(-30), 100, 100, CancellationToken.None));
@@ -148,7 +148,7 @@ public class ScmProviderClientTests
             _ => Json("""{"total_count":1,"repositories":[{"id":5,"full_name":"org/repo","html_url":"https://github.com/org/repo","default_branch":"main"}]}""")
         });
         var client = new ScmProviderClient(new Factory(recorder), new GitHubAppTokens());
-        var connection = ScmConnection.Create(ScmProvider.GitHub, "App", null, "p", Guid.NewGuid(), ScmAuthKind.GitHubApp, 12345, 678);
+        var connection = GitHostConnection.Create(GitProvider.GitHub, "App", null, "p", Guid.NewGuid(), GitAuthenticationKind.GitHubApp, 12345, 678);
 
         Assert.Equal("flow-tracker[bot]", await client.CheckAsync(connection, pem, CancellationToken.None));
         Assert.Equal(["org/repo"], (await client.ListRepositoriesAsync(connection, pem, null, CancellationToken.None)).Select(r => r.FullName));
@@ -168,7 +168,7 @@ public class ScmProviderClientTests
             System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1));
 
         // Не PEM — понятная ошибка, а не исключение криптографии.
-        var broken = ScmConnection.Create(ScmProvider.GitHub, "App", null, "p", Guid.NewGuid(), ScmAuthKind.GitHubApp, 1, 2);
+        var broken = GitHostConnection.Create(GitProvider.GitHub, "App", null, "p", Guid.NewGuid(), GitAuthenticationKind.GitHubApp, 1, 2);
         var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmProviderException>(() => client.CheckAsync(broken, "not a key", CancellationToken.None));
         Assert.Contains("PEM", error.Message);
     }
@@ -189,29 +189,29 @@ public class ScmProviderClientTests
         });
         var client = new ScmProviderClient(new Factory(recorder));
 
-        var github = ScmConnection.Create(ScmProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
-        var ghRepo = ScmRepository.Create(github.Id, "101", "acme/web", "https://github.com/acme/web", "main", "p");
+        var github = GitHostConnection.Create(GitProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
+        var ghRepo = GitRepository.Create(github.Id, "101", "acme/web", "https://github.com/acme/web", "main", "p");
         await client.CreateBranchAsync(github, "tok", ghRepo, "WEB-1", "main", CancellationToken.None);
         Assert.Equal("https://api.github.com/repos/acme/web/git/refs", recorder.Requests[^1].Request.RequestUri!.ToString());
         Assert.Contains("\"sha\":\"abc123\"", recorder.Requests[^1].Body);
         var pr = await client.CreatePullRequestAsync(github, "tok", ghRepo, "WEB-1", "main", "WEB-1 x", "body", true, CancellationToken.None);
-        Assert.Equal(("12", ScmLinkState.Open), (pr.Number, pr.State));
+        Assert.Equal(("12", GitDevelopmentLinkState.Open), (pr.Number, pr.State));
         Assert.Contains("\"draft\":true", recorder.Requests[^1].Body);
         await client.CommentOnPullRequestAsync(github, "tok", ghRepo, "12", "Задача", CancellationToken.None);
         Assert.Equal("https://api.github.com/repos/acme/web/issues/12/comments", recorder.Requests[^1].Request.RequestUri!.ToString());
 
-        var gitlab = ScmConnection.Create(ScmProvider.GitLab, "GitLab", "https://gl.example.com", "p", Guid.NewGuid());
-        var glRepo = ScmRepository.Create(gitlab.Id, "7", "g/p", "https://gl.example.com/g/p", "main", "p");
+        var gitlab = GitHostConnection.Create(GitProvider.GitLab, "GitLab", "https://gl.example.com", "p", Guid.NewGuid());
+        var glRepo = GitRepository.Create(gitlab.Id, "7", "g/p", "https://gl.example.com/g/p", "main", "p");
         await client.CreateBranchAsync(gitlab, "tok", glRepo, "WEB-1", "main", CancellationToken.None);
         Assert.Equal("https://gl.example.com/api/v4/projects/7/repository/branches?branch=WEB-1&ref=main", recorder.Requests[^1].Request.RequestUri!.ToString());
         var mr = await client.CreatePullRequestAsync(gitlab, "tok", glRepo, "WEB-1", "main", "WEB-1 x", "body", true, CancellationToken.None);
-        Assert.Equal(("3", ScmLinkState.Draft), (mr.Number, mr.State));
+        Assert.Equal(("3", GitDevelopmentLinkState.Draft), (mr.Number, mr.State));
         Assert.Contains("Draft: WEB-1 x", recorder.Requests[^1].Body);
         await client.CommentOnPullRequestAsync(gitlab, "tok", glRepo, "3", "Задача", CancellationToken.None);
         Assert.Equal("https://gl.example.com/api/v4/projects/7/merge_requests/3/notes", recorder.Requests[^1].Request.RequestUri!.ToString());
 
-        var gitea = ScmConnection.Create(ScmProvider.Gitea, "Gitea", "https://git.example.com", "p", Guid.NewGuid());
-        var gtRepo = ScmRepository.Create(gitea.Id, "9", "acme/web", "https://git.example.com/acme/web", "main", "p");
+        var gitea = GitHostConnection.Create(GitProvider.Gitea, "Gitea", "https://git.example.com", "p", Guid.NewGuid());
+        var gtRepo = GitRepository.Create(gitea.Id, "9", "acme/web", "https://git.example.com/acme/web", "main", "p");
         await client.CreateBranchAsync(gitea, "tok", gtRepo, "WEB-1", "main", CancellationToken.None);
         Assert.Equal("https://git.example.com/api/v1/repos/acme/web/branches", recorder.Requests[^1].Request.RequestUri!.ToString());
         Assert.Contains("\"old_branch_name\":\"main\"", recorder.Requests[^1].Body);

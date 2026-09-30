@@ -62,7 +62,7 @@
                                 }
                             </td>
                             <td>
-                                @if (d.Status == ScmDeliveryStatus.Failed)
+                                @if (d.Status == GitIntegrationJobStatus.Failed)
                                 {
                                     <DsButton Variant="secondary" Size="sm" OnClick="() => Retry(d)" Disabled="_busy">Повторить</DsButton>
                                 }
@@ -83,17 +83,17 @@
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
-    private static readonly (ScmDeliveryStatus? Status, string Label)[] Filters =
+    private static readonly (GitIntegrationJobStatus? Status, string Label)[] Filters =
     [
-        (null, "Все"), (ScmDeliveryStatus.Failed, "Ошибки"), (ScmDeliveryStatus.Pending, "В очереди"),
-        (ScmDeliveryStatus.Done, "Разобраны"), (ScmDeliveryStatus.Ignored, "Пропущены")
+        (null, "Все"), (GitIntegrationJobStatus.Failed, "Ошибки"), (GitIntegrationJobStatus.Pending, "В очереди"),
+        (GitIntegrationJobStatus.Done, "Разобраны"), (GitIntegrationJobStatus.Ignored, "Пропущены")
     ];
 
     private MudDialog? _dialog;
     private bool _visible = true;
     private bool _closing;
     private bool _busy;
-    private ScmDeliveryStatus? _status;
+    private GitIntegrationJobStatus? _status;
     private List<ScmDeliveryResponse>? _deliveries;
 
     private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
@@ -101,19 +101,19 @@
     protected override async Task OnInitializedAsync()
     {
         // Есть ошибки — открываемся сразу на них: ради них диалог обычно и открывают.
-        _status = Repository.FailedDeliveries > 0 ? ScmDeliveryStatus.Failed : null;
+        _status = Repository.FailedDeliveries > 0 ? GitIntegrationJobStatus.Failed : null;
         await Reload();
     }
 
-    private static string StateClass(ScmDeliveryStatus status) => status switch
+    private static string StateClass(GitIntegrationJobStatus status) => status switch
     {
-        ScmDeliveryStatus.Failed => "failed",
-        ScmDeliveryStatus.Pending => "pending",
-        ScmDeliveryStatus.Done => "done",
+        GitIntegrationJobStatus.Failed => "failed",
+        GitIntegrationJobStatus.Pending => "pending",
+        GitIntegrationJobStatus.Done => "done",
         _ => ""
     };
 
-    private async Task Filter(ScmDeliveryStatus? status)
+    private async Task Filter(GitIntegrationJobStatus? status)
     {
         _status = status;
         _deliveries = null;

@@ -110,7 +110,7 @@ internal sealed class SearchSourceReader(
             from link in db.ScmLinks.AsNoTracking()
             join task in db.TaskItems.AsNoTracking() on link.TaskId equals task.Id
             join repository in db.ScmRepositories.AsNoTracking() on link.RepositoryId equals repository.Id
-            where link.Id == linkId && link.Kind != ScmLinkKind.Branch
+            where link.Id == linkId && link.Kind != GitDevelopmentLinkKind.Branch
             select new
             {
                 link.Kind,
@@ -134,7 +134,7 @@ internal sealed class SearchSourceReader(
             .FirstOrDefaultAsync(cancellationToken);
 
         string label, content;
-        if (found.Kind == ScmLinkKind.PullRequest)
+        if (found.Kind == GitDevelopmentLinkKind.PullRequest)
         {
             label = $"PR #{found.ExternalId}";
             var branches = found.SourceBranch is { } source ? $"\n{source}{(found.TargetBranch is { } target ? $" → {target}" : "")}" : "";

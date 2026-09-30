@@ -4,7 +4,7 @@ namespace Flow.Domain.Entities.GitIntegration;
 /// Доставка вебхука: принята, подпись сошлась, событие уже нормализовано до нужных Flow полей (Payload — JSON
 /// нормализованного события, а не исходный мегабайтный push). Обрабатывает воркер, повтор с backoff до MaxAttempts.
 /// </summary>
-public sealed class ScmDelivery
+public sealed class GitIntegrationJob
 {
     /// <summary>
     /// Не вебхук, а задание дозагрузки истории (этап 5B): последние PR и коммиты ветки по умолчанию через API. Живёт в
@@ -26,7 +26,7 @@ public sealed class ScmDelivery
 
     public DateTime ReceivedAt { get; private set; }
 
-    public ScmDeliveryStatus Status { get; private set; }
+    public GitIntegrationJobStatus Status { get; private set; }
 
     public int Attempts { get; private set; }
 
@@ -36,16 +36,16 @@ public sealed class ScmDelivery
 
     public string Payload { get; private set; } = "{}";
 
-    private ScmDelivery()
+    private GitIntegrationJob()
     {
         // EF Core
     }
 
-    public static ScmDelivery Create(Guid repositoryId, string deliveryId, string eventName, string? payload)
+    public static GitIntegrationJob Create(Guid repositoryId, string deliveryId, string eventName, string? payload)
     {
         var now = DateTime.UtcNow;
         var id = string.IsNullOrWhiteSpace(deliveryId) ? Guid.NewGuid().ToString() : deliveryId.Trim();
-        return new ScmDelivery
+        return new GitIntegrationJob
         {
             Id = Guid.NewGuid(),
             RepositoryId = repositoryId,
@@ -53,7 +53,7 @@ public sealed class ScmDelivery
             Event = eventName.Length <= 60 ? eventName : eventName[..60],
             ReceivedAt = now,
             NextAttemptAt = now,
-            Status = payload is null ? ScmDeliveryStatus.Ignored : ScmDeliveryStatus.Pending,
+            Status = payload is null ? GitIntegrationJobStatus.Ignored : GitIntegrationJobStatus.Pending,
             Payload = payload ?? "{}"
         };
     }
@@ -61,7 +61,7 @@ public sealed class ScmDelivery
     public bool IsBackfill => Event == BackfillEvent;
 
     /// <summary>Задание дозагрузки истории репозитория — Pending сразу.</summary>
-    public static ScmDelivery CreateBackfill(Guid repositoryId) =>
+    public static GitIntegrationJob CreateBackfill(Guid repositoryId) =>
         Create(repositoryId, $"backfill-{Guid.NewGuid():N}", BackfillEvent, "{}");
 
     /// <summary>
@@ -69,7 +69,7 @@ public sealed class ScmDelivery
     /// </summary>
     public void Postpone(DateTime until, string reason)
     {
-        if (Status != ScmDeliveryStatus.Pending)
+        if (Status != GitIntegrationJobStatus.Pending)
             throw new InvalidOperationException("Отложить можно только доставку в очереди.");
         NextAttemptAt = DateTime.SpecifyKind(until, DateTimeKind.Utc);
         LastError = reason.Length <= ErrorMaxLength ? reason : reason[..ErrorMaxLength];
@@ -78,9 +78,9 @@ public sealed class ScmDelivery
     /// <summary>Повтор вручную (диагностика доставок): Failed снова в очередь, попытки с нуля.</summary>
     public void Retry(DateTime utcNow)
     {
-        if (Status != ScmDeliveryStatus.Failed)
+        if (Status != GitIntegrationJobStatus.Failed)
             throw new InvalidOperationException("Повторить можно только доставку с ошибкой.");
-        Status = ScmDeliveryStatus.Pending;
+        Status = GitIntegrationJobStatus.Pending;
         Attempts = 0;
         NextAttemptAt = utcNow;
         LastError = null;
@@ -88,7 +88,7 @@ public sealed class ScmDelivery
 
     public void MarkDone()
     {
-        Status = ScmDeliveryStatus.Done;
+        Status = GitIntegrationJobStatus.Done;
         Attempts++;
         LastError = null;
     }
@@ -100,7 +100,7 @@ public sealed class ScmDelivery
         LastError = error.Length <= ErrorMaxLength ? error : error[..ErrorMaxLength];
         if (Attempts >= MaxAttempts)
         {
-            Status = ScmDeliveryStatus.Failed;
+            Status = GitIntegrationJobStatus.Failed;
             return;
         }
 

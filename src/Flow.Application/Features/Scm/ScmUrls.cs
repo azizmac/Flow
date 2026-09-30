@@ -6,13 +6,13 @@ namespace Flow.Application.Features.Scm;
 /// <summary>Адреса и тексты для хостинга: ссылка на ветку и комментарий «задача Flow» (этап 5D).</summary>
 public static class ScmUrls
 {
-    public static string Branch(ScmProvider provider, string webUrl, string branch)
+    public static string Branch(GitProvider provider, string webUrl, string branch)
     {
         var escaped = string.Join('/', branch.Split('/').Select(Uri.EscapeDataString));
         return provider switch
         {
-            ScmProvider.GitHub => $"{webUrl}/tree/{escaped}",
-            ScmProvider.GitLab => $"{webUrl}/-/tree/{escaped}",
+            GitProvider.GitHub => $"{webUrl}/tree/{escaped}",
+            GitProvider.GitLab => $"{webUrl}/-/tree/{escaped}",
             _ => $"{webUrl}/src/branch/{escaped}"
         };
     }

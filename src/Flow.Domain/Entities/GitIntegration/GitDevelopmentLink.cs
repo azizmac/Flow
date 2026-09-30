@@ -4,7 +4,7 @@ namespace Flow.Domain.Entities.GitIntegration;
 /// Ветка, коммит или PR, связанные с задачей. Уникальна по (задача, репозиторий, вид, внешний id): повтор
 /// доставки обновляет, а не плодит. Заголовки и сообщения — недоверенный текст: показываются как текст.
 /// </summary>
-public sealed class ScmLink
+public sealed class GitDevelopmentLink
 {
     public const int TitleMaxLength = 500;
     public const int ExternalIdMaxLength = 255;
@@ -15,7 +15,7 @@ public sealed class ScmLink
 
     public Guid RepositoryId { get; private set; }
 
-    public ScmLinkKind Kind { get; private set; }
+    public GitDevelopmentLinkKind Kind { get; private set; }
 
     /// <summary>sha коммита, номер PR или имя ветки.</summary>
     public string ExternalId { get; private set; } = string.Empty;
@@ -24,7 +24,7 @@ public sealed class ScmLink
 
     public string Title { get; private set; } = string.Empty;
 
-    public ScmLinkState? State { get; private set; }
+    public GitDevelopmentLinkState? State { get; private set; }
 
     public string? AuthorLogin { get; private set; }
 
@@ -46,12 +46,12 @@ public sealed class ScmLink
 
     public const int NoteMaxLength = 500;
 
-    private ScmLink()
+    private GitDevelopmentLink()
     {
         // EF Core
     }
 
-    public static ScmLink Create(Guid taskId, Guid repositoryId, ScmLinkKind kind, string externalId) =>
+    public static GitDevelopmentLink Create(Guid taskId, Guid repositoryId, GitDevelopmentLinkKind kind, string externalId) =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -64,7 +64,7 @@ public sealed class ScmLink
         };
 
     /// <summary>Свежие данные события. OccurredAt — время события у хостинга, не приёма.</summary>
-    public void Apply(string url, string title, ScmLinkState? state, string? authorLogin, Guid? authorUserId,
+    public void Apply(string url, string title, GitDevelopmentLinkState? state, string? authorLogin, Guid? authorUserId,
         string? sourceBranch, string? targetBranch, DateTime occurredAt)
     {
         Url = Trim(url, 1000);
@@ -81,7 +81,7 @@ public sealed class ScmLink
     public void SetNote(string? note) =>
         Note = string.IsNullOrWhiteSpace(note) ? null : note.Length <= NoteMaxLength ? note : note[..NoteMaxLength];
 
-    public void SetState(ScmLinkState state)
+    public void SetState(GitDevelopmentLinkState state)
     {
         State = state;
         UpdatedAt = DateTime.UtcNow;

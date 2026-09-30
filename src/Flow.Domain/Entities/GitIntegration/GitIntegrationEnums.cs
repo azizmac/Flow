@@ -4,7 +4,7 @@ namespace Flow.Domain.Entities.GitIntegration;
 // различие — заголовки подписи и доставки. Секреты хранятся зашифрованными (IDataProtector, purpose Flow.Scm):
 // домен видит только непрозрачную строку.
 
-public enum ScmProvider
+public enum GitProvider
 {
     GitHub = 0,
     GitLab = 1,
@@ -13,20 +13,20 @@ public enum ScmProvider
 }
 
 /// <summary>Чем подключение входит в API: личный/сервисный токен или GitHub App (закрытый ключ + установка, этап 5B).</summary>
-public enum ScmAuthKind
+public enum GitAuthenticationKind
 {
     Token = 0,
     GitHubApp = 1
 }
 
-public enum ScmLinkKind
+public enum GitDevelopmentLinkKind
 {
     Branch = 0,
     Commit = 1,
     PullRequest = 2
 }
 
-public enum ScmLinkState
+public enum GitDevelopmentLinkState
 {
     Open = 0,
     Draft = 1,
@@ -34,7 +34,7 @@ public enum ScmLinkState
     Closed = 3
 }
 
-public enum ScmDeliveryStatus
+public enum GitIntegrationJobStatus
 {
     Pending = 0,
     Done = 1,

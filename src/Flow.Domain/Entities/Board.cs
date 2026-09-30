@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Flow.Domain.Templates;
+using Flow.Domain.Entities.GitIntegration;
 
 namespace Flow.Domain.Entities;
 
@@ -18,7 +19,7 @@ public sealed partial class Board
     private readonly List<StatusTransition> _transitions = [];
     private readonly List<CustomFieldDefinition> _customFields = [];
     private readonly List<TaskScreen> _screens = [];
-    private readonly List<CodeRepository> _codeRepositories = [];
+    private readonly List<GitRepositoryBoard> _repositoryBindings = [];
 
     public Guid Id { get; private set; }
 
@@ -49,8 +50,8 @@ public sealed partial class Board
 
     public IReadOnlyCollection<TaskItem> Tasks => _tasks;
 
-    /// <summary>Подключённые к проекту Git-репозитории.</summary>
-    public IReadOnlyCollection<CodeRepository> CodeRepositories => _codeRepositories;
+    /// <summary>Привязки Git-репозиториев к проекту; один репозиторий может принадлежать нескольким проектам.</summary>
+    public IReadOnlyCollection<GitRepositoryBoard> RepositoryBindings => _repositoryBindings;
 
     /// <summary>Пользовательские поля проекта, включая архивные (docs/TZ_task_model.md §4).</summary>
     public IReadOnlyCollection<CustomFieldDefinition> CustomFields => _customFields;
@@ -132,16 +133,6 @@ public sealed partial class Board
     }
 
     public void Rename(string name) => Name = ValidateName(name);
-
-    public CodeRepository AddCodeRepository(RepositoryProvider provider, string name, string remoteUrl, string branch)
-    {
-        var repository = new CodeRepository(Id, provider, name, remoteUrl, branch);
-        if (_codeRepositories.Any(existing => existing.RemoteUrl == repository.RemoteUrl))
-            throw new InvalidOperationException("Repository is already connected to this board.");
-
-        _codeRepositories.Add(repository);
-        return repository;
-    }
 
     public void SetVisibility(BoardVisibility visibility) =>
         Visibility = Enum.IsDefined(visibility)

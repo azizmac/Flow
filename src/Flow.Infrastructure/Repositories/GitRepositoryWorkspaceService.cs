@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Flow.Application.Abstractions;
-using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Microsoft.Extensions.Logging;
 
 namespace Flow.Infrastructure.Repositories;
@@ -9,28 +9,18 @@ internal sealed class GitRepositoryWorkspaceService(
     RepositoryWorkspaceOptions options,
     ILogger<GitRepositoryWorkspaceService> logger) : IRepositoryWorkspaceService
 {
-    public string GetAgentDirectory(CodeRepository repository)
+    public string GetAgentDirectory(GitRepository repository)
     {
         if (repository.LastSyncedCommit is null)
             throw new InvalidOperationException("Repository has no synchronized revision.");
 
-        return Path.Combine(options.AgentWorkspaceRoot, repository.BoardId.ToString("N"),
-            repository.Id.ToString("N"), repository.LastSyncedCommit);
+        return Path.Combine(options.AgentWorkspaceRoot, repository.Id.ToString("N"), repository.LastSyncedCommit);
     }
 
-    public Task DeleteBoardAsync(Guid boardId, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var directory = Path.Combine(Path.GetFullPath(options.WorkspaceRoot), boardId.ToString("N"));
-        if (Directory.Exists(directory))
-            Directory.Delete(directory, recursive: true);
-        return Task.CompletedTask;
-    }
-
-    public async Task<string> SynchronizeAsync(CodeRepository repository, CancellationToken cancellationToken)
+    public async Task<string> SynchronizeAsync(GitRepository repository, CancellationToken cancellationToken)
     {
         var parent = Path.Combine(Path.GetFullPath(options.WorkspaceRoot),
-            repository.BoardId.ToString("N"), repository.Id.ToString("N"));
+            repository.Id.ToString("N"));
         var staging = Path.Combine(parent, ".staging-" + Guid.NewGuid().ToString("N"));
 
         Directory.CreateDirectory(parent);
@@ -43,7 +33,7 @@ internal sealed class GitRepositoryWorkspaceService(
             await RunGitAsync(null,
                 ["-c", "protocol.file.allow=never", "-c", "protocol.ext.allow=never",
                     "-c", "http.followRedirects=false", "clone", "--depth", "1", "--single-branch",
-                    "--branch", repository.Branch, "--", repository.RemoteUrl, staging],
+                    "--branch", repository.DefaultBranch, "--", repository.WebUrl, staging],
                 cancellationToken);
 
             var commit = (await RunGitAsync(staging, ["rev-parse", "--verify", "HEAD"], cancellationToken)).Trim();

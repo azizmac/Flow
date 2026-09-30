@@ -6,7 +6,7 @@ namespace Flow.Domain.Entities.GitIntegration;
 /// сразу деактивирован, поэтому его не назначить исполнителем и не упомянуть. Журнал ссылается на него FK — профиль
 /// создаётся при первой надобности.
 /// </summary>
-public static class ScmBot
+public static class GitIntegrationBot
 {
     public static readonly Guid Id = new("00000000-0000-0000-0000-00000000f10b");
 
