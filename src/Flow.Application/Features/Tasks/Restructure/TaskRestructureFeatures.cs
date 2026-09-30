@@ -392,7 +392,7 @@ internal sealed class TaskMoveCommandHandler(
                     searchIndex.Enqueue(SearchSourceType.Comment, comment.Id, target.Id, SearchIndexOperation.Upsert);
                 // PR и коммиты задачи (этап 5E) остаются при ней, но их чанки несут проект — для фильтра видимости.
                 foreach (var link in await developmentLinks.GetByTaskIdAsync(moved.Id, cancellationToken))
-                    Flow.Application.Features.Scm.ScmSearch.Upsert(searchIndex, link, target.Id);
+                    Flow.Application.Features.GitIntegration.GitSearch.Upsert(searchIndex, link, target.Id);
 
                 // Ранг — временный: настоящий выставит AssignRanks ниже, по свежему максимуму целевого проекта.
                 var oldCode = target.ReceiveTask(moved, item.StatusId, item.TypeId, FractionalIndex.First, item.CustomFieldsJson, item.KeepParent);

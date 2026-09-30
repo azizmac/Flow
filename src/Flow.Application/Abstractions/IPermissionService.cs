@@ -28,14 +28,14 @@ public interface IPermissionService
     /// <summary>Создавать, править и удалять шаблоны задач проекта — ManageTaskTemplates (Developer+, этап 3G).</summary>
     void EnsureCanManageTaskTemplates(ProjectAccessInfo access);
 
-    /// <summary>Создать ветку или PR на хостинге из карточки задачи — WriteScm (Developer+, этап 5D).</summary>
-    void EnsureCanWriteScm(ProjectAccessInfo access);
+    /// <summary>Создать ветку или PR на хостинге из карточки задачи — WriteGit (Developer+, этап 5D).</summary>
+    void EnsureCanWriteGit(ProjectAccessInfo access);
 
     /// <summary>Создавать, править, закрывать и удалять вехи проекта — ManageMilestones (Developer+).</summary>
     void EnsureCanManageMilestones(ProjectAccessInfo access);
 
-    /// <summary>Привязка репозиториев к проекту (docs/TZ_scm_integration.md §6) — ManageScm, администратор проекта.</summary>
-    void EnsureCanManageScm(ProjectAccessInfo access);
+    /// <summary>Привязка репозиториев к проекту (docs/TZ_git_integration.md §6) — ManageGit, администратор проекта.</summary>
+    void EnsureCanManageGit(ProjectAccessInfo access);
 
     /// <summary>Подключения к Git-хостингам и репозитории (экран «Интеграции») — глобальные Admin и Owner.</summary>
     void EnsureCanManageIntegrations(User actor);

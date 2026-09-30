@@ -1,6 +1,6 @@
 using System.Net;
 using Flow.Application.Features.Agents.Commands.AgentTestAskCommand;
-using Flow.Application.Features.Scm;
+using Flow.Application.Features.GitIntegration;
 using Flow.Client.Services;
 using Flow.Shared.Contracts.Agents;
 

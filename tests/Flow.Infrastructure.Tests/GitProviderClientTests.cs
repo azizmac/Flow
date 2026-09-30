@@ -2,7 +2,7 @@ using System.Net;
 using System.Text;
 using Flow.Domain.Entities;
 using Flow.Domain.Entities.GitIntegration;
-using Flow.Infrastructure.Scm;
+using Flow.Infrastructure.GitIntegration;
 using Xunit;
 
 namespace Flow.Infrastructure.Tests;
@@ -41,7 +41,7 @@ public class GitProviderClientTests
             "/user/repos" => Json("""[{"id":101,"full_name":"acme/web","html_url":"https://github.com/acme/web","default_branch":"main"},{"id":102,"full_name":"acme/api","html_url":"https://github.com/acme/api","default_branch":"dev"}]"""),
             _ => Json("""{"id":555}""", HttpStatusCode.Created)
         });
-        var client = new ScmProviderClient(new Factory(recorder));
+        var client = new GitProviderClient(new Factory(recorder));
         var connection = GitHostConnection.Create(GitProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
         var repository = GitRepository.Create(connection.Id, "101", "acme/web", "https://github.com/acme/web", "main", "p");
 
@@ -60,7 +60,7 @@ public class GitProviderClientTests
     public async Task GitLab_And_Gitea_Use_Their_Api_Roots_And_Tokens()
     {
         var recorder = new Recorder(_ => Json("""{"id":7,"username":"dev","path_with_namespace":"g/p","web_url":"https://gl.example.com/g/p"}"""));
-        var client = new ScmProviderClient(new Factory(recorder));
+        var client = new GitProviderClient(new Factory(recorder));
 
         var gitlab = GitHostConnection.Create(GitProvider.GitLab, "GitLab", "https://gl.example.com/", "p", Guid.NewGuid());
         Assert.Equal("dev", await client.CheckAsync(gitlab, "glpat", CancellationToken.None));
@@ -76,10 +76,10 @@ public class GitProviderClientTests
     [Fact]
     public async Task Errors_Become_Readable_Reasons()
     {
-        var client = new ScmProviderClient(new Factory(new Recorder(_ => Json("{}", HttpStatusCode.Unauthorized))));
+        var client = new GitProviderClient(new Factory(new Recorder(_ => Json("{}", HttpStatusCode.Unauthorized))));
         var connection = GitHostConnection.Create(GitProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
 
-        var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmProviderException>(() => client.CheckAsync(connection, "x", CancellationToken.None));
+        var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.GitProviderException>(() => client.CheckAsync(connection, "x", CancellationToken.None));
         Assert.Contains("Токен", error.Message);
     }
 
@@ -99,7 +99,7 @@ public class GitProviderClientTests
                 ? Json("[" + string.Join(",", Enumerable.Repeat(fresh, 50)) + "]")
                 : Json("[" + fresh + "," + fresh.Replace("2026-09-20T00:00:00Z", old) + "]");
         });
-        var client = new ScmProviderClient(new Factory(recorder));
+        var client = new GitProviderClient(new Factory(recorder));
         var connection = GitHostConnection.Create(GitProvider.Gitea, "Gitea", "https://git.example.com", "p", Guid.NewGuid());
         var repository = GitRepository.Create(connection.Id, "9", "acme/web", "https://git.example.com/acme/web", "dev", "p");
 
@@ -116,7 +116,7 @@ public class GitProviderClientTests
     public async Task Exhausted_Rate_Limit_Carries_The_Reset_Time()
     {
         var reset = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds();
-        var client = new ScmProviderClient(new Factory(new Recorder(_ =>
+        var client = new GitProviderClient(new Factory(new Recorder(_ =>
         {
             var response = Json("""{"message":"API rate limit exceeded"}""", HttpStatusCode.Forbidden);
             response.Headers.Add("X-RateLimit-Remaining", "0");
@@ -126,14 +126,14 @@ public class GitProviderClientTests
         var connection = GitHostConnection.Create(GitProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
         var repository = GitRepository.Create(connection.Id, "1", "acme/web", "https://github.com/acme/web", "main", "p");
 
-        var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmRateLimitException>(() =>
+        var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.GitRateLimitException>(() =>
             client.GetHistoryAsync(connection, "tok", repository, DateTime.UtcNow.AddDays(-30), 100, 100, CancellationToken.None));
         Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(reset).UtcDateTime, error.ResetAt);
 
         // Обычный 403 без нулевого остатка — это права, а не лимит.
-        var plain = new ScmProviderClient(new Factory(new Recorder(_ => Json("{}", HttpStatusCode.Forbidden))));
-        var forbidden = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmProviderException>(() => plain.CheckAsync(connection, "tok", CancellationToken.None));
-        Assert.IsNotType<Flow.Application.Abstractions.ScmRateLimitException>(forbidden);
+        var plain = new GitProviderClient(new Factory(new Recorder(_ => Json("{}", HttpStatusCode.Forbidden))));
+        var forbidden = await Assert.ThrowsAsync<Flow.Application.Abstractions.GitProviderException>(() => plain.CheckAsync(connection, "tok", CancellationToken.None));
+        Assert.IsNotType<Flow.Application.Abstractions.GitRateLimitException>(forbidden);
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class GitProviderClientTests
             "/app" => Json("""{"slug":"flow-tracker"}"""),
             _ => Json("""{"total_count":1,"repositories":[{"id":5,"full_name":"org/repo","html_url":"https://github.com/org/repo","default_branch":"main"}]}""")
         });
-        var client = new ScmProviderClient(new Factory(recorder), new GitHubAppTokens());
+        var client = new GitProviderClient(new Factory(recorder), new GitHubAppTokens());
         var connection = GitHostConnection.Create(GitProvider.GitHub, "App", null, "p", Guid.NewGuid(), GitAuthenticationKind.GitHubApp, 12345, 678);
 
         Assert.Equal("flow-tracker[bot]", await client.CheckAsync(connection, pem, CancellationToken.None));
@@ -169,7 +169,7 @@ public class GitProviderClientTests
 
         // Не PEM — понятная ошибка, а не исключение криптографии.
         var broken = GitHostConnection.Create(GitProvider.GitHub, "App", null, "p", Guid.NewGuid(), GitAuthenticationKind.GitHubApp, 1, 2);
-        var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.ScmProviderException>(() => client.CheckAsync(broken, "not a key", CancellationToken.None));
+        var error = await Assert.ThrowsAsync<Flow.Application.Abstractions.GitProviderException>(() => client.CheckAsync(broken, "not a key", CancellationToken.None));
         Assert.Contains("PEM", error.Message);
     }
 
@@ -187,7 +187,7 @@ public class GitProviderClientTests
             var p when p.EndsWith("/merge_requests") => Json("""{"iid":3,"title":"Draft: WEB-1 x","state":"opened","draft":true,"web_url":"https://gl.example.com/g/p/-/merge_requests/3","source_branch":"WEB-1","target_branch":"main"}""", HttpStatusCode.Created),
             _ => Json("{}", HttpStatusCode.Created)
         });
-        var client = new ScmProviderClient(new Factory(recorder));
+        var client = new GitProviderClient(new Factory(recorder));
 
         var github = GitHostConnection.Create(GitProvider.GitHub, "GitHub", null, "p", Guid.NewGuid());
         var ghRepo = GitRepository.Create(github.Id, "101", "acme/web", "https://github.com/acme/web", "main", "p");

@@ -18,7 +18,7 @@ using Flow.Application.Features.Boards.Workflow;
 using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
 using Flow.Application.Features.Boards.Queries.BoardListQuery;
-using Flow.Application.Features.Scm;
+using Flow.Application.Features.GitIntegration;
 using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Tasks;

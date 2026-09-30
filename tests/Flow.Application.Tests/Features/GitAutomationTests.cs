@@ -1,24 +1,24 @@
 using System.Text;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Workflow;
-using Flow.Application.Features.Scm;
+using Flow.Application.Features.GitIntegration;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Queries.TaskActivityListQuery;
 using Flow.Application.Features.Tasks.Queries.TaskCommentListQuery;
 using Flow.Domain.Entities;
 using Flow.Domain.Entities.GitIntegration;
 using Flow.Shared.Contracts.Boards;
-using Flow.Shared.Contracts.Scm;
+using Flow.Shared.Contracts.GitIntegration;
 using Xunit;
 using SharedMode = Flow.Shared.Contracts.Boards.WorkflowMode;
-using SharedProvider = Flow.Shared.Contracts.Scm.GitProvider;
+using SharedProvider = Flow.Shared.Contracts.GitIntegration.GitProvider;
 using GitDevelopmentLinkKind = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkKind;
 using GitDevelopmentLinkState = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkState;
 
 namespace Flow.Application.Tests.Features;
 
 /// <summary>
-/// Этап 5C (docs/TZ_scm_integration.md §4–5): автопереходы по PR через workflow (разрешён / запрещён / задача уже
+/// Этап 5C (docs/TZ_git_integration.md §4–5): автопереходы по PR через workflow (разрешён / запрещён / задача уже
 /// закрыта / переоткрытие), actor — автор PR или flow-bot, смарт-коммиты (только ветка по умолчанию, только
 /// сопоставленный автор с правами, флаг привязки, без повтора), дозагрузка истории задачи не двигает.
 /// </summary>
@@ -35,12 +35,12 @@ public class GitAutomationTests
     {
         var context = TestMediatorFactory.CreateGitContext();
         var board = (await context.Mediator.Send(new BoardCreateCommand(Owner, "Сайт", "WEB"), CancellationToken.None)).Response!;
-        var connection = await context.Mediator.Send(new ScmConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "token", null), CancellationToken.None);
-        var repository = (await context.Mediator.Send(new ScmRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
+        var connection = await context.Mediator.Send(new GitHostConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "token", null), CancellationToken.None);
+        var repository = (await context.Mediator.Send(new GitRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
         var task = (await context.Mediator.Send(new TaskCreateCommand(Owner, board.Id, "Форма входа", null, null), CancellationToken.None))!;
         var setup = new Setup(context, board, repository.Id, context.Client.CreatedHooks.Single().Secret, task.Id);
-        await context.Mediator.Send(new ScmBindCommand(Owner, board.Id, repository.Id, true,
-            new UpdateScmBindingRequest(setup.Status("В работе"), setup.Status("Сделана"), smartCommits)), CancellationToken.None);
+        await context.Mediator.Send(new GitBindCommand(Owner, board.Id, repository.Id, true,
+            new UpdateGitBindingRequest(setup.Status("В работе"), setup.Status("Сделана"), smartCommits)), CancellationToken.None);
         return setup;
     }
 
@@ -51,11 +51,11 @@ public class GitAutomationTests
         {
             ["X-GitHub-Event"] = eventName,
             ["X-GitHub-Delivery"] = delivery,
-            ["X-Hub-Signature-256"] = "sha256=" + ScmSignatures.Sign(body, setup.Secret)
+            ["X-Hub-Signature-256"] = "sha256=" + GitSignatures.Sign(body, setup.Secret)
         };
-        await setup.Context.Mediator.Send(new ScmWebhookReceiveCommand(setup.RepositoryId, headers, body), CancellationToken.None);
-        foreach (var id in await setup.Context.Mediator.Send(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
-            await setup.Context.Mediator.Send(new ScmDeliveryProcessCommand(id), CancellationToken.None);
+        await setup.Context.Mediator.Send(new GitWebhookReceiveCommand(setup.RepositoryId, headers, body), CancellationToken.None);
+        foreach (var id in await setup.Context.Mediator.Send(new GitDueIntegrationJobsQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
+            await setup.Context.Mediator.Send(new GitIntegrationJobProcessCommand(id), CancellationToken.None);
     }
 
     private static string Pr(string action, string state, bool merged = false, string target = "main", string author = "octocat") =>
@@ -160,19 +160,19 @@ public class GitAutomationTests
         await DeliverAsync(setup, "push", Push("main", "a1", "WEB-1 #done"), "p-1");
         Assert.Equal(setup.Status("Не начата"), (await TaskAsync(setup)).StatusId);
 
-        setup.Context.Client.History = new Flow.Application.Abstractions.ScmHistory(
-            [new ScmPullRequest("7", "WEB-1", null, GitDevelopmentLinkState.Merged, "u", "octocat", "f", "main", DateTime.UtcNow)], []);
-        await setup.Context.Mediator.Send(new ScmBackfillCommand(Owner, setup.RepositoryId), CancellationToken.None);
-        foreach (var id in await setup.Context.Mediator.Send(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
-            await setup.Context.Mediator.Send(new ScmDeliveryProcessCommand(id), CancellationToken.None);
+        setup.Context.Client.History = new Flow.Application.Abstractions.GitHistory(
+            [new GitPullRequest("7", "WEB-1", null, GitDevelopmentLinkState.Merged, "u", "octocat", "f", "main", DateTime.UtcNow)], []);
+        await setup.Context.Mediator.Send(new GitBackfillCommand(Owner, setup.RepositoryId), CancellationToken.None);
+        foreach (var id in await setup.Context.Mediator.Send(new GitDueIntegrationJobsQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
+            await setup.Context.Mediator.Send(new GitIntegrationJobProcessCommand(id), CancellationToken.None);
         Assert.Contains(setup.Context.Git.Links, l => l.ExternalId == "7");
         Assert.Equal(setup.Status("Не начата"), (await TaskAsync(setup)).StatusId);
 
         // Статус автоперехода — только своего проекта.
         var other = (await setup.Context.Mediator.Send(new BoardCreateCommand(Owner, "Чужой", "OPS"), CancellationToken.None)).Response!;
-        await Assert.ThrowsAsync<ArgumentException>(() => setup.Context.Mediator.Send(new ScmBindCommand(Owner, setup.Board.Id, setup.RepositoryId, true,
-            new UpdateScmBindingRequest(other.Statuses[0].Id)), CancellationToken.None));
-        var bound = (await setup.Context.Mediator.Send(new ScmBoardRepositoriesQuery(Owner, setup.Board.Id), CancellationToken.None))!.Single();
+        await Assert.ThrowsAsync<ArgumentException>(() => setup.Context.Mediator.Send(new GitBindCommand(Owner, setup.Board.Id, setup.RepositoryId, true,
+            new UpdateGitBindingRequest(other.Statuses[0].Id)), CancellationToken.None));
+        var bound = (await setup.Context.Mediator.Send(new GitBoardRepositoriesQuery(Owner, setup.Board.Id), CancellationToken.None))!.Single();
         Assert.Equal((setup.Status("В работе"), false), (bound.OnPullRequestOpenedStatusId!.Value, bound.SmartCommits));
     }
 }

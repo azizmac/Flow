@@ -64,7 +64,7 @@ public sealed class ApiFixture : IAsyncLifetime
                 // Вложения кладутся в память: поднимать MinIO ради проверки кодов ответа незачем,
                 // сам S3-клиент проверяется отдельным интеграционным тестом.
                 services.AddSingleton<IFileStorage>(Storage);
-                services.AddSingleton<IScmProviderClient>(Git);
+                services.AddSingleton<IGitProviderClient>(Git);
 
                 services
                     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

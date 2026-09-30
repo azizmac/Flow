@@ -118,7 +118,7 @@ TransitionConditions (value object, jsonb):
 ### Применение
 
 - Все пути смены статуса — `TaskUpdate`, `TaskRankCommand` (канбан), `RemoveStatus` (служебный перенос —
-  **без** проверки), смарт-коммиты (`TZ_scm_integration`), слияние — идут через одну проверку в Application.
+  **без** проверки), смарт-коммиты (`TZ_git_integration`), слияние — идут через одну проверку в Application.
 - Отказ → `TaskUpdateResult.TransitionNotAllowed(reasons)` → 400 `{ message, reasons: [...] }`. Не 409:
   конфликта версий здесь нет, это нарушение правила.
 - `GET /tasks/{id}/transitions` → список целевых статусов, для каждого `allowed` и `reasons`. Клиент:
@@ -154,7 +154,7 @@ TransitionConditions (value object, jsonb):
   `CheckTransition(from, to, ctx, typeId?)` — текст отказа называет workflow типа. `CreateTask` сразу в неначальный
   статус проверяет workflow своего типа.
 - Все пути смены статуса уже шли через `TransitionGuard` — он передаёт `task.TypeId`, отдельных правок в `TaskUpdate`,
-  канбане и автопереходах SCM не понадобилось; `GET /tasks/{id}/transitions` — тоже по типу задачи.
+  канбане и автопереходах Git не понадобилось; `GET /tasks/{id}/transitions` — тоже по типу задачи.
 - API: `GET /boards/{id}/workflow?typeId=` (у типа без своего — проектный с `inherited: true`), `PUT` с `taskTypeId`
   в теле, `DELETE /boards/{id}/workflow?typeId=` — вернуть проектный. `TaskTypeResponse.HasOwnWorkflow`.
 - Клиент: «Workflow для» на `WorkflowPage` (`?type=`): тип без своего — проектный граф только для чтения и «Сделать
@@ -194,7 +194,7 @@ TransitionConditions (value object, jsonb):
 - Application: `Features/Tasks/TransitionGuard` собирает контекст (роль в проекте, исполнитель, чек-лист; дети
   грузятся, только если какой-то переход требует `RequireChildrenDone`). Проверяет `TaskUpdate` до любых правок —
   отказ не оставляет ни записи в журнале, ни частично применённых полей. Второй путь — перенос карточки канбана
-  (`TaskRankCommand` со `StatusId`, этап 2B) — зовёт тот же guard; смарт-коммиты (`TZ_scm_integration`) обязаны
+  (`TaskRankCommand` со `StatusId`, этап 2B) — зовёт тот же guard; смарт-коммиты (`TZ_git_integration`) обязаны
   тоже.
 - `WorkflowGet` (чтение — любая роль с доступом), `WorkflowSet` (`EnsureCanManageConfig`), `TaskTransitions`.
   API: GET/PUT `/boards/{id}/workflow`, GET `/tasks/{id}/transitions`, PATCH `/tasks/{id}` при отказе — 400

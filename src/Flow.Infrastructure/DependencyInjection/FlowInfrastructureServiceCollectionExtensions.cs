@@ -1,5 +1,5 @@
-using Flow.Application.Features.Scm;
-using Flow.Infrastructure.Scm;
+using Flow.Application.Features.GitIntegration;
+using Flow.Infrastructure.GitIntegration;
 using Flow.Application.Features.Tasks.Recurrence;
 using Flow.Infrastructure.Recurrence;
 using Amazon.Runtime;
@@ -57,14 +57,14 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<IGitDevelopmentLinkRepository, GitDevelopmentLinkRepository>();
         services.AddScoped<IGitIntegrationJobRepository, GitIntegrationJobRepository>();
 
-        // Git-хостинги (docs/TZ_scm_integration.md): клиенты API, настройки секции Scm и разбор доставок вебхуков.
-        var scm = configuration.GetSection(ScmOptions.SectionName).Get<ScmOptions>() ?? new ScmOptions();
-        services.AddSingleton(scm);
-        services.AddHttpClient(ScmProviderClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
+        // Git-хостинги (docs/TZ_git_integration.md): клиенты API, настройки секции Scm и разбор доставок вебхуков.
+        var git = configuration.GetSection(GitOptions.SectionName).Get<GitOptions>() ?? new GitOptions();
+        services.AddSingleton(git);
+        services.AddHttpClient(GitProviderClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
         services.AddSingleton<GitHubAppTokens>();
-        services.AddScoped<IScmProviderClient, ScmProviderClient>();
-        if (scm.WorkerEnabled)
-            services.AddHostedService<ScmWorker>();
+        services.AddScoped<IGitProviderClient, GitProviderClient>();
+        if (git.WorkerEnabled)
+            services.AddHostedService<GitWorker>();
 
         // Повторяющиеся задачи (docs/TZ_task_model.md §9): настройки секции Recurrence и фоновый генератор.
         var recurrence = configuration.GetSection(RecurrenceOptions.SectionName).Get<RecurrenceOptions>() ?? new RecurrenceOptions();

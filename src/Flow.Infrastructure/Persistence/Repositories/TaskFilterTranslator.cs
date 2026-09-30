@@ -161,10 +161,10 @@ internal static class TaskFilterTranslator
     /// <summary>Открытый — Open или Draft; нет PR — ни одной связи вида PullRequest, в каком бы состоянии она ни была.</summary>
     private static Expression<Func<TaskItem, bool>> PullRequest(TaskFilterPullRequestState state, FlowDbContext db) => state switch
     {
-        TaskFilterPullRequestState.Open => t => db.ScmLinks.Any(l => l.TaskId == t.Id && l.Kind == GitDevelopmentLinkKind.PullRequest
+        TaskFilterPullRequestState.Open => t => db.GitDevelopmentLinks.Any(l => l.TaskId == t.Id && l.Kind == GitDevelopmentLinkKind.PullRequest
                                                                     && (l.State == GitDevelopmentLinkState.Open || l.State == GitDevelopmentLinkState.Draft)),
-        TaskFilterPullRequestState.Merged => t => db.ScmLinks.Any(l => l.TaskId == t.Id && l.Kind == GitDevelopmentLinkKind.PullRequest && l.State == GitDevelopmentLinkState.Merged),
-        _ => t => !db.ScmLinks.Any(l => l.TaskId == t.Id && l.Kind == GitDevelopmentLinkKind.PullRequest)
+        TaskFilterPullRequestState.Merged => t => db.GitDevelopmentLinks.Any(l => l.TaskId == t.Id && l.Kind == GitDevelopmentLinkKind.PullRequest && l.State == GitDevelopmentLinkState.Merged),
+        _ => t => !db.GitDevelopmentLinks.Any(l => l.TaskId == t.Id && l.Kind == GitDevelopmentLinkKind.PullRequest)
     };
 
     private static Expression<Func<TaskItem, bool>> Not(Expression<Func<TaskItem, bool>> inner) =>

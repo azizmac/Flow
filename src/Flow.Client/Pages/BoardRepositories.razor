@@ -110,8 +110,8 @@
     [Parameter] public Guid BoardId { get; set; }
 
     private BoardResponse? _board;
-    private List<ScmBoardRepositoryResponse> _repositories = [];
-    private List<ScmBoardRepositoryResponse> _available = [];
+    private List<GitBoardRepositoryResponse> _repositories = [];
+    private List<GitBoardRepositoryResponse> _available = [];
     private Guid _selectedRepositoryId;
     private string? _error;
     private string? _bindError;
@@ -146,7 +146,7 @@
             _error = result.Error;
 
         await Access.EnsureCoversAsync([BoardId]);
-        _canManage = Permissions.CanManageScm(Access.For(BoardId));
+        _canManage = Permissions.CanManageGit(Access.For(BoardId));
         _loading = false;
     }
 
@@ -169,7 +169,7 @@
         await Load();
     }
 
-    private async Task Sync(ScmBoardRepositoryResponse repository)
+    private async Task Sync(GitBoardRepositoryResponse repository)
     {
         if (_syncingId is not null) return;
         _syncingId = repository.RepositoryId;

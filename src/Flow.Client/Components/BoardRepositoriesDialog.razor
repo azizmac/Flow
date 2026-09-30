@@ -1,6 +1,6 @@
-@* Репозитории проекта (docs/TZ_scm_integration.md §6): какие подключённые репозитории связываются с задачами этого
+@* Репозитории проекта (docs/TZ_git_integration.md §6): какие подключённые репозитории связываются с задачами этого
    проекта — код задачи из непривязанного репозитория молча пропускается. Один репозиторий можно привязать к нескольким
-   проектам (монорепозиторий). Право — ManageScm (администратор проекта); подключают репозитории Admin и Owner в настройках. *@
+   проектам (монорепозиторий). Право — ManageGit (администратор проекта); подключают репозитории Admin и Owner в настройках. *@
 @implements IAsyncDisposable
 @inject IFlowApi Api
 @inject ToastService Toasts
@@ -24,15 +24,15 @@
         {
             @foreach (var r in _repositories)
             {
-                @* Строка репозитория и его настройки — один блок на общей подложке (.scm-repo). *@
-                <div class="scm-repo">
-                <div class="scm-bind">
+                @* Строка репозитория и его настройки — один блок на общей подложке (.git-repo). *@
+                <div class="git-repo">
+                <div class="git-bind">
                     <DsCheckbox Value="r.IsBound" ValueChanged="v => Set(r, v)" Disabled="_busy" Label="@r.FullName" />
-                    <span class="hint">@ScmMeta.Name(r.Provider)</span>
+                    <span class="hint">@GitMeta.Name(r.Provider)</span>
                 </div>
                 @if (r.IsBound)
                 {
-                    <div class="scm-auto">
+                    <div class="git-auto">
                         <DsSelect T="Guid?" Label="PR открыт →" Value="r.OnPullRequestOpenedStatusId" Disabled="_busy"
                                   ValueChanged="v => Configure(r with { OnPullRequestOpenedStatusId = v })" ToStringFunc="StatusName">
                             <MudSelectItem T="Guid?" Value="null">не менять статус</MudSelectItem>
@@ -49,10 +49,10 @@
                                 <MudSelectItem T="Guid?" Value="s.Id">@s.Name</MudSelectItem>
                             }
                         </DsSelect>
-                        <DsCheckbox Value="r.SmartCommits" Disabled="_busy" ValueChanged="v => Configure(r with { SmartCommits = v })" Class="scm-auto-smart"
+                        <DsCheckbox Value="r.SmartCommits" Disabled="_busy" ValueChanged="v => Configure(r with { SmartCommits = v })" Class="git-auto-smart"
                                     Label="Смарт-коммиты: #done, #comment, #status в ветке по умолчанию" />
                         <DsCheckbox Value="r.CommentOnPullRequests" Disabled="_busy" ValueChanged="v => Configure(r with { CommentOnPullRequests = v })"
-                                    Class="scm-auto-smart" Label="Комментарий в новом PR со ссылкой на задачу" />
+                                    Class="git-auto-smart" Label="Комментарий в новом PR со ссылкой на задачу" />
                     </div>
                 }
                 </div>
@@ -72,7 +72,7 @@
     private bool _visible = true;
     private bool _closing;
     private bool _busy;
-    private IReadOnlyList<ScmBoardRepositoryResponse>? _repositories;
+    private IReadOnlyList<GitBoardRepositoryResponse>? _repositories;
 
     private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
 
@@ -84,7 +84,7 @@
             Toasts.Error(result.Error ?? "Не удалось загрузить репозитории");
     }
 
-    private async Task Set(ScmBoardRepositoryResponse repository, bool bound)
+    private async Task Set(GitBoardRepositoryResponse repository, bool bound)
     {
         _busy = true;
         var result = await Api.SetBoardRepository(Board.Id, repository.RepositoryId, bound);
@@ -98,11 +98,11 @@
     private string StatusName(Guid? id) => id is { } v ? Board.Statuses.FirstOrDefault(s => s.Id == v)?.Name ?? "—" : "не менять статус";
 
     /// <summary>Настройки привязки уходят целиком — изменённая копия строки.</summary>
-    private async Task Configure(ScmBoardRepositoryResponse r)
+    private async Task Configure(GitBoardRepositoryResponse r)
     {
         _busy = true;
         var result = await Api.SetBoardRepository(Board.Id, r.RepositoryId, true,
-            new UpdateScmBindingRequest(r.OnPullRequestOpenedStatusId, r.OnPullRequestMergedStatusId, r.SmartCommits, r.CommentOnPullRequests));
+            new UpdateGitBindingRequest(r.OnPullRequestOpenedStatusId, r.OnPullRequestMergedStatusId, r.SmartCommits, r.CommentOnPullRequests));
         _busy = false;
         if (result.Ok)
             _repositories = result.Value;

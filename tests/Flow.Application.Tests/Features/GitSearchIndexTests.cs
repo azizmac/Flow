@@ -2,7 +2,7 @@ using System.Text;
 using Flow.Application.Abstractions;
 using Flow.Application.Tests.Fakes;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
-using Flow.Application.Features.Scm;
+using Flow.Application.Features.GitIntegration;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 using Flow.Domain.Entities.GitIntegration;
@@ -10,7 +10,7 @@ using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
 using Xunit;
 using GitDevelopmentLinkKind = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkKind;
-using SharedProvider = Flow.Shared.Contracts.Scm.GitProvider;
+using SharedProvider = Flow.Shared.Contracts.GitIntegration.GitProvider;
 
 namespace Flow.Application.Tests.Features;
 
@@ -28,10 +28,10 @@ public class GitSearchIndexTests
     {
         var context = TestMediatorFactory.CreateGitContext();
         var board = (await context.Mediator.Send(new BoardCreateCommand(Owner, "Сайт", "WEB"), CancellationToken.None)).Response!;
-        var connection = await context.Mediator.Send(new ScmConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "token", null), CancellationToken.None);
-        var repository = (await context.Mediator.Send(new ScmRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
+        var connection = await context.Mediator.Send(new GitHostConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "token", null), CancellationToken.None);
+        var repository = (await context.Mediator.Send(new GitRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
         var task = (await context.Mediator.Send(new TaskCreateCommand(Owner, board.Id, "Форма входа", null, null), CancellationToken.None))!;
-        await context.Mediator.Send(new ScmBindCommand(Owner, board.Id, repository.Id, true), CancellationToken.None);
+        await context.Mediator.Send(new GitBindCommand(Owner, board.Id, repository.Id, true), CancellationToken.None);
         return new Setup(context, board, repository.Id, context.Client.CreatedHooks.Single().Secret, task.Id);
     }
 
@@ -42,11 +42,11 @@ public class GitSearchIndexTests
         {
             ["X-GitHub-Event"] = eventName,
             ["X-GitHub-Delivery"] = delivery,
-            ["X-Hub-Signature-256"] = "sha256=" + ScmSignatures.Sign(body, setup.Secret)
+            ["X-Hub-Signature-256"] = "sha256=" + GitSignatures.Sign(body, setup.Secret)
         };
-        await setup.Context.Mediator.Send(new ScmWebhookReceiveCommand(setup.RepositoryId, headers, body), CancellationToken.None);
-        foreach (var id in await setup.Context.Mediator.Send(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
-            await setup.Context.Mediator.Send(new ScmDeliveryProcessCommand(id), CancellationToken.None);
+        await setup.Context.Mediator.Send(new GitWebhookReceiveCommand(setup.RepositoryId, headers, body), CancellationToken.None);
+        foreach (var id in await setup.Context.Mediator.Send(new GitDueIntegrationJobsQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
+            await setup.Context.Mediator.Send(new GitIntegrationJobProcessCommand(id), CancellationToken.None);
     }
 
     private static string Pr(string title) =>
@@ -99,12 +99,12 @@ public class GitSearchIndexTests
     public async Task Backfill_Is_Indexed_In_The_Background_And_Task_Delete_Removes_Links()
     {
         var setup = await ConnectAsync();
-        setup.Context.Client.History = new ScmHistory(
-            [new ScmPullRequest("7", "WEB-1 старый фикс", null, GitDevelopmentLinkState.Merged, "https://github.com/acme/web/pull/7", "octocat", "web-1", "main", DateTime.UtcNow.AddDays(-3))],
+        setup.Context.Client.History = new GitHistory(
+            [new GitPullRequest("7", "WEB-1 старый фикс", null, GitDevelopmentLinkState.Merged, "https://github.com/acme/web/pull/7", "octocat", "web-1", "main", DateTime.UtcNow.AddDays(-3))],
             []);
-        await setup.Context.Mediator.Send(new ScmBackfillCommand(Owner, setup.RepositoryId), CancellationToken.None);
-        foreach (var id in await setup.Context.Mediator.Send(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
-            await setup.Context.Mediator.Send(new ScmDeliveryProcessCommand(id), CancellationToken.None);
+        await setup.Context.Mediator.Send(new GitBackfillCommand(Owner, setup.RepositoryId), CancellationToken.None);
+        foreach (var id in await setup.Context.Mediator.Send(new GitDueIntegrationJobsQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
+            await setup.Context.Mediator.Send(new GitIntegrationJobProcessCommand(id), CancellationToken.None);
         var backfilled = Assert.Single(Development(setup));
         Assert.Equal(1, backfilled.Priority);
 

@@ -776,8 +776,8 @@ a.mud-link:hover {
 .sc-add.mud-input-control { max-width: 320px; }
 /* Модалки настройки проекта со списком полей («Экраны задач», «Поля проекта») — шире стандартных 440px. */
 .mud-dialog.flow-modal.wide { width: 680px; max-width: calc(100vw - 32px); }
-/* Диагностика доставок SCM — таблица в шесть колонок с текстом ошибки. */
-.mud-dialog.flow-modal.scm-deliv-modal { width: 880px; max-width: calc(100vw - 32px); }
+/* Диагностика доставок Git — таблица в шесть колонок с текстом ошибки. */
+.mud-dialog.flow-modal.git-deliv-modal { width: 880px; max-width: calc(100vw - 32px); }
 .sc-req .mud-typography { color: var(--text-secondary); font: var(--fw-medium) 12px var(--font-text); }
 
 /* Календарь: MudDropZone — наша ячейка дня без фона Material; цель «вставить первым» ужата до полосы на границе. */

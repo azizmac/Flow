@@ -107,9 +107,9 @@ internal sealed class SearchSourceReader(
     private async Task<SourceSnapshot?> ReadDevelopmentAsync(Guid linkId, CancellationToken cancellationToken)
     {
         var found = await (
-            from link in db.ScmLinks.AsNoTracking()
+            from link in db.GitDevelopmentLinks.AsNoTracking()
             join task in db.TaskItems.AsNoTracking() on link.TaskId equals task.Id
-            join repository in db.ScmRepositories.AsNoTracking() on link.RepositoryId equals repository.Id
+            join repository in db.GitRepositories.AsNoTracking() on link.RepositoryId equals repository.Id
             where link.Id == linkId && link.Kind != GitDevelopmentLinkKind.Branch
             select new
             {

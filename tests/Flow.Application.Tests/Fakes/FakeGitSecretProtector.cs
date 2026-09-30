@@ -4,7 +4,7 @@ using Flow.Domain.Entities.GitIntegration;
 namespace Flow.Application.Tests.Fakes;
 
 /// <summary>Обратимое «шифрование» для тестов: префикс, а не криптография.</summary>
-public sealed class FakeGitSecretProtector : IScmSecretProtector
+public sealed class FakeGitSecretProtector : IGitSecretProtector
 {
     public string Protect(string secret) => "p:" + secret;
 

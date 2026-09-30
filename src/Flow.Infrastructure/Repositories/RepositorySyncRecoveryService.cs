@@ -14,7 +14,7 @@ public sealed class RepositorySyncRecoveryService(IServiceProvider services, ILo
     {
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FlowDbContext>();
-        var interrupted = await db.ScmRepositories
+        var interrupted = await db.GitRepositories
             .Where(repository => repository.SyncState == Flow.Domain.Entities.GitIntegration.GitWorkspaceSyncState.Syncing)
             .ToListAsync(cancellationToken);
 

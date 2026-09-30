@@ -25,7 +25,7 @@ public enum ProjectPermission
 
     /// <summary>Создавать, править, закрывать и удалять вехи (docs/TZ_task_views.md §6): Developer и выше.</summary>
     ManageMilestones = 14,
-    ManageScm = 15,
+    ManageGit = 15,
     ManageTaskTemplates = 16,
-    WriteScm = 17
+    WriteGit = 17
 }

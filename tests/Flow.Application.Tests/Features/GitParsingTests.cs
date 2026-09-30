@@ -1,5 +1,5 @@
 using System.Text;
-using Flow.Application.Features.Scm;
+using Flow.Application.Features.GitIntegration;
 using Flow.Domain.Entities;
 using Flow.Domain.Entities.GitIntegration;
 using Xunit;
@@ -7,7 +7,7 @@ using Xunit;
 namespace Flow.Application.Tests.Features;
 
 /// <summary>
-/// Чистые функции интеграции с Git (docs/TZ_scm_integration.md §2–3): детектор кодов, подписи каждого провайдера,
+/// Чистые функции интеграции с Git (docs/TZ_git_integration.md §2–3): детектор кодов, подписи каждого провайдера,
 /// разбор payload'ов в нормализованное событие. Payload'ы — по форме документации хостингов.
 /// </summary>
 public class GitParsingTests
@@ -35,53 +35,53 @@ public class GitParsingTests
     {
         var body = Encoding.UTF8.GetBytes("{\"zen\":\"ok\"}");
         const string secret = "s3cr3t";
-        var hex = ScmSignatures.Sign(body, secret);
+        var hex = GitSignatures.Sign(body, secret);
 
-        Assert.True(ScmSignatures.Verify(GitProvider.GitHub, Headers(("X-Hub-Signature-256", "sha256=" + hex)), body, secret));
-        Assert.False(ScmSignatures.Verify(GitProvider.GitHub, Headers(("X-Hub-Signature-256", "sha256=" + hex)), body, "other"));
-        Assert.False(ScmSignatures.Verify(GitProvider.GitHub, Headers(("X-Hub-Signature-256", hex)), body, secret));
-        Assert.True(ScmSignatures.Verify(GitProvider.GitLab, Headers(("X-Gitlab-Token", secret)), body, secret));
-        Assert.False(ScmSignatures.Verify(GitProvider.GitLab, Headers(), body, secret));
-        Assert.True(ScmSignatures.Verify(GitProvider.Gitea, Headers(("X-Gitea-Signature", hex)), body, secret));
-        Assert.True(ScmSignatures.Verify(GitProvider.Forgejo, Headers(("X-Forgejo-Signature", hex)), body, secret));
-        Assert.False(ScmSignatures.Verify(GitProvider.Forgejo, Headers(("X-Forgejo-Signature", "zz")), body, secret));
+        Assert.True(GitSignatures.Verify(GitProvider.GitHub, Headers(("X-Hub-Signature-256", "sha256=" + hex)), body, secret));
+        Assert.False(GitSignatures.Verify(GitProvider.GitHub, Headers(("X-Hub-Signature-256", "sha256=" + hex)), body, "other"));
+        Assert.False(GitSignatures.Verify(GitProvider.GitHub, Headers(("X-Hub-Signature-256", hex)), body, secret));
+        Assert.True(GitSignatures.Verify(GitProvider.GitLab, Headers(("X-Gitlab-Token", secret)), body, secret));
+        Assert.False(GitSignatures.Verify(GitProvider.GitLab, Headers(), body, secret));
+        Assert.True(GitSignatures.Verify(GitProvider.Gitea, Headers(("X-Gitea-Signature", hex)), body, secret));
+        Assert.True(GitSignatures.Verify(GitProvider.Forgejo, Headers(("X-Forgejo-Signature", hex)), body, secret));
+        Assert.False(GitSignatures.Verify(GitProvider.Forgejo, Headers(("X-Forgejo-Signature", "zz")), body, secret));
     }
 
     [Fact]
     public void GitHub_Push_Pull_Request_And_Branches()
     {
-        var push = ScmPayloadParser.Parse(GitProvider.GitHub, "push", Encoding.UTF8.GetBytes("""
+        var push = GitPayloadParser.Parse(GitProvider.GitHub, "push", Encoding.UTF8.GetBytes("""
             {"ref":"refs/heads/web-12-login","after":"abc","deleted":false,
              "commits":[{"id":"abc","message":"WEB-12 add form\n\nbody","url":"https://github.com/a/b/commit/abc",
                          "timestamp":"2026-09-20T10:00:00+03:00","author":{"email":"dev@example.com","username":"octocat"}}]}
             """))!;
-        Assert.Equal((ScmEventKind.Push, "web-12-login", 1), (push.Kind, push.Branch, push.TotalCommits));
+        Assert.Equal((GitEventKind.Push, "web-12-login", 1), (push.Kind, push.Branch, push.TotalCommits));
         Assert.Equal(("abc", "dev@example.com", "octocat"), (push.Commits![0].Sha, push.Commits[0].AuthorEmail, push.Commits[0].AuthorLogin));
         Assert.Equal(new DateTime(2026, 9, 20, 7, 0, 0, DateTimeKind.Utc), push.Commits[0].Timestamp);
 
-        var pr = ScmPayloadParser.Parse(GitProvider.GitHub, "pull_request", Encoding.UTF8.GetBytes("""
+        var pr = GitPayloadParser.Parse(GitProvider.GitHub, "pull_request", Encoding.UTF8.GetBytes("""
             {"action":"closed","pull_request":{"number":42,"title":"WEB-12 Login","body":null,"state":"closed","merged":true,
              "html_url":"https://github.com/a/b/pull/42","user":{"login":"octocat"},"head":{"ref":"web-12-login"},"base":{"ref":"main"},
              "updated_at":"2026-09-21T10:00:00Z"}}
             """))!.PullRequest!;
         Assert.Equal(("42", GitDevelopmentLinkState.Merged, "web-12-login", "main"), (pr.Number, pr.State, pr.SourceBranch, pr.TargetBranch));
 
-        Assert.Equal(ScmEventKind.BranchCreated, ScmPayloadParser.Parse(GitProvider.GitHub, "create", Encoding.UTF8.GetBytes("""{"ref":"web-1","ref_type":"branch"}"""))!.Kind);
-        Assert.Null(ScmPayloadParser.Parse(GitProvider.GitHub, "create", Encoding.UTF8.GetBytes("""{"ref":"v1","ref_type":"tag"}""")));
-        Assert.Null(ScmPayloadParser.Parse(GitProvider.GitHub, "issues", Encoding.UTF8.GetBytes("{}")));
-        Assert.Equal(ScmEventKind.BranchDeleted, ScmPayloadParser.Parse(GitProvider.GitHub, "push",
+        Assert.Equal(GitEventKind.BranchCreated, GitPayloadParser.Parse(GitProvider.GitHub, "create", Encoding.UTF8.GetBytes("""{"ref":"web-1","ref_type":"branch"}"""))!.Kind);
+        Assert.Null(GitPayloadParser.Parse(GitProvider.GitHub, "create", Encoding.UTF8.GetBytes("""{"ref":"v1","ref_type":"tag"}""")));
+        Assert.Null(GitPayloadParser.Parse(GitProvider.GitHub, "issues", Encoding.UTF8.GetBytes("{}")));
+        Assert.Equal(GitEventKind.BranchDeleted, GitPayloadParser.Parse(GitProvider.GitHub, "push",
             Encoding.UTF8.GetBytes("""{"ref":"refs/heads/x","deleted":true,"after":"0000000000000000000000000000000000000000"}"""))!.Kind);
     }
 
     [Fact]
     public void GitLab_Push_Branch_And_Merge_Request()
     {
-        var created = ScmPayloadParser.Parse(GitProvider.GitLab, "Push Hook", Encoding.UTF8.GetBytes("""
+        var created = GitPayloadParser.Parse(GitProvider.GitLab, "Push Hook", Encoding.UTF8.GetBytes("""
             {"ref":"refs/heads/WEB-5","before":"0000000000000000000000000000000000000000","after":"abc","commits":[],"total_commits_count":0}
             """))!;
-        Assert.Equal((ScmEventKind.BranchCreated, "WEB-5"), (created.Kind, created.Branch));
+        Assert.Equal((GitEventKind.BranchCreated, "WEB-5"), (created.Kind, created.Branch));
 
-        var mr = ScmPayloadParser.Parse(GitProvider.GitLab, "Merge Request Hook", Encoding.UTF8.GetBytes("""
+        var mr = GitPayloadParser.Parse(GitProvider.GitLab, "Merge Request Hook", Encoding.UTF8.GetBytes("""
             {"user":{"username":"dev"},"object_attributes":{"iid":7,"title":"Draft: WEB-5","description":"","state":"opened","draft":true,
              "url":"https://gitlab.example.com/a/b/-/merge_requests/7","source_branch":"WEB-5","target_branch":"main","updated_at":"2026-09-21 10:00:00 UTC"}}
             """))!.PullRequest!;
@@ -92,15 +92,15 @@ public class GitParsingTests
     [Fact]
     public void Gitea_Pull_Request_And_Header_Names()
     {
-        var pr = ScmPayloadParser.Parse(GitProvider.Forgejo, "pull_request", Encoding.UTF8.GetBytes("""
+        var pr = GitPayloadParser.Parse(GitProvider.Forgejo, "pull_request", Encoding.UTF8.GetBytes("""
             {"action":"opened","pull_request":{"number":3,"title":"OPS-1","state":"open","merged":false,"html_url":"https://git.example.com/a/b/pulls/3",
              "user":{"login":"dev"},"head":{"ref":"ops-1"},"base":{"ref":"main"}}}
             """))!.PullRequest!;
         Assert.Equal(GitDevelopmentLinkState.Open, pr.State);
 
-        Assert.Equal("push", ScmPayloadParser.EventName(GitProvider.Forgejo, Headers(("X-Forgejo-Event", "push"))));
-        Assert.Equal("push", ScmPayloadParser.EventName(GitProvider.Gitea, Headers(("X-Gitea-Event", "push"))));
-        Assert.Equal("d-1", ScmPayloadParser.DeliveryId(GitProvider.GitHub, Headers(("X-GitHub-Delivery", "d-1"))));
+        Assert.Equal("push", GitPayloadParser.EventName(GitProvider.Forgejo, Headers(("X-Forgejo-Event", "push"))));
+        Assert.Equal("push", GitPayloadParser.EventName(GitProvider.Gitea, Headers(("X-Gitea-Event", "push"))));
+        Assert.Equal("d-1", GitPayloadParser.DeliveryId(GitProvider.GitHub, Headers(("X-GitHub-Delivery", "d-1"))));
     }
 
     [Fact]
@@ -112,27 +112,27 @@ public class GitParsingTests
               "user":{"login":"octocat"},"head":{"ref":"web-1"},"base":{"ref":"main"},"updated_at":"2026-09-10T10:00:00Z"},
              {"number":8,"title":"x","state":"closed","merged_at":null,"html_url":"u","user":{"login":"o"},"head":{"ref":"h"},"base":{"ref":"main"}}]
             """);
-        Assert.Equal([GitDevelopmentLinkState.Merged, GitDevelopmentLinkState.Closed], ScmPayloadParser.ParsePullRequests(GitProvider.GitHub, github.RootElement).Select(p => p.State));
+        Assert.Equal([GitDevelopmentLinkState.Merged, GitDevelopmentLinkState.Closed], GitPayloadParser.ParsePullRequests(GitProvider.GitHub, github.RootElement).Select(p => p.State));
 
         using var gitlab = System.Text.Json.JsonDocument.Parse("""
             [{"iid":3,"title":"Draft: WEB-2","description":"d","state":"opened","draft":true,"web_url":"https://gl/g/p/-/merge_requests/3",
               "author":{"username":"dev"},"source_branch":"web-2","target_branch":"main","updated_at":"2026-09-11T10:00:00.000Z"}]
             """);
-        var mr = ScmPayloadParser.ParsePullRequests(GitProvider.GitLab, gitlab.RootElement).Single();
+        var mr = GitPayloadParser.ParsePullRequests(GitProvider.GitLab, gitlab.RootElement).Single();
         Assert.Equal(("3", GitDevelopmentLinkState.Draft, "dev", "https://gl/g/p/-/merge_requests/3"), (mr.Number, mr.State, mr.AuthorLogin, mr.Url));
 
         using var commits = System.Text.Json.JsonDocument.Parse("""
             [{"sha":"abc","html_url":"https://github.com/a/b/commit/abc","commit":{"message":"WEB-1 fix","author":{"email":"a@b.c","date":"2026-09-12T08:00:00Z"}},"author":{"login":"octocat"}},
              {"sha":"def","html_url":"u","commit":{"message":"m","author":{"email":"x@y.z","date":"2026-09-12T09:00:00Z"}},"author":null}]
             """);
-        var parsed = ScmPayloadParser.ParseCommits(GitProvider.Gitea, commits.RootElement);
+        var parsed = GitPayloadParser.ParseCommits(GitProvider.Gitea, commits.RootElement);
         Assert.Equal(("abc", "WEB-1 fix", "a@b.c", "octocat"), (parsed[0].Sha, parsed[0].Message, parsed[0].AuthorEmail, parsed[0].AuthorLogin));
         Assert.Null(parsed[1].AuthorLogin);
 
         using var gitlabCommits = System.Text.Json.JsonDocument.Parse("""
             [{"id":"f00","message":"WEB-2 x","web_url":"https://gl/c/f00","author_email":"dev@example.com","committed_date":"2026-09-12T10:00:00.000+03:00"}]
             """);
-        var gl = ScmPayloadParser.ParseCommits(GitProvider.GitLab, gitlabCommits.RootElement).Single();
+        var gl = GitPayloadParser.ParseCommits(GitProvider.GitLab, gitlabCommits.RootElement).Single();
         Assert.Equal(("f00", new DateTime(2026, 9, 12, 7, 0, 0, DateTimeKind.Utc)), (gl.Sha, gl.Timestamp));
     }
 

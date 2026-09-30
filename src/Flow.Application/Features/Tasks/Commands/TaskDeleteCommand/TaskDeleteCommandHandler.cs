@@ -50,7 +50,7 @@ internal sealed class TaskDeleteCommandHandler(ITaskItemRepository tasks, ITaskC
 
             // PR и коммиты задачи (этап 5E) уйдут каскадом так же, как комментарии.
             foreach (var link in await developmentLinks.GetByTaskIdAsync(item.Id, cancellationToken))
-                Features.Scm.ScmSearch.Delete(searchIndex, link, item.BoardId);
+                Features.GitIntegration.GitSearch.Delete(searchIndex, link, item.BoardId);
 
             // Строки вложений уйдут каскадом, а чанки индекса привязаны к своим Id — список нужен до удаления.
             // Он же отвечает на вопрос, идти ли в хранилище: у задачи без файлов там делать нечего.

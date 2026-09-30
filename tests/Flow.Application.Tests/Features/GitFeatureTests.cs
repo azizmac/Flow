@@ -1,22 +1,22 @@
 using System.Text;
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
-using Flow.Application.Features.Scm;
+using Flow.Application.Features.GitIntegration;
 using Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 using Flow.Application.Features.Tasks.Queries.TaskGetQuery;
 using Flow.Application.Features.Tasks.Restructure;
 using Flow.Domain.Entities;
 using Flow.Shared.Contracts.Boards;
-using Flow.Shared.Contracts.Scm;
+using Flow.Shared.Contracts.GitIntegration;
 using Xunit;
 using DomainState = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkState;
 using GitDevelopmentLinkKind = Flow.Domain.Entities.GitIntegration.GitDevelopmentLinkKind;
-using SharedProvider = Flow.Shared.Contracts.Scm.GitProvider;
+using SharedProvider = Flow.Shared.Contracts.GitIntegration.GitProvider;
 
 namespace Flow.Application.Tests.Features;
 
 /// <summary>
-/// Интеграция с Git в Application (docs/TZ_scm_integration.md, этап 5A): подключения и вебхук (Admin+), ручная
+/// Интеграция с Git в Application (docs/TZ_git_integration.md, этап 5A): подключения и вебхук (Admin+), ручная
 /// настройка при отказе хостинга, приём доставки (подпись, повтор, лишние события), разбор push/PR/веток только в
 /// привязанных проектах, алиас кода, авторы, блок «Разработка» и значок PR. Разбор payload — GitParsingTests.
 /// </summary>
@@ -30,25 +30,25 @@ public class GitFeatureTests
     {
         var context = TestMediatorFactory.CreateGitContext();
         var board = (await context.Mediator.Send(new BoardCreateCommand(Owner, "Сайт", key), CancellationToken.None)).Response!;
-        var connection = await context.Mediator.Send(new ScmConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "token", null), CancellationToken.None);
-        var repository = (await context.Mediator.Send(new ScmRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
+        var connection = await context.Mediator.Send(new GitHostConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "token", null), CancellationToken.None);
+        var repository = (await context.Mediator.Send(new GitRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
         if (bind)
-            await context.Mediator.Send(new ScmBindCommand(Owner, board.Id, repository.Id, true), CancellationToken.None);
+            await context.Mediator.Send(new GitBindCommand(Owner, board.Id, repository.Id, true), CancellationToken.None);
         return new Setup(context, board, repository.Id, context.Client.CreatedHooks.Single().Secret);
     }
 
-    private static async Task<ScmWebhookResult> DeliverAsync(Setup setup, string eventName, string json, string delivery = "d-1", string? secret = null)
+    private static async Task<GitWebhookResult> DeliverAsync(Setup setup, string eventName, string json, string delivery = "d-1", string? secret = null)
     {
         var body = Encoding.UTF8.GetBytes(json);
         var headers = new Dictionary<string, string>
         {
             ["X-GitHub-Event"] = eventName,
             ["X-GitHub-Delivery"] = delivery,
-            ["X-Hub-Signature-256"] = "sha256=" + ScmSignatures.Sign(body, secret ?? setup.Secret)
+            ["X-Hub-Signature-256"] = "sha256=" + GitSignatures.Sign(body, secret ?? setup.Secret)
         };
-        var result = await setup.Context.Mediator.Send(new ScmWebhookReceiveCommand(setup.RepositoryId, headers, body), CancellationToken.None);
-        foreach (var id in await setup.Context.Mediator.Send(new ScmDueDeliveriesQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
-            await setup.Context.Mediator.Send(new ScmDeliveryProcessCommand(id), CancellationToken.None);
+        var result = await setup.Context.Mediator.Send(new GitWebhookReceiveCommand(setup.RepositoryId, headers, body), CancellationToken.None);
+        foreach (var id in await setup.Context.Mediator.Send(new GitDueIntegrationJobsQuery(DateTime.UtcNow.AddSeconds(1)), CancellationToken.None))
+            await setup.Context.Mediator.Send(new GitIntegrationJobProcessCommand(id), CancellationToken.None);
         return result;
     }
 
@@ -69,7 +69,7 @@ public class GitFeatureTests
     public async Task Connection_Is_Checked_And_Webhook_Created_With_A_Secret()
     {
         var setup = await ConnectAsync();
-        var connection = Assert.Single(await setup.Context.Mediator.Send(new ScmConnectionListQuery(Owner), CancellationToken.None));
+        var connection = Assert.Single(await setup.Context.Mediator.Send(new GitHostConnectionListQuery(Owner), CancellationToken.None));
 
         Assert.Equal(("octocat", false), (connection.CheckedLogin, connection.NeedsReconnect));
         var repository = Assert.Single(connection.Repositories);
@@ -86,11 +86,11 @@ public class GitFeatureTests
     public async Task Failed_Webhook_Returns_Manual_Settings_And_Bad_Token_Is_Reported()
     {
         var context = TestMediatorFactory.CreateGitContext();
-        var connection = await context.Mediator.Send(new ScmConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "bad", null), CancellationToken.None);
+        var connection = await context.Mediator.Send(new GitHostConnectionCreateCommand(Owner, SharedProvider.GitHub, "GitHub", "bad", null), CancellationToken.None);
         Assert.NotNull(connection.LastError);
 
         context.Client.Failure = "Токену не хватает прав на это действие.";
-        var repository = (await context.Mediator.Send(new ScmRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
+        var repository = (await context.Mediator.Send(new GitRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
         Assert.False(repository.WebhookCreated);
         Assert.Equal($"https://flow.example.com/hooks/scm/{repository.Id}", repository.ManualWebhookUrl);
         Assert.NotNull(repository.ManualWebhookSecret);
@@ -105,7 +105,7 @@ public class GitFeatureTests
         member.MarkActive();
         context.Users.Add(member);
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => context.Mediator.Send(new ScmConnectionListQuery(member.Id), CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => context.Mediator.Send(new GitHostConnectionListQuery(member.Id), CancellationToken.None));
     }
 
     [Fact]
@@ -113,12 +113,12 @@ public class GitFeatureTests
     {
         var setup = await ConnectAsync();
 
-        Assert.Equal(ScmWebhookResult.Unauthorized, await DeliverAsync(setup, "push", Push("main"), secret: "wrong"));
-        Assert.Equal(ScmWebhookResult.Accepted, await DeliverAsync(setup, "push", Push("main")));
-        Assert.Equal(ScmWebhookResult.Duplicate, await DeliverAsync(setup, "push", Push("main")));
-        Assert.Equal(ScmWebhookResult.Ignored, await DeliverAsync(setup, "star", "{}", "d-2"));
-        Assert.Equal(ScmWebhookResult.NotFound, await setup.Context.Mediator.Send(
-            new ScmWebhookReceiveCommand(Guid.NewGuid(), new Dictionary<string, string>(), []), CancellationToken.None));
+        Assert.Equal(GitWebhookResult.Unauthorized, await DeliverAsync(setup, "push", Push("main"), secret: "wrong"));
+        Assert.Equal(GitWebhookResult.Accepted, await DeliverAsync(setup, "push", Push("main")));
+        Assert.Equal(GitWebhookResult.Duplicate, await DeliverAsync(setup, "push", Push("main")));
+        Assert.Equal(GitWebhookResult.Ignored, await DeliverAsync(setup, "star", "{}", "d-2"));
+        Assert.Equal(GitWebhookResult.NotFound, await setup.Context.Mediator.Send(
+            new GitWebhookReceiveCommand(Guid.NewGuid(), new Dictionary<string, string>(), []), CancellationToken.None));
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class GitFeatureTests
         Assert.Equal(["web-1-login"], development.Branches.Select(b => b.ExternalId));
         // Оба коммита — в ветке задачи; второй упоминает задачу непривязанного проекта, ей связь не достаётся.
         Assert.Equal(2, development.CommitCount);
-        Assert.Equal(("42", Flow.Shared.Contracts.Scm.GitDevelopmentLinkState.Open, "acme/web"),
+        Assert.Equal(("42", Flow.Shared.Contracts.GitIntegration.GitDevelopmentLinkState.Open, "acme/web"),
             (development.PullRequests.Single().ExternalId, development.PullRequests.Single().State, development.PullRequests.Single().RepositoryName));
         Assert.Equal(Owner, development.Commits.First().AuthorUserId);
         Assert.Empty((await mediator.Send(new TaskDevelopmentQuery(Owner, foreign.Id), CancellationToken.None))!.Commits);
@@ -152,7 +152,7 @@ public class GitFeatureTests
              "html_url":"https://github.com/acme/web/pull/42","user":{"login":"octocat"},"head":{"ref":"web-1-login"},"base":{"ref":"main"},
              "updated_at":"2026-09-22T10:00:00Z"}}
             """, "pr-2");
-        Assert.Equal(Flow.Shared.Contracts.Scm.GitDevelopmentLinkState.Merged, (await mediator.Send(new TaskGetQuery(Owner, task.Id), CancellationToken.None))!.PullRequestState);
+        Assert.Equal(Flow.Shared.Contracts.GitIntegration.GitDevelopmentLinkState.Merged, (await mediator.Send(new TaskGetQuery(Owner, task.Id), CancellationToken.None))!.PullRequestState);
         Assert.Single(setup.Context.Git.Links, l => l.Kind == GitDevelopmentLinkKind.PullRequest);
 
         // Удалённая ветка закрывает связь, но не удаляет её.
@@ -167,13 +167,13 @@ public class GitFeatureTests
         var mediator = setup.Context.Mediator;
         var task = (await mediator.Send(new TaskCreateCommand(Owner, setup.Board.Id, "Переедет", null, null), CancellationToken.None))!;
         var target = (await mediator.Send(new BoardCreateCommand(Owner, "Новый дом", "NEW"), CancellationToken.None)).Response!;
-        await mediator.Send(new ScmBindCommand(Owner, target.Id, setup.RepositoryId, true), CancellationToken.None);
+        await mediator.Send(new GitBindCommand(Owner, target.Id, setup.RepositoryId, true), CancellationToken.None);
         await mediator.Send(new TaskMoveCommand(Owner, task.Id, target.Id), CancellationToken.None);
 
         await DeliverAsync(setup, "push", Push("main", ("c9", "WEB-1 fix after move")), "p-9");
         Assert.Equal(1, (await mediator.Send(new TaskDevelopmentQuery(Owner, task.Id), CancellationToken.None))!.CommitCount);
 
-        await mediator.Send(new ScmBindCommand(Owner, target.Id, setup.RepositoryId, false), CancellationToken.None);
+        await mediator.Send(new GitBindCommand(Owner, target.Id, setup.RepositoryId, false), CancellationToken.None);
         await DeliverAsync(setup, "push", Push("main", ("c10", "NEW-1 again")), "p-10");
         Assert.Equal(1, (await mediator.Send(new TaskDevelopmentQuery(Owner, task.Id), CancellationToken.None))!.CommitCount);
     }

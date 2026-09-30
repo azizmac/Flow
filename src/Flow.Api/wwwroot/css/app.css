@@ -2926,7 +2926,7 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .rec-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
 .rec-date { padding: 2px 8px; border-radius: 999px; background: rgba(109, 151, 115, 0.18); color: var(--sage); font: var(--fw-semibold) 12px var(--font-display); }
 
-/* ---- Интеграция с Git (docs/TZ_scm_integration.md, этап 5A) ---- */
+/* ---- Интеграция с Git (docs/TZ_git_integration.md, этап 5A) ---- */
 .dev-block { display: flex; flex-direction: column; gap: 4px; }
 .dev-block .subtasks-head .icon-lnk:first-of-type { margin-left: auto; }
 .dev-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; color: var(--text-primary); text-decoration: none; font: var(--fw-medium) 13px var(--font-text); }
@@ -2940,41 +2940,41 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 .dev-state.merged { background: rgba(109, 151, 115, 0.2); color: var(--sage); }
 .count-chip.pr-chip.open { color: var(--accent); }
 .count-chip.pr-chip.merged { color: var(--sage); }
-.scm-conn { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--border); }
-.scm-conn-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.scm-conn-head b { color: #fff; font: var(--fw-semibold) 14px var(--font-display); }
-.scm-check { margin-left: auto; }
-.scm-repos tr.off td { opacity: 0.55; }
-.scm-repos a { color: var(--text-primary); text-decoration: none; }
-.scm-hint { margin-top: 6px; }
-.scm-hint a { margin-left: 6px; color: var(--accent); }
-.scm-remote { display: flex; flex-direction: column; max-height: 320px; overflow: auto; margin-top: 8px; }
-.scm-remote-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--text-primary); font: var(--fw-medium) 13px var(--font-text); text-align: left; cursor: pointer; }
-.scm-remote-row:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); }
-.scm-remote-row:disabled { cursor: default; opacity: 0.55; }
-.scm-manual { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
-.scm-manual code { padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); font: 12px var(--font-mono); word-break: break-all; }
-.scm-auth { margin: 4px 0 2px; }
-.scm-pem textarea { font: 12px var(--font-mono) !important; }
-.scm-deliv-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-.scm-deliv-actions { display: flex; gap: 8px; margin-left: auto; }
-.scm-deliv td { vertical-align: top; }
-.scm-deliv td.nowrap { white-space: nowrap; }
-.scm-deliv td.num { text-align: right; font-variant-numeric: tabular-nums; }
-.scm-deliv-error { display: flex; flex-direction: column; gap: 2px; max-width: 360px; word-break: break-word; }
-.scm-deliv-state { display: inline-block; padding: 1px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); color: var(--text-secondary); font: var(--fw-medium) 12px var(--font-text); white-space: nowrap; }
-.scm-deliv-state.failed { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
-.scm-deliv-state.pending { color: var(--accent); }
-.scm-deliv-state.done { color: var(--sage); }
+.git-conn { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--border); }
+.git-conn-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.git-conn-head b { color: #fff; font: var(--fw-semibold) 14px var(--font-display); }
+.git-check { margin-left: auto; }
+.git-repos tr.off td { opacity: 0.55; }
+.git-repos a { color: var(--text-primary); text-decoration: none; }
+.git-hint { margin-top: 6px; }
+.git-hint a { margin-left: 6px; color: var(--accent); }
+.git-remote { display: flex; flex-direction: column; max-height: 320px; overflow: auto; margin-top: 8px; }
+.git-remote-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--text-primary); font: var(--fw-medium) 13px var(--font-text); text-align: left; cursor: pointer; }
+.git-remote-row:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); }
+.git-remote-row:disabled { cursor: default; opacity: 0.55; }
+.git-manual { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.git-manual code { padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); font: 12px var(--font-mono); word-break: break-all; }
+.git-auth { margin: 4px 0 2px; }
+.git-pem textarea { font: 12px var(--font-mono) !important; }
+.git-deliv-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.git-deliv-actions { display: flex; gap: 8px; margin-left: auto; }
+.git-deliv td { vertical-align: top; }
+.git-deliv td.nowrap { white-space: nowrap; }
+.git-deliv td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.git-deliv-error { display: flex; flex-direction: column; gap: 2px; max-width: 360px; word-break: break-word; }
+.git-deliv-state { display: inline-block; padding: 1px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); color: var(--text-secondary); font: var(--fw-medium) 12px var(--font-text); white-space: nowrap; }
+.git-deliv-state.failed { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.git-deliv-state.pending { color: var(--accent); }
+.git-deliv-state.done { color: var(--sage); }
 .ms-shared { padding: 1px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); color: var(--text-secondary); font: var(--fw-medium) 12px var(--font-text); }
 .md-shared { margin-top: 8px; }
-.scm-auto { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; padding: 0 0 12px 30px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
-.scm-auto .scm-auto-smart { grid-column: 1 / -1; }
-.scm-create { display: flex; flex-direction: column; gap: 12px; }
+.git-auto { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; padding: 0 0 12px 30px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.git-auto .git-auto-smart { grid-column: 1 / -1; }
+.git-create { display: flex; flex-direction: column; gap: 12px; }
 .dev-note { margin: -2px 0 4px 10px; color: var(--accent); font: var(--fw-medium) 12px var(--font-text); }
 .tl-source { color: var(--text-muted); }
 .tl-source a { color: inherit; text-decoration: underline dotted; }
-.scm-bind { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.git-bind { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
 /* Шаблоны проектов и перенос настроек (этап 3F) */
 .cb-template { margin-top: 4px; }
@@ -3040,10 +3040,10 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
    страниц и панели инструментов, строки таблиц и основных списков задач/людей (там разделители — норма),
    события ленты между комментариями (лёгкие намеренно). Правила стоят в конце файла: они перебивают прежние
    border-top/border-bottom-разделители и отрицательные поля этих блоков. */
-.tpl-row, .pa-row, .scm-remote-row, .scm-repo, .rs-part,
+.tpl-row, .pa-row, .git-remote-row, .git-repo, .rs-part,
 .subtask-row, .check-row, .links .link-row, .att-row, .dev-row, .similar-row,
-.scm-conn, .gp-group, .link-list .link-row,
-.tt-form, .pa-section:not(:has(.pa-list, .pa-add)), .pa-add, .ac-target, .ac-parts, .scm-manual,
+.git-conn, .gp-group, .link-list .link-row,
+.tt-form, .pa-section:not(:has(.pa-list, .pa-add)), .pa-add, .ac-target, .ac-parts, .git-manual,
 .rec-preview, .wd-grid, .rs-facts, .rs-notes, .cb-template-hint, .gp-new,
 .recurrence, .drawer-body > .meta-grid {
     background: rgba(0, 0, 0, 0.14);
@@ -3053,26 +3053,26 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
 /* Строки списков */
 .tpl-row, .pa-row, .link-list .link-row { padding: 8px 12px; }
 .tpl-row:last-child, .link-list .link-row:last-child { border-bottom: 1px solid var(--border-subtle); }
-.scm-remote-row { padding: 8px 12px; }
+.git-remote-row { padding: 8px 12px; }
 .subtask-row, .check-row, .links .link-row, .dev-row { padding: 6px 10px; }
 .att-row, .similar-row { margin: 0; padding: 7px 10px; }
 .rs-part { padding: 8px 10px; }
-.pa-list, .checklist, .links, .subtasks, .dev-block, .link-list, .scm-remote { gap: 6px; }
+.pa-list, .checklist, .links, .subtasks, .dev-block, .link-list, .git-remote { gap: 6px; }
 .tpl-row + .tpl-row { margin-top: 6px; }
-.scm-repo + .scm-repo { margin-top: 8px; }
+.git-repo + .git-repo { margin-top: 8px; }
 /* Самостоятельные блоки */
-.scm-repo { padding: 6px 12px; }
-.scm-repo .scm-auto { border-bottom: 0; margin-bottom: 0; padding-bottom: 8px; }
-.scm-conn, .gp-group { padding: 12px 14px; }
-.scm-conn + .scm-conn, .gp-group + .gp-group { margin-top: 8px; }
-.tt-form, .pa-section:not(:has(.pa-list, .pa-add)), .pa-add, .ac-parts, .scm-manual, .rec-preview, .wd-grid,
+.git-repo { padding: 6px 12px; }
+.git-repo .git-auto { border-bottom: 0; margin-bottom: 0; padding-bottom: 8px; }
+.git-conn, .gp-group { padding: 12px 14px; }
+.git-conn + .git-conn, .gp-group + .gp-group { margin-top: 8px; }
+.tt-form, .pa-section:not(:has(.pa-list, .pa-add)), .pa-add, .ac-parts, .git-manual, .rec-preview, .wd-grid,
 .cb-template-hint, .gp-new, .recurrence, .drawer-body > .meta-grid { padding: 12px 14px; }
 .ac-target { margin-top: 10px; padding: 12px 14px; }
 .rs-facts { padding: 10px 14px; }
 .rs-notes { padding: 10px 14px 10px 32px; }
 /* Наведение на карточку-строку — темнее, а не светлее: светлый налёт прежних строк на тёмной подложке мутнел. */
 @media (hover: hover) and (pointer: fine) {
-    .tpl-row:hover, .pa-row:hover, .scm-remote-row:hover, .subtask-row:hover, .check-row:hover,
+    .tpl-row:hover, .pa-row:hover, .git-remote-row:hover, .subtask-row:hover, .check-row:hover,
     .links .link-row:hover, .att-row:hover, .dev-row:hover, .similar-row:hover {
         background: rgba(0, 0, 0, 0.22);
         border-color: var(--border);

@@ -1,6 +1,6 @@
 namespace Flow.Domain.Entities.GitIntegration;
 
-// Интеграция с Git-хостингами (docs/TZ_scm_integration.md, этап 5A). Forgejo = Gitea по протоколу: один разбор,
+// Интеграция с Git-хостингами (docs/TZ_git_integration.md, этап 5A). Forgejo = Gitea по протоколу: один разбор,
 // различие — заголовки подписи и доставки. Секреты хранятся зашифрованными (IDataProtector, purpose Flow.Scm):
 // домен видит только непрозрачную строку.
 

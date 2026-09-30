@@ -1,5 +1,5 @@
 @* Экран «Настройки» (/settings, ?tab=ui|search|integrations|about).
-   «Интеграции» — подключения к Git-хостингам и репозитории (Admin+, Components/ScmIntegrations).
+   «Интеграции» — подключения к Git-хостингам и репозитории (Admin+, Components/GitIntegrations).
    «Интерфейс» — личные настройки (GET/PATCH /users/me/preferences): хранятся на сервере и едут за человеком
    на любой компьютер; каждое поле сохраняется сразу по клику, кнопки «Сохранить» нет.
    «Поиск» — состояние индекса (GET /search/status, Admin+) и переиндексация (POST /search/reindex, Owner).
@@ -94,7 +94,7 @@
         }
         else if (Tab == "integrations")
         {
-            <ScmIntegrations />
+            <GitIntegrations />
         }
         else if (Tab == "permissions")
         {
@@ -316,7 +316,7 @@
 
     private bool CanReindex => Permissions.CanReindex(Me);
 
-    /// <summary>Подключения к Git-хостингам (docs/TZ_scm_integration.md §6) — глобальные Admin и Owner.</summary>
+    /// <summary>Подключения к Git-хостингам (docs/TZ_git_integration.md §6) — глобальные Admin и Owner.</summary>
     private bool CanManageIntegrations => Me?.Role >= UserRole.Admin;
 
     /// <summary>Вкладка «Поиск» без прав не показывается; прямая ссылка на неё открывает «Интерфейс».</summary>

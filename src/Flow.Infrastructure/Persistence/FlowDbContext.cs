@@ -51,15 +51,15 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
 
     public DbSet<TaskRecurrenceOccurrence> TaskRecurrenceOccurrences => Set<TaskRecurrenceOccurrence>();
 
-    public DbSet<GitHostConnection> ScmConnections => Set<GitHostConnection>();
+    public DbSet<GitHostConnection> GitHostConnections => Set<GitHostConnection>();
 
-    public DbSet<GitRepository> ScmRepositories => Set<GitRepository>();
+    public DbSet<GitRepository> GitRepositories => Set<GitRepository>();
 
-    public DbSet<GitRepositoryBoard> ScmRepositoryBoards => Set<GitRepositoryBoard>();
+    public DbSet<GitRepositoryBoard> GitRepositoryBoards => Set<GitRepositoryBoard>();
 
-    public DbSet<GitDevelopmentLink> ScmLinks => Set<GitDevelopmentLink>();
+    public DbSet<GitDevelopmentLink> GitDevelopmentLinks => Set<GitDevelopmentLink>();
 
-    public DbSet<GitIntegrationJob> ScmDeliveries => Set<GitIntegrationJob>();
+    public DbSet<GitIntegrationJob> GitIntegrationJobs => Set<GitIntegrationJob>();
 
     /// <summary>
     /// Поисковый индекс — проекция, а не домен: наружу из сборки не торчит, Application работает

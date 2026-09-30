@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
-using Flow.Application.Features.Scm;
-using Flow.Shared.Contracts.Scm;
+using Flow.Application.Features.GitIntegration;
+using Flow.Shared.Contracts.GitIntegration;
 using Xunit;
 
 namespace Flow.Api.Tests;
@@ -18,11 +18,11 @@ public sealed class GitWebhookApiTests(ApiFixture api)
     public async Task Webhook_Is_Anonymous_Outside_Api_And_Checks_Signature()
     {
         using var owner = api.CreateClientAs();
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(GitProvider.GitHub, "GitHub", "token"));
-        var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
-        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "101"));
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub", "token"));
+        var connection = (await connectionResponse.Content.ReadFromJsonAsync<GitHostConnectionResponse>())!;
+        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddGitRepositoryRequest(connection.Id, "101"));
         Assert.Equal(HttpStatusCode.Created, repositoryResponse.StatusCode);
-        var repository = (await repositoryResponse.Content.ReadFromJsonAsync<ScmRepositoryResponse>())!;
+        var repository = (await repositoryResponse.Content.ReadFromJsonAsync<GitRepositoryResponse>())!;
         var secret = api.Git.CreatedHooks[^1].Secret;
 
         using var anonymous = api.CreateClient();
@@ -32,7 +32,7 @@ public sealed class GitWebhookApiTests(ApiFixture api)
             var request = new HttpRequestMessage(HttpMethod.Post, $"/hooks/scm/{repositoryId}") { Content = new ByteArrayContent(body) };
             request.Headers.Add("X-GitHub-Event", "push");
             request.Headers.Add("X-GitHub-Delivery", delivery);
-            request.Headers.Add("X-Hub-Signature-256", "sha256=" + ScmSignatures.Sign(body, signatureSecret));
+            request.Headers.Add("X-Hub-Signature-256", "sha256=" + GitSignatures.Sign(body, signatureSecret));
             return request;
         }
 
@@ -49,23 +49,23 @@ public sealed class GitWebhookApiTests(ApiFixture api)
         using var underApi = await anonymous.PostAsync($"/api/hooks/scm/{repository.Id}", new ByteArrayContent(body));
         Assert.NotEqual(HttpStatusCode.Accepted, underApi.StatusCode);
 
-        using var huge = new HttpRequestMessage(HttpMethod.Post, $"/hooks/scm/{repository.Id}") { Content = new ByteArrayContent(new byte[ScmWebhookControllerLimit + 1]) };
+        using var huge = new HttpRequestMessage(HttpMethod.Post, $"/hooks/scm/{repository.Id}") { Content = new ByteArrayContent(new byte[GitWebhookControllerLimit + 1]) };
         using var tooLarge = await anonymous.SendAsync(huge);
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, tooLarge.StatusCode);
     }
 
-    private const int ScmWebhookControllerLimit = 5 * 1024 * 1024;
+    private const int GitWebhookControllerLimit = 5 * 1024 * 1024;
 
     /// <summary>Этап 5B: дозагрузка истории — 202, неизвестный репозиторий — 404; повтор неизвестной доставки — 404.</summary>
     [Fact]
     public async Task Backfill_Is_Accepted_And_Unknown_Ids_Are_404()
     {
         using var owner = api.CreateClientAs();
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(GitProvider.GitHub, "GitHub 5B", "token"));
-        var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
-        api.Git.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("205", "acme/backfill", "https://github.com/acme/backfill", "main"));
-        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "205"));
-        var repository = (await repositoryResponse.Content.ReadFromJsonAsync<ScmRepositoryResponse>())!;
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub 5B", "token"));
+        var connection = (await connectionResponse.Content.ReadFromJsonAsync<GitHostConnectionResponse>())!;
+        api.Git.Remote.Add(new Flow.Application.Abstractions.GitRemoteRepository("205", "acme/backfill", "https://github.com/acme/backfill", "main"));
+        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddGitRepositoryRequest(connection.Id, "205"));
+        var repository = (await repositoryResponse.Content.ReadFromJsonAsync<GitRepositoryResponse>())!;
 
         using var accepted = await owner.PostAsync($"/api/scm/repositories/{repository.Id}/backfill", null);
         Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);
@@ -80,19 +80,19 @@ public sealed class GitWebhookApiTests(ApiFixture api)
     public async Task Binding_Accepts_An_Empty_Body_Or_Automation_Settings()
     {
         using var owner = api.CreateClientAs();
-        using var boardResponse = await owner.PostAsJsonAsync("/api/boards", new Flow.Shared.Contracts.Boards.CreateBoardRequest("Автоматизация", "SCMC"));
+        using var boardResponse = await owner.PostAsJsonAsync("/api/boards", new Flow.Shared.Contracts.Boards.CreateBoardRequest("Автоматизация", "GITC"));
         var board = (await boardResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Boards.BoardResponse>())!;
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(GitProvider.GitHub, "GitHub 5C", "token"));
-        var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
-        api.Git.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("305", "acme/auto", "https://github.com/acme/auto", "main"));
-        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "305"));
-        var repository = (await repositoryResponse.Content.ReadFromJsonAsync<ScmRepositoryResponse>())!;
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub 5C", "token"));
+        var connection = (await connectionResponse.Content.ReadFromJsonAsync<GitHostConnectionResponse>())!;
+        api.Git.Remote.Add(new Flow.Application.Abstractions.GitRemoteRepository("305", "acme/auto", "https://github.com/acme/auto", "main"));
+        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddGitRepositoryRequest(connection.Id, "305"));
+        var repository = (await repositoryResponse.Content.ReadFromJsonAsync<GitRepositoryResponse>())!;
 
         using var plain = await owner.PutAsync($"/api/boards/{board.Id}/repositories/{repository.Id}", null);
         Assert.Equal(HttpStatusCode.OK, plain.StatusCode);
         var done = board.Statuses.Single(s => s.IsFinal).Id;
-        using var configured = await owner.PutAsJsonAsync($"/api/boards/{board.Id}/repositories/{repository.Id}", new UpdateScmBindingRequest(null, done, true));
-        var list = (await configured.Content.ReadFromJsonAsync<List<ScmBoardRepositoryResponse>>())!;
+        using var configured = await owner.PutAsJsonAsync($"/api/boards/{board.Id}/repositories/{repository.Id}", new UpdateGitBindingRequest(null, done, true));
+        var list = (await configured.Content.ReadFromJsonAsync<List<GitBoardRepositoryResponse>>())!;
         Assert.Equal((done, true), (list.Single(r => r.RepositoryId == repository.Id).OnPullRequestMergedStatusId!.Value, list.Single(r => r.RepositoryId == repository.Id).SmartCommits));
     }
 
@@ -101,27 +101,27 @@ public sealed class GitWebhookApiTests(ApiFixture api)
     public async Task Branch_And_Pull_Request_Routes_Answer_With_Development()
     {
         using var owner = api.CreateClientAs();
-        using var boardResponse = await owner.PostAsJsonAsync("/api/boards", new Flow.Shared.Contracts.Boards.CreateBoardRequest("Действия", "SCMX"));
+        using var boardResponse = await owner.PostAsJsonAsync("/api/boards", new Flow.Shared.Contracts.Boards.CreateBoardRequest("Действия", "GITX"));
         var board = (await boardResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Boards.BoardResponse>())!;
         using var taskResponse = await owner.PostAsJsonAsync($"/api/boards/{board.Id}/tasks", new Flow.Shared.Contracts.Tasks.CreateTaskRequest("Кнопка", null, null));
         var task = (await taskResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Tasks.TaskResponse>())!;
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateScmConnectionRequest(GitProvider.GitHub, "GitHub 5D", "token"));
-        var connection = (await connectionResponse.Content.ReadFromJsonAsync<ScmConnectionResponse>())!;
-        api.Git.Remote.Add(new Flow.Application.Abstractions.ScmRemoteRepository("405", "acme/act", "https://github.com/acme/act", "main"));
-        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddScmRepositoryRequest(connection.Id, "405"));
-        var repository = (await repositoryResponse.Content.ReadFromJsonAsync<ScmRepositoryResponse>())!;
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub 5D", "token"));
+        var connection = (await connectionResponse.Content.ReadFromJsonAsync<GitHostConnectionResponse>())!;
+        api.Git.Remote.Add(new Flow.Application.Abstractions.GitRemoteRepository("405", "acme/act", "https://github.com/acme/act", "main"));
+        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddGitRepositoryRequest(connection.Id, "405"));
+        var repository = (await repositoryResponse.Content.ReadFromJsonAsync<GitRepositoryResponse>())!;
         using var bind = await owner.PutAsync($"/api/boards/{board.Id}/repositories/{repository.Id}", null);
 
-        using var branch = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/development/branch", new CreateScmBranchRequest(repository.Id, "SCMX-1-knopka"));
+        using var branch = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/development/branch", new CreateGitBranchRequest(repository.Id, "GITX-1-knopka"));
         Assert.Equal(HttpStatusCode.OK, branch.StatusCode);
-        Assert.Equal("SCMX-1-knopka", (await branch.Content.ReadFromJsonAsync<TaskDevelopmentResponse>())!.Branches.Single().ExternalId);
-        using var pr = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/development/pull-request", new CreateScmPullRequestRequest(repository.Id, "SCMX-1-knopka"));
+        Assert.Equal("GITX-1-knopka", (await branch.Content.ReadFromJsonAsync<TaskDevelopmentResponse>())!.Branches.Single().ExternalId);
+        using var pr = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/development/pull-request", new CreateGitPullRequestRequest(repository.Id, "GITX-1-knopka"));
         Assert.Equal(HttpStatusCode.OK, pr.StatusCode);
         Assert.Single((await pr.Content.ReadFromJsonAsync<TaskDevelopmentResponse>())!.PullRequests);
 
-        using var bad = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/development/branch", new CreateScmBranchRequest(repository.Id, "плохое имя"));
+        using var bad = await owner.PostAsJsonAsync($"/api/tasks/{task.Id}/development/branch", new CreateGitBranchRequest(repository.Id, "плохое имя"));
         Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
-        using var missing = await owner.PostAsJsonAsync($"/api/tasks/{Guid.NewGuid()}/development/branch", new CreateScmBranchRequest(repository.Id, "x-1"));
+        using var missing = await owner.PostAsJsonAsync($"/api/tasks/{Guid.NewGuid()}/development/branch", new CreateGitBranchRequest(repository.Id, "x-1"));
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 }

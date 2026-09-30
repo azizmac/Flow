@@ -1,0 +1,71 @@
+using Flow.Application.Abstractions;
+using Flow.Application.Security;
+using Flow.Domain.Entities.GitIntegration;
+using MediatR;
+
+namespace Flow.Application.Features.GitIntegration;
+
+public sealed record SynchronizeGitRepositoryCommand(Guid ActorId, Guid BoardId, Guid RepositoryId)
+    : IRequest<bool?>;
+
+internal sealed class SynchronizeGitRepositoryCommandHandler(
+    IGitHostConnectionRepository connections,
+    IGitRepositoryCatalog catalog,
+    IGitRepositoryBoardRepository repositoryBoards,
+    IRepositoryWorkspaceService workspaces,
+    ActorResolver actors,
+    IPermissionService permissions,
+    IProjectAccess projectAccess,
+    IUnitOfWork unitOfWork)
+    : IRequestHandler<SynchronizeGitRepositoryCommand, bool?>
+{
+    public async Task<bool?> Handle(SynchronizeGitRepositoryCommand request, CancellationToken cancellationToken)
+    {
+        var actor = await actors.ResolveAsync(request.ActorId, cancellationToken);
+        permissions.EnsureCanManageGit(await projectAccess.GetAsync(actor, request.BoardId, cancellationToken));
+
+        var repository = await catalog.GetByIdAsync(request.RepositoryId, cancellationToken);
+        if (repository is null || !(await repositoryBoards.GetAsync(request.BoardId, request.RepositoryId, cancellationToken)).Any())
+            return null;
+
+        var connection = await connections.GetByIdAsync(repository.ConnectionId, cancellationToken);
+        if (connection is null || !CanClonePublicRepository(connection.Provider, repository.WebUrl))
+            throw new InvalidOperationException("Локальная синхронизация пока доступна только для публичных репозиториев GitHub и GitLab.");
+
+        repository.StartSync();
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            var commit = await workspaces.SynchronizeAsync(repository, cancellationToken);
+            repository.CompleteSync(commit);
+        }
+        catch (OperationCanceledException)
+        {
+            repository.FailSync("Синхронизация прервана.");
+            await unitOfWork.SaveChangesAsync(CancellationToken.None);
+            throw;
+        }
+        catch (Exception)
+        {
+            repository.FailSync("Не удалось получить репозиторий. Проверьте адрес и ветку.");
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    private static bool CanClonePublicRepository(GitProvider provider, string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+        uri.Scheme == Uri.UriSchemeHttps &&
+        string.IsNullOrEmpty(uri.UserInfo) &&
+        uri.IsDefaultPort &&
+        string.IsNullOrEmpty(uri.Query) &&
+        string.IsNullOrEmpty(uri.Fragment) &&
+        string.Equals(uri.Host, provider switch
+        {
+            GitProvider.GitHub => "github.com",
+            GitProvider.GitLab => "gitlab.com",
+            _ => null
+        }, StringComparison.OrdinalIgnoreCase);
+}

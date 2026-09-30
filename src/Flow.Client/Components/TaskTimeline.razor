@@ -490,8 +490,8 @@
     private static RenderFragment SourceOf(TaskActivityResponse a) => a.Source is not { } source
         ? _ => { }
         : a.SourceUrl is { } url
-            ? @<span class="tl-source"> · по <a href="@url" target="_blank" rel="noopener noreferrer">@ScmMeta.SourceLabel(source)</a></span>
-            : @<span class="tl-source"> · по @ScmMeta.SourceLabel(source)</span>;
+            ? @<span class="tl-source"> · по <a href="@url" target="_blank" rel="noopener noreferrer">@GitMeta.SourceLabel(source)</a></span>
+            : @<span class="tl-source"> · по @GitMeta.SourceLabel(source)</span>;
 
     /// <summary>Коды выделенных задач — ссылками /tasks/{код}: коды живут дольше Id в тексте журнала.</summary>
     private static RenderFragment SplitCodes(string? codes) => @<span>выделены задачи:

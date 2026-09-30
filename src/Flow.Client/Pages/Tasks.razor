@@ -226,7 +226,7 @@
                                 }
                                 @if (context.Item.PullRequestState is { } prState)
                                 {
-                                    <span class="count-chip pr-chip @ScmMeta.StateClass(prState)" title="@($"Последний PR: {ScmMeta.StateLabel(prState)}")"><Icon Name="code" Size="12" />PR</span>
+                                    <span class="count-chip pr-chip @GitMeta.StateClass(prState)" title="@($"Последний PR: {GitMeta.StateLabel(prState)}")"><Icon Name="code" Size="12" />PR</span>
                                 }
                                 @if (context.Item.BlockedByCount > 0)
                                 {
@@ -485,7 +485,7 @@
                 <DsIconButton Icon="copy" Size="30" Title="Шаблоны задач" Class="project-tool" OnClick="() => _templatesOpen = true" />
             }
             <DsIconButton Icon="calendar" Size="30" Title="Вехи проекта" Class="project-tool" OnClick="@(() => Nav.NavigateTo($"boards/{board.Id}/milestones"))" />
-            @if (Permissions.CanManageScm(access))
+            @if (Permissions.CanManageGit(access))
             {
                 <DsIconButton Icon="code" Size="30" Title="Репозитории проекта" Class="project-tool" OnClick="() => _reposOpen = true" />
             }

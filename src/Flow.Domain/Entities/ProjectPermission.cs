@@ -28,12 +28,12 @@ public enum ProjectPermission
     /// <summary>Создавать, править, закрывать и удалять вехи (docs/TZ_task_views.md §6): Developer и выше.</summary>
     ManageMilestones = 14,
 
-    /// <summary>Привязывать репозитории Git-хостинга к проекту (docs/TZ_scm_integration.md §6): администратор проекта.</summary>
-    ManageScm = 15,
+    /// <summary>Привязывать репозитории Git-хостинга к проекту (docs/TZ_git_integration.md §6): администратор проекта.</summary>
+    ManageGit = 15,
 
     /// <summary>Создавать, править и удалять шаблоны задач проекта (docs/TZ_workflow_config.md §5): Developer и выше.</summary>
     ManageTaskTemplates = 16,
 
-    /// <summary>Создавать ветки и PR на хостинге из карточки задачи (docs/TZ_scm_integration.md §8, этап 5D): Developer и выше.</summary>
-    WriteScm = 17
+    /// <summary>Создавать ветки и PR на хостинге из карточки задачи (docs/TZ_git_integration.md §8, этап 5D): Developer и выше.</summary>
+    WriteGit = 17
 }
