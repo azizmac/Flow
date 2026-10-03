@@ -1,23 +1,23 @@
 <component name="ProjectRunConfigurationManager">
-  <!-- Весь Flow в Docker одной кнопкой, то же, что docker/up.ps1: сеть и тома → данные → приложение
-       на http://localhost:8080 (API_PORT). Раньше это была составная конфигурация, но она запускает
-       вложенные параллельно — и на чистой машине приложение стартовало раньше, чем появлялась сеть
-       flow-network. Шаги «Before launch» идут строго по очереди. Порядок данных и api при этом не
-       критичен: api дожидается базы сам (Startup:DatabaseWaitTimeoutSeconds).
-       Fast mode выключен по той же причине, что в «Flow (docker compose)». -->
+  <!-- Сначала Flow (data stack) с OpenCode, затем сборка и запуск api с интерфейсом на :8080.
+       Сеть и тома должны быть заранее созданы init под свою ОС; автоматического init нет.
+       LM Studio запускает разработчик. Для Debug приложения на работающих данных — Flow Only.
+       См. docs/OpenCode_setup.md. -->
   <configuration default="false" name="Flow (full stack)" type="docker-deploy" factoryName="docker-compose.yml" server-name="Docker">
     <deployment type="docker-compose.yml">
       <settings>
         <option name="envFilePath" value="" />
+        <option name="envFilePaths">
+          <list>
+            <option value="" />
+          </list>
+        </option>
         <option name="commandLineOptions" value="--build" />
         <option name="sourceFilePath" value="docker-compose.yml" />
       </settings>
     </deployment>
     <EXTENSION ID="com.jetbrains.rider.docker.debug" isFastModeEnabled="false" isSslEnabled="false" />
     <method v="2">
-      <!-- init стоит и здесь, и внутри «Flow (data stack)»: второй прогон — секунда, зато сеть появится
-           даже там, где Rider не исполняет вложенные «Before launch». -->
-      <option name="RunConfigurationTask" enabled="true" run_configuration_name="Flow (init)" run_configuration_type="ShConfigurationType" />
       <option name="RunConfigurationTask" enabled="true" run_configuration_name="Flow (data stack)" run_configuration_type="docker-deploy" />
     </method>
   </configuration>

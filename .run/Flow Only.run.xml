@@ -1,0 +1,28 @@
+<component name="ProjectRunConfigurationManager">
+  <!-- Только приложение: пересобрать образ api и поднять его. Для случая, когда данные уже работают
+       (после «Flow (full stack)» или «Flow (data stack)»); сеть и тома тоже должны уже существовать.
+       Локальный overlay собирает Debug с символами и без оптимизаций. Для отладчика выбрать Debug,
+       а не Run. Fast mode выключен: образ должен пройти editor (CodeMirror), build и publish.
+       OpenCode должен уже работать в data stack; LM Studio — на хосте. См. docs/OpenCode_setup.md. -->
+  <configuration default="false" name="Flow Only" type="docker-deploy" factoryName="docker-compose.yml" server-name="Docker">
+    <deployment type="docker-compose.yml">
+      <settings>
+        <option name="envFilePath" value="" />
+        <option name="commandLineOptions" value="--build" />
+        <option name="sourceFilePath" value="docker-compose.yml" />
+        <option name="secondarySourceFiles">
+          <list>
+            <option value="docker-compose.debug.yml" />
+          </list>
+        </option>
+        <option name="services">
+          <list>
+            <option value="api" />
+          </list>
+        </option>
+      </settings>
+    </deployment>
+    <EXTENSION ID="com.jetbrains.rider.docker.debug" isFastModeEnabled="false" isSslEnabled="false" />
+    <method v="2" />
+  </configuration>
+</component>

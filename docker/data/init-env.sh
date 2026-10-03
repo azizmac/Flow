@@ -1,6 +1,8 @@
 #!/bin/sh
 # Создаёт общую сеть и внешние тома данных. Запускается один раз перед первым стартом, повторный
 # запуск ничего не ломает. См. docs/TZ_infra_data_split.md.
+# Контейнеры и LM Studio не запускает; общий том репозиториев затем используют api и OpenCode.
+# Инструкция запуска агента: docs/OpenCode_setup.md.
 #
 #   sh docker/data/init-env.sh
 #   DATA_ROOT=/mnt/flow sh docker/data/init-env.sh   # данные на своём каталоге вместо томов Docker

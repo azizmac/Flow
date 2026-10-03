@@ -2,6 +2,7 @@
 # приложение. Compose не умеет depends_on между проектами, поэтому порядок задаёт скрипт;
 # сервис, стартовавший раньше базы, дожидается её сам (Startup:DatabaseWaitTimeoutSeconds).
 # Все шаги идемпотентны.
+# Стек данных включает OpenCode; LM Studio разработчик запускает отдельно. См. docs/OpenCode_setup.md.
 #
 #   powershell -ExecutionPolicy Bypass -File docker/up.ps1
 #   powershell -ExecutionPolicy Bypass -File docker/up.ps1 -NoBuild

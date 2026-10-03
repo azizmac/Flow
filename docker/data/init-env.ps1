@@ -1,4 +1,6 @@
 ﻿# Создаёт общую сеть и внешние тома данных (Windows). Аналог docker/data/init-env.sh.
+# Контейнеры и LM Studio не запускает; общий том репозиториев затем используют api и OpenCode.
+# Инструкция запуска агента: docs/OpenCode_setup.md.
 #
 #   powershell -ExecutionPolicy Bypass -File docker/data/init-env.ps1
 #   $env:DATA_ROOT="D:\flow"; powershell -ExecutionPolicy Bypass -File docker/data/init-env.ps1

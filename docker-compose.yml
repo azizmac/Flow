@@ -4,11 +4,12 @@
 # Auth-модуля. См. docs/TZ_infra_data_split.md, docs/TZ_modular_monolith.md.
 #
 #   sh docker/data/init-env.sh                       # один раз: общая сеть и тома данных
-#   docker compose -f docker-compose.data.yml up -d  # данные
+#   docker compose -f docker-compose.data.yml up -d  # PostgreSQL, S3 и OpenCode
 #   docker compose up -d --build                     # приложение
 #
 # Адреса БД и S3 — переменные: POSTGRES_HOST и S3_ENDPOINT можно увести на внешние сервисы
 # и не поднимать docker-compose.data.yml вовсе.
+# Для агента всё равно нужны доступный OpenCode и общая копия репозитория; см. docs/OpenCode_setup.md.
 
 # Базовый пользователь (Owner) при первом запуске: Auth-модуль создаёт учётную запись, Flow.Api — профиль
 # с тем же Id. См. docs/TZ_modular_monolith.md. Пароль после первого входа нужно сменить.
@@ -68,12 +69,14 @@ services:
       S3__SecretKey: ${MINIO_ROOT_PASSWORD:-flow12345}
       S3__Bucket: ${S3_BUCKET:-flow}
       S3__UseSsl: ${S3_USE_SSL:-false}
+      # Адрес сервиса в общей Docker-сети. localhost:4096 используется только из процесса на хосте.
       OpenCode__BaseUrl: ${OPENCODE_API_URL:-http://opencode:4096}
       OpenCode__Username: ${OPENCODE_SERVER_USERNAME:-opencode}
       OpenCode__Password: ${OPENCODE_SERVER_PASSWORD:-flow-opencode-local}
       OpenCode__ProviderId: ${OPENCODE_PROVIDER_ID:-lmstudio}
       OpenCode__ModelId: ${OPENCODE_MODEL_ID:-qwen3.6-35b-a3b}
       OpenCode__TimeoutSeconds: ${OPENCODE_TIMEOUT_SECONDS:-300}
+      # Один том под разными путями: api пишет checkout, OpenCode читает его как /workspaces:ro.
       Repositories__WorkspaceRoot: /var/lib/flow/repositories
       Repositories__AgentWorkspaceRoot: /workspaces
       # Поиск включён по умолчанию: без модели он деградирует в полнотекстовый (GET /search
