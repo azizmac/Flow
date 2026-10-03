@@ -38,7 +38,7 @@
                         <div class="repo-create-foot">
                             <DsSelect T="Guid" @bind-Value="_selectedRepositoryId" ToStringFunc="RepositoryName"
                                       AriaLabel="Репозиторий для привязки" Placeholder="Выберите репозиторий"
-                                      Compact="true" Class="repo-selector" Disabled="_binding">
+                                      Compact="true" Class="repo-selector" Disabled="@(_binding || _unbinding)">
                                 <MudSelectItem T="Guid" Value="Guid.Empty">Выберите репозиторий</MudSelectItem>
                                 @foreach (var repository in _available)
                                 {
@@ -46,7 +46,7 @@
                                 }
                             </DsSelect>
                             <DsButton Variant="primary" Size="sm" Icon="plus" Busy="_binding"
-                                      Disabled="@(_selectedRepositoryId == Guid.Empty)" OnClick="Bind">Привязать</DsButton>
+                                      Disabled="@(_selectedRepositoryId == Guid.Empty || _unbinding)" OnClick="Bind">Привязать</DsButton>
                         </div>
                     }
                     @if (_bindError is not null)
@@ -61,6 +61,10 @@
                 @if (_syncError is not null)
                 {
                     <div class="repo-error" role="alert">@_syncError</div>
+                }
+                @if (_unbindError is not null)
+                {
+                    <div class="repo-error" role="alert">@_unbindError</div>
                 }
                 @if (_repositories.Count == 0)
                 {
@@ -97,8 +101,14 @@
                             @if (_canManage && repository.Provider is GitProvider.GitHub or GitProvider.GitLab)
                             {
                                 <DsButton Variant="secondary" Size="sm" Icon="history" Busy="@(_syncingId == repository.RepositoryId)"
-                                          Disabled="@(repository.SyncState is "Syncing" || _syncingId is not null)"
+                                          Disabled="@(repository.SyncState is "Syncing" || _syncingId is not null || _unbinding)"
                                           OnClick="() => Sync(repository)">Синхронизировать</DsButton>
+                            }
+                            @if (_canManage)
+                            {
+                                <DsButton Variant="tertiary" Size="sm" Icon="close-simple" Title="Отвязать только от текущего проекта"
+                                          Disabled="@(_binding || _unbinding || _syncingId is not null)"
+                                          OnClick="() => _repositoryToUnbind = repository">Отвязать</DsButton>
                             }
                         </div>
                     </article>
@@ -107,6 +117,13 @@
         }
     </div>
 </div>
+
+@if (_repositoryToUnbind is { } repositoryToUnbind)
+{
+    <ConfirmDialog Title="@($"Отвязать репозиторий «{repositoryToUnbind.FullName}»?")"
+                   Text="Будет удалена только привязка к этому проекту и её настройки. Репозиторий, локальная копия кода, существующие связи с задачами и привязки к другим проектам сохранятся."
+                   ConfirmLabel="Отвязать" OnConfirm="Unbind" OnCancel="() => _repositoryToUnbind = null" />
+}
 
 @code {
     [Parameter] public Guid BoardId { get; set; }
@@ -118,10 +135,13 @@
     private string? _error;
     private string? _bindError;
     private string? _syncError;
+    private string? _unbindError;
     private bool _loading = true;
     private bool _binding;
+    private bool _unbinding;
     private bool _canManage;
     private Guid? _syncingId;
+    private GitBoardRepositoryResponse? _repositoryToUnbind;
 
     protected override async Task OnParametersSetAsync() => await Load();
 
@@ -158,7 +178,7 @@
 
     private async Task Bind()
     {
-        if (_binding || _selectedRepositoryId == Guid.Empty) return;
+        if (_binding || _unbinding || _selectedRepositoryId == Guid.Empty) return;
         _binding = true;
         _bindError = null;
         var result = await Api.SetBoardRepository(BoardId, _selectedRepositoryId, true);
@@ -172,9 +192,34 @@
         await Load();
     }
 
+    private async Task Unbind()
+    {
+        if (_unbinding || _binding || _syncingId is not null || _repositoryToUnbind is not { } repository) return;
+        _unbinding = true;
+        _unbindError = null;
+        try
+        {
+            var result = await Api.SetBoardRepository(BoardId, repository.RepositoryId, false);
+            _repositoryToUnbind = null;
+            if (!result.Ok)
+            {
+                _unbindError = result.Error ?? "Не удалось отвязать репозиторий.";
+                return;
+            }
+
+            _repositories = result.Value!.Where(item => item.IsBound).ToList();
+            _available = result.Value!.Where(item => !item.IsBound).ToList();
+            _selectedRepositoryId = Guid.Empty;
+        }
+        finally
+        {
+            _unbinding = false;
+        }
+    }
+
     private async Task Sync(GitBoardRepositoryResponse repository)
     {
-        if (_syncingId is not null) return;
+        if (_syncingId is not null || _unbinding) return;
         _syncingId = repository.RepositoryId;
         _syncError = null;
         var result = await Api.SynchronizeGitRepository(BoardId, repository.RepositoryId);
