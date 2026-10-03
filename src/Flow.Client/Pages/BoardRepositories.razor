@@ -36,13 +36,15 @@
                     @if (_available.Count > 0)
                     {
                         <div class="repo-create-foot">
-                            <select value="@_selectedRepositoryId" @onchange="SelectRepository">
-                                <option value="@Guid.Empty">Выберите репозиторий</option>
+                            <DsSelect T="Guid" @bind-Value="_selectedRepositoryId" ToStringFunc="RepositoryName"
+                                      AriaLabel="Репозиторий для привязки" Placeholder="Выберите репозиторий"
+                                      Compact="true" Class="repo-selector" Disabled="_binding">
+                                <MudSelectItem T="Guid" Value="Guid.Empty">Выберите репозиторий</MudSelectItem>
                                 @foreach (var repository in _available)
                                 {
-                                    <option value="@repository.RepositoryId">@repository.FullName</option>
+                                    <MudSelectItem T="Guid" Value="repository.RepositoryId">@repository.FullName</MudSelectItem>
                                 }
-                            </select>
+                            </DsSelect>
                             <DsButton Variant="primary" Size="sm" Icon="plus" Busy="_binding"
                                       Disabled="@(_selectedRepositoryId == Guid.Empty)" OnClick="Bind">Привязать</DsButton>
                         </div>
@@ -150,8 +152,9 @@
         _loading = false;
     }
 
-    private void SelectRepository(ChangeEventArgs e) =>
-        _selectedRepositoryId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : Guid.Empty;
+    private string? RepositoryName(Guid id) => id == Guid.Empty
+        ? "Выберите репозиторий"
+        : _available.FirstOrDefault(repository => repository.RepositoryId == id)?.FullName;
 
     private async Task Bind()
     {

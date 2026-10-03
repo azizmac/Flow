@@ -37,22 +37,20 @@
                 </div>
 
                 <div class="agent-test-source">
-                    <label>Проект
-                        <select value="@_boardId" @onchange="SelectBoard">
-                            @foreach (var board in _boards)
-                            {
-                                <option value="@board.Id">@board.Name</option>
-                            }
-                        </select>
-                    </label>
-                    <label>Репозиторий
-                        <select value="@_repositoryId" @onchange="SelectRepository">
-                            @foreach (var repository in _repositories)
-                            {
-                                <option value="@repository.RepositoryId">@repository.FullName · @repository.DefaultBranch (@repository.SyncState)</option>
-                            }
-                        </select>
-                    </label>
+                    <DsSelect T="Guid" Label="Проект" Value="_boardId" ValueChanged="SelectBoard"
+                              ToStringFunc="BoardName" Placeholder="Выберите проект" Compact="true" Disabled="@(_boards.Count == 0)">
+                        @foreach (var board in _boards)
+                        {
+                            <MudSelectItem T="Guid" Value="board.Id">@board.Name</MudSelectItem>
+                        }
+                    </DsSelect>
+                    <DsSelect T="Guid" Label="Репозиторий" @bind-Value="_repositoryId" ToStringFunc="RepositoryLabel"
+                              Placeholder="Выберите репозиторий" Compact="true" Disabled="@(_repositories.Count == 0)">
+                        @foreach (var repository in _repositories)
+                        {
+                            <MudSelectItem T="Guid" Value="repository.RepositoryId">@RepositoryLabel(repository.RepositoryId)</MudSelectItem>
+                        }
+                    </DsSelect>
                 </div>
                 @if (_boardId != Guid.Empty && _repositories.Count == 0)
                 {
@@ -162,14 +160,18 @@
             _repositoryId = repositoryId;
     }
 
-    private async Task SelectBoard(ChangeEventArgs e)
+    private async Task SelectBoard(Guid boardId)
     {
-        _boardId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : Guid.Empty;
+        _boardId = boardId;
         await LoadRepositories();
     }
 
-    private void SelectRepository(ChangeEventArgs e) =>
-        _repositoryId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : Guid.Empty;
+    private string? BoardName(Guid id) => _boards.FirstOrDefault(board => board.Id == id)?.Name;
+
+    private string? RepositoryLabel(Guid id) =>
+        _repositories.FirstOrDefault(repository => repository.RepositoryId == id) is { } repository
+            ? $"{repository.FullName} · {repository.DefaultBranch} ({repository.SyncState})"
+            : null;
 
     private async Task LoadRepositories()
     {

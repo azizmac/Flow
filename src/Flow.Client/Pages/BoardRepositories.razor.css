@@ -1,4 +1,4 @@
-.repo-page { width: min(1080px, 100%); display: flex; flex-direction: column; gap: 26px; }
+.repo-page { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 26px; }
 .repo-intro { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .repo-intro h1 { margin: 0; color: #fff; font: var(--fw-extrabold) 24px var(--font-display); }
 .repo-intro p { margin: 7px 0 0; color: var(--text-secondary); font: var(--fw-medium) 13px var(--font-text); }
@@ -10,11 +10,9 @@
 .repo-create-grid ::deep .repo-name { grid-column: 2 / 4; }
 .repo-create-grid ::deep .repo-url { grid-column: 1 / 3; }
 .repo-field { display: flex; flex-direction: column; gap: var(--space-3); color: var(--text-secondary); font: var(--fw-medium) var(--text-body) var(--font-display); }
-.repo-field select { height: 34px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; outline: none; background: transparent; color: #fff; font: var(--fw-semibold) 13.5px var(--font-text); }
-.repo-field select:focus { border-color: var(--accent); }
-.repo-field option { background: var(--surface); }
 .repo-create-foot { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.repo-create-foot select { min-width: 260px; max-width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text-primary); font: var(--fw-medium) 13px var(--font-text); }
+.repo-create-foot ::deep .repo-selector { flex: 1 1 auto; min-width: 0; }
+.repo-create-foot ::deep .ds-btn { flex: none; }
 .repo-create .hint a { color: var(--accent); }
 .repo-list { display: flex; flex-direction: column; gap: 12px; }
 .repo-list > .repo-section-title { margin-bottom: 4px; }

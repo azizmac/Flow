@@ -1,5 +1,6 @@
 .agent-test {
-    width: min(1080px, 100%);
+    width: 100%;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
@@ -44,10 +45,7 @@ kbd { padding: 1px 4px; border: 1px solid var(--border-strong); border-radius: 4
 .agent-test-question-field { display: flex; flex-direction: column; gap: var(--space-2); }
 .agent-test-question-label { color: var(--text-secondary); font: var(--fw-medium) var(--text-body) var(--font-display); }
 .agent-test-source { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); }
-.agent-test-source label { min-width: 0; display: flex; flex-direction: column; gap: 9px; color: var(--text-secondary); font: var(--fw-medium) var(--text-body) var(--font-display); }
-.agent-test-source select { width: 100%; min-width: 0; min-height: var(--control-h-md); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--r-md); outline: none; background: rgba(0, 0, 0, .12); color: var(--text-primary); font: var(--fw-medium) 12px var(--font-text); color-scheme: dark; }
-.agent-test-source select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-.agent-test-source option { background: var(--surface); color: var(--text-primary); }
+.agent-test-source ::deep .ds-field { min-width: 0; }
 .agent-test-question { width: 100%; box-sizing: border-box; min-height: 180px; padding: var(--space-3); resize: vertical; border: 1px solid var(--border); border-radius: var(--r-md); outline: none; background: rgba(0, 0, 0, .12); color: var(--text-primary); font: var(--fw-medium) 13.5px/1.6 var(--font-text); transition: border-color .18s ease, box-shadow .18s ease; color-scheme: dark; }
 .agent-test-question::placeholder { color: var(--text-tertiary); }
 .agent-test-question:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
