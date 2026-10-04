@@ -2,7 +2,7 @@
 # Без USER $APP_UID: Auth-модуль пишет сертификаты (/certs) и ключи Data Protection (/keys) в volumes,
 # которые Docker создаёт от root. При переходе на non-root нужно chown этих каталогов.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git \
+    && apt-get install -y --no-install-recommends git=1:2.43.0-1ubuntu7.3 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 EXPOSE 8080
