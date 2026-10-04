@@ -14,10 +14,16 @@ namespace Flow.Application.Features.Templates;
 
 public sealed record BoardTemplateListQuery(Guid ActorId) : IRequest<IReadOnlyList<BoardTemplateResponse>>;
 
-/// <summary>Снимок конфигурации проекта; IncludeTasks — до 50 задач верхнего уровня как образец. null — проекта нет.</summary>
+/// <summary>
+/// Снимок конфигурации проекта; IncludeTasks — до 50 задач верхнего уровня как образец. null — проекта нет.
+/// Обработчик - <see cref="BoardTemplateHandlers"/>
+/// </summary>
 public sealed record BoardTemplateSaveCommand(Guid ActorId, Guid BoardId, string Name, string? Description, bool IncludeTasks)
     : IRequest<BoardTemplateResponse?>;
 
+/// <summary>
+/// Обработчик - <see cref="BoardTemplateHandlers"/>
+/// </summary>
 public sealed record BoardTemplateDeleteCommand(Guid ActorId, Guid TemplateId) : IRequest<bool>;
 
 /// <summary>Чертёж шаблона по Id — встроенного или сохранённого (с апгрейдом старой версии); null — такого нет.</summary>

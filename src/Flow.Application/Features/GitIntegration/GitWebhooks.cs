@@ -13,18 +13,28 @@ public enum GitWebhookResult { NotFound, Unauthorized, BadRequest, Duplicate, Ac
 /// Приём вебхука (docs/TZ_git_integration.md §2): подпись по сырому телу до разбора JSON, повтор доставки — Duplicate
 /// без повторной обработки, событие нормализуется сразу и пишется в очередь; разбор — воркером. Заголовки —
 /// без учёта регистра.
+/// Обработчик - <see cref="GitWebhookReceiveCommandHandler"/>
 /// </summary>
 public sealed record GitWebhookReceiveCommand(Guid RepositoryId, IReadOnlyDictionary<string, string> Headers, byte[] Body) : IRequest<GitWebhookResult>;
 
 /// <summary>Id доставок, которые пора разобрать.</summary>
 public sealed record GitDueIntegrationJobsQuery(DateTime UtcNow, int Limit = 50) : IRequest<IReadOnlyList<Guid>>;
 
-/// <summary>Разобрать одну доставку; исключение — сбой, его записывает <see cref="GitIntegrationJobFailCommand"/> в новой области.</summary>
+/// <summary>
+/// Разобрать одну доставку; исключение — сбой, его записывает <see cref="GitIntegrationJobFailCommand"/> в новой области.
+/// Обработчик - <see cref="GitIntegrationJobHandlers"/>
+/// </summary>
 public sealed record GitIntegrationJobProcessCommand(Guid DeliveryId) : IRequest<bool>;
 
+/// <summary>
+/// Обработчик - <see cref="GitIntegrationJobHandlers"/>
+/// </summary>
 public sealed record GitIntegrationJobFailCommand(Guid DeliveryId, string Error) : IRequest;
 
-/// <summary>Удалить обработанные доставки старше срока хранения.</summary>
+/// <summary>
+/// Удалить обработанные доставки старше срока хранения.
+/// Обработчик - <see cref="GitIntegrationJobHandlers"/>
+/// </summary>
 public sealed record GitPurgeIntegrationJobsCommand(DateTime OlderThan) : IRequest<int>;
 
 internal sealed class GitWebhookReceiveCommandHandler(

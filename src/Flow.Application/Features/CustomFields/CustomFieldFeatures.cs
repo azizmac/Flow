@@ -11,7 +11,10 @@ using MediatR;
 
 namespace Flow.Application.Features.CustomFields;
 
-/// <summary>Новое поле проекта (docs/TZ_task_model.md §4). Права — ManageConfig; ответ — проект целиком, как у типов задач.</summary>
+/// <summary>
+/// Новое поле проекта (docs/TZ_task_model.md §4). Права — ManageConfig; ответ — проект целиком, как у типов задач.
+/// Обработчик - <see cref="CustomFieldConfigHandlers"/>
+/// </summary>
 public sealed record CustomFieldCreateCommand(
     Guid ActorId,
     Guid BoardId,
@@ -22,7 +25,10 @@ public sealed record CustomFieldCreateCommand(
     bool IsRequired = false,
     IReadOnlyList<Guid>? TaskTypeIds = null) : IRequest<BoardResponse?>;
 
-/// <summary>PATCH поля: null — не трогать; ключ и тип не меняются. Архив — IsArchived. Права — ManageConfig.</summary>
+/// <summary>
+/// PATCH поля: null — не трогать; ключ и тип не меняются. Архив — IsArchived. Права — ManageConfig.
+/// Обработчик - <see cref="CustomFieldConfigHandlers"/>
+/// </summary>
 public sealed record CustomFieldUpdateCommand(
     Guid ActorId,
     Guid BoardId,
@@ -33,12 +39,16 @@ public sealed record CustomFieldUpdateCommand(
     IReadOnlyList<Guid>? TaskTypeIds = null,
     bool? IsArchived = null) : IRequest<BoardResponse?>;
 
-/// <summary>Полная перестановка полей проекта. Права — ManageConfig.</summary>
+/// <summary>
+/// Полная перестановка полей проекта. Права — ManageConfig.
+/// Обработчик - <see cref="CustomFieldConfigHandlers"/>
+/// </summary>
 public sealed record CustomFieldReorderCommand(Guid ActorId, Guid BoardId, IReadOnlyList<Guid> FieldIds) : IRequest<BoardResponse?>;
 
 /// <summary>
 /// Значения полей задачи, PATCH-семантика по полям (null очищает). Это правка задачи (EnsureCanEditTask); журнал
 /// CustomFieldChanged по каждому изменённому полю, Upsert в поиске — если поменялся текст.
+/// Обработчик - <see cref="TaskSetCustomFieldsCommandHandler"/>
 /// </summary>
 public sealed record TaskSetCustomFieldsCommand(Guid ActorId, Guid TaskId, IReadOnlyDictionary<Guid, JsonElement?> Values)
     : IRequest<TaskUpdateResult>;

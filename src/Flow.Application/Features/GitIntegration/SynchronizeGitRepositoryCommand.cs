@@ -5,6 +5,9 @@ using MediatR;
 
 namespace Flow.Application.Features.GitIntegration;
 
+/// <summary>
+/// Обработчик - <see cref="SynchronizeGitRepositoryCommandHandler"/>
+/// </summary>
 public sealed record SynchronizeGitRepositoryCommand(Guid ActorId, Guid BoardId, Guid RepositoryId)
     : IRequest<bool?>;
 

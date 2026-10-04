@@ -14,8 +14,14 @@ namespace Flow.Application.Features.GitIntegration;
 // привязанный к проекту задачи. Связь (ветка, PR) пишется сразу, не дожидаясь вебхука: он потом лишь обновит её.
 // Отказ хостинга (нет прав у токена, ветка уже есть) — 400 с его причиной.
 
+/// <summary>
+/// Обработчик - <see cref="GitTaskActionHandlers"/>
+/// </summary>
 public sealed record TaskGitBranchCreateCommand(Guid ActorId, Guid TaskId, Guid RepositoryId, string Name, string? FromBranch) : IRequest<TaskDevelopmentResponse?>;
 
+/// <summary>
+/// Обработчик - <see cref="GitTaskActionHandlers"/>
+/// </summary>
 public sealed record TaskGitPullRequestCreateCommand(Guid ActorId, Guid TaskId, Guid RepositoryId, string SourceBranch, string? TargetBranch, string? Title, bool Draft)
     : IRequest<TaskDevelopmentResponse?>;
 

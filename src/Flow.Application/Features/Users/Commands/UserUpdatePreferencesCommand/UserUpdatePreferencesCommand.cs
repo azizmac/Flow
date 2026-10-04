@@ -7,6 +7,7 @@ namespace Flow.Application.Features.Users.Commands.UserUpdatePreferencesCommand;
 /// Меняет личные настройки самого actor — у команды нет UserId намеренно: править чужие настройки
 /// не может никто, даже Owner, поэтому и строки в матрице прав у неё нет. PATCH-семантика: null — не трогать.
 /// Недопустимое значение — ArgumentException (400).
+/// Обработчик - <see cref="UserUpdatePreferencesCommandHandler"/>
 /// </summary>
 public sealed record UserUpdatePreferencesCommand(
     Guid ActorId,

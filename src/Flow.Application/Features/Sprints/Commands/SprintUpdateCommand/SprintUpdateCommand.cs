@@ -6,6 +6,7 @@ namespace Flow.Application.Features.Sprints.Commands.SprintUpdateCommand;
 /// <summary>
 /// PATCH спринта: null — не трогать; ClearGoal/ClearDates снимают. У завершённого меняется только имя (иначе 400),
 /// у активного даты не снимаются. Права — ManageSprints.
+/// Обработчик - <see cref="SprintUpdateCommandHandler"/>
 /// </summary>
 public sealed record SprintUpdateCommand(
     Guid ActorId,

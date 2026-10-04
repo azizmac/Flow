@@ -8,6 +8,7 @@ namespace Flow.Application.Features.Tasks.Commands.TaskLinkCreateCommand;
 /// actor видит. Inward — задача из адреса становится целью («заблокирована»). Права — правка этой задачи; невидимая
 /// или несуществующая вторая задача — 400, как будто её нет. Такая связь уже есть — Duplicate (409).
 /// Журнал LinkAdded — у обеих задач.
+/// Обработчик - <see cref="TaskLinkCreateCommandHandler"/>
 /// </summary>
 public sealed record TaskLinkCreateCommand(Guid ActorId, Guid TaskId, TaskLinkType Type, Guid? TargetId = null, string? TargetCode = null, bool Inward = false)
     : IRequest<TaskLinkCreateResult>;

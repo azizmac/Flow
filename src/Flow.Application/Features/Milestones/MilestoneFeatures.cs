@@ -14,11 +14,17 @@ public sealed record MilestoneListQuery(Guid ActorId, Guid BoardId) : IRequest<I
 /// <summary>Одна веха с прогрессом; null — нет или проект скрыт (404).</summary>
 public sealed record MilestoneGetQuery(Guid ActorId, Guid MilestoneId) : IRequest<MilestoneResponse?>;
 
-/// <summary>Новая открытая веха в конце списка проекта; имя уникально в проекте без учёта регистра. Права — ManageMilestones.</summary>
+/// <summary>
+/// Новая открытая веха в конце списка проекта; имя уникально в проекте без учёта регистра. Права — ManageMilestones.
+/// Обработчик - <see cref="MilestoneCreateCommandHandler"/>
+/// </summary>
 public sealed record MilestoneCreateCommand(Guid ActorId, Guid BoardId, string Name, string? Description = null, DateOnly? TargetDate = null)
     : IRequest<MilestoneResponse?>;
 
-/// <summary>PATCH вехи: null — не трогать; Clear* снимают; Closed закрывает или открывает снова. Права — ManageMilestones.</summary>
+/// <summary>
+/// PATCH вехи: null — не трогать; Clear* снимают; Closed закрывает или открывает снова. Права — ManageMilestones.
+/// Обработчик - <see cref="MilestoneUpdateCommandHandler"/>
+/// </summary>
 public sealed record MilestoneUpdateCommand(
     Guid ActorId,
     Guid MilestoneId,
@@ -29,16 +35,23 @@ public sealed record MilestoneUpdateCommand(
     bool ClearTargetDate = false,
     bool? Closed = null) : IRequest<MilestoneResponse?>;
 
-/// <summary>Удаление вехи: задачи теряют веху с записью MilestoneChanged в журнале. false — вехи нет. Права — ManageMilestones.</summary>
+/// <summary>
+/// Удаление вехи: задачи теряют веху с записью MilestoneChanged в журнале. false — вехи нет. Права — ManageMilestones.
+/// Обработчик - <see cref="MilestoneDeleteCommandHandler"/>
+/// </summary>
 public sealed record MilestoneDeleteCommand(Guid ActorId, Guid MilestoneId) : IRequest<bool>;
 
 /// <summary>
 /// Общая веха (этап 2H): весь список проектов, где она доступна. Права — ManageMilestones в проекте-владельце и в каждом
 /// добавляемом проекте. Из убранного проекта задачи выходят из вехи с записью в журнале. null — вехи нет.
+/// Обработчик - <see cref="MilestoneShareCommandHandler"/>
 /// </summary>
 public sealed record MilestoneShareCommand(Guid ActorId, Guid MilestoneId, IReadOnlyList<Guid> BoardIds) : IRequest<MilestoneResponse?>;
 
-/// <summary>Поле «Веха» в карточке: веха своего проекта (или общая с ним) или null. Это правка задачи (EnsureCanEditTask); закрытая или чужая — 400.</summary>
+/// <summary>
+/// Поле «Веха» в карточке: веха своего проекта (или общая с ним) или null. Это правка задачи (EnsureCanEditTask); закрытая или чужая — 400.
+/// Обработчик - <see cref="TaskSetMilestoneCommandHandler"/>
+/// </summary>
 public sealed record TaskSetMilestoneCommand(Guid ActorId, Guid TaskId, Guid? MilestoneId) : IRequest<TaskUpdateResult>;
 
 internal sealed class MilestoneListQueryHandler(

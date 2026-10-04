@@ -3,5 +3,8 @@ using MediatR;
 
 namespace Flow.Application.Features.Tasks.Commands.TaskCommentEditCommand;
 
-/// <summary>Править может только автор. Записи в журнал нет — в ленте видно «изменено» по EditedAt.</summary>
+/// <summary>
+/// Править может только автор. Записи в журнал нет — в ленте видно «изменено» по EditedAt.
+/// Обработчик - <see cref="TaskCommentEditCommandHandler"/>
+/// </summary>
 public sealed record TaskCommentEditCommand(Guid ActorId, Guid CommentId, string Body) : IRequest<TaskCommentResult>;

@@ -15,13 +15,25 @@ public sealed record SavedFilterListQuery(Guid ActorId) : IRequest<IReadOnlyList
 
 public sealed record SavedFilterGetQuery(Guid ActorId, Guid FilterId) : IRequest<SavedFilterResponse?>;
 
+/// <summary>
+/// Обработчик - <see cref="SavedFilterHandlers"/>
+/// </summary>
 public sealed record SavedFilterCreateCommand(Guid ActorId, string Name, string Query, bool Shared) : IRequest<SavedFilterResponse>;
 
+/// <summary>
+/// Обработчик - <see cref="SavedFilterHandlers"/>
+/// </summary>
 public sealed record SavedFilterUpdateCommand(Guid ActorId, Guid FilterId, string? Name, string? Query, bool? Shared) : IRequest<SavedFilterResponse?>;
 
+/// <summary>
+/// Обработчик - <see cref="SavedFilterHandlers"/>
+/// </summary>
 public sealed record SavedFilterDeleteCommand(Guid ActorId, Guid FilterId) : IRequest<bool>;
 
-/// <summary>Звезда: фильтр в избранном сайдбара. Повтор — no-op.</summary>
+/// <summary>
+/// Звезда: фильтр в избранном сайдбара. Повтор — no-op.
+/// Обработчик - <see cref="SavedFilterHandlers"/>
+/// </summary>
 public sealed record SavedFilterStarCommand(Guid ActorId, Guid FilterId, bool Starred) : IRequest<SavedFilterResponse?>;
 
 internal static class SavedFilterMapping

@@ -13,6 +13,7 @@ namespace Flow.Application.Features.Tasks.Commands.TaskRankCommand;
 /// SprintId / ToBacklog — перенос между секциями бэклога (docs/TZ_task_views.md §2): спринт своего проекта, не
 /// завершённый, SprintChanged в журнале. Со StatusId или сменой спринта соседи необязательны (пустая секция — ранг
 /// не меняется); без них и без соседей — 400.
+/// Обработчик - <see cref="TaskRankCommandHandler"/>
 /// </summary>
 public sealed record TaskRankCommand(
     Guid ActorId,

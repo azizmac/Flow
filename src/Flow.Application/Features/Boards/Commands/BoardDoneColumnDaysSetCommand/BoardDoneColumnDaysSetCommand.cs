@@ -6,5 +6,6 @@ namespace Flow.Application.Features.Boards.Commands.BoardDoneColumnDaysSetComman
 /// <summary>
 /// Окно финальной колонки канбана в днях (docs/TZ_task_views.md §1), 1…365. Это настройка проекта, как типы задач
 /// и workflow, поэтому право — ManageConfig. Вне диапазона — 400.
+/// Обработчик - <see cref="BoardDoneColumnDaysSetCommandHandler"/>
 /// </summary>
 public sealed record BoardDoneColumnDaysSetCommand(Guid ActorId, Guid BoardId, int Days) : IRequest<BoardResponse?>;

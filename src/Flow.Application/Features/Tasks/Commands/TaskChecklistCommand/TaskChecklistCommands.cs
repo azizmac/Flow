@@ -8,12 +8,24 @@ namespace Flow.Application.Features.Tasks.Commands.TaskChecklistCommand;
 // длинный текст, больше 100 пунктов, неполный порядок — 400. Журнал ChecklistChanged пишется, только когда меняется
 // прогресс «выполнено/всего»: правка текста и порядок его не трогают.
 
+/// <summary>
+/// Обработчик - <see cref="TaskChecklistAddCommandHandler"/>
+/// </summary>
 public sealed record TaskChecklistAddCommand(Guid ActorId, Guid TaskId, string Text) : IRequest<IReadOnlyList<TaskChecklistItemResponse>?>;
 
-/// <summary>PATCH-семантика: null — не трогать.</summary>
+/// <summary>
+/// PATCH-семантика: null — не трогать.
+/// Обработчик - <see cref="TaskChecklistUpdateCommandHandler"/>
+/// </summary>
 public sealed record TaskChecklistUpdateCommand(Guid ActorId, Guid TaskId, Guid ItemId, string? Text = null, bool? IsDone = null)
     : IRequest<IReadOnlyList<TaskChecklistItemResponse>?>;
 
+/// <summary>
+/// Обработчик - <see cref="TaskChecklistDeleteCommandHandler"/>
+/// </summary>
 public sealed record TaskChecklistDeleteCommand(Guid ActorId, Guid TaskId, Guid ItemId) : IRequest<IReadOnlyList<TaskChecklistItemResponse>?>;
 
+/// <summary>
+/// Обработчик - <see cref="TaskChecklistReorderCommandHandler"/>
+/// </summary>
 public sealed record TaskChecklistReorderCommand(Guid ActorId, Guid TaskId, IReadOnlyList<Guid> ItemIds) : IRequest<IReadOnlyList<TaskChecklistItemResponse>?>;

@@ -17,20 +17,38 @@ namespace Flow.Application.Features.Groups;
 
 public sealed record GroupListQuery(Guid ActorId) : IRequest<IReadOnlyList<GroupResponse>>;
 
+/// <summary>
+/// Обработчик - <see cref="GroupHandlers"/>
+/// </summary>
 public sealed record GroupCreateCommand(Guid ActorId, string Name, string? Description, bool IsTeam = false) : IRequest<GroupResponse>;
 
-/// <summary>null — группы нет.</summary>
+/// <summary>
+/// null — группы нет.
+/// Обработчик - <see cref="GroupHandlers"/>
+/// </summary>
 public sealed record GroupUpdateCommand(Guid ActorId, Guid GroupId, string Name, string? Description, bool? IsTeam = null) : IRequest<GroupResponse?>;
 
-/// <summary>Удаление уносит состав и роли группы во всех проектах (каскад). false — группы нет.</summary>
+/// <summary>
+/// Удаление уносит состав и роли группы во всех проектах (каскад). false — группы нет.
+/// Обработчик - <see cref="GroupHandlers"/>
+/// </summary>
 public sealed record GroupDeleteCommand(Guid ActorId, Guid GroupId) : IRequest<bool>;
 
-/// <summary>Добавить или убрать человека. Добавляют только активных; повтор — no-op. null — группы нет.</summary>
+/// <summary>
+/// Добавить или убрать человека. Добавляют только активных; повтор — no-op. null — группы нет.
+/// Обработчик - <see cref="GroupHandlers"/>
+/// </summary>
 public sealed record GroupMemberSetCommand(Guid ActorId, Guid GroupId, Guid UserId, bool Member) : IRequest<GroupResponse?>;
 
-/// <summary>Роль группы в проекте (выдать или сменить) — ManageMembers, не выше своей.</summary>
+/// <summary>
+/// Роль группы в проекте (выдать или сменить) — ManageMembers, не выше своей.
+/// Обработчик - <see cref="GroupHandlers"/>
+/// </summary>
 public sealed record BoardGroupSetCommand(Guid ActorId, Guid BoardId, Guid GroupId, ProjectRole Role, Guid? PermissionSetId = null) : IRequest<BoardMemberResult>;
 
+/// <summary>
+/// Обработчик - <see cref="GroupHandlers"/>
+/// </summary>
 public sealed record BoardGroupRemoveCommand(Guid ActorId, Guid BoardId, Guid GroupId) : IRequest<BoardMemberResult>;
 
 internal sealed class GroupHandlers(
@@ -176,7 +194,10 @@ internal sealed class GroupHandlers(
     }
 }
 
-/// <summary>Команда задачи (этап 4D): группа с IsTeam или null — снять. Права — правка задачи; журнал TeamChanged.</summary>
+/// <summary>
+/// Команда задачи (этап 4D): группа с IsTeam или null — снять. Права — правка задачи; журнал TeamChanged.
+/// Обработчик - <see cref="TaskSetTeamCommandHandler"/>
+/// </summary>
 public sealed record TaskSetTeamCommand(Guid ActorId, Guid TaskId, Guid? TeamId) : IRequest<TaskUpdateResult>;
 
 internal sealed class TaskSetTeamCommandHandler(

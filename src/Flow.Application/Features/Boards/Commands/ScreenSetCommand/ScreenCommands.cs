@@ -11,11 +11,15 @@ namespace Flow.Application.Features.Boards.Commands.ScreenSetCommand;
 /// Экран задач проекта (docs/TZ_workflow_config.md §3) заменяется целиком: TaskTypeId = null — для всех типов.
 /// Права — ManageConfig; ответ — проект целиком; чужой тип, неизвестное поле, дубль, поле, которого нет в форме
 /// создания, на Create — 400.
+/// Обработчик - <see cref="ScreenCommandHandlers"/>
 /// </summary>
 public sealed record ScreenSetCommand(Guid ActorId, Guid BoardId, Guid? TaskTypeId, DomainContext Context, IReadOnlyList<ScreenFieldDto> Fields)
     : IRequest<BoardResponse?>;
 
-/// <summary>Сбросить экран к «для всех типов» или встроенному. Права — ManageConfig.</summary>
+/// <summary>
+/// Сбросить экран к «для всех типов» или встроенному. Права — ManageConfig.
+/// Обработчик - <see cref="ScreenCommandHandlers"/>
+/// </summary>
 public sealed record ScreenResetCommand(Guid ActorId, Guid BoardId, Guid? TaskTypeId, DomainContext Context) : IRequest<BoardResponse?>;
 
 internal sealed class ScreenCommandHandlers(

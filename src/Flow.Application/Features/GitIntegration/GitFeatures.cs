@@ -21,29 +21,50 @@ namespace Flow.Application.Features.GitIntegration;
 
 public sealed record GitHostConnectionListQuery(Guid ActorId) : IRequest<IReadOnlyList<GitHostConnectionResponse>>;
 
-/// <summary>Token — токен доступа, у GitHub App — закрытый ключ приложения (PEM); AppId/InstallationId — только у него.</summary>
+/// <summary>
+/// Token — токен доступа, у GitHub App — закрытый ключ приложения (PEM); AppId/InstallationId — только у него.
+/// Обработчик - <see cref="GitAdminHandlers"/>
+/// </summary>
 public sealed record GitHostConnectionCreateCommand(Guid ActorId, SharedProvider Provider, string Name, string Token, string? BaseUrl,
     SharedAuthKind AuthKind = SharedAuthKind.Token, long? AppId = null, long? InstallationId = null) : IRequest<GitHostConnectionResponse>;
 
+/// <summary>
+/// Обработчик - <see cref="GitAdminHandlers"/>
+/// </summary>
 public sealed record GitHostConnectionUpdateCommand(Guid ActorId, Guid ConnectionId, string Name, string? BaseUrl, string? Token,
     long? AppId = null, long? InstallationId = null) : IRequest<GitHostConnectionResponse?>;
 
-/// <summary>Удаляет подключение и его репозитории (вебхуки у хостинга — best-effort); связи задач уходят каскадом.</summary>
+/// <summary>
+/// Удаляет подключение и его репозитории (вебхуки у хостинга — best-effort); связи задач уходят каскадом.
+/// Обработчик - <see cref="GitAdminHandlers"/>
+/// </summary>
 public sealed record GitHostConnectionDeleteCommand(Guid ActorId, Guid ConnectionId) : IRequest<bool>;
 
+/// <summary>
+/// Обработчик - <see cref="GitAdminHandlers"/>
+/// </summary>
 public sealed record GitHostConnectionCheckCommand(Guid ActorId, Guid ConnectionId) : IRequest<GitHostConnectionResponse?>;
 
 public sealed record GitAvailableRepositoriesQuery(Guid ActorId, Guid ConnectionId, string? Query) : IRequest<IReadOnlyList<GitRemoteRepositoryResponse>?>;
 
-/// <summary>Добавить репозиторий: создать вебхук с новым секретом. Уже добавленный и выключенный — включается заново.</summary>
+/// <summary>
+/// Добавить репозиторий: создать вебхук с новым секретом. Уже добавленный и выключенный — включается заново.
+/// Обработчик - <see cref="GitAdminHandlers"/>
+/// </summary>
 public sealed record GitRepositoryAddCommand(Guid ActorId, Guid ConnectionId, string ExternalId) : IRequest<GitRepositoryResponse?>;
 
-/// <summary>Отключить репозиторий: вебхук удаляется у хостинга, приём выключается, связи задач остаются.</summary>
+/// <summary>
+/// Отключить репозиторий: вебхук удаляется у хостинга, приём выключается, связи задач остаются.
+/// Обработчик - <see cref="GitAdminHandlers"/>
+/// </summary>
 public sealed record GitRepositoryDisableCommand(Guid ActorId, Guid RepositoryId) : IRequest<bool>;
 
 public sealed record GitBoardRepositoriesQuery(Guid ActorId, Guid BoardId) : IRequest<IReadOnlyList<GitBoardRepositoryResponse>?>;
 
-/// <summary>Привязать/отвязать; Settings — автоматизация привязки (этап 5C), null — не менять.</summary>
+/// <summary>
+/// Привязать/отвязать; Settings — автоматизация привязки (этап 5C), null — не менять.
+/// Обработчик - <see cref="GitProjectHandlers"/>
+/// </summary>
 public sealed record GitBindCommand(Guid ActorId, Guid BoardId, Guid RepositoryId, bool Bound, UpdateGitBindingRequest? Settings = null)
     : IRequest<IReadOnlyList<GitBoardRepositoryResponse>?>;
 
@@ -51,12 +72,16 @@ public sealed record TaskDevelopmentQuery(Guid ActorId, Guid TaskId) : IRequest<
 
 public sealed record GitIntegrationJobsQuery(Guid ActorId, Guid RepositoryId, Flow.Shared.Contracts.GitIntegration.GitIntegrationJobStatus? Status) : IRequest<IReadOnlyList<GitIntegrationJobResponse>?>;
 
-/// <summary>Повторить доставку с ошибкой (диагностика, этап 5B): снова в очередь, попытки с нуля. null — нет такой.</summary>
+/// <summary>
+/// Повторить доставку с ошибкой (диагностика, этап 5B): снова в очередь, попытки с нуля. null — нет такой.
+/// Обработчик - <see cref="GitAdminHandlers"/>
+/// </summary>
 public sealed record GitIntegrationJobRetryCommand(Guid ActorId, Guid DeliveryId) : IRequest<GitIntegrationJobResponse?>;
 
 /// <summary>
 /// Дозагрузить историю репозитория вручную (этап 5B). Задание ставится в очередь доставок; уже стоящее — не дублируется.
 /// false — репозитория нет.
+/// Обработчик - <see cref="GitAdminHandlers"/>
 /// </summary>
 public sealed record GitBackfillCommand(Guid ActorId, Guid RepositoryId) : IRequest<bool>;
 
