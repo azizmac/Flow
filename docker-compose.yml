@@ -75,7 +75,7 @@ services:
       OpenCode__Password: ${OPENCODE_SERVER_PASSWORD:-flow-opencode-local}
       OpenCode__ProviderId: ${OPENCODE_PROVIDER_ID:-lmstudio}
       OpenCode__ModelId: ${OPENCODE_MODEL_ID:-qwen3.6-35b-a3b}
-      OpenCode__TimeoutSeconds: ${OPENCODE_TIMEOUT_SECONDS:-300}
+      OpenCode__TimeoutSeconds: ${OPENCODE_TIMEOUT_SECONDS:-1800}
       # Один том под разными путями: api пишет checkout, OpenCode читает его как /workspaces:ro.
       Repositories__WorkspaceRoot: /var/lib/flow/repositories
       Repositories__AgentWorkspaceRoot: /workspaces

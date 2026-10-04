@@ -51,6 +51,8 @@ public interface IFlowApi
     // Локальные копии репозиториев и проверка агента.
     Task<ApiResult<bool>> SynchronizeGitRepository(Guid boardId, Guid repositoryId, CancellationToken ct = default);
     Task<ApiResult<Flow.Shared.Contracts.Agents.AgentTestResponse>> AskAgent(Flow.Shared.Contracts.Agents.AgentTestRequest request, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Agents.TaskRequirementsResponse>> ReviewTaskRequirements(
+        Flow.Shared.Contracts.Agents.TaskRequirementsRequest request, CancellationToken ct = default);
 
 
     // Шаблоны задач (этап 3G)

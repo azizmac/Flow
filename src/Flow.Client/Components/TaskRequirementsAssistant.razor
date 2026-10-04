@@ -1,0 +1,169 @@
+@implements IDisposable
+@inject IFlowApi Api
+
+<section class="requirements-assistant" aria-label="Подсказки по требованиям задачи" aria-busy="@_busy">
+    <div class="requirements-assistant-actions">
+        <DsButton Variant="secondary" Size="sm" Icon="message" Busy="_busy" Disabled="@(!CanReview)" OnClick="Review">
+            Что нужно учесть?
+        </DsButton>
+        <span class="hint">По описанию задачи и кодовым базам проекта.</span>
+    </div>
+
+    @if (_busy)
+    {
+        <div class="requirements-assistant-progress" role="status">
+            <span class="ds-spin"></span>
+            <span>Агент ищет связанные участки кода. Это может занять некоторое время.</span>
+        </div>
+    }
+
+    @if (_error is not null)
+    {
+        <div class="requirements-assistant-error" role="alert">
+            <Icon Name="danger" Size="16" />
+            <span>@_error</span>
+        </div>
+    }
+
+    @if (_answer is { } answer)
+    {
+        <div class="requirements-assistant-answer">
+            <div class="requirements-assistant-heading">
+                <span class="requirements-assistant-icon"><Icon Name="message" Size="16" /></span>
+                <div>
+                    <div class="requirements-assistant-title">Что стоит учесть</div>
+                    <div class="hint">Рекомендации не изменяют описание задачи.</div>
+                </div>
+            </div>
+
+            @if (IsStale)
+            {
+                <div class="requirements-assistant-notice" role="status">
+                    Название или описание изменилось. Рекомендации относятся к предыдущему варианту — запустите анализ заново.
+                </div>
+            }
+
+            @if (answer.SkippedRepositories.Count > 0)
+            {
+                <div class="requirements-assistant-notice">
+                    Не включены в анализ кодовые базы без готовой ревизии: @string.Join(", ", answer.SkippedRepositories).
+                </div>
+            }
+
+            <MarkdownView Text="@answer.Text" Placeholder="Агент вернул пустой ответ." ForAgentResponse="true" />
+
+            @if (answer.Repositories.Count > 0)
+            {
+                <div class="requirements-assistant-sources">
+                    <span class="hint">Доступные агенту ревизии</span>
+                    @foreach (var repository in answer.Repositories)
+                    {
+                        <div class="requirements-assistant-source">
+                            <Icon Name="code" Size="13" />
+                            <span>@repository.FullName</span>
+                            <span class="code" title="@repository.Commit">@ShortCommit(repository.Commit)</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public Guid BoardId { get; set; }
+    [Parameter] public Guid? TaskId { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private TaskRequirementsResponse? _answer;
+    private string? _error;
+    private string? _reviewedTitle;
+    private string? _reviewedDescription;
+    private Guid _contextBoardId;
+    private Guid? _contextTaskId;
+    private CancellationTokenSource? _requestCts;
+    private int _requestVersion;
+    private bool _busy;
+    private bool _disposed;
+
+    private bool CanReview => !_disposed && !_busy && !Disabled && BoardId != Guid.Empty &&
+        !string.IsNullOrWhiteSpace(Description);
+
+    private bool IsStale => !string.Equals(_reviewedTitle, Title, StringComparison.Ordinal) ||
+        !string.Equals(_reviewedDescription, Description, StringComparison.Ordinal);
+
+    protected override void OnParametersSet()
+    {
+        if (_contextBoardId == BoardId && _contextTaskId == TaskId)
+            return;
+
+        CancelRequest();
+        _contextBoardId = BoardId;
+        _contextTaskId = TaskId;
+        _answer = null;
+        _error = null;
+    }
+
+    private async Task Review()
+    {
+        if (!CanReview)
+            return;
+
+        var version = ++_requestVersion;
+        var cts = new CancellationTokenSource();
+        _requestCts = cts;
+        _reviewedTitle = Title;
+        _reviewedDescription = Description;
+        var request = new TaskRequirementsRequest(BoardId, Title ?? string.Empty, Description!, TaskId);
+        _busy = true;
+        _error = null;
+        _answer = null;
+
+        try
+        {
+            var result = await Api.ReviewTaskRequirements(request, cts.Token);
+            if (_disposed || version != _requestVersion || cts.IsCancellationRequested)
+                return;
+
+            if (result.Ok)
+                _answer = result.Value;
+            else
+                _error = result.Error ?? "Не удалось получить рекомендации. Попробуйте ещё раз.";
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            // Закрытая форма и другая задача не должны получать результат прежнего анализа.
+        }
+        catch (OperationCanceledException)
+        {
+            if (!_disposed && version == _requestVersion)
+                _error = "Агент не успел ответить за отведённое время. Попробуйте ещё раз.";
+        }
+        finally
+        {
+            if (ReferenceEquals(_requestCts, cts))
+                _requestCts = null;
+            cts.Dispose();
+            if (!_disposed && version == _requestVersion)
+                _busy = false;
+        }
+    }
+
+    private void CancelRequest()
+    {
+        _requestVersion++;
+        _requestCts?.Cancel();
+        _requestCts = null;
+        _busy = false;
+    }
+
+    private static string ShortCommit(string commit) => commit[..Math.Min(12, commit.Length)];
+
+    public void Dispose()
+    {
+        _disposed = true;
+        CancelRequest();
+    }
+}

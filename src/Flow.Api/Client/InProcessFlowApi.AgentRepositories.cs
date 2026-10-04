@@ -26,5 +26,11 @@ internal sealed partial class InProcessFlowApi
             {
                 return ApiResult<AgentTestResponse>.Fail(ex.Message, HttpStatusCode.BadGateway);
             }
+            catch (TimeoutException)
+            {
+                return ApiResult<AgentTestResponse>.Fail(
+                    "Агент не завершил анализ за отведённое время. Попробуйте повторить запрос.",
+                    HttpStatusCode.BadGateway);
+            }
         });
 }

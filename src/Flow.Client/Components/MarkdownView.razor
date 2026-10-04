@@ -29,6 +29,8 @@
     [Parameter] public string? Class { get; set; }
     [Parameter] public string? Style { get; set; }
     [Parameter] public EventCallback OnClick { get; set; }
+    /// <summary>Безопасное подмножество Markdown для ответа агента: без изображений, HTML и пользовательских атрибутов.</summary>
+    [Parameter] public bool ForAgentResponse { get; set; }
 
     private readonly string _id = "md-view-" + Guid.NewGuid().ToString("N")[..8];
 
@@ -42,7 +44,7 @@
 
     protected override void OnParametersSet() => Render();
 
-    private void Render() => _html = FlowMarkdown.ToHtml(Text, Sizes.Find);
+    private void Render() => _html = FlowMarkdown.ToHtml(Text, Sizes.Find, ForAgentResponse);
 
     private void OnSizesChanged() => InvokeAsync(() =>
     {

@@ -15,5 +15,5 @@ public sealed class OpenCodeOptions
 
     public string ModelId { get; set; } = "qwen3.6-35b-a3b";
 
-    public int TimeoutSeconds { get; set; } = 300;
+    public int TimeoutSeconds { get; set; } = 1800;
 }
