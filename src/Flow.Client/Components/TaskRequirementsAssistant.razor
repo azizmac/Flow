@@ -1,3 +1,4 @@
+@using System.Diagnostics
 @implements IDisposable
 @inject IFlowApi Api
 
@@ -13,8 +14,16 @@
     {
         <div class="requirements-assistant-progress" role="status">
             <span class="ds-spin"></span>
-            <span>Агент ищет связанные участки кода. Это может занять некоторое время.</span>
+            <div>
+                <span>Агент исследует кодовые базы.</span>
+                <div class="requirements-assistant-duration" aria-live="off">Прошло: @FormatElapsed(_elapsed ?? TimeSpan.Zero)</div>
+            </div>
         </div>
+    }
+
+    @if (!_busy && _elapsed is { } elapsed)
+    {
+        <div class="requirements-assistant-duration">Время запроса: @FormatElapsed(elapsed)</div>
     }
 
     @if (_error is not null)
@@ -84,6 +93,7 @@
     private Guid _contextBoardId;
     private Guid? _contextTaskId;
     private CancellationTokenSource? _requestCts;
+    private TimeSpan? _elapsed;
     private int _requestVersion;
     private bool _busy;
     private bool _disposed;
@@ -120,6 +130,10 @@
         _busy = true;
         _error = null;
         _answer = null;
+        _elapsed = TimeSpan.Zero;
+        using var timerCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+        var stopwatch = Stopwatch.StartNew();
+        var timerTask = UpdateElapsedAsync(stopwatch, version, timerCts.Token);
 
         try
         {
@@ -143,11 +157,40 @@
         }
         finally
         {
+            stopwatch.Stop();
+            timerCts.Cancel();
+            await timerTask;
             if (ReferenceEquals(_requestCts, cts))
                 _requestCts = null;
             cts.Dispose();
             if (!_disposed && version == _requestVersion)
+            {
+                _elapsed = stopwatch.Elapsed;
                 _busy = false;
+            }
+        }
+    }
+
+    private async Task UpdateElapsedAsync(Stopwatch stopwatch, int version, CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await InvokeAsync(() =>
+                {
+                    if (_disposed || version != _requestVersion || cancellationToken.IsCancellationRequested)
+                        return;
+
+                    _elapsed = stopwatch.Elapsed;
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Обновления прекращаются вместе с запросом или при закрытии формы.
         }
     }
 
@@ -157,7 +200,12 @@
         _requestCts?.Cancel();
         _requestCts = null;
         _busy = false;
+        _elapsed = null;
     }
+
+    private static string FormatElapsed(TimeSpan elapsed) => elapsed.TotalHours >= 1
+        ? $"{(int)elapsed.TotalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}"
+        : $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00}";
 
     private static string ShortCommit(string commit) => commit[..Math.Min(12, commit.Length)];
 
