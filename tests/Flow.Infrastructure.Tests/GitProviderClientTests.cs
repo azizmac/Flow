@@ -47,7 +47,7 @@ public class GitProviderClientTests
 
         Assert.Equal("octocat", await client.CheckAsync(connection, "tok", CancellationToken.None));
         Assert.Equal(["acme/api"], (await client.ListRepositoriesAsync(connection, "tok", "api", CancellationToken.None)).Select(r => r.FullName));
-        Assert.Equal("555", await client.CreateWebhookAsync(connection, "tok", repository, "https://flow/hooks/scm/1", "sec", CancellationToken.None));
+        Assert.Equal("555", await client.CreateWebhookAsync(connection, "tok", repository, "https://flow/hooks/git/1", "sec", CancellationToken.None));
 
         var (hook, body) = recorder.Requests[^1];
         Assert.Equal("https://api.github.com/repos/acme/web/hooks", hook.RequestUri!.ToString());

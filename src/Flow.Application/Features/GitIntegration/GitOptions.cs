@@ -1,7 +1,7 @@
 namespace Flow.Application.Features.GitIntegration;
 
 /// <summary>
-/// Секция "Scm". PublicBaseUrl — адрес Flow снаружи для вебхука ({PublicBaseUrl}/hooks/scm/{id}): внутри контейнера
+/// Секция "Scm". PublicBaseUrl — адрес Flow снаружи для вебхука ({PublicBaseUrl}/hooks/git/{id}): внутри контейнера
 /// хост не знает, как его видит хостинг. Не задан — вебхук не создаётся, экран показывает адрес и секрет для ручной
 /// настройки. Воркер доставок — WorkerEnabled/PollIntervalSeconds; объём дозагрузки истории — Backfill*.
 /// </summary>
@@ -34,6 +34,6 @@ public sealed class GitOptions
     public string WebhookUrl(Guid repositoryId, string? fallbackBase = null)
     {
         var baseUrl = (PublicBaseUrl ?? fallbackBase ?? "").TrimEnd('/');
-        return $"{baseUrl}/hooks/scm/{repositoryId}";
+        return $"{baseUrl}/hooks/git/{repositoryId}";
     }
 }

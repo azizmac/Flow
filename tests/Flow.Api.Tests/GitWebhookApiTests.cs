@@ -18,9 +18,9 @@ public sealed class GitWebhookApiTests(ApiFixture api)
     public async Task Webhook_Is_Anonymous_Outside_Api_And_Checks_Signature()
     {
         using var owner = api.CreateClientAs();
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub", "token"));
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/git/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub", "token"));
         var connection = (await connectionResponse.Content.ReadFromJsonAsync<GitHostConnectionResponse>())!;
-        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddGitRepositoryRequest(connection.Id, "101"));
+        using var repositoryResponse = await owner.PostAsJsonAsync("/api/git/repositories", new AddGitRepositoryRequest(connection.Id, "101"));
         Assert.Equal(HttpStatusCode.Created, repositoryResponse.StatusCode);
         var repository = (await repositoryResponse.Content.ReadFromJsonAsync<GitRepositoryResponse>())!;
         var secret = api.Git.CreatedHooks[^1].Secret;
@@ -29,7 +29,7 @@ public sealed class GitWebhookApiTests(ApiFixture api)
         var body = Encoding.UTF8.GetBytes("""{"ref":"refs/heads/main","after":"x","commits":[]}""");
         HttpRequestMessage Hook(Guid repositoryId, string signatureSecret, string delivery)
         {
-            var request = new HttpRequestMessage(HttpMethod.Post, $"/hooks/scm/{repositoryId}") { Content = new ByteArrayContent(body) };
+            var request = new HttpRequestMessage(HttpMethod.Post, $"/hooks/git/{repositoryId}") { Content = new ByteArrayContent(body) };
             request.Headers.Add("X-GitHub-Event", "push");
             request.Headers.Add("X-GitHub-Delivery", delivery);
             request.Headers.Add("X-Hub-Signature-256", "sha256=" + GitSignatures.Sign(body, signatureSecret));
@@ -46,10 +46,10 @@ public sealed class GitWebhookApiTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
 
         // Под /api вебхука нет: там только Bearer.
-        using var underApi = await anonymous.PostAsync($"/api/hooks/scm/{repository.Id}", new ByteArrayContent(body));
+        using var underApi = await anonymous.PostAsync($"/api/hooks/git/{repository.Id}", new ByteArrayContent(body));
         Assert.NotEqual(HttpStatusCode.Accepted, underApi.StatusCode);
 
-        using var huge = new HttpRequestMessage(HttpMethod.Post, $"/hooks/scm/{repository.Id}") { Content = new ByteArrayContent(new byte[GitWebhookControllerLimit + 1]) };
+        using var huge = new HttpRequestMessage(HttpMethod.Post, $"/hooks/git/{repository.Id}") { Content = new ByteArrayContent(new byte[GitWebhookControllerLimit + 1]) };
         using var tooLarge = await anonymous.SendAsync(huge);
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, tooLarge.StatusCode);
     }
@@ -61,17 +61,17 @@ public sealed class GitWebhookApiTests(ApiFixture api)
     public async Task Backfill_Is_Accepted_And_Unknown_Ids_Are_404()
     {
         using var owner = api.CreateClientAs();
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub 5B", "token"));
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/git/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub 5B", "token"));
         var connection = (await connectionResponse.Content.ReadFromJsonAsync<GitHostConnectionResponse>())!;
         api.Git.Remote.Add(new Flow.Application.Abstractions.GitRemoteRepository("205", "acme/backfill", "https://github.com/acme/backfill", "main"));
-        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddGitRepositoryRequest(connection.Id, "205"));
+        using var repositoryResponse = await owner.PostAsJsonAsync("/api/git/repositories", new AddGitRepositoryRequest(connection.Id, "205"));
         var repository = (await repositoryResponse.Content.ReadFromJsonAsync<GitRepositoryResponse>())!;
 
-        using var accepted = await owner.PostAsync($"/api/scm/repositories/{repository.Id}/backfill", null);
+        using var accepted = await owner.PostAsync($"/api/git/repositories/{repository.Id}/backfill", null);
         Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);
-        using var missing = await owner.PostAsync($"/api/scm/repositories/{Guid.NewGuid()}/backfill", null);
+        using var missing = await owner.PostAsync($"/api/git/repositories/{Guid.NewGuid()}/backfill", null);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
-        using var retry = await owner.PostAsync($"/api/scm/deliveries/{Guid.NewGuid()}/retry", null);
+        using var retry = await owner.PostAsync($"/api/git/deliveries/{Guid.NewGuid()}/retry", null);
         Assert.Equal(HttpStatusCode.NotFound, retry.StatusCode);
     }
 
@@ -82,10 +82,10 @@ public sealed class GitWebhookApiTests(ApiFixture api)
         using var owner = api.CreateClientAs();
         using var boardResponse = await owner.PostAsJsonAsync("/api/boards", new Flow.Shared.Contracts.Boards.CreateBoardRequest("Автоматизация", "GITC"));
         var board = (await boardResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Boards.BoardResponse>())!;
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub 5C", "token"));
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/git/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub 5C", "token"));
         var connection = (await connectionResponse.Content.ReadFromJsonAsync<GitHostConnectionResponse>())!;
         api.Git.Remote.Add(new Flow.Application.Abstractions.GitRemoteRepository("305", "acme/auto", "https://github.com/acme/auto", "main"));
-        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddGitRepositoryRequest(connection.Id, "305"));
+        using var repositoryResponse = await owner.PostAsJsonAsync("/api/git/repositories", new AddGitRepositoryRequest(connection.Id, "305"));
         var repository = (await repositoryResponse.Content.ReadFromJsonAsync<GitRepositoryResponse>())!;
 
         using var plain = await owner.PutAsync($"/api/boards/{board.Id}/repositories/{repository.Id}", null);
@@ -105,10 +105,10 @@ public sealed class GitWebhookApiTests(ApiFixture api)
         var board = (await boardResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Boards.BoardResponse>())!;
         using var taskResponse = await owner.PostAsJsonAsync($"/api/boards/{board.Id}/tasks", new Flow.Shared.Contracts.Tasks.CreateTaskRequest("Кнопка", null, null));
         var task = (await taskResponse.Content.ReadFromJsonAsync<Flow.Shared.Contracts.Tasks.TaskResponse>())!;
-        using var connectionResponse = await owner.PostAsJsonAsync("/api/scm/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub 5D", "token"));
+        using var connectionResponse = await owner.PostAsJsonAsync("/api/git/connections", new CreateGitHostConnectionRequest(GitProvider.GitHub, "GitHub 5D", "token"));
         var connection = (await connectionResponse.Content.ReadFromJsonAsync<GitHostConnectionResponse>())!;
         api.Git.Remote.Add(new Flow.Application.Abstractions.GitRemoteRepository("405", "acme/act", "https://github.com/acme/act", "main"));
-        using var repositoryResponse = await owner.PostAsJsonAsync("/api/scm/repositories", new AddGitRepositoryRequest(connection.Id, "405"));
+        using var repositoryResponse = await owner.PostAsJsonAsync("/api/git/repositories", new AddGitRepositoryRequest(connection.Id, "405"));
         var repository = (await repositoryResponse.Content.ReadFromJsonAsync<GitRepositoryResponse>())!;
         using var bind = await owner.PutAsync($"/api/boards/{board.Id}/repositories/{repository.Id}", null);
 

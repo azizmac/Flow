@@ -76,7 +76,7 @@ public class GitFeatureTests
         Assert.True(repository.WebhookCreated);
         Assert.Equal([setup.Board.Id], repository.BoardIds);
         var hook = setup.Context.Client.CreatedHooks.Single();
-        Assert.Equal($"https://flow.example.com/hooks/scm/{setup.RepositoryId}", hook.Url);
+        Assert.Equal($"https://flow.example.com/hooks/git/{setup.RepositoryId}", hook.Url);
         Assert.Equal(64, hook.Secret.Length);
         // Токен хранится только зашифрованным.
         Assert.StartsWith("p:", setup.Context.Git.Connections.Single().SecretProtected);
@@ -92,7 +92,7 @@ public class GitFeatureTests
         context.Client.Failure = "Токену не хватает прав на это действие.";
         var repository = (await context.Mediator.Send(new GitRepositoryAddCommand(Owner, connection.Id, "101"), CancellationToken.None))!;
         Assert.False(repository.WebhookCreated);
-        Assert.Equal($"https://flow.example.com/hooks/scm/{repository.Id}", repository.ManualWebhookUrl);
+        Assert.Equal($"https://flow.example.com/hooks/git/{repository.Id}", repository.ManualWebhookUrl);
         Assert.NotNull(repository.ManualWebhookSecret);
         Assert.Contains("прав", repository.WebhookError);
     }

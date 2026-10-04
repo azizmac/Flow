@@ -13,34 +13,34 @@ namespace Flow.Api.Controllers;
 [ApiController]
 public class GitController(IMediator mediator, IActorAccessor actor) : ControllerBase
 {
-    [HttpGet("scm/connections")]
+    [HttpGet("git/connections")]
     public async Task<IActionResult> Connections(CancellationToken cancellationToken) =>
         Ok(await mediator.Send(new GitHostConnectionListQuery(actor.Require()), cancellationToken));
 
-    [HttpPost("scm/connections")]
+    [HttpPost("git/connections")]
     public Task<IActionResult> Create(CreateGitHostConnectionRequest request, CancellationToken cancellationToken) =>
         Send(async () => (object?)await mediator.Send(new GitHostConnectionCreateCommand(actor.Require(), request.Provider, request.Name, request.Token, request.BaseUrl,
             request.AuthKind, request.AppId, request.InstallationId), cancellationToken));
 
-    [HttpPatch("scm/connections/{id:guid}")]
+    [HttpPatch("git/connections/{id:guid}")]
     public Task<IActionResult> Update(Guid id, UpdateGitHostConnectionRequest request, CancellationToken cancellationToken) =>
         Send(async () => (object?)await mediator.Send(new GitHostConnectionUpdateCommand(actor.Require(), id, request.Name, request.BaseUrl, request.Token,
             request.AppId, request.InstallationId), cancellationToken));
 
-    [HttpDelete("scm/connections/{id:guid}")]
+    [HttpDelete("git/connections/{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken) =>
         await mediator.Send(new GitHostConnectionDeleteCommand(actor.Require(), id), cancellationToken) ? NoContent() : NotFound();
 
-    [HttpPost("scm/connections/{id:guid}/check")]
+    [HttpPost("git/connections/{id:guid}/check")]
     public Task<IActionResult> Check(Guid id, CancellationToken cancellationToken) =>
         Send(async () => (object?)await mediator.Send(new GitHostConnectionCheckCommand(actor.Require(), id), cancellationToken));
 
-    [HttpGet("scm/connections/{id:guid}/available-repositories")]
+    [HttpGet("git/connections/{id:guid}/available-repositories")]
     public Task<IActionResult> Available(Guid id, [FromQuery] string? q, CancellationToken cancellationToken) =>
         Send(async () => (object?)await mediator.Send(new GitAvailableRepositoriesQuery(actor.Require(), id, q), cancellationToken));
 
     /// <summary>Создаёт вебхук; не вышло — 201 с адресом и секретом для ручной настройки (только в этом ответе).</summary>
-    [HttpPost("scm/repositories")]
+    [HttpPost("git/repositories")]
     public async Task<IActionResult> AddRepository(AddGitRepositoryRequest request, CancellationToken cancellationToken)
     {
         try
@@ -55,21 +55,21 @@ public class GitController(IMediator mediator, IActorAccessor actor) : Controlle
     }
 
     /// <summary>Отключить: вебхук удаляется у хостинга, связи задач остаются.</summary>
-    [HttpDelete("scm/repositories/{id:guid}")]
+    [HttpDelete("git/repositories/{id:guid}")]
     public async Task<IActionResult> DisableRepository(Guid id, CancellationToken cancellationToken) =>
         await mediator.Send(new GitRepositoryDisableCommand(actor.Require(), id), cancellationToken) ? NoContent() : NotFound();
 
-    [HttpGet("scm/repositories/{id:guid}/deliveries")]
+    [HttpGet("git/repositories/{id:guid}/deliveries")]
     public async Task<IActionResult> Deliveries(Guid id, [FromQuery] GitIntegrationJobStatus? status, CancellationToken cancellationToken) =>
         await mediator.Send(new GitIntegrationJobsQuery(actor.Require(), id, status), cancellationToken) is { } list ? Ok(list) : NotFound();
 
     /// <summary>Повторить доставку с ошибкой; не Failed — 400.</summary>
-    [HttpPost("scm/deliveries/{id:guid}/retry")]
+    [HttpPost("git/deliveries/{id:guid}/retry")]
     public Task<IActionResult> RetryDelivery(Guid id, CancellationToken cancellationToken) =>
         Send(async () => (object?)await mediator.Send(new GitIntegrationJobRetryCommand(actor.Require(), id), cancellationToken));
 
     /// <summary>Дозагрузить историю (последние PR и коммиты ветки по умолчанию) — фоном, 202; отключённый — 400.</summary>
-    [HttpPost("scm/repositories/{id:guid}/backfill")]
+    [HttpPost("git/repositories/{id:guid}/backfill")]
     public async Task<IActionResult> Backfill(Guid id, CancellationToken cancellationToken)
     {
         try

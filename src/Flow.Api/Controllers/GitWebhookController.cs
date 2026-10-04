@@ -16,7 +16,7 @@ public sealed class GitWebhookController(IMediator mediator, ILogger<GitWebhookC
 {
     public const long MaxBodyBytes = 5 * 1024 * 1024;
 
-    [HttpPost("hooks/scm/{repositoryId:guid}")]
+    [HttpPost("hooks/git/{repositoryId:guid}")]
     [RequestSizeLimit(MaxBodyBytes)]
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> Receive(Guid repositoryId, CancellationToken cancellationToken)

@@ -33,6 +33,8 @@ public sealed class AuthFixture : IAsyncLifetime
             builder.UseSetting("ConnectionStrings:Postgres", _container.GetConnectionString());
             builder.UseSetting("Auth:Issuer", "http://localhost");
             builder.UseSetting("Auth:UseEphemeralKeys", "true");
+            // Auth-тесты не проверяют индексацию и не должны обращаться к локальному эмбеддеру.
+            builder.UseSetting("Search:Indexing:Enabled", "false");
             builder.UseSetting("Auth:Client:RedirectUris:0", ClientRedirectUri);
             builder.UseSetting("Auth:Client:PostLogoutRedirectUris:0", "http://localhost:5016/authentication/logout-callback");
         });

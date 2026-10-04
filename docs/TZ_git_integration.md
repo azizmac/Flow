@@ -9,7 +9,7 @@
 
 ## Принятые решения
 
-- Код, контракты и компоненты используют имена `Git*`, а папки и namespaces — `GitIntegration`. SQL-таблицы — `GitHostConnections`, `GitRepositories`, `GitRepositoryBoards`, `GitDevelopmentLinks`, `GitIntegrationJobs`; миграция `RenameScmTablesToGit` переименовывает существующие таблицы `Scm*` с сохранением данных. Для совместимости сохранены исторические миграции, маршруты `/api/scm` и `/hooks/scm`, секция настроек `Scm`, переменная `SCM_PUBLIC_BASE_URL` и DataProtection purpose `Flow.Scm`.
+- Код, контракты и компоненты используют имена `Git*`, а папки и namespaces — `GitIntegration`. SQL-таблицы — `GitHostConnections`, `GitRepositories`, `GitRepositoryBoards`, `GitDevelopmentLinks`, `GitIntegrationJobs`; миграция `RenameScmTablesToGit` переименовывает существующие таблицы `Scm*` с сохранением данных. Маршруты области — `/api/git` и `/hooks/git`. Для совместимости сохранены исторические миграции, секция настроек `Scm`, переменная `SCM_PUBLIC_BASE_URL` и DataProtection purpose `Flow.Scm`.
 
 - **Основной канал — вебхуки хостинга, а не опрос API.** Хостинг сам сообщает о push и PR. API нужен для
   регистрации вебхука, дозагрузки истории при подключении и (этап 5D) действий из Flow.
@@ -62,7 +62,10 @@ GitIntegrationJob: Id, RepositoryId, DeliveryId (из заголовка), Event
 
 ## 2. Приём вебхуков
 
-- Маршрут `POST /hooks/scm/{repositoryId}` — **вне `/api`** и с `[AllowAnonymous]`: вебхук не несёт Bearer,
+- После перехода на маршруты `Git` ранее зарегистрированные вебхуки нужно вручную перенастроить на
+  `{PublicBaseUrl}/hooks/git/{repositoryId}`. Старый адрес больше не обслуживается; настройки на внешних
+  Git-хостингах автоматически не изменяются.
+- Маршрут `POST /hooks/git/{repositoryId}` — **вне `/api`** и с `[AllowAnonymous]`: вебхук не несёт Bearer,
   а под `/api` принимается только Bearer. `FallbackPolicy` закрывает всё прочее, поэтому анонимность здесь
   явная и единственная, как у `/health/*`.
 - `RequestSizeLimit` 5 МБ; больше — 413. GitHub режет payload на 25 МБ, но push с таким телом Flow всё равно
@@ -138,7 +141,7 @@ GitIntegrationJob: Id, RepositoryId, DeliveryId (из заголовка), Event
   или группы; Gitea/Forgejo — `read:repository`, `write:repository` для хуков). В интерфейсе — подсказка со
   ссылкой на страницу создания токена у провайдера.
 - Выбор репозиториев — список из API подключения с поиском. При добавлении Flow сам создаёт вебхук со случайным
-  32-байтным секретом и адресом `{PublicBaseUrl}/hooks/scm/{id}`. `PublicBaseUrl` — новая настройка
+  32-байтным секретом и адресом `{PublicBaseUrl}/hooks/git/{id}`. `PublicBaseUrl` — новая настройка
   (`Scm:PublicBaseUrl`): внутри контейнера хост не знает, как его видят снаружи. Если вебхук создать не удалось
   (нет прав), экран показывает адрес и секрет для ручной настройки.
 - Привязка репозитория к проекту — в настройках проекта, вкладка «Разработка» (право `ManageGit`,
@@ -172,7 +175,7 @@ GitIntegrationJob: Id, RepositoryId, DeliveryId (из заголовка), Event
   регистра, `web-12-login` тоже WEB-12), `GitSignatures` (HMAC-SHA256 и токен GitLab, `FixedTimeEquals`),
   `GitPayloadParser` → `GitEvent`. Нормализованное событие и есть `Payload` доставки: в очереди лежат только поля Flow.
   У GitLab создание и удаление ветки — тот же Push Hook с нулевым before/after.
-- Приём — `GitWebhookController` (`POST /hooks/scm/{id}`, вне `/api`, `[AllowAnonymous]`, 5 МБ): подпись → повтор
+- Приём — `GitWebhookController` (`POST /hooks/git/{id}`, вне `/api`, `[AllowAnonymous]`, 5 МБ): подпись → повтор
   (Id доставки; у старого GitLab без UUID — SHA-256 тела) → нормализация → очередь → 202. Разбор — `GitWorker`
   (Infrastructure, scope на доставку, сбой — `GitIntegrationJobFailCommand`, чистка доставок старше 30 дней). Вместо
   `FOR UPDATE SKIP LOCKED` — идемпотентность: связь уникальна и обновляется, повтор даёт то же состояние.
@@ -192,7 +195,7 @@ GitIntegrationJob: Id, RepositoryId, DeliveryId (из заголовка), Event
 - **Дозагрузка истории** живёт в той же очереди, что вебхуки: задание — `GitIntegrationJob` с событием `flow:backfill`
   (`GitIntegrationJob.CreateBackfill`). Отдельной таблицы и воркера нет — повторы, backoff, диагностика и срок хранения общие.
   Ставится при каждой новой привязке репозитория к проекту (задачи проекта уже упоминались в PR до привязки) и вручную —
-  `POST /scm/repositories/{id}/backfill`; второе задание поверх стоящего в очереди не ставится (`HasPendingDeliveryAsync`).
+  `POST /git/repositories/{id}/backfill`; второе задание поверх стоящего в очереди не ставится (`HasPendingDeliveryAsync`).
   Разбор: `IGitProviderClient.GetHistoryAsync` → PR по возрастанию даты изменения (последнее состояние пишется
   последним) и коммиты ветки по умолчанию одним push-событием — тем же `Processor`, что вебхуки. Объём —
   `Scm:BackfillPullRequests` (100), `BackfillCommitDays` (30, от момента постановки), `BackfillMaxCommits` (1000).
@@ -210,7 +213,7 @@ GitIntegrationJob: Id, RepositoryId, DeliveryId (из заголовка), Event
   репозиториев — `GET /installation/repositories`. Вебхуки — по-прежнему на репозиторий (право приложения Webhooks: write),
   а не общий вебхук приложения: секрет остаётся свой у каждого репозитория. Способ входа после создания не меняется.
 - **Диагностика доставок**: `GitRepositoryResponse.FailedDeliveries` (один GROUP BY), `GitIntegrationJobResponse.NextAttemptAt`
-  (у Pending — когда воркер возьмёт снова) и `IsBackfill`; повтор — `POST /scm/deliveries/{id}/retry` (`GitIntegrationJob.Retry`:
+  (у Pending — когда воркер возьмёт снова) и `IsBackfill`; повтор — `POST /git/deliveries/{id}/retry` (`GitIntegrationJob.Retry`:
   только из Failed, попытки с нуля). Клиент: в «Настройки → Интеграции» у репозитория ссылка «доставки» (или «N ошибок»
   красным) → `Components/GitIntegrationJobsDialog` — фильтр по состоянию, текст ошибки, «Повторить», «Дозагрузить историю».
 - **FQL `development`**: `openPR` (есть PR в состоянии Open или Draft), `mergedPR`, `noPR` (ни одной связи вида
@@ -288,16 +291,16 @@ GitIntegrationJob: Id, RepositoryId, DeliveryId (из заголовка), Event
 
 | Метод | Путь | Кто |
 |---|---|---|
-| GET/POST | `/scm/connections`; PATCH/DELETE `/scm/connections/{id}`; POST `/scm/connections/{id}/check` | Admin+ |
-| GET | `/scm/connections/{id}/available-repositories?q=` | Admin+ |
-| POST/DELETE | `/scm/repositories` `{ connectionId, externalId }`, `/scm/repositories/{id}` | Admin+ |
+| GET/POST | `/git/connections`; PATCH/DELETE `/git/connections/{id}`; POST `/git/connections/{id}/check` | Admin+ |
+| GET | `/git/connections/{id}/available-repositories?q=` | Admin+ |
+| POST/DELETE | `/git/repositories` `{ connectionId, externalId }`, `/git/repositories/{id}` | Admin+ |
 | PUT/DELETE | `/boards/{id}/repositories/{repoId}` `{ onPullRequestOpenedStatusId?, onPullRequestMergedStatusId?, smartCommits, commentOnPullRequests }` | `ManageGit` |
 | GET | `/tasks/{id}/development` — `GitDevelopmentLink` задачи, сгруппированные по типу | `ViewProject` |
 | POST | `/tasks/{id}/development/branch` `{ repositoryId, name, fromBranch? }`, `/tasks/{id}/development/pull-request` `{ repositoryId, sourceBranch, targetBranch?, title?, draft }` — ответ «Разработка»; 400 — имя, непривязанный репозиторий, отказ хостинга | `WriteGit` |
-| GET | `/scm/repositories/{id}/deliveries?status=` — диагностика доставок | Admin+ |
-| POST | `/scm/deliveries/{id}/retry` — повторить доставку с ошибкой (не Failed — 400) | Admin+ |
-| POST | `/scm/repositories/{id}/backfill` — дозагрузить историю, 202 | Admin+ |
-| POST | `/hooks/scm/{repositoryId}` — приём вебхука | аноним + подпись |
+| GET | `/git/repositories/{id}/deliveries?status=` — диагностика доставок | Admin+ |
+| POST | `/git/deliveries/{id}/retry` — повторить доставку с ошибкой (не Failed — 400) | Admin+ |
+| POST | `/git/repositories/{id}/backfill` — дозагрузить историю, 202 | Admin+ |
+| POST | `/hooks/git/{repositoryId}` — приём вебхука | аноним + подпись |
 
 ## Тесты
 

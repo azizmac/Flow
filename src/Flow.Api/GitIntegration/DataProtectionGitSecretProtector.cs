@@ -11,7 +11,6 @@ namespace Flow.Api.GitIntegration;
 /// </summary>
 internal sealed class DataProtectionGitSecretProtector(IDataProtectionProvider provider) : IGitSecretProtector
 {
-    // Purpose не переименовываем: иначе сохранённые токены и секреты не расшифруются.
     private readonly IDataProtector _protector = provider.CreateProtector("Flow.Scm");
 
     public string Protect(string secret) => _protector.Protect(secret);
