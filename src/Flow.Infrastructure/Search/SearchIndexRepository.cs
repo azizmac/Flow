@@ -216,7 +216,7 @@ internal sealed class SearchIndexRepository(FlowDbContext db) : ISearchIndexRepo
         SearchSourceType.Development =>
             """
             SELECT l."Id" AS "SourceId", t."BoardId" AS "BoardId"
-            FROM "ScmLinks" l JOIN "TaskItems" t ON t."Id" = l."TaskId"
+            FROM "GitDevelopmentLinks" l JOIN "TaskItems" t ON t."Id" = l."TaskId"
             WHERE l."Kind" <> 0 AND (@boardId::uuid IS NULL OR t."BoardId" = @boardId)
             """,
 

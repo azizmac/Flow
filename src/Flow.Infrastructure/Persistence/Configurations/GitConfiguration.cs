@@ -7,13 +7,13 @@ namespace Flow.Infrastructure.Persistence.Configurations;
 
 // Интеграция с Git-хостингами (docs/TZ_git_integration.md §1). Удаление подключения уносит репозитории, их привязки,
 // связи и доставки каскадом; удаление задачи — её связи; удаление проекта — привязки.
-// SQL-имена таблиц сохранены: переименование кода не меняет существующую схему и историю миграций.
+// SQL-имена таблиц соответствуют сущностям; переход со старых имён Scm* выполняет отдельная миграция.
 
 internal sealed class GitHostConnectionConfiguration : IEntityTypeConfiguration<GitHostConnection>
 {
     public void Configure(EntityTypeBuilder<GitHostConnection> builder)
     {
-        builder.ToTable("ScmConnections");
+        builder.ToTable("GitHostConnections");
         builder.HasKey(c => c.Id);
         builder.Property(c => c.Id).ValueGeneratedNever();
         builder.Property(c => c.Name).HasMaxLength(GitHostConnection.NameMaxLength).IsRequired();
@@ -29,7 +29,7 @@ internal sealed class GitRepositoryConfiguration : IEntityTypeConfiguration<GitR
 {
     public void Configure(EntityTypeBuilder<GitRepository> builder)
     {
-        builder.ToTable("ScmRepositories");
+        builder.ToTable("GitRepositories");
         builder.HasKey(r => r.Id);
         builder.Property(r => r.Id).ValueGeneratedNever();
         builder.Property(r => r.ExternalId).HasMaxLength(100).IsRequired();
@@ -51,7 +51,7 @@ internal sealed class GitRepositoryBoardConfiguration : IEntityTypeConfiguration
 {
     public void Configure(EntityTypeBuilder<GitRepositoryBoard> builder)
     {
-        builder.ToTable("ScmRepositoryBoards");
+        builder.ToTable("GitRepositoryBoards");
         builder.HasKey(b => new { b.RepositoryId, b.BoardId });
         builder.HasOne<GitRepository>().WithMany().HasForeignKey(b => b.RepositoryId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Board>().WithMany(b => b.RepositoryBindings).HasForeignKey(b => b.BoardId).OnDelete(DeleteBehavior.Cascade);
@@ -67,7 +67,7 @@ internal sealed class GitDevelopmentLinkConfiguration : IEntityTypeConfiguration
 {
     public void Configure(EntityTypeBuilder<GitDevelopmentLink> builder)
     {
-        builder.ToTable("ScmLinks");
+        builder.ToTable("GitDevelopmentLinks");
         builder.HasKey(l => l.Id);
         builder.Property(l => l.Id).ValueGeneratedNever();
         builder.Property(l => l.ExternalId).HasMaxLength(GitDevelopmentLink.ExternalIdMaxLength).IsRequired();
@@ -89,7 +89,7 @@ internal sealed class GitIntegrationJobConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<GitIntegrationJob> builder)
     {
-        builder.ToTable("ScmDeliveries");
+        builder.ToTable("GitIntegrationJobs");
         builder.HasKey(d => d.Id);
         builder.Property(d => d.Id).ValueGeneratedNever();
         builder.Property(d => d.DeliveryId).HasMaxLength(GitIntegrationJob.DeliveryIdMaxLength).IsRequired();

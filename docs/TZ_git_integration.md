@@ -9,7 +9,7 @@
 
 ## Принятые решения
 
-- Код, контракты и компоненты используют имена `Git*`, а папки и namespaces — `GitIntegration`. Для совместимости сохранены исторические миграции, SQL-имена таблиц `Scm*`, маршруты `/api/scm` и `/hooks/scm`, секция настроек `Scm`, переменная `SCM_PUBLIC_BASE_URL` и DataProtection purpose `Flow.Scm`.
+- Код, контракты и компоненты используют имена `Git*`, а папки и namespaces — `GitIntegration`. SQL-таблицы — `GitHostConnections`, `GitRepositories`, `GitRepositoryBoards`, `GitDevelopmentLinks`, `GitIntegrationJobs`; миграция `RenameScmTablesToGit` переименовывает существующие таблицы `Scm*` с сохранением данных. Для совместимости сохранены исторические миграции, маршруты `/api/scm` и `/hooks/scm`, секция настроек `Scm`, переменная `SCM_PUBLIC_BASE_URL` и DataProtection purpose `Flow.Scm`.
 
 - **Основной канал — вебхуки хостинга, а не опрос API.** Хостинг сам сообщает о push и PR. API нужен для
   регистрации вебхука, дозагрузки истории при подключении и (этап 5D) действий из Flow.

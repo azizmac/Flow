@@ -219,7 +219,7 @@ internal sealed class SearchQueryRepository(FlowDbContext db, IEmbeddingGenerato
             LEFT JOIN "Users" u ON b."SourceType" = 4 AND u."Id" = b."SourceId"
             LEFT JOIN "Attachments" at ON b."SourceType" = 5 AND at."Id" = b."SourceId"
             LEFT JOIN "TaskItems" att ON att."Id" = at."TaskId"
-            LEFT JOIN "ScmLinks" sl ON b."SourceType" = 6 AND sl."Id" = b."SourceId"
+            LEFT JOIN "GitDevelopmentLinks" sl ON b."SourceType" = 6 AND sl."Id" = b."SourceId"
             LEFT JOIN "TaskItems" slt ON slt."Id" = sl."TaskId"
             WHERE b."SourceType" <> 4 OR u."Status" <> 2
             ORDER BY b.score DESC, b."SourceUpdatedAt" DESC
