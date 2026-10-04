@@ -22,7 +22,7 @@ SCRIPTS_DIR=$ROOT/docker/data
 # Все compose-файлы проекта: основной стек, стек данных и оверлеи железа. Именно список, а не пара
 # переменных: оверлеи профилей железа будут добавляться, и каждый забытый — это дырка в проверке,
 # через которую уезжает необъявленная переменная.
-set -- docker-compose.yml docker-compose.data.yml docker/ai/nvidia.yml
+set -- docker-compose.yml docker-compose.data.yml docker-compose.debug.yml docker/ai/nvidia.yml
 
 for file in "$@" deploy/required-vars.txt .env.example; do
     if [ ! -f "$ROOT/$file" ]; then

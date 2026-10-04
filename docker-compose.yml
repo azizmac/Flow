@@ -1,15 +1,15 @@
 ﻿# Стек приложения: один сервис api — ядро, Auth-модуль и интерфейс (серверный рендер) в одном хосте.
-# Отдельного контейнера client больше нет. Данные (PostgreSQL и S3) живут в отдельном стеке —
-# docker-compose.data.yml, проект flow-data. Здесь нет ни одного тома с данными проекта, поэтому
-# `docker compose down -v` безопасен: он уносит только ключи и сертификаты Auth-модуля, которые
-# пересоздаются при следующем старте. См. docs/TZ_infra_data_split.md, docs/TZ_modular_monolith.md.
+# Отдельного контейнера client больше нет. Данные (PostgreSQL, S3 и checkout'ы репозиториев)
+# живут во внешних томах, поэтому `docker compose down -v` уносит только ключи и сертификаты
+# Auth-модуля. См. docs/TZ_infra_data_split.md, docs/TZ_modular_monolith.md.
 #
 #   sh docker/data/init-env.sh                       # один раз: общая сеть и тома данных
-#   docker compose -f docker-compose.data.yml up -d  # данные
+#   docker compose -f docker-compose.data.yml up -d  # PostgreSQL, S3 и OpenCode
 #   docker compose up -d --build                     # приложение
 #
 # Адреса БД и S3 — переменные: POSTGRES_HOST и S3_ENDPOINT можно увести на внешние сервисы
 # и не поднимать docker-compose.data.yml вовсе.
+# Для агента всё равно нужны доступный OpenCode и общая копия репозитория; см. docs/OpenCode_setup.md.
 
 # Базовый пользователь (Owner) при первом запуске: Auth-модуль создаёт учётную запись, Flow.Api — профиль
 # с тем же Id. См. docs/TZ_modular_monolith.md. Пароль после первого входа нужно сменить.
@@ -59,7 +59,7 @@ services:
       Auth__EncryptionCertificate__Path: /certs/encryption.pfx
       Auth__EncryptionCertificate__Password: ${AUTH_CERT_PASSWORD:-flow-certs}
       DataProtection__KeysPath: /keys
-      # Адрес Flow снаружи — для вебхуков Git-хостингов ({адрес}/hooks/scm/{id}): изнутри контейнера его не узнать.
+      # Адрес Flow снаружи — для вебхуков Git-хостингов ({адрес}/hooks/git/{id}): изнутри контейнера его не узнать.
       Scm__PublicBaseUrl: ${SCM_PUBLIC_BASE_URL:-http://localhost:8080}
       Cors__Origins__0: http://localhost:${CLIENT_PORT:-5016}
       ConnectionStrings__Postgres: >-
@@ -69,6 +69,16 @@ services:
       S3__SecretKey: ${MINIO_ROOT_PASSWORD:-flow12345}
       S3__Bucket: ${S3_BUCKET:-flow}
       S3__UseSsl: ${S3_USE_SSL:-false}
+      # Адрес сервиса в общей Docker-сети. localhost:4096 используется только из процесса на хосте.
+      OpenCode__BaseUrl: ${OPENCODE_API_URL:-http://opencode:4096}
+      OpenCode__Username: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OpenCode__Password: ${OPENCODE_SERVER_PASSWORD:-flow-opencode-local}
+      OpenCode__ProviderId: ${OPENCODE_PROVIDER_ID:-lmstudio}
+      OpenCode__ModelId: ${OPENCODE_MODEL_ID:-qwen3.6-35b-a3b}
+      OpenCode__TimeoutSeconds: ${OPENCODE_TIMEOUT_SECONDS:-1800}
+      # Один том под разными путями: api пишет checkout, OpenCode читает его как /workspaces:ro.
+      Repositories__WorkspaceRoot: /var/lib/flow/repositories
+      Repositories__AgentWorkspaceRoot: /workspaces
       # Поиск включён по умолчанию: без модели он деградирует в полнотекстовый (GET /search
       # отвечает degraded: true), а очередь индексации копится до её появления. SEARCH_ENABLED=false
       # отключает и эндпоинты, и воркер — поведение приложения становится в точности прежним.
@@ -102,6 +112,7 @@ services:
     volumes:
       - auth-certs:/certs
       - auth-keys:/keys
+      - repository-workspaces:/var/lib/flow/repositories
     ports:
       # API_BIND=127.0.0.1 за реверс-прокси: снаружи Flow доступен только через него, а проба выкатки
       # на самом сервере продолжает ходить на порт напрямую.
@@ -138,6 +149,10 @@ networks:
     external: true
 
 volumes:
+  # Локальные checkout'ы исходного кода — данные проекта, поэтому это внешний том.
+  repository-workspaces:
+    name: flow-repository-workspaces
+    external: true
   # Не данные проекта, а ключи подписи и cookie Auth-модуля: при потере пересоздаются, пользователи
   # просто входят заново. Поэтому тома обычные и `down -v` их уносит.
   auth-keys:

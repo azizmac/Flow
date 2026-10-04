@@ -8,6 +8,7 @@ namespace Flow.Application.Features.Boards.Commands.StatusUpdateCommand;
 /// Изменить статус (docs/TZ_workflow_config.md §1). PATCH-семантика: null — не трогать. IsInitial принимает только
 /// true (флаг переносится на этот статус). Type задаёт вид, ClearType = true снимает его (статус без вида).
 /// WipLimit — мягкий лимит колонки канбана, ClearWipLimit снимает его. Права — ManageConfig. Нарушение инварианта (последний финальный, начальный финальным) или занятое имя — 400.
+/// Обработчик - <see cref="StatusUpdateCommandHandler"/>
 /// </summary>
 public sealed record StatusUpdateCommand(
     Guid ActorId,

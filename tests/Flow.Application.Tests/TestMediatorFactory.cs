@@ -36,14 +36,14 @@ public sealed record SearchTestContext(
     FakeReranker Reranker,
     FakeVisionEmbeddingGenerator Vision);
 
-public sealed record ScmTestContext(
+public sealed record GitTestContext(
     IMediator Mediator,
     FakeBoardRepository Boards,
     FakeTaskItemRepository Tasks,
     FakeUserRepository Users,
-    FakeScmStore Scm,
-    FakeScmProviderClient Client,
-    Flow.Application.Features.Scm.ScmOptions Options,
+    FakeGitRepositories Git,
+    FakeGitProviderClient Client,
+    Flow.Application.Features.GitIntegration.GitOptions Options,
     FakeSearchIndexQueue SearchIndex);
 
 public static class TestMediatorFactory
@@ -97,10 +97,10 @@ public static class TestMediatorFactory
     }
 
     /// <summary>Интеграция с Git: хранилище связей и доставок, хостинг в памяти, настройки (PublicBaseUrl задан).</summary>
-    public static ScmTestContext CreateScmContext()
+    public static GitTestContext CreateGitContext()
     {
         var all = Build();
-        return new ScmTestContext(all.Mediator, all.Boards, all.Tasks, all.Users, all.Scm, all.ScmClient, all.ScmOptions, all.SearchQueue);
+        return new GitTestContext(all.Mediator, all.Boards, all.Tasks, all.Users, all.Git, all.GitClient, all.GitOptions, all.SearchQueue);
     }
 
     /// <summary>Плюс фейковый UnitOfWork — для проверки повторов сохранения (конфликт ранга).</summary>
@@ -124,7 +124,7 @@ public static class TestMediatorFactory
         return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Accounts);
     }
 
-    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings, FakeAttachmentRepository Attachments, InMemoryFileStorage Storage, AttachmentOptions AttachmentOptions, FakeReranker Reranker, FakeVisionEmbeddingGenerator Vision, FakeUnitOfWork UnitOfWork, FakeScmStore Scm, FakeScmProviderClient ScmClient, Flow.Application.Features.Scm.ScmOptions ScmOptions) Build()
+    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings, FakeAttachmentRepository Attachments, InMemoryFileStorage Storage, AttachmentOptions AttachmentOptions, FakeReranker Reranker, FakeVisionEmbeddingGenerator Vision, FakeUnitOfWork UnitOfWork, FakeGitRepositories Git, FakeGitProviderClient GitClient, Flow.Application.Features.GitIntegration.GitOptions GitOptions) Build()
     {
         var boards = new FakeBoardRepository();
         var tasks = new FakeTaskItemRepository(boards);
@@ -165,13 +165,17 @@ public static class TestMediatorFactory
         services.AddSingleton<IDashboardRepository>(new FakeDashboardRepository());
         services.AddSingleton<ITaskCodeAliasRepository>(new FakeTaskCodeAliasRepository(tasks));
         services.AddSingleton<ITaskRecurrenceRepository>(new FakeTaskRecurrenceRepository());
-        var scm = new FakeScmStore();
-        var scmClient = new FakeScmProviderClient();
-        var scmOptions = new Flow.Application.Features.Scm.ScmOptions { PublicBaseUrl = "https://flow.example.com" };
-        services.AddSingleton<IScmStore>(scm);
-        services.AddSingleton<IScmProviderClient>(scmClient);
-        services.AddSingleton(scmOptions);
-        services.AddSingleton<IScmSecretProtector>(new FakeScmSecretProtector());
+        var git = new FakeGitRepositories();
+        var gitClient = new FakeGitProviderClient();
+        var gitOptions = new Flow.Application.Features.GitIntegration.GitOptions { PublicBaseUrl = "https://flow.example.com" };
+        services.AddSingleton<IGitHostConnectionRepository>(git.HostConnections);
+        services.AddSingleton<IGitRepositoryCatalog>(git.Catalog);
+        services.AddSingleton<IGitRepositoryBoardRepository>(git.RepositoryBoards);
+        services.AddSingleton<IGitDevelopmentLinkRepository>(git.DevelopmentLinks);
+        services.AddSingleton<IGitIntegrationJobRepository>(git.IntegrationJobs);
+        services.AddSingleton<IGitProviderClient>(gitClient);
+        services.AddSingleton(gitOptions);
+        services.AddSingleton<IGitSecretProtector>(new FakeGitSecretProtector());
         services.AddSingleton<IUserRepository>(users);
         services.AddSingleton<IAccountService>(accounts);
         services.AddSingleton<ITaskCommentRepository>(comments);
@@ -193,6 +197,6 @@ public static class TestMediatorFactory
         services.AddFlowApplication();
 
         var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
-        return (mediator, boards, tasks, users, accounts, comments, activities, searchQueue, searchOptions, searchIndex, embeddings, attachments, storage, attachmentOptions, reranker, visionEmbedder, unitOfWork, scm, scmClient, scmOptions);
+        return (mediator, boards, tasks, users, accounts, comments, activities, searchQueue, searchOptions, searchIndex, embeddings, attachments, storage, attachmentOptions, reranker, visionEmbedder, unitOfWork, git, gitClient, gitOptions);
     }
 }

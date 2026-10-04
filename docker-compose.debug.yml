@@ -1,0 +1,11 @@
+# Локальный Run/Debug в Rider (Flow Only). Основной стек и серверная сборка остаются Release.
+# Fast mode выключен, поэтому выполняются все стадии Dockerfile, включая сборку CodeMirror.
+services:
+  api:
+    build:
+      args:
+        BUILD_CONFIGURATION: Debug
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    labels:
+      com.jetbrains.rider.debug: "true"

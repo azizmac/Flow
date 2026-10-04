@@ -19,7 +19,7 @@
 <div class="topbar">
     <div class="topbar-left"><h2>Люди</h2></div>
     <div class="topbar-right">
-        <SearchBox Placeholder="Имя, @@username или почта..." Value="@_search" ValueChanged="v => _search = v" />
+        <SearchBox Placeholder="@("Имя, @username или почта...")" Value="@_search" ValueChanged="v => _search = v" />
         @if (CanManageUsers)
         {
             <DsButton Variant="primary" Size="md" Icon="user-plus" OnClick="OpenCreate">Добавить</DsButton>

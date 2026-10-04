@@ -61,7 +61,7 @@ public static class FqlFields
         (Domain.Entities.TaskPriority.High, ["high", "высокий"]),
         (Domain.Entities.TaskPriority.Critical, ["critical", "критический"]));
 
-    /// <summary>development = … (docs/TZ_scm_integration.md §7): открытый (или черновой) PR, смёрженный PR, ни одного PR.</summary>
+    /// <summary>development = … (docs/TZ_git_integration.md §7): открытый (или черновой) PR, смёрженный PR, ни одного PR.</summary>
     public static readonly IReadOnlyDictionary<string, TaskFilterPullRequestState> Development = Map(
         (TaskFilterPullRequestState.Open, ["openPR", "открытый"]),
         (TaskFilterPullRequestState.Merged, ["mergedPR", "смёржен"]),

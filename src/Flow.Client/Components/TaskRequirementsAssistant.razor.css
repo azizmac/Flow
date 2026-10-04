@@ -1,0 +1,113 @@
+.requirements-assistant {
+    display: flex;
+    flex-direction: column;
+    flex: none;
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+.requirements-assistant-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.requirements-assistant-progress,
+.requirements-assistant-error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.requirements-assistant-progress {
+    color: var(--text-secondary);
+}
+
+.requirements-assistant-duration {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+}
+
+.requirements-assistant-error {
+    padding: var(--space-3);
+    border: 1px solid var(--danger);
+    border-radius: var(--r-md);
+    background: var(--danger-soft);
+    color: var(--text-primary);
+}
+
+.requirements-assistant-answer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: rgba(0, 0, 0, 0.12);
+    min-width: 0;
+}
+
+.requirements-assistant-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.requirements-assistant-icon {
+    display: grid;
+    place-items: center;
+    width: var(--control-h-sm);
+    height: var(--control-h-sm);
+    flex: none;
+    border-radius: var(--r-md);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.requirements-assistant-title {
+    margin-bottom: var(--space-1);
+    font: var(--fw-semibold) 13px var(--font-display);
+    color: var(--text-primary);
+}
+
+.requirements-assistant-notice {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--r-sm);
+    background: var(--accent-soft);
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.requirements-assistant-answer ::deep .desc-box {
+    flex: none;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.requirements-assistant-sources {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+}
+
+.requirements-assistant-source {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    color: var(--text-secondary);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.requirements-assistant-source .code {
+    color: var(--accent);
+}

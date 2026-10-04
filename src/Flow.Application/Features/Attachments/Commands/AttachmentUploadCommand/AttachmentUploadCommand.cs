@@ -4,6 +4,7 @@ namespace Flow.Application.Features.Attachments.Commands.AttachmentUploadCommand
 
 /// <summary>
 /// Загрузка файла к задаче. ActorId — Member и выше (403 для Reader).
+/// Обработчик - <see cref="AttachmentUploadCommandHandler"/>
 /// </summary>
 /// <param name="Content">
 /// Поток файла. Обязан быть перематываемым: сначала по нему считается SHA-256 и сигнатура,

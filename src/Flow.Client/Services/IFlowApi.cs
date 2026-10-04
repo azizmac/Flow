@@ -4,7 +4,7 @@ using Flow.Shared.Contracts.Attachments;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Search;
 using Flow.Shared.Contracts.Dashboards;
-using Flow.Shared.Contracts.Scm;
+using Flow.Shared.Contracts.GitIntegration;
 using Flow.Shared.Contracts.Milestones;
 using Flow.Shared.Contracts.Sprints;
 using Flow.Shared.Contracts.Tasks;
@@ -48,6 +48,12 @@ public interface IFlowApi
     Task<ApiResult<IReadOnlyList<BoardResponse>>> GetBoards(CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> GetBoard(Guid id, CancellationToken ct = default);
     Task<ApiResult<BoardResponse>> CreateBoard(CreateBoardRequest request, CancellationToken ct = default);
+    // Локальные копии репозиториев и проверка агента.
+    Task<ApiResult<bool>> SynchronizeGitRepository(Guid boardId, Guid repositoryId, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Agents.AgentTestResponse>> AskAgent(Flow.Shared.Contracts.Agents.AgentTestRequest request, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Agents.TaskRequirementsResponse>> ReviewTaskRequirements(
+        Flow.Shared.Contracts.Agents.TaskRequirementsRequest request, CancellationToken ct = default);
+
 
     // Шаблоны задач (этап 3G)
     Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Tasks.TaskTemplateResponse>>> GetTaskTemplates(Guid boardId, CancellationToken ct = default);
@@ -164,25 +170,25 @@ public interface IFlowApi
     Task<ApiResult<bool>> DeleteRecurrence(Guid taskId, CancellationToken ct = default);
     Task<ApiResult<IReadOnlyList<DateOnly>>> PreviewRecurrence(Guid taskId, TaskRecurrenceRequest request, int count = 5, CancellationToken ct = default);
 
-    // Git-хостинги (docs/TZ_scm_integration.md): подключения и репозитории — Admin+, привязка к проекту — ManageScm.
-    Task<ApiResult<IReadOnlyList<ScmConnectionResponse>>> GetScmConnections(CancellationToken ct = default);
-    Task<ApiResult<ScmConnectionResponse>> CreateScmConnection(CreateScmConnectionRequest request, CancellationToken ct = default);
-    Task<ApiResult<ScmConnectionResponse>> UpdateScmConnection(Guid id, UpdateScmConnectionRequest request, CancellationToken ct = default);
-    Task<ApiResult<bool>> DeleteScmConnection(Guid id, CancellationToken ct = default);
-    Task<ApiResult<ScmConnectionResponse>> CheckScmConnection(Guid id, CancellationToken ct = default);
-    Task<ApiResult<IReadOnlyList<ScmRemoteRepositoryResponse>>> GetAvailableRepositories(Guid connectionId, string? query, CancellationToken ct = default);
-    Task<ApiResult<ScmRepositoryResponse>> AddScmRepository(AddScmRepositoryRequest request, CancellationToken ct = default);
-    Task<ApiResult<bool>> DisableScmRepository(Guid repositoryId, CancellationToken ct = default);
-    Task<ApiResult<IReadOnlyList<ScmDeliveryResponse>>> GetScmDeliveries(Guid repositoryId, ScmDeliveryStatus? status = null, CancellationToken ct = default);
-    Task<ApiResult<ScmDeliveryResponse>> RetryScmDelivery(Guid deliveryId, CancellationToken ct = default);
-    Task<ApiResult<bool>> BackfillScmRepository(Guid repositoryId, CancellationToken ct = default);
-    Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> GetBoardRepositories(Guid boardId, CancellationToken ct = default);
-    Task<ApiResult<IReadOnlyList<ScmBoardRepositoryResponse>>> SetBoardRepository(Guid boardId, Guid repositoryId, bool bound,
-        UpdateScmBindingRequest? settings = null, CancellationToken ct = default);
+    // Git-хостинги (docs/TZ_git_integration.md): подключения и репозитории — Admin+, привязка к проекту — ManageGit.
+    Task<ApiResult<IReadOnlyList<GitHostConnectionResponse>>> GetGitHostConnections(CancellationToken ct = default);
+    Task<ApiResult<GitHostConnectionResponse>> CreateGitHostConnection(CreateGitHostConnectionRequest request, CancellationToken ct = default);
+    Task<ApiResult<GitHostConnectionResponse>> UpdateGitHostConnection(Guid id, UpdateGitHostConnectionRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteGitHostConnection(Guid id, CancellationToken ct = default);
+    Task<ApiResult<GitHostConnectionResponse>> CheckGitHostConnection(Guid id, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<GitRemoteRepositoryResponse>>> GetAvailableRepositories(Guid connectionId, string? query, CancellationToken ct = default);
+    Task<ApiResult<GitRepositoryResponse>> AddGitRepository(AddGitRepositoryRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DisableGitRepository(Guid repositoryId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<GitIntegrationJobResponse>>> GetGitIntegrationJobs(Guid repositoryId, GitIntegrationJobStatus? status = null, CancellationToken ct = default);
+    Task<ApiResult<GitIntegrationJobResponse>> RetryGitIntegrationJob(Guid deliveryId, CancellationToken ct = default);
+    Task<ApiResult<bool>> BackfillGitRepository(Guid repositoryId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<GitBoardRepositoryResponse>>> GetBoardRepositories(Guid boardId, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<GitBoardRepositoryResponse>>> SetBoardRepository(Guid boardId, Guid repositoryId, bool bound,
+        UpdateGitBindingRequest? settings = null, CancellationToken ct = default);
     Task<ApiResult<TaskDevelopmentResponse>> GetTaskDevelopment(Guid taskId, CancellationToken ct = default);
-    // Этап 5D: ветка и PR из карточки задачи (WriteScm); ответ — блок «Разработка» целиком.
-    Task<ApiResult<TaskDevelopmentResponse>> CreateScmBranch(Guid taskId, CreateScmBranchRequest request, CancellationToken ct = default);
-    Task<ApiResult<TaskDevelopmentResponse>> CreateScmPullRequest(Guid taskId, CreateScmPullRequestRequest request, CancellationToken ct = default);
+    // Этап 5D: ветка и PR из карточки задачи (WriteGit); ответ — блок «Разработка» целиком.
+    Task<ApiResult<TaskDevelopmentResponse>> CreateGitBranch(Guid taskId, CreateGitBranchRequest request, CancellationToken ct = default);
+    Task<ApiResult<TaskDevelopmentResponse>> CreateGitPullRequest(Guid taskId, CreateGitPullRequestRequest request, CancellationToken ct = default);
 
     // Дашборды (docs/TZ_task_views.md §8): данные каждого виджета — отдельным вызовом; ошибка виджета — в WidgetDataResponse.Error.
     Task<ApiResult<IReadOnlyList<DashboardResponse>>> GetDashboards(CancellationToken ct = default);

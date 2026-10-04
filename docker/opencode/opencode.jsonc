@@ -1,0 +1,23 @@
+{
+  // HTTP-сервер OpenCode запускается в data stack; LM Studio — отдельно на хосте.
+  // Настройка и проверка интеграции: docs/OpenCode_setup.md.
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/qwen3.6-35b-a3b",
+  "providers": {
+    "lmstudio": {
+      "name": "LM Studio",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        // host.docker.internal задаётся Compose через host-gateway, не заменять на localhost.
+        "baseURL": "http://host.docker.internal:1234/v1"
+      },
+      "models": {
+        "qwen3.6-35b-a3b": {
+          "name": "Qwen 3.6 35B A3B",
+          // Фактический идентификатор модели из LM Studio /v1/models.
+          "modelID": "qwen/qwen3.6-35b-a3b"
+        }
+      }
+    }
+  }
+}

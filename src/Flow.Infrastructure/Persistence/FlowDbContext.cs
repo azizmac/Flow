@@ -1,4 +1,5 @@
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.GitIntegration;
 using Flow.Infrastructure.Search.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -50,15 +51,15 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
 
     public DbSet<TaskRecurrenceOccurrence> TaskRecurrenceOccurrences => Set<TaskRecurrenceOccurrence>();
 
-    public DbSet<ScmConnection> ScmConnections => Set<ScmConnection>();
+    public DbSet<GitHostConnection> GitHostConnections => Set<GitHostConnection>();
 
-    public DbSet<ScmRepository> ScmRepositories => Set<ScmRepository>();
+    public DbSet<GitRepository> GitRepositories => Set<GitRepository>();
 
-    public DbSet<ScmRepositoryBoard> ScmRepositoryBoards => Set<ScmRepositoryBoard>();
+    public DbSet<GitRepositoryBoard> GitRepositoryBoards => Set<GitRepositoryBoard>();
 
-    public DbSet<ScmLink> ScmLinks => Set<ScmLink>();
+    public DbSet<GitDevelopmentLink> GitDevelopmentLinks => Set<GitDevelopmentLink>();
 
-    public DbSet<ScmDelivery> ScmDeliveries => Set<ScmDelivery>();
+    public DbSet<GitIntegrationJob> GitIntegrationJobs => Set<GitIntegrationJob>();
 
     /// <summary>
     /// Поисковый индекс — проекция, а не домен: наружу из сборки не торчит, Application работает

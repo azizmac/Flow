@@ -24,7 +24,7 @@ public static class FlowApplicationServiceCollectionExtensions
         services.AddScoped<ActorResolver>();
         services.AddScoped<IProjectAccess, ProjectAccess>();
         services.AddScoped<MentionResolver>();
-        services.AddScoped<Features.Scm.ScmAutomation>();
+        services.AddScoped<Features.GitIntegration.GitAutomation>();
         services.AddScoped<Features.Tasks.TaskResponses>();
         services.AddScoped<Features.Tasks.TaskLinkResponses>();
         services.AddScoped<Features.Tasks.TransitionGuard>();
@@ -35,7 +35,7 @@ public static class FlowApplicationServiceCollectionExtensions
         services.AddScoped<Features.Milestones.MilestoneProgressCalculator>();
         // Секцию "Recurrence" привязывает Flow.Infrastructure вместе с воркером; здесь — умолчания для тестов и хостов без него.
         services.TryAddSingleton(new Features.Tasks.Recurrence.RecurrenceOptions());
-        services.TryAddSingleton(new Features.Scm.ScmOptions());
+        services.TryAddSingleton(new Features.GitIntegration.GitOptions());
 
         return services;
     }

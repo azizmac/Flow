@@ -4,7 +4,10 @@ using TaskPriority = Flow.Domain.Entities.TaskPriority;
 
 namespace Flow.Application.Features.Tasks.Commands.TaskCreateCommand;
 
-/// <summary>Response = null, если доска не найдена.</summary>
+/// <summary>
+/// Response = null, если доска не найдена.
+/// Обработчик - <see cref="TaskCreateCommandHandler"/>
+/// </summary>
 /// <remarks>
 /// ActorId — Member+ (403 для Reader); пишется в TaskItem.CreatedById. TypeId = null — тип проекта по умолчанию,
 /// чужой или архивный тип — InvalidOperationException (400). Priority = null — None. ParentId — сразу подзадачей:

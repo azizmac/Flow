@@ -50,7 +50,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         services.AddSingleton<IAccountService, AlwaysSucceedingAccountService>();
         // Вложения кладём в память: S3-клиент проверяется отдельным тестом против MinIO.
         services.AddSingleton<IFileStorage>(Storage);
-        services.AddSingleton<IScmSecretProtector>(new FakeScmSecretProtector());
+        services.AddSingleton<IGitSecretProtector>(new FakeGitSecretProtector());
         _services = services.BuildServiceProvider();
 
         await using var scope = _services.CreateAsyncScope();

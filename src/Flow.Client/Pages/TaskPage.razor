@@ -106,6 +106,12 @@ else if (_task is not null && _board is not null)
                 {
                     <MarkdownView Text="@_task.Description" Class="big" OnClick="OnDescClick" />
                 }
+                @if (CanEdit)
+                {
+                    <TaskRequirementsAssistant BoardId="_board.Id" TaskId="_task.Id"
+                                               Title="@(_editingTitle ? _title : _task.Title)"
+                                               Description="@(_editingDesc ? _description : _task.Description)" Disabled="_busy" />
+                }
             </div>
             }
             <SubtaskList Board="_board" Parent="_task" CanCreate="Permissions.CanCreateTask(Access.For(_board.Id))"

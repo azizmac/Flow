@@ -91,6 +91,7 @@
             <div class="desc-wrap">
                 <div class="desc-head"><div class="meta-k">Описание@(descField.Required ? " *" : "")</div></div>
                 <MarkdownEditor @bind-Value="_description" MinHeight="120" ShowActions="false" AllowEmpty="true" SubmitHint="создать" OnSubmit="Create" />
+                <TaskRequirementsAssistant BoardId="Board.Id" Title="@_title" Description="@_description" Disabled="_busy" />
             </div>
         }
         @if (_error is not null)
@@ -207,6 +208,12 @@ else if (Item is not null)
             else
             {
                 <MarkdownView Text="@Item.Description" OnClick="OnDescClick" />
+            }
+            @if (CanEdit)
+            {
+                <TaskRequirementsAssistant BoardId="Board.Id" TaskId="Item.Id"
+                                           Title="@(_editingTitle ? _title : Current.Title)"
+                                           Description="@(_editingDesc ? _description : Current.Description)" Disabled="_busy" />
             }
         </div>
         }

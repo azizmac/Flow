@@ -4,6 +4,7 @@
 # сервис, стартовавший раньше базы, дожидается её сам (Startup:DatabaseWaitTimeoutSeconds).
 # Все шаги идемпотентны — скрипт можно запускать и на первом старте, и на обновлении.
 # Windows-аналог — docker/up.ps1. См. docs/TZ_infra_data_split.md.
+# Стек данных включает OpenCode; LM Studio разработчик запускает отдельно. См. docs/OpenCode_setup.md.
 #
 #   sh docker/up.sh                        # поднять всё, образы приложения пересобрать
 #   sh docker/up.sh --no-build             # без пересборки

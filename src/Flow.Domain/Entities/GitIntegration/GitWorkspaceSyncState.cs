@@ -1,0 +1,20 @@
+namespace Flow.Domain.Entities.GitIntegration;
+
+/// <summary>Состояние локальной синхронизации Git-репозитория.</summary>
+public enum GitWorkspaceSyncState
+{
+    /// <summary>Репозиторий создан, но первая ревизия ещё не подготовлена.</summary>
+    Pending = 0,
+
+    /// <summary>Выполняется clone либо обновление локального зеркала.</summary>
+    Syncing = 1,
+
+    /// <summary>Есть успешно синхронизированная ревизия, пригодная для анализа.</summary>
+    Ready = 2,
+
+    /// <summary>
+    /// Последняя попытка синхронизации не удалась. Предыдущая успешная ревизия, если есть,
+    /// остаётся доступной и не удаляется.
+    /// </summary>
+    Failed = 3
+}

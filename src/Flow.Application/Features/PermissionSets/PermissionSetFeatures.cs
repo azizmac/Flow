@@ -17,13 +17,22 @@ namespace Flow.Application.Features.PermissionSets;
 
 public sealed record PermissionSetListQuery(Guid ActorId) : IRequest<IReadOnlyList<PermissionSetResponse>>;
 
+/// <summary>
+/// Обработчик - <see cref="PermissionSetHandlers"/>
+/// </summary>
 public sealed record PermissionSetCreateCommand(Guid ActorId, string Name, string? Description, DomainRole BaseRole, IReadOnlyList<DomainPermission> Permissions)
     : IRequest<PermissionSetResponse>;
 
-/// <summary>Имя, описание и права; базовая роль не меняется. null — набора нет; встроенный — 400.</summary>
+/// <summary>
+/// Имя, описание и права; базовая роль не меняется. null — набора нет; встроенный — 400.
+/// Обработчик - <see cref="PermissionSetHandlers"/>
+/// </summary>
 public sealed record PermissionSetUpdateCommand(Guid ActorId, Guid SetId, string Name, string? Description, IReadOnlyList<DomainPermission> Permissions)
     : IRequest<PermissionSetResponse?>;
 
+/// <summary>
+/// Обработчик - <see cref="PermissionSetHandlers"/>
+/// </summary>
 public sealed record PermissionSetDeleteCommand(Guid ActorId, Guid SetId) : IRequest<bool>;
 
 /// <summary>Права из контракта в домен: неизвестное число — 400 (домен проверит ещё раз).</summary>

@@ -8,6 +8,7 @@ namespace Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 /// IsDefault = false не поддерживается (флаг снимается, только когда его получает другой тип) — 400.
 /// Права — Admin+. Response = null, если проекта нет; тип из другого проекта, архивация типа по умолчанию,
 /// занятое имя — InvalidOperationException (400).
+/// Обработчик - <see cref="TaskTypeUpdateCommandHandler"/>
 /// </summary>
 public sealed record TaskTypeUpdateCommand(Guid ActorId, Guid BoardId, Guid TypeId, string? Name = null, bool? IsDefault = null, bool? IsArchived = null)
     : IRequest<BoardResponse?>;

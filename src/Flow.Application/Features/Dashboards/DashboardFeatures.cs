@@ -19,22 +19,40 @@ public sealed record DashboardGetQuery(Guid ActorId, Guid DashboardId) : IReques
 /// <summary>Стартовый дашборд смотрящего: свой «по умолчанию», иначе первый свой; нет своих — null.</summary>
 public sealed record DashboardDefaultQuery(Guid ActorId) : IRequest<DashboardResponse?>;
 
+/// <summary>
+/// Обработчик - <see cref="DashboardHandlers"/>
+/// </summary>
 public sealed record DashboardCreateCommand(Guid ActorId, string Name, bool Shared) : IRequest<DashboardResponse>;
 
-/// <summary>PATCH: null — не трогать; IsDefault = true снимает флаг с остальных дашбордов автора. Менять — автор.</summary>
+/// <summary>
+/// PATCH: null — не трогать; IsDefault = true снимает флаг с остальных дашбордов автора. Менять — автор.
+/// Обработчик - <see cref="DashboardHandlers"/>
+/// </summary>
 public sealed record DashboardUpdateCommand(Guid ActorId, Guid DashboardId, string? Name = null, bool? Shared = null, bool? IsDefault = null)
     : IRequest<DashboardResponse?>;
 
-/// <summary>Удалить — автор, общий — ещё Admin+. false — не найден.</summary>
+/// <summary>
+/// Удалить — автор, общий — ещё Admin+. false — не найден.
+/// Обработчик - <see cref="DashboardHandlers"/>
+/// </summary>
 public sealed record DashboardDeleteCommand(Guid ActorId, Guid DashboardId) : IRequest<bool>;
 
-/// <summary>Новый виджет; настройки проверяются по виду (FQL биндится правами автора, фильтр — видимый ему). Менять — автор.</summary>
+/// <summary>
+/// Новый виджет; настройки проверяются по виду (FQL биндится правами автора, фильтр — видимый ему). Менять — автор.
+/// Обработчик - <see cref="DashboardHandlers"/>
+/// </summary>
 public sealed record WidgetAddCommand(Guid ActorId, Guid DashboardId, DomainWidgetType Type, string? Title, WidgetConfig Config,
     int? X = null, int? Y = null, int W = 6, int H = 3) : IRequest<DashboardResponse?>;
 
+/// <summary>
+/// Обработчик - <see cref="DashboardHandlers"/>
+/// </summary>
 public sealed record WidgetUpdateCommand(Guid ActorId, Guid DashboardId, Guid WidgetId, string? Title, WidgetConfig Config, int X, int Y, int W, int H)
     : IRequest<DashboardResponse?>;
 
+/// <summary>
+/// Обработчик - <see cref="DashboardHandlers"/>
+/// </summary>
 public sealed record WidgetRemoveCommand(Guid ActorId, Guid DashboardId, Guid WidgetId) : IRequest<DashboardResponse?>;
 
 /// <summary>Данные виджета правами смотрящего; дашборд не виден — null (404), ошибка виджета — в ответе, не исключением.</summary>

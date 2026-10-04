@@ -40,10 +40,10 @@ internal sealed class PermissionService : IPermissionService
         RequireProject(access, ProjectPermission.ManageSprints, "Спринты ведут разработчики и администраторы проекта.");
     }
 
-    public void EnsureCanWriteScm(ProjectAccessInfo access)
+    public void EnsureCanWriteGit(ProjectAccessInfo access)
     {
         RequireVisible(access);
-        RequireProject(access, ProjectPermission.WriteScm, "Ветки и PR из Flow создают разработчики и администраторы проекта.");
+        RequireProject(access, ProjectPermission.WriteGit, "Ветки и PR из Flow создают разработчики и администраторы проекта.");
     }
 
     public void EnsureCanManageTaskTemplates(ProjectAccessInfo access)
@@ -167,10 +167,10 @@ internal sealed class PermissionService : IPermissionService
             "Удалять чужие вложения может администратор проекта.");
     }
 
-    public void EnsureCanManageScm(ProjectAccessInfo access)
+    public void EnsureCanManageGit(ProjectAccessInfo access)
     {
         RequireVisible(access);
-        RequireProject(access, ProjectPermission.ManageScm, "Привязывать репозитории к проекту может его администратор.");
+        RequireProject(access, ProjectPermission.ManageGit, "Привязывать репозитории к проекту может его администратор.");
     }
 
     public void EnsureCanManageIntegrations(User actor) =>

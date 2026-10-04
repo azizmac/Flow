@@ -142,7 +142,7 @@ else
                             }
                             @if (task.PullRequestState is { } prState)
                             {
-                                <span class="count-chip pr-chip @ScmMeta.StateClass(prState)" title="@($"Последний PR: {ScmMeta.StateLabel(prState)}")"><Icon Name="code" Size="12" />PR</span>
+                                <span class="count-chip pr-chip @GitMeta.StateClass(prState)" title="@($"Последний PR: {GitMeta.StateLabel(prState)}")"><Icon Name="code" Size="12" />PR</span>
                             }
                             @if (task.BlockedByCount > 0)
                             {

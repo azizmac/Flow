@@ -6,7 +6,7 @@ using MediatR;
 
 namespace Flow.Application.Features.Tasks.Commands.TaskDeleteCommand;
 
-internal sealed class TaskDeleteCommandHandler(ITaskItemRepository tasks, ITaskCommentRepository comments, IAttachmentRepository attachments, IFileStorage storage, ISearchIndexQueue searchIndex, IScmStore scm, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
+internal sealed class TaskDeleteCommandHandler(ITaskItemRepository tasks, ITaskCommentRepository comments, IAttachmentRepository attachments, IFileStorage storage, ISearchIndexQueue searchIndex, IGitDevelopmentLinkRepository developmentLinks, ActorResolver actors, IPermissionService permissions, IProjectAccess projectAccess, IUnitOfWork unitOfWork)
     : IRequestHandler<TaskDeleteCommand, bool>
 {
     public async Task<bool> Handle(TaskDeleteCommand request, CancellationToken cancellationToken)
@@ -49,8 +49,8 @@ internal sealed class TaskDeleteCommandHandler(ITaskItemRepository tasks, ITaskC
             searchIndex.Enqueue(SearchSourceType.Task, item.Id, item.BoardId, SearchIndexOperation.Delete);
 
             // PR и коммиты задачи (этап 5E) уйдут каскадом так же, как комментарии.
-            foreach (var link in await scm.GetLinksByTaskAsync(item.Id, cancellationToken))
-                Features.Scm.ScmSearch.Delete(searchIndex, link, item.BoardId);
+            foreach (var link in await developmentLinks.GetByTaskIdAsync(item.Id, cancellationToken))
+                Features.GitIntegration.GitSearch.Delete(searchIndex, link, item.BoardId);
 
             // Строки вложений уйдут каскадом, а чанки индекса привязаны к своим Id — список нужен до удаления.
             // Он же отвечает на вопрос, идти ли в хранилище: у задачи без файлов там делать нечего.

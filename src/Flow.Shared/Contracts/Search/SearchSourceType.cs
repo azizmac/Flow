@@ -15,8 +15,8 @@ public enum SearchSourceType
     Attachment = 5,
 
     /// <summary>
-    /// PR или коммит задачи с Git-хостинга (docs/TZ_scm_integration.md, этап 5E): заголовок PR или первая строка
-    /// сообщения коммита. Источник — строка ScmLinks; ветки не индексируются (их имя — код и название задачи).
+    /// PR или коммит задачи с Git-хостинга (docs/TZ_git_integration.md, этап 5E): заголовок PR или первая строка
+    /// сообщения коммита. Источник — строка GitDevelopmentLinks; ветки не индексируются (их имя — код и название задачи).
     /// </summary>
     Development = 6
 }

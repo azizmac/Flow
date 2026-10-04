@@ -18,9 +18,12 @@ using Flow.Application.Features.Boards.Workflow;
 using Flow.Application.Features.Boards.Commands.TaskTypeUpdateCommand;
 using Flow.Application.Features.Boards.Queries.BoardGetQuery;
 using Flow.Application.Features.Boards.Queries.BoardListQuery;
+using Flow.Application.Features.GitIntegration;
 using Flow.Application.Abstractions;
 using Flow.Shared.Contracts.Boards;
 using Flow.Shared.Contracts.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -354,5 +357,17 @@ public class BoardsController(IMediator mediator, IActorAccessor actor) : Contro
     {
         var deleted = await mediator.Send(new BoardDeleteCommand(actor.Require(), id), cancellationToken);
         return deleted ? NoContent() : NotFound();
+    }
+
+    [HttpPost("{id:guid}/repositories/{repositoryId:guid}/sync")]
+    public async Task<IActionResult> SynchronizeRepository(Guid id, Guid repositoryId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var repository = await mediator.Send(new SynchronizeGitRepositoryCommand(actor.Require(), id, repositoryId), cancellationToken);
+            return repository is null ? NotFound() : Ok(repository);
+        }
+        catch (InvalidOperationException ex) { return Conflict(new ApiError(ex.Message)); }
+        catch (DbUpdateConcurrencyException) { return Conflict(new ApiError("Репозиторий уже синхронизируется.")); }
     }
 }

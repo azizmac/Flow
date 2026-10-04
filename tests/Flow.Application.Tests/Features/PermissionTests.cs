@@ -2,7 +2,7 @@ using Flow.Application.Features.Dashboards;
 using Flow.Application.Features.Filters;
 using Flow.Application.Features.Tasks.Restructure;
 using Flow.Application.Features.Tasks.Recurrence;
-using Flow.Application.Features.Scm;
+using Flow.Application.Features.GitIntegration;
 using Flow.Application.Exceptions;
 using Flow.Application.Features.Boards.Commands.BoardCreateCommand;
 using Flow.Application.Features.Boards.Commands.BoardDeleteCommand;
@@ -621,7 +621,7 @@ public class PermissionTests
         var (mediator, _, _, users) = TestMediatorFactory.Create();
         var actor = AddUser(users, role, "actor");
 
-        Task List() => mediator.Send(new ScmConnectionListQuery(actor), CancellationToken.None);
+        Task List() => mediator.Send(new GitHostConnectionListQuery(actor), CancellationToken.None);
 
         if (allowed) await List(); else await Forbidden(List);
     }
@@ -635,7 +635,7 @@ public class PermissionTests
         var actor = AddUser(users, role, "actor");
         var board = await CreateBoardAsync(mediator);
 
-        Task List() => mediator.Send(new ScmBoardRepositoriesQuery(actor, board), CancellationToken.None);
+        Task List() => mediator.Send(new GitBoardRepositoriesQuery(actor, board), CancellationToken.None);
 
         if (allowed) await List(); else await Forbidden(List);
     }

@@ -14,10 +14,16 @@ namespace Flow.Application.Features.Boards.Workflow;
 /// <summary>TaskTypeId — workflow типа (этап 3E): свой или, если своего нет, проекта с Inherited.</summary>
 public sealed record WorkflowGetQuery(Guid ActorId, Guid BoardId, Guid? TaskTypeId = null) : IRequest<WorkflowResponse?>;
 
-/// <summary>Тип снова живёт по workflow проекта: его свои переходы удаляются. Права — ManageConfig.</summary>
+/// <summary>
+/// Тип снова живёт по workflow проекта: его свои переходы удаляются. Права — ManageConfig.
+/// Обработчик - <see cref="WorkflowHandlers"/>
+/// </summary>
 public sealed record WorkflowResetTypeCommand(Guid ActorId, Guid BoardId, Guid TaskTypeId) : IRequest<WorkflowResponse?>;
 
-/// <summary>Layout — раскладка графа (этап 3D): null — не менять, пустой — автораскладка.</summary>
+/// <summary>
+/// Layout — раскладка графа (этап 3D): null — не менять, пустой — автораскладка.
+/// Обработчик - <see cref="WorkflowHandlers"/>
+/// </summary>
 public sealed record WorkflowSetCommand(Guid ActorId, Guid BoardId, WorkflowMode Mode, IReadOnlyList<TransitionRequest> Transitions,
     IReadOnlyList<StatusPosition>? Layout = null, Guid? TaskTypeId = null) : IRequest<WorkflowResponse?>;
 

@@ -1,5 +1,5 @@
-using Flow.Application.Features.Scm;
-using Flow.Infrastructure.Scm;
+using Flow.Application.Features.GitIntegration;
+using Flow.Infrastructure.GitIntegration;
 using Flow.Application.Features.Tasks.Recurrence;
 using Flow.Infrastructure.Recurrence;
 using Amazon.Runtime;
@@ -8,6 +8,8 @@ using Flow.Application.Abstractions;
 using Flow.Application.Features.Attachments;
 using Flow.Infrastructure.Persistence;
 using Flow.Infrastructure.Persistence.Repositories;
+using Flow.Infrastructure.OpenCode;
+using Flow.Infrastructure.Repositories;
 using Flow.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -49,16 +51,20 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<ITaskCodeAliasRepository, TaskCodeAliasRepository>();
         services.AddScoped<ITaskRecurrenceRepository, TaskRecurrenceRepository>();
-        services.AddScoped<IScmStore, ScmStore>();
+        services.AddScoped<IGitHostConnectionRepository, GitHostConnectionRepository>();
+        services.AddScoped<IGitRepositoryCatalog, GitRepositoryCatalog>();
+        services.AddScoped<IGitRepositoryBoardRepository, GitRepositoryBoardRepository>();
+        services.AddScoped<IGitDevelopmentLinkRepository, GitDevelopmentLinkRepository>();
+        services.AddScoped<IGitIntegrationJobRepository, GitIntegrationJobRepository>();
 
-        // Git-хостинги (docs/TZ_scm_integration.md): клиенты API, настройки секции Scm и разбор доставок вебхуков.
-        var scm = configuration.GetSection(ScmOptions.SectionName).Get<ScmOptions>() ?? new ScmOptions();
-        services.AddSingleton(scm);
-        services.AddHttpClient(ScmProviderClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
+        // Git-хостинги (docs/TZ_git_integration.md): клиенты API, настройки секции Scm и разбор доставок вебхуков.
+        var git = configuration.GetSection(GitOptions.SectionName).Get<GitOptions>() ?? new GitOptions();
+        services.AddSingleton(git);
+        services.AddHttpClient(GitProviderClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
         services.AddSingleton<GitHubAppTokens>();
-        services.AddScoped<IScmProviderClient, ScmProviderClient>();
-        if (scm.WorkerEnabled)
-            services.AddHostedService<ScmWorker>();
+        services.AddScoped<IGitProviderClient, GitProviderClient>();
+        if (git.WorkerEnabled)
+            services.AddHostedService<GitWorker>();
 
         // Повторяющиеся задачи (docs/TZ_task_model.md §9): настройки секции Recurrence и фоновый генератор.
         var recurrence = configuration.GetSection(RecurrenceOptions.SectionName).Get<RecurrenceOptions>() ?? new RecurrenceOptions();
@@ -79,12 +85,36 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
+        services.Configure<RepositoryWorkspaceOptions>(configuration.GetSection(RepositoryWorkspaceOptions.SectionName));
+        services.AddSingleton(provider => provider.GetRequiredService<IOptions<RepositoryWorkspaceOptions>>().Value);
+        services.AddSingleton<IRepositoryWorkspaceService, GitRepositoryWorkspaceService>();
+
+        AddOpenCode(services, configuration);
         AddAttachments(services, configuration);
 
         // Поисковый индекс: очередь нужна хендлерам всегда (при Search:Enabled=false она молча
         // ничего не пишет), поэтому регистрируется здесь, а не только из Flow.Api/Program.cs.
         services.AddFlowSearch(configuration);
         return services;
+    }
+
+    private static void AddOpenCode(IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<OpenCodeOptions>(configuration.GetSection(OpenCodeOptions.SectionName));
+        services.AddSingleton(provider => provider.GetRequiredService<IOptions<OpenCodeOptions>>().Value);
+
+        services.AddHttpClient(OpenCodeClient.HttpClientName, (provider, client) =>
+        {
+            var options = provider.GetRequiredService<OpenCodeOptions>();
+            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds));
+
+            var credentials = Convert.ToBase64String(
+                System.Text.Encoding.UTF8.GetBytes($"{options.Username}:{options.Password}"));
+            client.DefaultRequestHeaders.Authorization = new("Basic", credentials);
+        });
+
+        services.AddScoped<IFlowAgentClient, OpenCodeClient>();
     }
 
     /// <summary>

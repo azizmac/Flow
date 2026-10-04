@@ -5,13 +5,13 @@
 
 English · [Русский](README.ru.md)
 
-A project task tracker built on .NET 10: one backend with an authentication module and a Blazor WebAssembly client. The whole stack starts with a single Docker command.
+A project task tracker built on .NET 10: backend, authentication and a Blazor Interactive Server interface hosted together by Flow.Api. The whole stack starts with a single Docker command.
 
 ## What it is for
 
 Flow tracks a team's work: projects (boards) with their own status sets, tasks with human-readable codes (`FLOW-12`), assignees, roles and access rules. Everything runs on your own infrastructure — no external services required.
 
-The longer-term goal is an AI assistant inside the tracker: grounded in the team's knowledge base, it drafts specifications in the project's own format, decomposes them into board tasks, and builds business-process diagrams. Inference is planned to run locally so project data never leaves the team's infrastructure. Design work happens in [#1](https://github.com/azizmac/Flow/issues/1) and [#5](https://github.com/azizmac/Flow/issues/5); no AI subsystem exists in the code yet.
+The longer-term goal is an AI assistant inside the tracker: grounded in the team's knowledge base, it drafts specifications in the project's own format, decomposes them into board tasks, and builds business-process diagrams. Inference runs locally so project data stays within the team's infrastructure. A technical form already answers questions about synchronized repositories through OpenCode and LM Studio; design of the complete workflow continues in [#1](https://github.com/azizmac/Flow/issues/1) and [#5](https://github.com/azizmac/Flow/issues/5).
 
 ## What works today
 
@@ -19,10 +19,10 @@ The longer-term goal is an AI assistant inside the tracker: grounded in the team
 - **Users.** Profiles (name, contacts, external links), `Invited / Active / Deactivated` states, search and autocomplete.
 - **Roles and permissions.** `Reader → Member → Developer → Admin → Owner`; the permission matrix is enforced on the server, and the client hides actions the current user cannot perform. A "last Owner" rule prevents locking the instance out of administration.
 - **Task timeline.** Markdown comments with `@mentions` (a GitHub-style editor with preview and toolbar) and a change log: title, description, status, assignee, due date, deleted comments. Due dates with overdue highlighting.
-- **Authentication.** The `Flow.Auth` module is hosted by `Flow.Api`: ASP.NET Core Identity with BCrypt and OpenIddict (authorization code + PKCE, refresh, client credentials). The client signs in over OIDC; the API validates Bearer JWTs locally. The initial password must be changed at first sign-in.
+- **Authentication.** The `Flow.Auth` module is hosted by `Flow.Api`: ASP.NET Core Identity with BCrypt and OpenIddict (authorization code + PKCE, refresh, client credentials). The interface uses a cookie session; the JSON API validates Bearer JWTs locally. The initial password must be changed at first sign-in.
 - **Attachments.** Files on a task: stored in S3-compatible storage, size and type limits, downloads only over an authorised request. Listing, upload, image previews and deletion live in the task card and the drawer. A file can be dropped onto the card or straight into a comment (screenshots paste from the clipboard too): it is attached to the task, and the text gets an inline image or a download link.
 - **Search.** Hybrid vector and full-text search over tasks, comments, projects, people and the contents of attached files (PDF, docx, xlsx, pptx, plain text) on pgvector: it finds by meaning, not by substring. A sidebar box with live suggestions and a results page with filters; the index is updated in the same transaction as the edit.
-- **Interface.** A Blazor WebAssembly client built on the MudBlazor UI kit: the dark Flow theme, a task list with server-side sorting across six fields and paging, a task drawer, keyboard shortcuts and full keyboard navigation, a CodeMirror Markdown editor. Aimed at desktops and laptops (1280 px and up); the sidebar collapses to icons on narrow screens.
+- **Interface.** A Flow.Client Razor component library using Blazor Interactive Server and the MudBlazor UI kit, hosted by Flow.Api: the dark Flow theme, a task list with server-side sorting across six fields and paging, a task drawer, keyboard shortcuts and full keyboard navigation, a CodeMirror Markdown editor. Aimed at desktops and laptops (1280 px and up); the sidebar collapses to icons on narrow screens.
 - **Infrastructure.** PostgreSQL 16, EF Core, migrations applied on backend startup. Build, tests and image publishing run in GitHub Actions.
 
 ![Tasks of a project](docs/images/board.png)
@@ -65,13 +65,15 @@ What the script does step by step, and its flags, is covered in "The start scrip
 
 ```bash
 sh docker/data/init-env.sh                       # once: shared network and data volumes
-docker compose -f docker-compose.data.yml up -d  # data: PostgreSQL and S3
+docker compose -f docker-compose.data.yml up -d  # PostgreSQL, S3 and OpenCode
 docker compose up -d --build                     # application
 ```
 
-The first build takes a few minutes. Once the containers are up, the client is at http://localhost:5016 — continue with "First sign-in" below.
+The first build takes a few minutes. Once the containers are up, Flow is at http://localhost:8080 — continue with "First sign-in" below. There is no separate frontend on port 5016.
 
-Services: client :5016, backend API and authentication :8080, PostgreSQL :5432, S3-compatible storage :9000 with its console on :9001. Ports and the bootstrap user's credentials come from `.env`, which is not tracked in git — the same file feeds both stacks. If a local PostgreSQL already holds port 5432, set `POSTGRES_PORT=5433`. On Windows, run `docker/data/init-env.ps1` instead of the shell script.
+Services: interface, JSON API (`/api`) and authentication :8080, OpenCode :4096, PostgreSQL :5432, S3-compatible storage :9000 with its console on :9001. Ports and the bootstrap user's credentials come from `.env`, which is not tracked in git — the same file feeds both stacks. If a local PostgreSQL already holds port 5432, set `POSTGRES_PORT=5433`. On Windows, run `docker/data/init-env.ps1` instead of the shell script.
+
+Use `/agents/test` to ask about code after binding and synchronizing a project repository. See the [OpenCode setup guide (Russian)](docs/OpenCode_setup.md) for LM Studio, shared workspaces, Rider and troubleshooting. OpenCode starts with the normal data stack, without an `agent` profile; LM Studio runs separately on the host.
 
 Token-signing certificates are generated on first start. Migrations create one `flow` database layout: core tables in the `public` schema and Identity/OpenIddict tables in `auth`. The two stacks start in any order: the backend waits for the database when necessary (`Startup:DatabaseWaitTimeoutSeconds`, 60 s by default).
 
@@ -80,9 +82,9 @@ Token-signing certificates are generated on first start. Migrations create one `
 `docker/up.sh` (and its Windows twin `docker/up.ps1`) is the same three commands in the right order, because Compose has no `depends_on` across projects and the data stack has to come up separately. Step by step:
 
 1. **`.env`** — copied from `.env.example` if missing. Both stacks read it; without it the compose defaults apply.
-2. **`docker/data/init-env.sh`** — the shared `flow-network` network and the external `flow-postgres-data`, `flow-minio-data` volumes. `DATA_ROOT` puts the volumes on a directory of your choice: `DATA_ROOT=/mnt/flow sh docker/up.sh` (only honoured when the volumes are created).
-3. **Data stack** — `docker compose -f docker-compose.data.yml up -d`: PostgreSQL and S3.
-4. **Application stack** — `docker compose up -d --build`: api (including authentication) and client.
+2. **`docker/data/init-env.sh`** — the shared `flow-network` network and the external `flow-postgres-data`, `flow-minio-data`, `flow-models-data`, `flow-repository-workspaces` volumes. `DATA_ROOT` puts the volumes on a directory of your choice: `DATA_ROOT=/mnt/flow sh docker/up.sh` (only honoured when the volumes are created).
+3. **Data stack** — `docker compose -f docker-compose.data.yml up -d`: PostgreSQL, S3 and OpenCode.
+4. **Application stack** — `docker compose up -d --build`: one api service hosting authentication and the server-rendered client.
 
 | Flag | What it does |
 |---|---|
@@ -92,11 +94,13 @@ Token-signing certificates are generated on first start. Migrations create one `
 
 Every step is idempotent: an existing network, volumes and `.env` are left alone, and running containers are not needlessly recreated. So the same `sh docker/up.sh` both sets the project up from scratch and updates it after a `git pull`.
 
-You don't need the script if the data lives elsewhere: point `POSTGRES_HOST` and `S3_ENDPOINT` at it in `.env` and bring up the application alone — `docker compose up -d --build`. In Rider, the compound `Flow (full stack)` configuration starts both halves.
+For external databases/storage, set `POSTGRES_HOST` and `S3_ENDPOINT` in `.env`, create the shared network and volumes with init, then bring up the application — `docker compose up -d --build`. The agent still requires an available OpenCode server; to run it separately, use `docker compose -f docker-compose.data.yml up -d opencode`.
+
+In Rider, manually run `Flow (init Windows)` or `Flow (init Linux/macOS)` before the first start. `Flow (data stack)` starts infrastructure including OpenCode, `Flow (full stack)` then starts the application, and `Flow Only` starts only the application on an existing data stack. `Flow Only` uses the Debug overlay; choose Debug rather than Run to attach the debugger. Init is not called automatically by the stack configurations.
 
 ### Two stacks, and why
 
-Data lives in its own Compose project (`docker-compose.data.yml`, project `flow-data`) on external volumes `flow-postgres-data` and `flow-minio-data`. The application stack owns no project data at all, so `docker compose down -v` cannot touch it — it only drops the Auth module's keys and certificates, which are recreated on the next start.
+Data and the OpenCode service live in the `flow-data` Compose project. PostgreSQL, S3 and repository workspaces use external volumes, so `docker compose down -v` in the application stack cannot touch them — it only drops the Auth module's keys and certificates, which are recreated on the next start. Flow.Api writes checkouts to `flow-repository-workspaces`; OpenCode reads that same volume read-only.
 
 | What you want | Command |
 |---|---|
@@ -105,7 +109,7 @@ Data lives in its own Compose project (`docker-compose.data.yml`, project `flow-
 | Stop the data stack (data stays) | `docker compose -f docker-compose.data.yml down` |
 | Delete the data, deliberately | `docker compose -f docker-compose.data.yml down` then `docker volume rm flow-postgres-data flow-minio-data` |
 
-To keep the data somewhere specific, create the volumes with `DATA_ROOT=/mnt/flow sh docker/data/init-env.sh`. To use a managed PostgreSQL or an external S3, point `POSTGRES_HOST` and `S3_ENDPOINT` at them in `.env` and skip `docker-compose.data.yml` entirely.
+To keep the data somewhere specific, create the volumes with `DATA_ROOT=/mnt/flow sh docker/data/init-env.sh`. To use a managed PostgreSQL or an external S3, point `POSTGRES_HOST` and `S3_ENDPOINT` at them in `.env` and skip the local postgres/s3 services. The agent still needs an available OpenCode server and matching repository storage.
 
 ### Backups
 
@@ -254,7 +258,7 @@ The first start creates a bootstrap user — the single account every other acco
 
 The values come from `.env` (`BOOTSTRAP_USERNAME`, `BOOTSTRAP_EMAIL`, `BOOTSTRAP_PASSWORD`) and are applied once, when the database is created. Changing them after the first run has no effect — change the password through the UI instead.
 
-**1. Open http://localhost:5016.** The client checks for a session and, finding none, sends you to the sign-in page served by the backend on :8080. The login field accepts either a username or an email.
+**1. Open http://localhost:8080.** The interface and `/account/login` sign-in page are served by the same host. The login field accepts either a username or an email.
 
 ![Flow sign-in page](docs/images/login.png)
 

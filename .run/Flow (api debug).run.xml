@@ -1,11 +1,8 @@
 <component name="ProjectRunConfigurationManager">
-  <!-- Данные в Docker, api — процессом Rider под отладчиком: брейкпоинты, горячая перезагрузка, без
-       пересборки образа. Интерфейс на http://localhost:5000 (профиль http из launchSettings.json).
-       Адреса берутся из appsettings.json и совпадают с дефолтами стека данных: Postgres localhost:5432,
-       MinIO localhost:9000. Если в .env порт другой (POSTGRES_PORT=5433 рядом с локальным Postgres),
-       api уйдёт в чужую базу — тогда задать в этой конфигурации переменную окружения
-       ConnectionStrings__Postgres=Host=localhost;Port=5433;Database=flow;Username=flow;Password=flow.
-       Контейнер api из «Flow (full stack)» лучше остановить: два процесса разбирают одну очередь индексации. -->
+  <!-- Data stack (включая OpenCode) — Docker, api и интерфейс — процесс Rider на :5000.
+       Перед первым запуском нужен ручной init под свою ОС. .env Compose не задаёт автоматически
+       настройки хост-процесса; его каталог repository-workspaces не является общим Docker-томом.
+       Для готовой проверки агента с общим томом использовать Flow Only. См. docs/OpenCode_setup.md. -->
   <configuration default="false" name="Flow (api debug)" type="LaunchSettings" factoryName=".NET Launch Settings Profile">
     <option name="LAUNCH_PROFILE_PROJECT_FILE_PATH" value="$PROJECT_DIR$/src/Flow.Api/Flow.Api.csproj" />
     <option name="LAUNCH_PROFILE_TFM" value="net10.0" />
@@ -19,7 +16,6 @@
     <option name="AUTO_ATTACH_CHILDREN" value="0" />
     <option name="MIXED_MODE_DEBUG" value="0" />
     <method v="2">
-      <option name="RunConfigurationTask" enabled="true" run_configuration_name="Flow (init)" run_configuration_type="ShConfigurationType" />
       <option name="RunConfigurationTask" enabled="true" run_configuration_name="Flow (data stack)" run_configuration_type="docker-deploy" />
       <option name="Build" />
     </method>

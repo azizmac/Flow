@@ -39,4 +39,5 @@ internal sealed class BoardDeleteCommandHandler(IBoardRepository boards, IFileSt
 
         return true;
     }
+
 }

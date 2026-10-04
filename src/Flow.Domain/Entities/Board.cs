@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Flow.Domain.Templates;
+using Flow.Domain.Entities.GitIntegration;
 
 namespace Flow.Domain.Entities;
 
@@ -18,6 +19,7 @@ public sealed partial class Board
     private readonly List<StatusTransition> _transitions = [];
     private readonly List<CustomFieldDefinition> _customFields = [];
     private readonly List<TaskScreen> _screens = [];
+    private readonly List<GitRepositoryBoard> _repositoryBindings = [];
 
     public Guid Id { get; private set; }
 
@@ -47,6 +49,9 @@ public sealed partial class Board
     public IReadOnlyCollection<TaskType> TaskTypes => _taskTypes;
 
     public IReadOnlyCollection<TaskItem> Tasks => _tasks;
+
+    /// <summary>Привязки Git-репозиториев к проекту; один репозиторий может принадлежать нескольким проектам.</summary>
+    public IReadOnlyCollection<GitRepositoryBoard> RepositoryBindings => _repositoryBindings;
 
     /// <summary>Пользовательские поля проекта, включая архивные (docs/TZ_task_model.md §4).</summary>
     public IReadOnlyCollection<CustomFieldDefinition> CustomFields => _customFields;

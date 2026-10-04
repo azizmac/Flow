@@ -85,7 +85,7 @@ BoardGroup: (BoardId, GroupId) PK, Role : ProjectRole
 | `ManageSprints`, `ManageMilestones` | — | — | ✓ | ✓ |
 | `ManageConfig` (статусы, workflow, типы, поля, экраны) | — | — | — | ✓ |
 | `ManageMembers` | — | — | — | ✓ |
-| `ManageScm` (привязка репозиториев) | — | — | — | ✓ |
+| `ManageGit` (привязка репозиториев) | — | — | — | ✓ |
 | `RenameProject`, `DeleteProject` | — | — | — | ✓ (удаление — ещё и глобальный Admin+) |
 
 Глобальные права (`UserRole`) остаются как есть: люди и роли, создание проектов (Admin+), диагностика поиска,
@@ -148,7 +148,7 @@ public interface IProjectAccess
 > **Сделано в 4A иначе:** роль по умолчанию — `PUT /boards/{id}/default-role { role }` (одно поле, null снимает:
 > в PATCH-семантике null означал бы «не трогать»). Видимость добавит свой эндпоинт в 4B. Список участников для
 > экрана «Доступ» — `GET /boards/{id}/members`; `DeleteTask` отдельным правом не стал: удаление задачи, как и раньше,
-> — это правка (Member удаляет свою). Права `ManageSprints`/`ManageMilestones`/`ManageScm` появятся вместе с
+> — это правка (Member удаляет свою). Права `ManageSprints`/`ManageMilestones`/`ManageGit` появятся вместе с
 > сущностями, которые защищают. Роль в проекте не кэшируется на запрос: время жизни scope не всегда равно запросу.
 | GET | `/boards/{id}/my-access` — роль и список `ProjectPermission` для клиента | `ViewProject` |
 | GET/POST | `/groups`; GET/PATCH/DELETE `/groups/{id}`; PUT/DELETE `/groups/{id}/members/{userId}` | чтение — все, изменение — глобальный Admin+ |

@@ -11,17 +11,26 @@ namespace Flow.Application.Features.Tasks.Restructure;
 
 // Слияние, разделение, перенос (docs/TZ_task_model.md §6, этап 1E) и поиск задачи по коду с учётом прежних кодов.
 
-/// <summary>Влить Source в Target. Ответ — Target; null — одной из задач нет.</summary>
+/// <summary>
+/// Влить Source в Target. Ответ — Target; null — одной из задач нет.
+/// Обработчик - <see cref="TaskMergeCommandHandler"/>
+/// </summary>
 public sealed record TaskMergeCommand(Guid ActorId, Guid SourceId, Guid TargetId) : IRequest<TaskResponse?>;
 
-/// <summary>Выделить из задачи 1–20 новых. Ответ — новые задачи; null — задачи нет.</summary>
+/// <summary>
+/// Выделить из задачи 1–20 новых. Ответ — новые задачи; null — задачи нет.
+/// Обработчик - <see cref="TaskSplitCommandHandler"/>
+/// </summary>
 public sealed record TaskSplitCommand(Guid ActorId, Guid SourceId, IReadOnlyList<SplitPart> Parts) : IRequest<IReadOnlyList<TaskResponse>?>;
 
 /// <summary>Что сделает перенос — до подтверждения. null — задачи или проекта нет (или он скрыт).</summary>
 public sealed record TaskMovePreviewQuery(Guid ActorId, Guid TaskId, Guid TargetBoardId,
     IReadOnlyDictionary<Guid, Guid>? StatusMap = null, IReadOnlyDictionary<Guid, Guid>? TypeMap = null) : IRequest<TaskMovePreviewResponse?>;
 
-/// <summary>Перенести задачу с поддеревом в другой проект. Ответ — задача с новым кодом.</summary>
+/// <summary>
+/// Перенести задачу с поддеревом в другой проект. Ответ — задача с новым кодом.
+/// Обработчик - <see cref="TaskMoveCommandHandler"/>
+/// </summary>
 public sealed record TaskMoveCommand(Guid ActorId, Guid TaskId, Guid TargetBoardId,
     IReadOnlyDictionary<Guid, Guid>? StatusMap = null, IReadOnlyDictionary<Guid, Guid>? TypeMap = null) : IRequest<TaskResponse?>;
 
@@ -338,7 +347,7 @@ internal sealed class TaskMoveCommandHandler(
     ITaskActivityRepository activities,
     IFileStorage storage,
     ISearchIndexQueue searchIndex,
-    IScmStore scm,
+    IGitDevelopmentLinkRepository developmentLinks,
     TaskResponses responses,
     ActorResolver actors,
     IPermissionService permissions,
@@ -391,8 +400,8 @@ internal sealed class TaskMoveCommandHandler(
                 foreach (var comment in await comments.GetByTaskIdAsync(moved.Id, cancellationToken))
                     searchIndex.Enqueue(SearchSourceType.Comment, comment.Id, target.Id, SearchIndexOperation.Upsert);
                 // PR и коммиты задачи (этап 5E) остаются при ней, но их чанки несут проект — для фильтра видимости.
-                foreach (var link in await scm.GetLinksByTaskAsync(moved.Id, cancellationToken))
-                    Flow.Application.Features.Scm.ScmSearch.Upsert(searchIndex, link, target.Id);
+                foreach (var link in await developmentLinks.GetByTaskIdAsync(moved.Id, cancellationToken))
+                    Flow.Application.Features.GitIntegration.GitSearch.Upsert(searchIndex, link, target.Id);
 
                 // Ранг — временный: настоящий выставит AssignRanks ниже, по свежему максимуму целевого проекта.
                 var oldCode = target.ReceiveTask(moved, item.StatusId, item.TypeId, FractionalIndex.First, item.CustomFieldsJson, item.KeepParent);

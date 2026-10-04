@@ -1,15 +1,17 @@
-# Стек данных: PostgreSQL и S3-совместимое хранилище. Живёт отдельным проектом Compose (name: flow-data),
-# чтобы жизненный цикл данных не зависел от стека приложения: `docker compose down -v` в docker-compose.yml
-# удаляет только контейнеры приложения. См. docs/TZ_infra_data_split.md.
+# Стек данных и вспомогательных сервисов: PostgreSQL, S3-совместимое хранилище и OpenCode. Живёт отдельным
+# проектом Compose (name: flow-data), чтобы жизненный цикл данных не зависел от стека приложения:
+# `docker compose down -v` в docker-compose.yml не удаляет внешние тома данных и репозиториев.
 #
-# Тома и сеть — внешние, создаются один раз: `sh docker/data/init-env.sh`.
+# Тома и сеть — внешние, создаются один раз: `sh docker/data/init-env.sh` (Windows: init-env.ps1).
 #
-#   docker compose -f docker-compose.data.yml up -d        # поднять данные
+#   docker compose -f docker-compose.data.yml up -d        # PostgreSQL, S3 и OpenCode
 #   docker compose -f docker-compose.data.yml down          # остановить (данные остаются в томах)
 #   docker volume rm flow-postgres-data flow-minio-data     # осознанно удалить данные
 #
 # Эмбеддер поиска — профиль ai:
 #   docker compose -f docker-compose.data.yml --profile ai up -d
+# OpenCode отдельного профиля не требует. LM Studio/Qwen запускаются на хосте, не в этом файле.
+# Настройка модели и проверка формы агента: docs/OpenCode_setup.md.
 name: flow-data
 
 services:
@@ -74,6 +76,32 @@ services:
       mc alias set local http://s3:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
       mc mb -p local/$$S3_BUCKET || true
       "
+    networks:
+      - flow-network
+
+  opencode:
+    # HTTP-сервер агента: serve, без запуска TUI. Стартует вместе с PostgreSQL и S3.
+    # Flow открывается на :8080/agents/test, не на порту OpenCode :4096.
+    # Тег образа фиксируется в .env, чтобы обновление OpenCode было осознанным.
+    image: ${OPENCODE_IMAGE:-ghcr.io/anomalyco/opencode:2.0.0}
+    restart: unless-stopped
+    command: serve --hostname 0.0.0.0 --port 4096
+    working_dir: /workspaces
+    environment:
+      OPENCODE_CONFIG: /config/opencode.jsonc
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-flow-opencode-local}
+    volumes:
+      # Flow.Api клонирует и обновляет репозитории; OpenCode только читает их.
+      - repository-workspaces:/workspaces:ro
+      - ./docker/opencode/opencode.jsonc:/config/opencode.jsonc:ro
+    ports:
+      # HTTP API доступен с хоста для диагностики, но не из локальной сети.
+      - "${OPENCODE_BIND:-127.0.0.1}:${OPENCODE_PORT:-4096}:4096"
+    extra_hosts:
+      # Адрес LM Studio на хосте; localhost внутри контейнера означал бы сам OpenCode.
+      # LM Studio должен принимать соединения из Docker; baseURL задан в opencode.jsonc.
+      - "host.docker.internal:host-gateway"
     networks:
       - flow-network
 
@@ -184,4 +212,8 @@ volumes:
   # а перекачивать гигабайты заново дорого.
   models-data:
     name: flow-models-data
+    external: true
+  # Локальные checkout'ы исходного кода: Flow.Api пишет в том, OpenCode читает его в режиме read-only.
+  repository-workspaces:
+    name: flow-repository-workspaces
     external: true

@@ -16,10 +16,16 @@ namespace Flow.Application.Features.Tasks.Recurrence;
 /// <summary>Правило задачи; null — задачи нет, она скрыта или правила нет.</summary>
 public sealed record TaskRecurrenceGetQuery(Guid ActorId, Guid TaskId) : IRequest<TaskRecurrenceResponse?>;
 
-/// <summary>Поставить или поменять правило (права — правка образца). null — задачи нет.</summary>
+/// <summary>
+/// Поставить или поменять правило (права — правка образца). null — задачи нет.
+/// Обработчик - <see cref="TaskRecurrenceHandlers"/>
+/// </summary>
 public sealed record TaskRecurrenceSetCommand(Guid ActorId, Guid TaskId, TaskRecurrenceRequest Rule) : IRequest<TaskRecurrenceResponse?>;
 
-/// <summary>Снять правило; уже созданные копии остаются. false — правила нет.</summary>
+/// <summary>
+/// Снять правило; уже созданные копии остаются. false — правила нет.
+/// Обработчик - <see cref="TaskRecurrenceHandlers"/>
+/// </summary>
 public sealed record TaskRecurrenceDeleteCommand(Guid ActorId, Guid TaskId) : IRequest<bool>;
 
 /// <summary>Ближайшие даты: Rule — правило, которое ещё только редактируется; null — сохранённое. null в ответе — задачи или правила нет.</summary>
@@ -28,10 +34,16 @@ public sealed record TaskRecurrencePreviewQuery(Guid ActorId, Guid TaskId, TaskR
 /// <summary>Id активных правил — генератор обходит их по одному.</summary>
 public sealed record RecurrenceActiveIdsQuery : IRequest<IReadOnlyList<Guid>>;
 
-/// <summary>Создать копии одного правила на день Today; ответ — сколько создано.</summary>
+/// <summary>
+/// Создать копии одного правила на день Today; ответ — сколько создано.
+/// Обработчик - <see cref="RecurrenceGenerateCommandHandler"/>
+/// </summary>
 public sealed record RecurrenceGenerateCommand(Guid RecurrenceId, DateOnly Today) : IRequest<int>;
 
-/// <summary>Генерация правила сорвалась — причина видна в интерфейсе, правило остаётся включённым и повторит на следующем проходе.</summary>
+/// <summary>
+/// Генерация правила сорвалась — причина видна в интерфейсе, правило остаётся включённым и повторит на следующем проходе.
+/// Обработчик - <see cref="RecurrenceRecordErrorCommandHandler"/>
+/// </summary>
 public sealed record RecurrenceRecordErrorCommand(Guid RecurrenceId, string Error) : IRequest;
 
 internal sealed class RecurrenceRecordErrorCommandHandler(ITaskRecurrenceRepository recurrences, IUnitOfWork unitOfWork)

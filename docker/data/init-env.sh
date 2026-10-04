@@ -1,6 +1,8 @@
 #!/bin/sh
 # Создаёт общую сеть и внешние тома данных. Запускается один раз перед первым стартом, повторный
 # запуск ничего не ломает. См. docs/TZ_infra_data_split.md.
+# Контейнеры и LM Studio не запускает; общий том репозиториев затем используют api и OpenCode.
+# Инструкция запуска агента: docs/OpenCode_setup.md.
 #
 #   sh docker/data/init-env.sh
 #   DATA_ROOT=/mnt/flow sh docker/data/init-env.sh   # данные на своём каталоге вместо томов Docker
@@ -11,6 +13,7 @@ NETWORK=flow-network
 PG_VOLUME=flow-postgres-data
 S3_VOLUME=flow-minio-data
 MODELS_VOLUME=flow-models-data
+REPOSITORY_WORKSPACES_VOLUME=flow-repository-workspaces
 DATA_ROOT=${DATA_ROOT:-}
 
 if docker network inspect "$NETWORK" >/dev/null 2>&1; then
@@ -51,6 +54,8 @@ create_volume "$S3_VOLUME" "${DATA_ROOT:+$DATA_ROOT/minio}"
 # Веса моделей эмбеддера (профиль ai). MODELS_ROOT задаёт свой каталог — веса обычно живут не там,
 # где данные: их не бэкапят и при желании переиспользуют между установками.
 create_volume "$MODELS_VOLUME" "${MODELS_ROOT:-${DATA_ROOT:+$DATA_ROOT/models}}"
+# Рабочие копии Git-репозиториев: Flow.Api пишет в том, OpenCode читает его в режиме read-only.
+create_volume "$REPOSITORY_WORKSPACES_VOLUME" "${DATA_ROOT:+$DATA_ROOT/repositories}"
 
 echo
 echo "Готово. Дальше:"

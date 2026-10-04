@@ -11,6 +11,7 @@ using Flow.Auth.DependencyInjection;
 using Flow.Client.DependencyInjection;
 using Flow.Client.Layout;
 using Flow.Client.Services;
+using Flow.Infrastructure.Repositories;
 using Flow.Infrastructure.DependencyInjection;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -51,8 +52,9 @@ builder.Services.AddFlowInfrastructure(builder.Configuration);              // 3
 // читался прямо здесь; второй вызов ничего не регистрирует.
 builder.Services.AddFlowSearch(builder.Configuration);
 builder.Services.AddFlowApplication();
-// Токены Git-хостингов и секреты вебхуков — под DataProtection хоста (docs/TZ_scm_integration.md §1).
-builder.Services.AddSingleton<Flow.Application.Abstractions.IScmSecretProtector, Flow.Api.Scm.DataProtectionScmSecretProtector>();
+// Токены Git-хостингов и секреты вебхуков — под DataProtection хоста (docs/TZ_git_integration.md §1).
+builder.Services.AddHostedService<RepositorySyncRecoveryService>();
+builder.Services.AddSingleton<Flow.Application.Abstractions.IGitSecretProtector, Flow.Api.GitIntegration.DataProtectionGitSecretProtector>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<ApiExceptionFilter>();

@@ -1,9 +1,9 @@
-@* Блок «Разработка» (docs/TZ_scm_integration.md §7): ветки, PR (номер, заголовок, состояние чипом, автор, целевая
+@* Блок «Разработка» (docs/TZ_git_integration.md §7): ветки, PR (номер, заголовок, состояние чипом, автор, целевая
    ветка) и последние коммиты задачи из привязанных репозиториев. Заголовки и сообщения — недоверенный текст с
    хостинга: выводятся как текст, без Markdown. Ссылки открываются на хостинге в новой вкладке. «Ветка» копирует
    git checkout -b КОД-название — без обращения к API. Проект без репозиториев — блока нет. Пометка под PR или коммитом —
    чего Flow не сделал по нему и почему (автопереход запрещён workflow, смарт-коммит без прав; этап 5C). С правом
-   WriteScm (этап 5D) — «Создать ветку» и «Создать PR» прямо на хостинге (ScmCreateDialog). *@
+   WriteGit (этап 5D) — «Создать ветку» и «Создать PR» прямо на хостинге (GitCreateDialog). *@
 @inject IFlowApi Api
 @inject BrowserInterop Browser
 @inject ToastService Toasts
@@ -30,7 +30,7 @@
             <a class="dev-row" href="@pr.Url" target="_blank" rel="noopener noreferrer">
                 <span class="dev-kind">PR #@pr.ExternalId</span>
                 <span class="dev-title">@pr.Title</span>
-                <span class="dev-state @ScmMeta.StateClass(pr.State)">@ScmMeta.StateLabel(pr.State)</span>
+                <span class="dev-state @GitMeta.StateClass(pr.State)">@GitMeta.StateLabel(pr.State)</span>
                 <span class="hint">@Who(pr)@(pr.TargetBranch is { } target ? $" → {target}" : "")</span>
             </a>
             @if (pr.Note is { } note)
@@ -42,7 +42,7 @@
         {
             <a class="dev-row" href="@branch.Url" target="_blank" rel="noopener noreferrer">
                 <span class="dev-kind">ветка</span>
-                <span class="dev-title mono @(branch.State == ScmLinkState.Closed ? "gone" : "")">@branch.ExternalId</span>
+                <span class="dev-title mono @(branch.State == GitDevelopmentLinkState.Closed ? "gone" : "")">@branch.ExternalId</span>
                 <span class="hint">@branch.RepositoryName</span>
             </a>
         }
@@ -67,7 +67,7 @@
 
 @if (_create is { } asPr && _data is { Repositories: { Count: > 0 } repos } data)
 {
-    <ScmCreateDialog Task="Task" Repositories="repos" Branches="data.Branches" PullRequest="asPr" OnDone="d => _data = d" OnClose="() => _create = null" />
+    <GitCreateDialog Task="Task" Repositories="repos" Branches="data.Branches" PullRequest="asPr" OnDone="d => _data = d" OnClose="() => _create = null" />
 }
 
 @code {
@@ -89,7 +89,7 @@
     }
 
     /// <summary>Сопоставленный человек Flow — его имя, иначе логин хостинга.</summary>
-    private string Who(ScmLinkResponse link) =>
+    private string Who(GitDevelopmentLinkResponse link) =>
         Users.Find(link.AuthorUserId) is { } user ? $"{user.FirstName} {user.LastName}".Trim() : link.AuthorLogin ?? "";
 
     private async Task CopyBranch()

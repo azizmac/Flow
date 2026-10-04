@@ -3,5 +3,8 @@ using MediatR;
 
 namespace Flow.Application.Features.Tasks.Commands.TaskSetDueDateCommand;
 
-/// <summary>DueDate = null — снять срок. Права — как на редактирование задачи. Срок раньше даты начала — ArgumentException (400).</summary>
+/// <summary>
+/// DueDate = null — снять срок. Права — как на редактирование задачи. Срок раньше даты начала — ArgumentException (400).
+/// Обработчик - <see cref="TaskSetDueDateCommandHandler"/>
+/// </summary>
 public sealed record TaskSetDueDateCommand(Guid ActorId, Guid TaskId, DateOnly? DueDate) : IRequest<TaskUpdateResult>;

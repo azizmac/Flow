@@ -335,6 +335,288 @@ namespace Flow.Infrastructure.Migrations
                     b.ToTable("DashboardWidgets", (string)null);
                 });
 
+            modelBuilder.Entity("Flow.Domain.Entities.GitIntegration.GitDevelopmentLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthorLogin")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("AuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceBranch")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int?>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetBranch")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorUserId");
+
+                    b.HasIndex("RepositoryId", "Kind", "ExternalId");
+
+                    b.HasIndex("TaskId", "RepositoryId", "Kind", "ExternalId")
+                        .IsUnique();
+
+                    b.ToTable("GitDevelopmentLinks", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.GitIntegration.GitHostConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("AppId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("AuthKind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BaseUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("CheckedLogin")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("InstallationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("LastCheckAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("Provider")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SecretProtected")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.ToTable("GitHostConnections", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.GitIntegration.GitIntegrationJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DeliveryId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Event")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RepositoryId", "DeliveryId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "NextAttemptAt");
+
+                    b.ToTable("GitIntegrationJobs", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.GitIntegration.GitRepository", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefaultBranch")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastDeliveryAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastSyncError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasComment("Краткая причина неудачной синхронизации.");
+
+                    b.Property<DateTime?>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasComment("Время последней успешной синхронизации.");
+
+                    b.Property<string>("LastSyncedCommit")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasComment("Commit последней успешной синхронизации.");
+
+                    b.Property<int>("SyncState")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasComment("Состояние локальной копии репозитория.");
+
+                    b.Property<string>("WebUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("WebhookId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("WebhookSecretProtected")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectionId", "ExternalId")
+                        .IsUnique();
+
+                    b.ToTable("GitRepositories", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.GitIntegration.GitRepositoryBoard", b =>
+                {
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("CommentOnPullRequests")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("OnPullRequestMergedStatusId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("OnPullRequestOpenedStatusId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("SmartCommits")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("RepositoryId", "BoardId");
+
+                    b.HasIndex("BoardId");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("OnPullRequestMergedStatusId");
+
+                    b.HasIndex("OnPullRequestOpenedStatusId");
+
+                    b.ToTable("GitRepositoryBoards", (string)null);
+                });
+
             modelBuilder.Entity("Flow.Domain.Entities.Group", b =>
                 {
                     b.Property<Guid>("Id")
@@ -515,269 +797,6 @@ namespace Flow.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("SavedFilterStars");
-                });
-
-            modelBuilder.Entity("Flow.Domain.Entities.ScmConnection", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<long?>("AppId")
-                        .HasColumnType("bigint");
-
-                    b.Property<int>("AuthKind")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("BaseUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("CheckedLogin")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CreatedById")
-                        .HasColumnType("uuid");
-
-                    b.Property<long?>("InstallationId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("LastCheckAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LastError")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<int>("Provider")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("SecretProtected")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedById");
-
-                    b.ToTable("ScmConnections", (string)null);
-                });
-
-            modelBuilder.Entity("Flow.Domain.Entities.ScmDelivery", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Attempts")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("DeliveryId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Event")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<string>("LastError")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<DateTime>("NextAttemptAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Payload")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<DateTime>("ReceivedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("RepositoryId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RepositoryId", "DeliveryId")
-                        .IsUnique();
-
-                    b.HasIndex("Status", "NextAttemptAt");
-
-                    b.ToTable("ScmDeliveries", (string)null);
-                });
-
-            modelBuilder.Entity("Flow.Domain.Entities.ScmLink", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AuthorLogin")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid?>("AuthorUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ExternalId")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime>("OccurredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("RepositoryId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("SourceBranch")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<int?>("State")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TargetBranch")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<Guid>("TaskId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Url")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AuthorUserId");
-
-                    b.HasIndex("RepositoryId", "Kind", "ExternalId");
-
-                    b.HasIndex("TaskId", "RepositoryId", "Kind", "ExternalId")
-                        .IsUnique();
-
-                    b.ToTable("ScmLinks", (string)null);
-                });
-
-            modelBuilder.Entity("Flow.Domain.Entities.ScmRepository", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ConnectionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DefaultBranch")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("ExternalId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastDeliveryAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("WebUrl")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("WebhookId")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("WebhookSecretProtected")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ConnectionId", "ExternalId")
-                        .IsUnique();
-
-                    b.ToTable("ScmRepositories", (string)null);
-                });
-
-            modelBuilder.Entity("Flow.Domain.Entities.ScmRepositoryBoard", b =>
-                {
-                    b.Property<Guid>("RepositoryId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BoardId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("CommentOnPullRequests")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CreatedById")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("OnPullRequestMergedStatusId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("OnPullRequestOpenedStatusId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("SmartCommits")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("RepositoryId", "BoardId");
-
-                    b.HasIndex("BoardId");
-
-                    b.HasIndex("CreatedById");
-
-                    b.HasIndex("OnPullRequestMergedStatusId");
-
-                    b.HasIndex("OnPullRequestOpenedStatusId");
-
-                    b.ToTable("ScmRepositoryBoards", (string)null);
                 });
 
             modelBuilder.Entity("Flow.Domain.Entities.Sprint", b =>
@@ -1717,6 +1736,84 @@ namespace Flow.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Flow.Domain.Entities.GitIntegration.GitDevelopmentLink", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Flow.Domain.Entities.GitIntegration.GitRepository", null)
+                        .WithMany()
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.GitIntegration.GitHostConnection", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.GitIntegration.GitIntegrationJob", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.GitIntegration.GitRepository", null)
+                        .WithMany()
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.GitIntegration.GitRepository", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.GitIntegration.GitHostConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.GitIntegration.GitRepositoryBoard", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.Board", null)
+                        .WithMany("RepositoryBindings")
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flow.Domain.Entities.Status", null)
+                        .WithMany()
+                        .HasForeignKey("OnPullRequestMergedStatusId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Flow.Domain.Entities.Status", null)
+                        .WithMany()
+                        .HasForeignKey("OnPullRequestOpenedStatusId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Flow.Domain.Entities.GitIntegration.GitRepository", null)
+                        .WithMany()
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Flow.Domain.Entities.GroupMember", b =>
                 {
                     b.HasOne("Flow.Domain.Entities.Group", null)
@@ -1761,84 +1858,6 @@ namespace Flow.Infrastructure.Migrations
                     b.HasOne("Flow.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Flow.Domain.Entities.ScmConnection", b =>
-                {
-                    b.HasOne("Flow.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("CreatedById")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Flow.Domain.Entities.ScmDelivery", b =>
-                {
-                    b.HasOne("Flow.Domain.Entities.ScmRepository", null)
-                        .WithMany()
-                        .HasForeignKey("RepositoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Flow.Domain.Entities.ScmLink", b =>
-                {
-                    b.HasOne("Flow.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("AuthorUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Flow.Domain.Entities.ScmRepository", null)
-                        .WithMany()
-                        .HasForeignKey("RepositoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Flow.Domain.Entities.TaskItem", null)
-                        .WithMany()
-                        .HasForeignKey("TaskId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Flow.Domain.Entities.ScmRepository", b =>
-                {
-                    b.HasOne("Flow.Domain.Entities.ScmConnection", null)
-                        .WithMany()
-                        .HasForeignKey("ConnectionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Flow.Domain.Entities.ScmRepositoryBoard", b =>
-                {
-                    b.HasOne("Flow.Domain.Entities.Board", null)
-                        .WithMany()
-                        .HasForeignKey("BoardId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Flow.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("CreatedById")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Flow.Domain.Entities.Status", null)
-                        .WithMany()
-                        .HasForeignKey("OnPullRequestMergedStatusId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Flow.Domain.Entities.Status", null)
-                        .WithMany()
-                        .HasForeignKey("OnPullRequestOpenedStatusId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Flow.Domain.Entities.ScmRepository", null)
-                        .WithMany()
-                        .HasForeignKey("RepositoryId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -2217,6 +2236,8 @@ namespace Flow.Infrastructure.Migrations
             modelBuilder.Entity("Flow.Domain.Entities.Board", b =>
                 {
                     b.Navigation("CustomFields");
+
+                    b.Navigation("RepositoryBindings");
 
                     b.Navigation("Screens");
 

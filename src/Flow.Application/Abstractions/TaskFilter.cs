@@ -50,7 +50,7 @@ public sealed record TaskFilterBlocked : TaskFilterNode;
 public enum TaskFilterPullRequestState { Open, Merged, None }
 
 /// <summary>
-/// Pull request'ы задачи (FQL development, docs/TZ_scm_integration.md §7): Open — есть открытый или черновой PR,
+/// Pull request'ы задачи (FQL development, docs/TZ_git_integration.md §7): Open — есть открытый или черновой PR,
 /// Merged — есть смёрженный, None — ни одного PR.
 /// </summary>
 public sealed record TaskFilterPullRequest(TaskFilterPullRequestState State) : TaskFilterNode;

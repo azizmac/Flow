@@ -2,6 +2,8 @@
 
 Статус: **реализовано**. Документ описывает действующее разделение data/application stack; архитектура Auth актуализирована после перехода к модульному монолиту.
 
+Запуск с OpenCode и LM Studio — [OpenCode_setup.md](OpenCode_setup.md). OpenCode включён в обычный data stack; интерфейс теперь хостится в Flow.Api на порту 8080. Ниже сохранён контекст исходного разделения стеков, а актуальные команды запуска приведены в разделе 8 и README.
+
 ## Исходное требование
 
 Вынести из `docker-compose.yml` базу данных и S3-хранилище отдельно, чтобы данные проекта жили
@@ -36,8 +38,8 @@
 
 ## Принятые решения
 
-- **Два compose-файла в одном репозитории.** `docker-compose.data.yml` — стек данных (`postgres`, `s3`, `s3-init`),
-  `docker-compose.yml` — только приложение (`api` с Auth-модулем, `client`). Разные проекты Compose (`name:` в каждом файле),
+- **Два compose-файла в одном репозитории.** `docker-compose.data.yml` — стек данных и агента (`postgres`, `s3`, `s3-init`, `opencode`),
+  `docker-compose.yml` — приложение (`api` с Auth-модулем и интерфейсом). Стек данных использует отдельный проект `flow-data`,
   разные жизненные циклы: `docker compose down -v` в приложении физически не может удалить тома данных.
 - **Тома — внешние и именованные.** `flow-postgres-data`, `flow-minio-data` объявляются `external: true` в обоих
   файлах. Создаются один раз скриптом инициализации. Compose удалять внешние тома не умеет — это и есть защита.
@@ -82,7 +84,7 @@
 ### 1. `docker-compose.data.yml` (новый)
 
 - `name: flow-data`;
-- сервисы `postgres`, `s3`, `s3-init` переезжают из `docker-compose.yml` без изменения образов и healthcheck;
+- сервисы `postgres`, `s3`, `s3-init`; OpenCode запускается здесь же без отдельного профиля;
 - проброс портов: `${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432`, аналогично MinIO API и консоли;
 - тома `flow-postgres-data`, `flow-minio-data` — `external: true`;
 - сеть `flow-network` — `external: true`;
@@ -90,7 +92,7 @@
 
 ### 2. `docker-compose.yml` (правится)
 
-- остаются `api` (ядро + Auth-модуль) и `client`; `depends_on` на `postgres`/`s3` убираются;
+- остаётся `api` (ядро + Auth-модуль + интерфейс); `depends_on` на `postgres`/`s3` убираются;
 - строки подключения собираются из переменных:
   `Host=${POSTGRES_HOST:-postgres};Port=${POSTGRES_INTERNAL_PORT:-5432};Database=${POSTGRES_DB:-flow}`;
 - `S3__Endpoint: ${S3_ENDPOINT:-http://s3:9000}`, `S3__UseSsl: ${S3_USE_SSL:-false}`;
@@ -100,7 +102,7 @@
 ### 3. Скрипт инициализации окружения
 
 `docker/data/init-env.sh` (+ `.ps1` для Windows): идемпотентно создаёт сеть `flow-network` и тома
-`flow-postgres-data`, `flow-minio-data`; при заданном `DATA_ROOT` создаёт тома с bind-драйвером на этот путь.
+`flow-postgres-data`, `flow-minio-data`, `flow-models-data`, `flow-repository-workspaces`; при заданном `DATA_ROOT` создаёт тома с bind-драйвером на этот путь (`MODELS_ROOT` переопределяет каталог весов).
 Запускается один раз перед первым стартом.
 
 ### 4. Ожидание готовности БД в приложении
@@ -162,7 +164,11 @@ BACKUP_KEEP=7
 - `README.md` / `README.ru.md`: новый раздел «Запуск» — три команды (init-env → стек данных → стек приложения),
   раздел про внешние БД/S3, раздел про бэкапы, честное описание того, что теперь удаляет `down -v`, а что нет;
 - `AGENTS.md`: описание двух стеков, переменных, места томов;
-- `.run/`: `Flow (data stack)` вместо `Flow (postgres only)`, `Flow (docker compose)` дополняется зависимостью.
+- `.run/`: `Flow (data stack)` запускает PostgreSQL, MinIO, создание бакета и OpenCode; `Flow Only` пересобирает и запускает только приложение на уже работающем стеке данных. Для локальной отладки подключает `docker-compose.debug.yml` (Debug, Development); Fast mode выключен, запуск отладчика — действием Debug в Rider.
+- Инициализация окружения — ответственность разработчика: перед первым запуском стека нужно запустить `Flow (init Linux/macOS)` или `Flow (init Windows)` в Rider. Они вызывают существующие `docker/data/init-env.sh` и `docker/data/init-env.ps1`; повторный запуск безопасен. Автоматического вызова init из конфигураций стека нет.
+- Docker CLI должен быть доступен в `PATH`. Пути интерпретаторов по умолчанию — `/bin/sh` и `C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe`; при другом расположении разработчик указывает свой путь в локальной копии конфигурации (без `Store as project file`). При необходимости там же задаются `DATA_ROOT` и `MODELS_ROOT`; настройки `.env` разработчик заполняет самостоятельно.
+- Без Rider (в том числе из терминала Visual Studio) инициализация выполняется командой `sh docker/data/init-env.sh` на Linux/macOS или `powershell -NoProfile -ExecutionPolicy Bypass -File docker/data/init-env.ps1` на Windows.
+- OpenCode читает `flow-repository-workspaces` как `/workspaces:ro`; приложение пишет в тот же том через `/var/lib/flow/repositories`. LM Studio запускает разработчик на хосте; конфигурация провайдера — `docker/opencode/opencode.jsonc`. Пошаговая проверка синхронизации и формы `/agents/test` — [OpenCode_setup.md](OpenCode_setup.md).
 
 ### 9. CI
 

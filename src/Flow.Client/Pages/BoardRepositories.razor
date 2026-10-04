@@ -1,0 +1,243 @@
+@page "/boards/{BoardId:guid}/repositories"
+@inject IFlowApi Api
+@inject ProjectAccessState Access
+
+<PageTitle>Репозитории — Flow</PageTitle>
+
+<div class="topbar">
+    <div class="topbar-left">
+        <a class="topbar-back" href="@($"tasks?board={BoardId}")" title="К задачам проекта"><Icon Name="arrow-left" Size="18" /></a>
+        <h2>Репозитории @(_board is null ? "" : $"· {_board.Key}")</h2>
+    </div>
+</div>
+
+<div class="content">
+    <div class="repo-page">
+        @if (_loading)
+        {
+            <Skeleton Kind="cards" Count="2" />
+        }
+        else if (_error is not null)
+        {
+            <div class="empty"><div class="empty-title">Не удалось загрузить репозитории</div><div>@_error</div><DsButton Variant="secondary" Size="sm" OnClick="Load">Повторить</DsButton></div>
+        }
+        else
+        {
+            <div class="repo-intro">
+                <div><h1>Исходный код проекта</h1><p>Привязанные репозитории доступны локальному агенту после синхронизации.</p></div>
+                <span class="repo-count">@_repositories.Count репозиториев</span>
+            </div>
+
+            @if (_canManage)
+            {
+                <section class="panel repo-create">
+                    <div class="repo-section-title"><Icon Name="plus" Size="17" /><h3>Привязать репозиторий</h3></div>
+                    <p class="hint">Новый репозиторий регистрируется в <a href="settings">Настройки → Интеграции</a>. Уже зарегистрированный можно привязать к этому проекту.</p>
+                    @if (_available.Count > 0)
+                    {
+                        <div class="repo-create-foot">
+                            <DsSelect T="Guid" @bind-Value="_selectedRepositoryId" ToStringFunc="RepositoryName"
+                                      AriaLabel="Репозиторий для привязки" Placeholder="Выберите репозиторий"
+                                      Compact="true" Class="repo-selector" Disabled="@(_binding || _unbinding)">
+                                <MudSelectItem T="Guid" Value="Guid.Empty">Выберите репозиторий</MudSelectItem>
+                                @foreach (var repository in _available)
+                                {
+                                    <MudSelectItem T="Guid" Value="repository.RepositoryId">@repository.FullName</MudSelectItem>
+                                }
+                            </DsSelect>
+                            <DsButton Variant="primary" Size="sm" Icon="plus" Busy="_binding"
+                                      Disabled="@(_selectedRepositoryId == Guid.Empty || _unbinding)" OnClick="Bind">Привязать</DsButton>
+                        </div>
+                    }
+                    @if (_bindError is not null)
+                    {
+                        <div class="repo-error" role="alert">@_bindError</div>
+                    }
+                </section>
+            }
+
+            <section class="repo-list">
+                <div class="repo-section-title"><Icon Name="code" Size="17" /><h3>Привязанные репозитории</h3></div>
+                @if (_syncError is not null)
+                {
+                    <div class="repo-error" role="alert">@_syncError</div>
+                }
+                @if (_unbindError is not null)
+                {
+                    <div class="repo-error" role="alert">@_unbindError</div>
+                }
+                @if (_repositories.Count == 0)
+                {
+                    <div class="panel repo-empty">У проекта пока нет привязанных репозиториев.</div>
+                }
+                @foreach (var repository in _repositories)
+                {
+                    <article class="panel repo-card" @key="repository.RepositoryId">
+                        <div class="repo-card-main">
+                            <div class="repo-card-head">
+                                <div><h4>@repository.FullName</h4><span>@repository.Provider · @repository.DefaultBranch</span></div>
+                                <span class="repo-state @repository.SyncState.ToLowerInvariant()">@StatusLabel(repository.SyncState)</span>
+                            </div>
+                            <div class="repo-remote">@repository.WebUrl</div>
+                            @if (repository.LastSyncedCommit is not null)
+                            {
+                                <div class="repo-revision">Commit <code>@repository.LastSyncedCommit[..Math.Min(12, repository.LastSyncedCommit.Length)]</code>
+                                    @if (repository.LastSyncedAt is { } syncedAt)
+                                    {
+                                        <span>· @syncedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                                    }
+                                </div>
+                            }
+                            @if (repository.LastSyncError is not null)
+                            {
+                                <div class="repo-error">@repository.LastSyncError</div>
+                            }
+                        </div>
+                        <div class="repo-card-actions">
+                            @if (repository.LastSyncedCommit is not null && repository.SyncState is "Ready" or "Failed")
+                            {
+                                <a class="ds-btn secondary sm" href="@($"agents/test?boardId={BoardId}&repositoryId={repository.RepositoryId}")">Спросить агента</a>
+                            }
+                            @if (_canManage && repository.Provider is GitProvider.GitHub or GitProvider.GitLab)
+                            {
+                                <DsButton Variant="secondary" Size="sm" Icon="history" Busy="@(_syncingId == repository.RepositoryId)"
+                                          Disabled="@(repository.SyncState is "Syncing" || _syncingId is not null || _unbinding)"
+                                          OnClick="() => Sync(repository)">Синхронизировать</DsButton>
+                            }
+                            @if (_canManage)
+                            {
+                                <DsButton Variant="tertiary" Size="sm" Icon="close-simple" Title="Отвязать только от текущего проекта"
+                                          Disabled="@(_binding || _unbinding || _syncingId is not null)"
+                                          OnClick="() => _repositoryToUnbind = repository">Отвязать</DsButton>
+                            }
+                        </div>
+                    </article>
+                }
+            </section>
+        }
+    </div>
+</div>
+
+@if (_repositoryToUnbind is { } repositoryToUnbind)
+{
+    <ConfirmDialog Title="@($"Отвязать репозиторий «{repositoryToUnbind.FullName}»?")"
+                   Text="Будет удалена только привязка к этому проекту и её настройки. Репозиторий, локальная копия кода, существующие связи с задачами и привязки к другим проектам сохранятся."
+                   ConfirmLabel="Отвязать" OnConfirm="Unbind" OnCancel="() => _repositoryToUnbind = null" />
+}
+
+@code {
+    [Parameter] public Guid BoardId { get; set; }
+
+    private BoardResponse? _board;
+    private List<GitBoardRepositoryResponse> _repositories = [];
+    private List<GitBoardRepositoryResponse> _available = [];
+    private Guid _selectedRepositoryId;
+    private string? _error;
+    private string? _bindError;
+    private string? _syncError;
+    private string? _unbindError;
+    private bool _loading = true;
+    private bool _binding;
+    private bool _unbinding;
+    private bool _canManage;
+    private Guid? _syncingId;
+    private GitBoardRepositoryResponse? _repositoryToUnbind;
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        _error = null;
+        var board = await Api.GetBoard(BoardId);
+        if (!board.Ok)
+        {
+            _error = board.Error;
+            _loading = false;
+            return;
+        }
+
+        _board = board.Value;
+        var result = await Api.GetBoardRepositories(BoardId);
+        if (result.Ok)
+        {
+            _repositories = result.Value!.Where(repository => repository.IsBound).ToList();
+            _available = result.Value!.Where(repository => !repository.IsBound).ToList();
+        }
+        else
+            _error = result.Error;
+
+        await Access.EnsureCoversAsync([BoardId]);
+        _canManage = Permissions.CanManageGit(Access.For(BoardId));
+        _loading = false;
+    }
+
+    private string? RepositoryName(Guid id) => id == Guid.Empty
+        ? "Выберите репозиторий"
+        : _available.FirstOrDefault(repository => repository.RepositoryId == id)?.FullName;
+
+    private async Task Bind()
+    {
+        if (_binding || _unbinding || _selectedRepositoryId == Guid.Empty) return;
+        _binding = true;
+        _bindError = null;
+        var result = await Api.SetBoardRepository(BoardId, _selectedRepositoryId, true);
+        _binding = false;
+        if (!result.Ok)
+        {
+            _bindError = result.Error;
+            return;
+        }
+        _selectedRepositoryId = Guid.Empty;
+        await Load();
+    }
+
+    private async Task Unbind()
+    {
+        if (_unbinding || _binding || _syncingId is not null || _repositoryToUnbind is not { } repository) return;
+        _unbinding = true;
+        _unbindError = null;
+        try
+        {
+            var result = await Api.SetBoardRepository(BoardId, repository.RepositoryId, false);
+            _repositoryToUnbind = null;
+            if (!result.Ok)
+            {
+                _unbindError = result.Error ?? "Не удалось отвязать репозиторий.";
+                return;
+            }
+
+            _repositories = result.Value!.Where(item => item.IsBound).ToList();
+            _available = result.Value!.Where(item => !item.IsBound).ToList();
+            _selectedRepositoryId = Guid.Empty;
+        }
+        finally
+        {
+            _unbinding = false;
+        }
+    }
+
+    private async Task Sync(GitBoardRepositoryResponse repository)
+    {
+        if (_syncingId is not null || _unbinding) return;
+        _syncingId = repository.RepositoryId;
+        _syncError = null;
+        var result = await Api.SynchronizeGitRepository(BoardId, repository.RepositoryId);
+        _syncingId = null;
+        if (!result.Ok)
+        {
+            _syncError = result.Error;
+            return;
+        }
+        await Load();
+    }
+
+    private static string StatusLabel(string state) => state switch
+    {
+        "Pending" => "Ожидает синхронизации",
+        "Syncing" => "Синхронизируется",
+        "Ready" => "Готов",
+        "Failed" => "Ошибка",
+        _ => state
+    };
+}

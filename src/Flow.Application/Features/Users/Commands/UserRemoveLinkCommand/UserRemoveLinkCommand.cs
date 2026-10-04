@@ -3,5 +3,8 @@ using MediatR;
 
 namespace Flow.Application.Features.Users.Commands.UserRemoveLinkCommand;
 
-/// <summary>Удаляет ссылку типа; если её не было — всё равно Success (идемпотентно).</summary>
+/// <summary>
+/// Удаляет ссылку типа; если её не было — всё равно Success (идемпотентно).
+/// Обработчик - <see cref="UserRemoveLinkCommandHandler"/>
+/// </summary>
 public sealed record UserRemoveLinkCommand(Guid ActorId, Guid UserId, UserLinkType Type) : IRequest<UserUpdateResult>;

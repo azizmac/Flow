@@ -16,14 +16,26 @@ namespace Flow.Application.Features.TaskTemplates;
 
 public sealed record TaskTemplateListQuery(Guid ActorId, Guid BoardId) : IRequest<IReadOnlyList<TaskTemplateResponse>?>;
 
+/// <summary>
+/// Обработчик - <see cref="TaskTemplateHandlers"/>
+/// </summary>
 public sealed record TaskTemplateCreateCommand(Guid ActorId, Guid BoardId, SaveTaskTemplateRequest Template) : IRequest<TaskTemplateResponse?>;
 
-/// <summary>Правка — полная замена содержимого. null — шаблона нет.</summary>
+/// <summary>
+/// Правка — полная замена содержимого. null — шаблона нет.
+/// Обработчик - <see cref="TaskTemplateHandlers"/>
+/// </summary>
 public sealed record TaskTemplateUpdateCommand(Guid ActorId, Guid TemplateId, SaveTaskTemplateRequest Template) : IRequest<TaskTemplateResponse?>;
 
+/// <summary>
+/// Обработчик - <see cref="TaskTemplateHandlers"/>
+/// </summary>
 public sealed record TaskTemplateDeleteCommand(Guid ActorId, Guid TemplateId) : IRequest<bool>;
 
-/// <summary>«Сохранить задачу как шаблон»: снимок задачи и её прямых подзадач. null — задачи нет.</summary>
+/// <summary>
+/// «Сохранить задачу как шаблон»: снимок задачи и её прямых подзадач. null — задачи нет.
+/// Обработчик - <see cref="TaskTemplateHandlers"/>
+/// </summary>
 public sealed record TaskTemplateFromTaskCommand(Guid ActorId, Guid TaskId, string Name) : IRequest<TaskTemplateResponse?>;
 
 internal static class TaskTemplateMapping

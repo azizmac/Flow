@@ -15,6 +15,9 @@ namespace Flow.Application.Features.Templates;
 public sealed record BoardApplyConfigPreviewQuery(Guid ActorId, Guid SourceBoardId, IReadOnlyList<ApplyConfigTarget> Targets, ConfigParts Parts)
     : IRequest<ApplyConfigPreviewResponse?>;
 
+/// <summary>
+/// Обработчик - <see cref="BoardApplyConfigHandlers"/>
+/// </summary>
 public sealed record BoardApplyConfigCommand(Guid ActorId, Guid SourceBoardId, IReadOnlyList<ApplyConfigTarget> Targets, ConfigParts Parts)
     : IRequest<ApplyBoardConfigResponse?>;
 
