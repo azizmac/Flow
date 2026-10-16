@@ -1,4 +1,4 @@
-using Flow.Auth.Options;
+﻿using Flow.Auth.Options;
 using Microsoft.Extensions.Options;
 using OpenIddict.Abstractions;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -54,6 +54,39 @@ public sealed class ClientSeeder(
             client.PostLogoutRedirectUris.Add(new Uri(uri, UriKind.Absolute));
 
         await UpsertApplicationAsync(client, cancellationToken);
+        await UpsertApplicationAsync(McpClient(auth), cancellationToken);
+    }
+
+    /// <summary>
+    /// Клиент для MCP-клиентов (Claude Code, IDE): тот же code + PKCE, плюс refresh — агент работает часами,
+    /// а access token живёт час. Разрешён ресурс MCP-сервера: клиенты MCP шлют его в resource (RFC 8707).
+    /// </summary>
+    private static OpenIddictApplicationDescriptor McpClient(AuthOptions auth)
+    {
+        var client = new OpenIddictApplicationDescriptor
+        {
+            ClientId = auth.McpClient.ClientId,
+            ClientType = ClientTypes.Public,
+            ApplicationType = ApplicationTypes.Native,
+            ConsentType = ConsentTypes.Implicit,
+            DisplayName = "Flow MCP",
+            Permissions =
+            {
+                Permissions.Endpoints.Authorization,
+                Permissions.Endpoints.Token,
+                Permissions.GrantTypes.AuthorizationCode,
+                Permissions.GrantTypes.RefreshToken,
+                Permissions.ResponseTypes.Code,
+                Permissions.Prefixes.Scope + AuthConstants.ApiScope,
+                Permissions.Prefixes.Resource + AuthConstants.McpResource(auth.Issuer)
+            },
+            Requirements = { Requirements.Features.ProofKeyForCodeExchange }
+        };
+
+        foreach (var uri in auth.McpClient.RedirectUris)
+            client.RedirectUris.Add(new Uri(uri, UriKind.Absolute));
+
+        return client;
     }
 
     private async Task RemoveLegacyAdminClientAsync(CancellationToken cancellationToken)

@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Flow.Auth.Data;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
@@ -84,7 +84,10 @@ public sealed class AuthorizationController(
 
         var identity = await CreateIdentityAsync(user);
         identity.SetScopes(request.GetScopes());
-        identity.SetResources(await scopes.ListResourcesAsync(identity.GetScopes()).ToListAsync());
+        // Аудитории — ресурсы scope'ов (flow-api) плюс явно запрошенные resource (клиенты MCP шлют адрес
+        // MCP-сервера; что он зарегистрирован и разрешён клиенту, OpenIddict уже проверил).
+        identity.SetResources((await scopes.ListResourcesAsync(identity.GetScopes()).ToListAsync())
+            .Concat(request.GetResources()).Distinct(StringComparer.Ordinal));
         identity.SetDestinations(GetDestinations);
 
         return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);

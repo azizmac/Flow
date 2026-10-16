@@ -94,6 +94,11 @@ public static class FlowAuthServiceCollectionExtensions
                     if (context.Request.Path.StartsWithSegments(AuthConstants.ApiPathPrefix))
                         return OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
 
+                    // MCP — тоже только Bearer, но через схему MCP: токен проверяет та же OpenIddict Validation
+                    // (ForwardAuthenticate), а 401 несёт resource_metadata для OAuth-discovery клиента MCP.
+                    if (context.Request.Path.StartsWithSegments(AuthConstants.McpPathPrefix))
+                        return AuthConstants.McpScheme;
+
                     return context.Request.Headers.Authorization.Any(
                         value => value is not null && value.StartsWith("Bearer ", StringComparison.Ordinal))
                         ? OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme
@@ -119,6 +124,10 @@ public static class FlowAuthServiceCollectionExtensions
             {
                 options.SetIssuer(new Uri(auth.Issuer, UriKind.Absolute));
 
+                // Второй адрес discovery — RFC 8414: клиенты MCP ищут метаданные сервера авторизации сначала там,
+                // и без него получили бы не 404, а 302 на страницу входа (FallbackPolicy закрывает всё подряд).
+                options.SetConfigurationEndpointUris(".well-known/openid-configuration", ".well-known/oauth-authorization-server");
+
                 options.SetAuthorizationEndpointUris("connect/authorize")
                     .SetTokenEndpointUris("connect/token")
                     .SetEndSessionEndpointUris("connect/endsession")
@@ -131,6 +140,10 @@ public static class FlowAuthServiceCollectionExtensions
                     .AllowClientCredentialsFlow();
 
                 options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.OfflineAccess, AuthConstants.ApiScope);
+
+                // Клиенты MCP по спецификации шлют resource (RFC 8707) — адрес самого MCP-сервера. OpenIddict 7
+                // отклоняет незарегистрированные ресурсы, поэтому он объявлен явно и разрешён клиенту flow-mcp.
+                options.RegisterResources(AuthConstants.McpResource(auth.Issuer));
 
                 // Access token — подписанный JWT без шифрования; локальная Validation использует ключи server напрямую.
                 options.DisableAccessTokenEncryption();

@@ -10,6 +10,13 @@ public sealed class AuthOptions
 
     public ClientOptions Client { get; set; } = new();
 
+    /// <summary>
+    /// Публичный OIDC-клиент для MCP-клиентов (Claude Code, IDE): code + PKCE, refresh. Динамической регистрации
+    /// клиентов у OpenIddict нет, поэтому client_id задаётся в клиенте MCP вручную, а адреса возврата — loopback
+    /// с фиксированным портом (OpenIddict сверяет redirect_uri целиком, порт тоже). Значения — appsettings.json.
+    /// </summary>
+    public McpClientOptions McpClient { get; set; } = new();
+
     public BCryptOptions BCrypt { get; set; } = new();
 
     public int AccessTokenLifetimeMinutes { get; set; } = 60;
@@ -40,6 +47,13 @@ public sealed class AuthOptions
         public string[] RedirectUris { get; set; } = [];
 
         public string[] PostLogoutRedirectUris { get; set; } = [];
+    }
+
+    public sealed class McpClientOptions
+    {
+        public string ClientId { get; set; } = "flow-mcp";
+
+        public string[] RedirectUris { get; set; } = [];
     }
 
     public sealed class BCryptOptions

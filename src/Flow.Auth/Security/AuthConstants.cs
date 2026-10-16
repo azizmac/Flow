@@ -22,4 +22,23 @@ public static class AuthConstants
     /// от запроса страницы: под этим префиксом cookie не принимается вовсе, только Bearer.
     /// </summary>
     public const string ApiPathPrefix = "/api";
+
+    /// <summary>
+    /// MCP-сервер Flow (Flow.Api/Mcp). Как и /api — только Bearer, cookie не принимается: клиент MCP — это
+    /// агент или IDE, а не браузер, и 302 на форму входа ему показать некуда.
+    /// </summary>
+    public const string McpPathPrefix = "/mcp";
+
+    /// <summary>
+    /// Схема MCP из пакета ModelContextProtocol.AspNetCore (регистрирует Flow.Api): аутентификацию она отдаёт
+    /// OpenIddict Validation, а на 401 добавляет в WWW-Authenticate адрес метаданных защищённого ресурса
+    /// (RFC 9728) — по нему клиент MCP сам находит сервер авторизации.
+    /// </summary>
+    public const string McpScheme = "FlowMcp";
+
+    /// <summary>
+    /// Канонический адрес MCP-сервера (RFC 8707): его клиент MCP передаёт в resource и сверяет с метаданными
+    /// защищённого ресурса. Строится от Auth:Issuer — того адреса, который видит клиент.
+    /// </summary>
+    public static string McpResource(string issuer) => issuer.TrimEnd('/') + McpPathPrefix;
 }
