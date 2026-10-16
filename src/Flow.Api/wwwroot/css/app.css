@@ -3078,3 +3078,18 @@ body.pointer-dragging { user-select: none; cursor: grabbing; }
         border-color: var(--border);
     }
 }
+
+/* «Настройки → Агент»: состояние OpenCode, модель агента, провайдеры и ключи (Components/AgentSettingsPanel). */
+.agent-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.agent-status b { color: #fff; font: var(--fw-semibold) 13px var(--font-mono); }
+.agent-warn { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--danger); border-radius: var(--r-md); background: var(--danger-soft); color: var(--text-primary); font: 13px/1.45 var(--font-text); }
+.agent-warn code, .git-hint code { padding: 1px 5px; border-radius: 4px; background: rgba(0, 0, 0, 0.25); font: 12px var(--font-mono); }
+.agent-model { margin-top: 12px; }
+.agent-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.card-head .agent-actions { margin-top: 0; }
+.agent-providers td { vertical-align: middle; white-space: nowrap; }
+.agent-providers td.agent-provider-name { width: 100%; white-space: normal; }
+.agent-provider-name b { display: block; color: #fff; }
+.agent-row-actions { white-space: nowrap; text-align: right; }
+.agent-picked { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.agent-picked b { color: #fff; font: var(--fw-semibold) 15px var(--font-display); }

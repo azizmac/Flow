@@ -629,6 +629,19 @@ public class PermissionTests
     [Theory]
     [InlineData(UserRole.Developer, false)]
     [InlineData(UserRole.Admin, true)]
+    public async Task Agent_Providers_Are_Managed_By_Global_Admins(UserRole role, bool allowed)
+    {
+        var (mediator, _, _, users) = TestMediatorFactory.Create();
+        var actor = AddUser(users, role, "actor");
+
+        Task List() => mediator.Send(new Flow.Application.Features.Agents.Settings.AgentProviderListQuery(actor), CancellationToken.None);
+
+        if (allowed) await List(); else await Forbidden(List);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Developer, false)]
+    [InlineData(UserRole.Admin, true)]
     public async Task Repositories_Are_Bound_By_Project_Admins(UserRole role, bool allowed)
     {
         var (mediator, _, _, users) = TestMediatorFactory.Create();

@@ -1,0 +1,347 @@
+@* «Настройки → Агент» (Admin+): инфраструктура агента — состояние OpenCode, модель, на которой Flow открывает сессии,
+   и провайдеры моделей с ключами (из каталога OpenCode или кастомные). Ключи хранятся во Flow зашифрованными
+   и уходят в OpenCode через его API сразу после сохранения. Ключ провайдера из каталога применяется без перезапуска;
+   кастомный провайдер (адрес, модели, ключ) OpenCode читает только на старте — тогда панель прямо говорит, что
+   OpenCode нужно перезапустить, и даёт команду. Здесь только настройка: функции агента живут в своих экранах. *@
+@inject IFlowApi Api
+@inject ToastService Toasts
+
+<div class="side-card">
+    <div class="card-head">
+        <div class="section-title">OpenCode</div>
+        <DsButton Variant="secondary" Size="sm" Icon="check-circle" OnClick="Check" Disabled="@(_busy || _status is not { Reachable: true })" Busy="_checking">
+            Проверить модель
+        </DsButton>
+    </div>
+    @if (_status is null)
+    {
+        <Skeleton Kind="rows" Count="2" />
+    }
+    else
+    {
+        <div class="agent-status">
+            @if (_status.Reachable)
+            {
+                <OnOff On="true" Label="@($"доступен{(_status.Version is { } v ? $", версия {v}" : "")}")" />
+            }
+            else
+            {
+                <OnOff On="false" Problem="true" Label="@($"недоступен: {_status.Error}")" />
+            }
+        </div>
+        <div class="agent-status">
+            <span class="hint">Модель агента:</span>
+            <b>@_status.DefaultProvider/@_status.DefaultModel</b>
+            <span class="hint">@(_status.DefaultFromSettings ? "выбрана здесь" : "из конфигурации сервера")</span>
+        </div>
+        @if (_status.RestartRequired.Count > 0)
+        {
+            <div class="agent-warn">
+                Перезапустите OpenCode, чтобы он увидел @(_status.RestartRequired.Count == 1 ? "провайдера" : "провайдеров")
+                «@string.Join("», «", _status.RestartRequired)»: кастомных провайдеров OpenCode читает только при старте.
+                На сервере: <code>docker compose -f docker-compose.data.yml restart opencode</code>. Ключи провайдеров из каталога
+                перезапуска не требуют.
+            </div>
+        }
+        @if (_status.Reachable && !_status.Configured)
+        {
+            <div class="agent-warn">
+                Агент не настроен: провайдер «@_status.DefaultProvider» в OpenCode не подключён. Подключите провайдера с ключом
+                ниже и выберите его модель — без облачного ключа на сервере без LM Studio агент отвечать не будет.
+            </div>
+        }
+        else if (!_status.Reachable)
+        {
+            <div class="agent-warn">
+                Flow не достучался до OpenCode. Настройки можно менять и сейчас: они сохранятся во Flow и уйдут в OpenCode,
+                как только он ответит. Проверьте контейнер: <code>docker compose -f docker-compose.data.yml ps opencode</code>.
+            </div>
+        }
+
+        <div class="wd-row agent-model">
+            <DsSelect T="string" Label="Провайдер модели" Value="_modelProvider" ValueChanged="SetModelProvider" Class="wd-field" Placeholder="из конфигурации сервера"
+                      ToStringFunc="@(k => k is null ? null : ProviderName(k))">
+                @foreach (var key in ModelProviders)
+                {
+                    <MudSelectItem T="string" Value="key">@ProviderName(key)</MudSelectItem>
+                }
+            </DsSelect>
+            @if (ModelsOf(_modelProvider) is { Count: > 0 } models)
+            {
+                <DsSelect T="string" Label="Модель" Value="_modelId" ValueChanged="v => _modelId = v" Class="wd-field"
+                          ToStringFunc="@(id => models.FirstOrDefault(m => m.Id == id)?.Name ?? id)">
+                    @foreach (var m in models)
+                    {
+                        <MudSelectItem T="string" Value="m.Id">@m.Name</MudSelectItem>
+                    }
+                </DsSelect>
+            }
+            else
+            {
+                <DsInput Label="Id модели" Value="@(_modelId ?? "")" ValueChanged="v => _modelId = v" MaxLength="200" Class="wd-field" />
+            }
+        </div>
+        <div class="agent-actions">
+            <DsButton Variant="primary" Size="sm" OnClick="SaveModel" Disabled="@(_busy || string.IsNullOrWhiteSpace(_modelProvider) || string.IsNullOrWhiteSpace(_modelId))">
+                Сохранить модель
+            </DsButton>
+            @if (_status.DefaultFromSettings)
+            {
+                <DsButton Variant="secondary" Size="sm" OnClick="ResetModel" Disabled="_busy">Вернуть модель из конфигурации</DsButton>
+            }
+        </div>
+    }
+</div>
+
+<div class="side-card">
+    <div class="card-head">
+        <div class="section-title">Провайдеры и ключи</div>
+        <div class="agent-actions">
+            <DsButton Variant="secondary" Size="sm" Icon="plus" OnClick="() => Open(custom: true)">Кастомный</DsButton>
+            <DsButton Variant="primary" Size="sm" Icon="plus" OnClick="() => Open(custom: false)">Из каталога</DsButton>
+        </div>
+    </div>
+    <div class="hint">
+        Как в самом OpenCode: провайдер из каталога (Anthropic, OpenAI, OpenRouter…) или свой OpenAI-совместимый сервер.
+        Ключи хранятся во Flow зашифрованными и наружу не отдаются. Ключ провайдера из каталога применяется сразу;
+        кастомный провайдер OpenCode увидит после перезапуска — панель об этом напомнит.
+    </div>
+
+    @if (_providers is null)
+    {
+        <Skeleton Kind="rows" Count="2" />
+    }
+    else if (_providers.Count == 0)
+    {
+        <div class="empty"><div class="empty-title">Провайдеры не подключены</div></div>
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Elevation="0" Class="git-repos agent-providers">
+            <tbody>
+                @foreach (var p in _providers)
+                {
+                    <tr>
+                        <td class="agent-provider-name"><b>@p.Name</b><span class="hint">@p.ProviderKey@(p.IsCustom ? " · кастомный" : "")</span></td>
+                        <td class="hint">@(p.HasKey ? $"ключ {p.KeyHint}" : "без ключа")</td>
+                        <td>
+                            @if (p.NeedsKey)
+                            {
+                                <OnOff On="false" Problem="true" Label="ключ нужно ввести заново" />
+                            }
+                            else if (p.ApplyError is { } error)
+                            {
+                                <OnOff On="false" Problem="true" Label="@error" />
+                            }
+                            else if (p.RestartRequired)
+                            {
+                                <OnOff On="false" Problem="true" Label="нужен перезапуск OpenCode" />
+                            }
+                            else if (p.Connected)
+                            {
+                                <OnOff On="true" Label="подключён в OpenCode" />
+                            }
+                            else
+                            {
+                                <OnOff On="false" Label="@(p.HasKey || p.IsCustom ? "ожидает передачи" : "нет ключа")" />
+                            }
+                        </td>
+                        <td class="agent-row-actions">
+                            <DsIconButton Icon="edit" Size="26" Title="Изменить или заменить ключ" OnClick="() => _editing = p" />
+                            <DsIconButton Icon="trash" Size="26" Title="Удалить провайдера" OnClick="() => _deleting = p" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+        @if (_providers.Any(p => p.ApplyError is not null))
+        {
+            <DsButton Variant="secondary" Size="sm" OnClick="Apply" Disabled="_busy">Передать в OpenCode заново</DsButton>
+        }
+    }
+</div>
+
+@if (_editing is not null || _adding is not null)
+{
+    <AgentProviderDialog Provider="_editing" Custom="@(_adding == true)" Catalog="_catalog" CatalogError="_catalogError"
+                         Taken="@(_providers?.Select(p => p.ProviderKey).ToHashSet() ?? [])"
+                         OnSaved="Saved" OnClose="() => { _editing = null; _adding = null; }" />
+}
+
+@if (_deleting is not null)
+{
+    <ConfirmDialog Title="@($"Удалить провайдера «{_deleting.Name}»?")"
+                   Text="Ключ будет стёрт во Flow и в OpenCode. Если это провайдер модели агента, выберите другую модель."
+                   OnConfirm="Delete" OnCancel="() => _deleting = null" />
+}
+
+@code {
+    private AgentStatusResponse? _status;
+    private List<AgentProviderResponse>? _providers;
+    private IReadOnlyList<AgentCatalogProviderResponse>? _catalog;
+    private string? _catalogError;
+    private AgentProviderResponse? _editing;
+    private AgentProviderResponse? _deleting;
+    private bool? _adding;
+    private bool _busy;
+    private bool _checking;
+    private string? _modelProvider;
+    private string? _modelId;
+
+    protected override Task OnInitializedAsync() => Task.WhenAll(Reload(), LoadCatalog());
+
+    /// <summary>Провайдеры для модели: подключённые во Flow и те, что OpenCode видит сам (например, LM Studio из его конфигурации).</summary>
+    private IEnumerable<string> ModelProviders =>
+        (_providers?.Select(p => p.ProviderKey) ?? [])
+        .Concat(_status?.ConnectedProviders ?? [])
+        .Append(_status?.DefaultProvider ?? "")
+        .Where(k => k.Length > 0)
+        .Distinct()
+        .Order();
+
+    private string ProviderName(string key) =>
+        _providers?.FirstOrDefault(p => p.ProviderKey == key)?.Name
+        ?? _catalog?.FirstOrDefault(c => c.Id == key)?.Name
+        ?? key;
+
+    private IReadOnlyList<AgentModelInfo> ModelsOf(string? key) =>
+        key is null ? []
+        : _providers?.FirstOrDefault(p => p.ProviderKey == key && p.IsCustom)?.Models
+          ?? _catalog?.FirstOrDefault(c => c.Id == key)?.Models
+          ?? [];
+
+    private void SetModelProvider(string? key)
+    {
+        _modelProvider = key;
+        var models = ModelsOf(key);
+        _modelId = models.Any(m => m.Id == _modelId) ? _modelId : models.FirstOrDefault()?.Id;
+    }
+
+    private async Task Reload()
+    {
+        var status = Api.GetAgentStatus();
+        var providers = Api.GetAgentProviders();
+        await Task.WhenAll(status, providers);
+
+        if (status.Result.Ok)
+        {
+            _status = status.Result.Value!;
+            _modelProvider = _status.DefaultProvider;
+            _modelId = _status.DefaultModel;
+        }
+        else
+            Toasts.Error(status.Result.Error ?? "Не удалось получить состояние OpenCode");
+
+        _providers = providers.Result.Ok ? providers.Result.Value!.ToList() : [];
+        if (!providers.Result.Ok)
+            Toasts.Error(providers.Result.Error ?? "Не удалось загрузить провайдеров");
+    }
+
+    private async Task LoadCatalog()
+    {
+        var result = await Api.GetAgentCatalog();
+        _catalog = result.Ok ? result.Value : null;
+        _catalogError = result.Ok ? null : result.Error;
+    }
+
+    private async Task Open(bool custom)
+    {
+        if (!custom && _catalog is null)
+            await LoadCatalog();
+        _adding = custom;
+    }
+
+    private async Task Saved(AgentProviderResponse provider)
+    {
+        _editing = null;
+        _adding = null;
+        // Ответ сохранения уже несёт итог передачи в OpenCode: «перезапустить» здесь нечего, есть только «дошло / не дошло».
+        if (provider.NeedsKey)
+            Toasts.Error($"«{provider.Name}»: {AgentText.NeedsKey}");
+        else if (provider.ApplyError is { } error)
+            Toasts.Warning($"«{provider.Name}» сохранён во Flow. {error}");
+        else if (provider.RestartRequired)
+            Toasts.Warning($"«{provider.Name}» передан в OpenCode. Перезапустите OpenCode, чтобы он его увидел: docker compose -f docker-compose.data.yml restart opencode");
+        else
+            Toasts.Ok($"«{provider.Name}» применён в OpenCode — перезапуск не нужен.");
+        await Reload();
+    }
+
+    private async Task Delete()
+    {
+        var provider = _deleting!;
+        _deleting = null;
+        var result = await Api.DeleteAgentProvider(provider.Id);
+        if (!result.Ok)
+            Toasts.Error(result.Error ?? "Не удалось удалить провайдера");
+        await Reload();
+    }
+
+    private async Task SaveModel()
+    {
+        _busy = true;
+        var result = await Api.SetAgentDefaultModel(new SetAgentDefaultModelRequest(_modelProvider, _modelId?.Trim()));
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось сохранить модель");
+            return;
+        }
+
+        _status = result.Value!;
+        if (_status.Configured)
+            Toasts.Ok($"Агент работает на {_status.DefaultProvider}/{_status.DefaultModel}.");
+        else
+            Toasts.Warning($"Модель сохранена, но провайдер «{_status.DefaultProvider}» в OpenCode не подключён.");
+    }
+
+    private async Task ResetModel()
+    {
+        _busy = true;
+        var result = await Api.SetAgentDefaultModel(new SetAgentDefaultModelRequest(null, null));
+        _busy = false;
+        if (result.Ok)
+        {
+            _status = result.Value!;
+            (_modelProvider, _modelId) = (_status.DefaultProvider, _status.DefaultModel);
+        }
+        else
+            Toasts.Error(result.Error ?? "Не удалось сбросить модель");
+    }
+
+    private async Task Check()
+    {
+        _busy = _checking = true;
+        var result = await Api.CheckAgent(new AgentCheckRequest(_modelProvider, _modelId?.Trim()));
+        _busy = _checking = false;
+        if (!result.Ok)
+            Toasts.Error(result.Error ?? "Проверка не прошла");
+        else if (result.Value!.Ok)
+            Toasts.Ok($"{result.Value.ProviderKey}/{result.Value.ModelId}: {result.Value.Message}");
+        else
+            Toasts.Error($"{result.Value.ProviderKey}/{result.Value.ModelId}: {result.Value.Message}");
+    }
+
+    private async Task Apply()
+    {
+        _busy = true;
+        var result = await Api.ApplyAgentConfig();
+        _busy = false;
+        if (!result.Ok)
+        {
+            Toasts.Error(result.Error ?? "Не удалось передать настройки");
+            return;
+        }
+
+        _providers = result.Value!.ToList();
+        if (_providers.All(p => p.ApplyError is null))
+            Toasts.Ok("Провайдеры и ключи переданы в OpenCode.");
+        else
+            Toasts.Warning(_providers.First(p => p.ApplyError is not null).ApplyError!);
+    }
+
+    private static class AgentText
+    {
+        public const string NeedsKey = "ключ не расшифровывается (сменились ключи шифрования сервера) — введите его заново.";
+    }
+}

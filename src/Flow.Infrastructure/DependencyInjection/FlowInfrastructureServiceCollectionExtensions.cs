@@ -56,6 +56,7 @@ public static class FlowInfrastructureServiceCollectionExtensions
         services.AddScoped<IGitRepositoryBoardRepository, GitRepositoryBoardRepository>();
         services.AddScoped<IGitDevelopmentLinkRepository, GitDevelopmentLinkRepository>();
         services.AddScoped<IGitIntegrationJobRepository, GitIntegrationJobRepository>();
+        services.AddScoped<IAgentProviderRepository, AgentProviderRepository>();
 
         // Git-хостинги (docs/TZ_git_integration.md): клиенты API, настройки секции Scm и разбор доставок вебхуков.
         var git = configuration.GetSection(GitOptions.SectionName).Get<GitOptions>() ?? new GitOptions();
@@ -114,7 +115,26 @@ public static class FlowInfrastructureServiceCollectionExtensions
             client.DefaultRequestHeaders.Authorization = new("Basic", credentials);
         });
 
+        services.AddScoped<OpenCodeModelSelector>();
         services.AddScoped<IFlowAgentClient, OpenCodeClient>();
+
+        // Настройка самого OpenCode из «Настройки → Агент»: провайдеры и ключи уходят через его HTTP API, без перезапуска.
+        // Таймауты — на каждый вызов (короткие для конфигурации, длинный для пробного запроса), поэтому у клиента их нет.
+        services.AddHttpClient(OpenCodeAgentRuntime.HttpClientName, (provider, client) =>
+        {
+            var options = provider.GetRequiredService<OpenCodeOptions>();
+            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+            client.Timeout = Timeout.InfiniteTimeSpan;
+
+            var credentials = Convert.ToBase64String(
+                System.Text.Encoding.UTF8.GetBytes($"{options.Username}:{options.Password}"));
+            client.DefaultRequestHeaders.Authorization = new("Basic", credentials);
+        });
+        services.AddSingleton<IAgentRuntime, OpenCodeAgentRuntime>();
+
+        var sync = configuration.GetSection(OpenCodeOptions.SectionName).Get<OpenCodeOptions>() ?? new OpenCodeOptions();
+        if (sync.SyncEnabled)
+            services.AddHostedService<OpenCodeConfigWorker>();
     }
 
     /// <summary>

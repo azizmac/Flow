@@ -35,6 +35,9 @@ public sealed class AuthFixture : IAsyncLifetime
             builder.UseSetting("Auth:UseEphemeralKeys", "true");
             // Auth-тесты не проверяют индексацию и не должны обращаться к локальному эмбеддеру.
             builder.UseSetting("Search:Indexing:Enabled", "false");
+            // Фоновая синхронизация с OpenCode не нужна и не должна дотянуться до OpenCode разработчика на :4096.
+            builder.UseSetting("OpenCode:BaseUrl", "http://localhost:1");
+            builder.UseSetting("OpenCode:SyncEnabled", "false");
             builder.UseSetting("Auth:Client:RedirectUris:0", ClientRedirectUri);
             builder.UseSetting("Auth:Client:PostLogoutRedirectUris:0", "http://localhost:5016/authentication/logout-callback");
         });

@@ -1,4 +1,5 @@
 using Flow.Domain.Entities;
+using Flow.Domain.Entities.Agents;
 using Flow.Domain.Entities.GitIntegration;
 using Flow.Infrastructure.Search.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -60,6 +61,10 @@ public sealed class FlowDbContext(DbContextOptions<FlowDbContext> options) : DbC
     public DbSet<GitDevelopmentLink> GitDevelopmentLinks => Set<GitDevelopmentLink>();
 
     public DbSet<GitIntegrationJob> GitIntegrationJobs => Set<GitIntegrationJob>();
+
+    public DbSet<AgentProvider> AgentProviders => Set<AgentProvider>();
+
+    public DbSet<AgentSettings> AgentSettings => Set<AgentSettings>();
 
     /// <summary>
     /// Поисковый индекс — проекция, а не домен: наружу из сборки не торчит, Application работает

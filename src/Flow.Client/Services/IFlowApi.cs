@@ -345,4 +345,15 @@ public interface IFlowApi
 
     // ---- О системе ----
     Task<ApiResult<AboutResponse>> GetAbout(CancellationToken ct = default);
+
+    // ---- Агент: провайдеры моделей и ключи OpenCode (Admin+, «Настройки → Агент») ----
+    Task<ApiResult<Flow.Shared.Contracts.Agents.AgentStatusResponse>> GetAgentStatus(CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Agents.AgentCatalogProviderResponse>>> GetAgentCatalog(CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Agents.AgentProviderResponse>>> GetAgentProviders(CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Agents.AgentProviderResponse>> CreateAgentProvider(Flow.Shared.Contracts.Agents.CreateAgentProviderRequest request, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Agents.AgentProviderResponse>> UpdateAgentProvider(Guid id, Flow.Shared.Contracts.Agents.UpdateAgentProviderRequest request, CancellationToken ct = default);
+    Task<ApiResult<bool>> DeleteAgentProvider(Guid id, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Agents.AgentStatusResponse>> SetAgentDefaultModel(Flow.Shared.Contracts.Agents.SetAgentDefaultModelRequest request, CancellationToken ct = default);
+    Task<ApiResult<Flow.Shared.Contracts.Agents.AgentCheckResponse>> CheckAgent(Flow.Shared.Contracts.Agents.AgentCheckRequest request, CancellationToken ct = default);
+    Task<ApiResult<IReadOnlyList<Flow.Shared.Contracts.Agents.AgentProviderResponse>>> ApplyAgentConfig(CancellationToken ct = default);
 }

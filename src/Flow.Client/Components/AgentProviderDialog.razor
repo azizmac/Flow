@@ -1,0 +1,201 @@
+@* Провайдер моделей агента: из каталога OpenCode (поиск по названию и Id, как в самом OpenCode) или кастомный
+   OpenAI-совместимый — свой Id, адрес API и модели строками «id | Название». Ключ уходит на сервер один раз, там
+   шифруется и сразу передаётся в OpenCode (кастомный провайдер OpenCode увидит после перезапуска); обратно не
+   приходит никогда — при правке пустое поле значит «не менять». Ключ необязателен: локальному серверу (LM Studio, Ollama) он часто не нужен.
+   Жизненный цикл MudDialog — как у GitHostConnectionDialog. *@
+@implements IAsyncDisposable
+@inject IFlowApi Api
+@inject BrowserInterop Browser
+
+<MudDialog @ref="_dialog" Visible="@_visible" VisibleChanged="OnVisibleChanged" Options="_options" Class="flow-modal"
+           TitleClass="flow-modal-title" ContentClass="flow-modal-content" ActionsClass="modal-actions">
+    <TitleContent>
+        <h3>@Title</h3>
+    </TitleContent>
+    <DialogContent>
+        @if (Provider is null && !Custom && _picked is null)
+        {
+            @if (Catalog is null)
+            {
+                <div class="ds-field-error">@(CatalogError ?? "Каталог провайдеров OpenCode ещё не загружен.")</div>
+            }
+            else
+            {
+                <DsInput Id="agent-q" Icon="search" Placeholder="Найти провайдера: Anthropic, OpenAI, OpenRouter…" Value="@_query" ValueChanged="v => _query = v" />
+                <div class="git-remote">
+                    @foreach (var c in Found)
+                    {
+                        var added = Taken.Contains(c.Id);
+                        <button type="button" class="git-remote-row" disabled="@added" @onclick="() => Pick(c)">
+                            <span>@c.Name</span>
+                            <span class="hint">@(added ? "подключён" : c.Id)</span>
+                        </button>
+                    }
+                </div>
+            }
+        }
+        else
+        {
+            @if (IsCustom)
+            {
+                <div class="wd-row">
+                    <DsInput Id="agent-key" Label="Id провайдера" Placeholder="my-llm" MaxLength="64" Value="@_key" ValueChanged="v => _key = v"
+                             Disabled="@(Provider is not null)" Class="wd-field" />
+                    <DsInput Label="Название" MaxLength="80" Value="@_name" ValueChanged="v => _name = v" Class="wd-field" />
+                </div>
+                <DsInput Label="Адрес API (OpenAI-совместимый)" Placeholder="https://llm.example.com/v1" MaxLength="500"
+                         Value="@_baseUrl" ValueChanged="v => _baseUrl = v" />
+                <DsInput Label="Модели — по одной в строке: id или «id | Название»" Lines="4" Value="@_models" ValueChanged="v => _models = v"
+                         Placeholder="qwen/qwen3.6-35b-a3b | Qwen 3.6" />
+                <div class="hint git-hint">
+                    Адрес изнутри контейнера OpenCode: сервер на этой же машине — <code>http://host.docker.internal:порт/v1</code>, не localhost.
+                </div>
+            }
+            else
+            {
+                <div class="agent-picked">
+                    <b>@(_picked?.Name ?? Provider?.Name)</b>
+                    <span class="hint">@(_picked?.Id ?? Provider?.ProviderKey)</span>
+                    @if (_picked is { Env.Count: > 0 } p)
+                    {
+                        <span class="hint">· в OpenCode это @string.Join(", ", p.Env)</span>
+                    }
+                </div>
+            }
+
+            <DsInput Id="agent-api-key" Type="password" MaxLength="4096" Value="@_apiKey" ValueChanged="v => _apiKey = v"
+                     Label="@(Provider is { HasKey: true } ? $"Новый ключ API (сейчас {Provider.KeyHint}; пусто — не менять)" : "Ключ API (необязательно для локального сервера)")" />
+            @if (Provider is { HasKey: true })
+            {
+                <MudCheckBox T="bool" Value="_clearKey" ValueChanged="v => _clearKey = v" Dense="true" Label="Удалить ключ" Disabled="@(!string.IsNullOrWhiteSpace(_apiKey))" />
+            }
+            <div class="hint git-hint">
+                Ключ хранится во Flow зашифрованным и наружу не отдаётся.
+                @(IsCustom ? "Кастомного провайдера OpenCode увидит после перезапуска — Flow напомнит об этом." : "В OpenCode ключ применяется сразу, перезапуск не нужен.")
+            </div>
+        }
+        @if (_error is not null)
+        {
+            <div class="ds-field-error">@_error</div>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (Provider is null && !Custom && _picked is not null)
+        {
+            <DsButton Variant="secondary" Size="md" OnClick="() => _picked = null" Disabled="_busy" Style="margin-right:auto">Назад</DsButton>
+        }
+        <DsButton Variant="secondary" Size="md" OnClick="Close" Disabled="_busy">Отмена</DsButton>
+        @if (Provider is not null || Custom || _picked is not null)
+        {
+            <DsButton Variant="primary" Size="md" OnClick="Save" Disabled="_busy" Busy="_busy">@(Provider is null ? "Подключить" : "Сохранить")</DsButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    /// <summary>Правка существующего; null — новый (из каталога или кастомный — по <see cref="Custom"/>).</summary>
+    [Parameter] public AgentProviderResponse? Provider { get; set; }
+    [Parameter] public bool Custom { get; set; }
+    [Parameter] public IReadOnlyList<AgentCatalogProviderResponse>? Catalog { get; set; }
+    [Parameter] public string? CatalogError { get; set; }
+    [Parameter] public IReadOnlyCollection<string> Taken { get; set; } = [];
+    [Parameter] public EventCallback<AgentProviderResponse> OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private MudDialog? _dialog;
+    private bool _visible = true;
+    private bool _closing;
+    private bool _busy;
+    private string? _error;
+    private string _query = "";
+    private AgentCatalogProviderResponse? _picked;
+    private string _key = "";
+    private string _name = "";
+    private string _baseUrl = "";
+    private string _models = "";
+    private string _apiKey = "";
+    private bool _clearKey;
+
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = false, CloseOnEscapeKey = true, BackdropClick = true };
+
+    private bool IsCustom => Provider?.IsCustom ?? Custom;
+
+    private string Title => Provider is not null ? $"Провайдер «{Provider.Name}»" : Custom ? "Кастомный провайдер" : "Провайдер из каталога OpenCode";
+
+    private IEnumerable<AgentCatalogProviderResponse> Found =>
+        (Catalog ?? []).Where(c => string.IsNullOrWhiteSpace(_query)
+                                   || c.Name.Contains(_query.Trim(), StringComparison.OrdinalIgnoreCase)
+                                   || c.Id.Contains(_query.Trim(), StringComparison.OrdinalIgnoreCase)).Take(200);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Provider is { } p)
+            (_key, _name, _baseUrl, _models) = (p.ProviderKey, p.Name, p.BaseUrl ?? "", string.Join("\n", p.Models.Select(m => m.Name == m.Id ? m.Id : $"{m.Id} | {m.Name}")));
+        await Task.Delay(50);
+        await Browser.FocusAsync(Provider is not null ? "agent-api-key" : Custom ? "agent-key" : "agent-q", select: true);
+    }
+
+    private async Task Pick(AgentCatalogProviderResponse provider)
+    {
+        _picked = provider;
+        _error = null;
+        await Task.Delay(50);
+        await Browser.FocusAsync("agent-api-key", select: true);
+    }
+
+    private IReadOnlyList<AgentModelInfo> ParseModels() =>
+        _models.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.Split('|', 2, StringSplitOptions.TrimEntries))
+            .Select(parts => new AgentModelInfo(parts[0], parts.Length > 1 && parts[1].Length > 0 ? parts[1] : parts[0]))
+            .ToList();
+
+    private async Task Save()
+    {
+        _error = null;
+        var apiKey = string.IsNullOrWhiteSpace(_apiKey) ? null : _apiKey.Trim();
+        if (IsCustom && ParseModels().Count == 0)
+        {
+            _error = "Укажите хотя бы одну модель.";
+            return;
+        }
+
+        _busy = true;
+        var result = Provider is { } existing
+            ? await Api.UpdateAgentProvider(existing.Id, existing.IsCustom
+                ? new UpdateAgentProviderRequest(_name.Trim(), _baseUrl.Trim(), ParseModels(), apiKey, _clearKey && apiKey is null)
+                : new UpdateAgentProviderRequest(ApiKey: apiKey, ClearApiKey: _clearKey && apiKey is null))
+            : IsCustom
+                ? await Api.CreateAgentProvider(new CreateAgentProviderRequest(_key.Trim(), true, _name.Trim(), _baseUrl.Trim(), ParseModels(), apiKey))
+                : await Api.CreateAgentProvider(new CreateAgentProviderRequest(_picked!.Id, false, _picked.Name, ApiKey: apiKey));
+        _busy = false;
+        if (!result.Ok)
+        {
+            _error = result.Error ?? "Не удалось сохранить провайдера";
+            return;
+        }
+
+        _apiKey = "";
+        await CloseDialog();
+        await OnSaved.InvokeAsync(result.Value!);
+    }
+
+    private Task OnVisibleChanged(bool visible) => visible || _closing ? Task.CompletedTask : Close();
+
+    private async Task CloseDialog()
+    {
+        if (_closing) return;
+        _closing = true;
+        _visible = false;
+        if (_dialog is not null)
+            await _dialog.CloseAsync();
+    }
+
+    public ValueTask DisposeAsync() => new(CloseDialog());
+
+    private async Task Close()
+    {
+        if (_busy) return;
+        await CloseDialog();
+        await OnClose.InvokeAsync();
+    }
+}

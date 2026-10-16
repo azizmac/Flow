@@ -56,6 +56,8 @@ builder.Services.AddFlowApplication();
 // Токены Git-хостингов и секреты вебхуков — под DataProtection хоста (docs/TZ_git_integration.md §1).
 builder.Services.AddHostedService<RepositorySyncRecoveryService>();
 builder.Services.AddSingleton<Flow.Application.Abstractions.IGitSecretProtector, Flow.Api.GitIntegration.DataProtectionGitSecretProtector>();
+// Ключи провайдеров агента (OpenCode) — под тем же DataProtection, своим purpose.
+builder.Services.AddSingleton<Flow.Application.Abstractions.IAgentSecretProtector, Flow.Api.Agents.DataProtectionAgentSecretProtector>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<ApiExceptionFilter>();

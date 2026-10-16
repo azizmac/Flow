@@ -87,3 +87,12 @@ VISION_MODEL_FILE|var|-|Файл GGUF визуальной модели, вхо�
 VISION_MODEL_URL|var|-|Откуда качать веса визуальной модели
 VISION_MMPROJ_FILE|var|-|Файл проектора визуальной модели
 VISION_MMPROJ_URL|var|-|Откуда качать веса проектора
+
+# ---- Агент (OpenCode) ----
+# OpenCode поднимается на сервере всегда. Ключи провайдеров моделей сюда не входят: их задают в Flow
+# («Настройки → Агент», Admin+), Flow хранит их зашифрованными и сам передаёт в OpenCode.
+OPENCODE_SERVER_PASSWORD|secret|2|Пароль HTTP API OpenCode: его получают и контейнер opencode, и api. Без него сервер уезжает с дев-паролем
+OPENCODE_IMAGE|var|-|Образ OpenCode, по умолчанию ghcr.io/anomalyco/opencode:2.0.0
+OPENCODE_PROVIDER_ID|var|-|Провайдер модели агента, пока в «Настройки → Агент» модель не выбрана. По умолчанию lmstudio
+OPENCODE_MODEL_ID|var|-|Модель агента по умолчанию (ключ модели в docker/opencode/opencode.jsonc). По умолчанию qwen3.6-35b-a3b
+OPENCODE_TIMEOUT_SECONDS|var|-|Сколько секунд ждать ответа агента. По умолчанию 1800

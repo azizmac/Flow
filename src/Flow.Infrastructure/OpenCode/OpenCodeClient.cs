@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace Flow.Infrastructure.OpenCode;
 
 /// <summary>HTTP-клиент к V2 API OpenCode.</summary>
-internal sealed class OpenCodeClient(IHttpClientFactory clients, OpenCodeOptions options, ILogger<OpenCodeClient> logger) : IFlowAgentClient
+internal sealed class OpenCodeClient(IHttpClientFactory clients, OpenCodeOptions options, OpenCodeModelSelector models, ILogger<OpenCodeClient> logger) : IFlowAgentClient
 {
     public const string HttpClientName = "flow-opencode";
 
@@ -33,7 +33,8 @@ internal sealed class OpenCodeClient(IHttpClientFactory clients, OpenCodeOptions
 
         try
         {
-            session = await CreateSessionAsync(client, request.WorkspaceDirectory, permissions, timeout.Token);
+            var model = await models.GetAsync(timeout.Token);
+            session = await CreateSessionAsync(client, model, request.WorkspaceDirectory, permissions, timeout.Token);
 
             using (var promptResponse = await client.PostAsJsonAsync(
                        $"api/session/{session.Id}/prompt",
@@ -89,14 +90,14 @@ internal sealed class OpenCodeClient(IHttpClientFactory clients, OpenCodeOptions
         }
     }
 
-    private async Task<Session> CreateSessionAsync(HttpClient client, string workspaceDirectory,
+    private static async Task<Session> CreateSessionAsync(HttpClient client, (string ProviderId, string ModelId) model, string workspaceDirectory,
         IReadOnlyList<PermissionRule>? permissions, CancellationToken cancellationToken)
     {
         using var response = await client.PostAsJsonAsync(
             "api/session",
             new CreateSessionRequest(
                 "Вопрос по исходному коду",
-                new ModelReference(options.ProviderId, options.ModelId),
+                new ModelReference(model.ProviderId, model.ModelId),
                 new LocationReference(workspaceDirectory),
                 permissions is null ? null : "plan",
                 permissions),

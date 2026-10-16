@@ -40,6 +40,9 @@ public interface IPermissionService
     /// <summary>Подключения к Git-хостингам и репозитории (экран «Интеграции») — глобальные Admin и Owner.</summary>
     void EnsureCanManageIntegrations(User actor);
 
+    /// <summary>Провайдеры моделей, ключи и модель агента (OpenCode, «Настройки → Агент») — глобальные Admin и Owner.</summary>
+    void EnsureCanManageAgent(User actor);
+
     /// <summary>Участники и роль по умолчанию — ManageMembers; выдаваемая роль не выше своей роли в проекте.</summary>
     void EnsureCanManageMembers(ProjectAccessInfo access, ProjectRole? grantedRole = null);
 

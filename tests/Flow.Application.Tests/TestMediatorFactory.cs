@@ -46,6 +46,14 @@ public sealed record GitTestContext(
     Flow.Application.Features.GitIntegration.GitOptions Options,
     FakeSearchIndexQueue SearchIndex);
 
+/// <summary>Провайдеры и ключи агента: хранилище, OpenCode в памяти, UnitOfWork.</summary>
+public sealed record AgentTestContext(
+    IMediator Mediator,
+    FakeUserRepository Users,
+    FakeAgentProviderRepository Providers,
+    FakeAgentRuntime Runtime,
+    FakeUnitOfWork UnitOfWork);
+
 public static class TestMediatorFactory
 {
     /// <summary>Owner, который сеется в FakeUserRepository при создании: actor для команд в тестах, где права не проверяются.</summary>
@@ -103,6 +111,19 @@ public static class TestMediatorFactory
         return new GitTestContext(all.Mediator, all.Boards, all.Tasks, all.Users, all.Git, all.GitClient, all.GitOptions, all.SearchQueue);
     }
 
+    /// <summary>Провайдеры моделей и ключи агента (OpenCode в памяти).</summary>
+    public static AgentTestContext CreateAgentContext()
+    {
+        var providers = new FakeAgentProviderRepository();
+        var runtime = new FakeAgentRuntime();
+        var all = Build(services =>
+        {
+            services.AddSingleton<IAgentProviderRepository>(providers);
+            services.AddSingleton<IAgentRuntime>(runtime);
+        });
+        return new AgentTestContext(all.Mediator, all.Users, providers, runtime, all.UnitOfWork);
+    }
+
     /// <summary>Плюс фейковый UnitOfWork — для проверки повторов сохранения (конфликт ранга).</summary>
     public static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUnitOfWork UnitOfWork) CreateWithUnitOfWork()
     {
@@ -124,7 +145,7 @@ public static class TestMediatorFactory
         return (all.Mediator, all.Boards, all.Tasks, all.Users, all.Accounts);
     }
 
-    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings, FakeAttachmentRepository Attachments, InMemoryFileStorage Storage, AttachmentOptions AttachmentOptions, FakeReranker Reranker, FakeVisionEmbeddingGenerator Vision, FakeUnitOfWork UnitOfWork, FakeGitRepositories Git, FakeGitProviderClient GitClient, Flow.Application.Features.GitIntegration.GitOptions GitOptions) Build()
+    private static (IMediator Mediator, FakeBoardRepository Boards, FakeTaskItemRepository Tasks, FakeUserRepository Users, FakeAccountService Accounts, FakeTaskCommentRepository Comments, FakeTaskActivityRepository Activities, FakeSearchIndexQueue SearchQueue, SearchOptions SearchOptions, FakeSearchQueryRepository SearchIndex, FakeQueryEmbeddingCache Embeddings, FakeAttachmentRepository Attachments, InMemoryFileStorage Storage, AttachmentOptions AttachmentOptions, FakeReranker Reranker, FakeVisionEmbeddingGenerator Vision, FakeUnitOfWork UnitOfWork, FakeGitRepositories Git, FakeGitProviderClient GitClient, Flow.Application.Features.GitIntegration.GitOptions GitOptions) Build(Action<ServiceCollection>? configure = null)
     {
         var boards = new FakeBoardRepository();
         var tasks = new FakeTaskItemRepository(boards);
@@ -176,6 +197,9 @@ public static class TestMediatorFactory
         services.AddSingleton<IGitProviderClient>(gitClient);
         services.AddSingleton(gitOptions);
         services.AddSingleton<IGitSecretProtector>(new FakeGitSecretProtector());
+        services.AddSingleton<IAgentProviderRepository>(new FakeAgentProviderRepository());
+        services.AddSingleton<IAgentRuntime>(new FakeAgentRuntime());
+        services.AddSingleton<IAgentSecretProtector>(new FakeAgentSecretProtector());
         services.AddSingleton<IUserRepository>(users);
         services.AddSingleton<IAccountService>(accounts);
         services.AddSingleton<ITaskCommentRepository>(comments);
@@ -195,6 +219,7 @@ public static class TestMediatorFactory
         var unitOfWork = new FakeUnitOfWork();
         services.AddSingleton<IUnitOfWork>(unitOfWork);
         services.AddFlowApplication();
+        configure?.Invoke(services);
 
         var mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
         return (mediator, boards, tasks, users, accounts, comments, activities, searchQueue, searchOptions, searchIndex, embeddings, attachments, storage, attachmentOptions, reranker, visionEmbedder, unitOfWork, git, gitClient, gitOptions);

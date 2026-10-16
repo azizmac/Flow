@@ -91,10 +91,21 @@ services:
       OPENCODE_CONFIG: /config/opencode.jsonc
       OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-flow-opencode-local}
+      # Провайдеры моделей и ключи задаются в Flow («Настройки → Агент»), а не здесь: Flow хранит ключи зашифрованными
+      # и сам передаёт их в OpenCode через его API. OpenCode кладёт их в свою глобальную конфигурацию и хранилище
+      # учётных данных — каталоги XDG в томе opencode-state, чтобы пересоздание контейнера их не стирало:
+      # кастомного провайдера OpenCode читает только на старте, и без тома каждая выкатка требовала бы перезапуска.
+      XDG_CONFIG_HOME: /var/lib/opencode/config
+      XDG_DATA_HOME: /var/lib/opencode/data
+      XDG_STATE_HOME: /var/lib/opencode/state
+      XDG_CACHE_HOME: /var/lib/opencode/cache
     volumes:
       # Flow.Api клонирует и обновляет репозитории; OpenCode только читает их.
       - repository-workspaces:/workspaces:ro
       - ./docker/opencode/opencode.jsonc:/config/opencode.jsonc:ro
+      # Состояние OpenCode: переданные Flow ключи и провайдеры, сессии. Ключи здесь лежат открытым текстом (так их
+      # хранит OpenCode); источник истины — Flow, и потерянный том Flow заполнит заново.
+      - opencode-state:/var/lib/opencode
     ports:
       # HTTP API доступен с хоста для диагностики, но не из локальной сети.
       - "${OPENCODE_BIND:-127.0.0.1}:${OPENCODE_PORT:-4096}:4096"
@@ -217,3 +228,7 @@ volumes:
   repository-workspaces:
     name: flow-repository-workspaces
     external: true
+  # Состояние OpenCode (конфигурация, учётные данные, сессии). Не внешний: его содержимое Flow восстанавливает сам,
+  # и `docker compose down -v` стека данных его законно уносит.
+  opencode-state:
+    name: flow-opencode-state

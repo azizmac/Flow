@@ -1,5 +1,6 @@
-@* Экран «Настройки» (/settings, ?tab=ui|search|integrations|about).
+@* Экран «Настройки» (/settings, ?tab=ui|search|integrations|agent|about).
    «Интеграции» — подключения к Git-хостингам и репозитории (Admin+, Components/GitIntegrations).
+   «Агент» — OpenCode: провайдеры моделей, ключи и модель агента (Admin+, Components/AgentSettingsPanel).
    «Интерфейс» — личные настройки (GET/PATCH /users/me/preferences): хранятся на сервере и едут за человеком
    на любой компьютер; каждое поле сохраняется сразу по клику, кнопки «Сохранить» нет.
    «Поиск» — состояние индекса (GET /search/status, Admin+) и переиндексация (POST /search/reindex, Owner).
@@ -95,6 +96,10 @@
         else if (Tab == "integrations")
         {
             <GitIntegrations />
+        }
+        else if (Tab == "agent")
+        {
+            <AgentSettingsPanel />
         }
         else if (Tab == "permissions")
         {
@@ -324,7 +329,7 @@
     [
         new("ui", "Интерфейс"),
         .. CanViewSearch ? [new DsTab("search", "Поиск")] : Array.Empty<DsTab>(),
-        .. CanManageIntegrations ? [new DsTab("integrations", "Интеграции"), new DsTab("permissions", "Наборы прав")] : Array.Empty<DsTab>(),
+        .. CanManageIntegrations ? [new DsTab("integrations", "Интеграции"), new DsTab("agent", "Агент"), new DsTab("permissions", "Наборы прав")] : Array.Empty<DsTab>(),
         new("about", "О системе")
     ];
 
@@ -332,6 +337,7 @@
     {
         "search" when CanViewSearch => "search",
         "integrations" when CanManageIntegrations => "integrations",
+        "agent" when CanManageIntegrations => "agent",
         "permissions" when CanManageIntegrations => "permissions",
         "about" => "about",
         _ => "ui"

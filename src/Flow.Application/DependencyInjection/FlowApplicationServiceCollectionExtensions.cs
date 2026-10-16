@@ -33,6 +33,7 @@ public static class FlowApplicationServiceCollectionExtensions
         services.AddScoped<Features.Milestones.TaskMilestones>();
         services.AddScoped<Features.CustomFields.TaskCustomFields>();
         services.AddScoped<Features.Milestones.MilestoneProgressCalculator>();
+        services.AddScoped<Features.Agents.Settings.AgentConfigSync>();
         // Секцию "Recurrence" привязывает Flow.Infrastructure вместе с воркером; здесь — умолчания для тестов и хостов без него.
         services.TryAddSingleton(new Features.Tasks.Recurrence.RecurrenceOptions());
         services.TryAddSingleton(new Features.GitIntegration.GitOptions());

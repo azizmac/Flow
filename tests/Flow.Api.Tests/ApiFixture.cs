@@ -57,6 +57,10 @@ public sealed class ApiFixture : IAsyncLifetime
             builder.UseSetting("Search:Indexing:Enabled", "false");
             builder.UseSetting("Search:Embeddings:QueryEndpoint", "http://localhost:1/v1");
             builder.UseSetting("Scm:PublicBaseUrl", "https://flow.example.com");
+            // Агент: заведомо недоступный OpenCode и без фоновой синхронизации — тесты не должны дотянуться до
+            // OpenCode разработчика на :4096 и записать в него свои провайдеры.
+            builder.UseSetting("OpenCode:BaseUrl", "http://localhost:1");
+            builder.UseSetting("OpenCode:SyncEnabled", "false");
 
             builder.ConfigureTestServices(services =>
             {

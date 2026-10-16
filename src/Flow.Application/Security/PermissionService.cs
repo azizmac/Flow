@@ -176,6 +176,9 @@ internal sealed class PermissionService : IPermissionService
     public void EnsureCanManageIntegrations(User actor) =>
         Require(actor.Role >= UserRole.Admin, "Подключать Git-хостинги могут Admin и Owner.");
 
+    public void EnsureCanManageAgent(User actor) =>
+        Require(actor.Role >= UserRole.Admin, "Ключи и провайдеров агента настраивают Admin и Owner.");
+
     public void EnsureCanViewSearchDiagnostics(User actor) =>
         Require(actor.Role >= UserRole.Admin, "Состояние поискового индекса доступно Admin и Owner.");
 

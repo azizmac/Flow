@@ -25,6 +25,91 @@ namespace Flow.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Flow.Domain.Entities.Agents.AgentProvider", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiKeyProtected")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ApplyError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("BaseUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsCustom")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("KeyHint")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime?>("KeyUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("KeyUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ProviderKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("RestartRequired")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("ProviderKey")
+                        .IsUnique();
+
+                    b.ToTable("AgentProviders", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.Agents.AgentSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ModelId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProviderKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AgentSettings", (string)null);
+                });
+
             modelBuilder.Entity("Flow.Domain.Entities.Attachment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1605,6 +1690,39 @@ namespace Flow.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("SearchIndexQueue", (string)null);
+                });
+
+            modelBuilder.Entity("Flow.Domain.Entities.Agents.AgentProvider", b =>
+                {
+                    b.HasOne("Flow.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.OwnsMany("Flow.Domain.Entities.Agents.AgentProviderModel", "Models", b1 =>
+                        {
+                            b1.Property<Guid>("AgentProviderId");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAdd();
+
+                            b1.Property<string>("Id");
+
+                            b1.Property<string>("Name")
+                                .IsRequired();
+
+                            b1.HasKey("AgentProviderId", "__synthesizedOrdinal");
+
+                            b1.ToTable("AgentProviders");
+
+                            b1.ToJson("Models");
+
+                            b1.WithOwner()
+                                .HasForeignKey("AgentProviderId");
+                        });
+
+                    b.Navigation("Models");
                 });
 
             modelBuilder.Entity("Flow.Domain.Entities.Attachment", b =>
