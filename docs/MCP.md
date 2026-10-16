@@ -15,16 +15,23 @@ Claude Desktop, Cursor, VS Code и любой другой клиент MCP ра
 `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource/mcp"`, клиент сам находит
 сервер авторизации (`/.well-known/oauth-authorization-server`) и открывает в браузере обычную страницу входа Flow.
 
-Динамической регистрации клиентов у OpenIddict нет, поэтому клиенту MCP нужно назвать готового клиента:
-
-| Параметр | Значение |
-|---|---|
-| client_id | `flow-mcp` (публичный, без секрета) |
-| redirect_uri | `http://localhost:33418/callback` или `http://127.0.0.1:33418/callback` |
-| scope | `flow-api offline_access` (клиент берёт их из метаданных ресурса сам) |
-
-OpenIddict сверяет адрес возврата целиком, вместе с портом, — поэтому порт обратного вызова у клиента фиксирован: 33418.
+Динамической регистрации клиентов у OpenIddict нет, поэтому клиенту MCP нужно назвать готового клиента
+`flow-mcp` (публичный, без секрета). Scope (`flow-api offline_access`) клиенты берут из метаданных ресурса сами.
 Access token живёт час (`Auth:AccessTokenLifetimeMinutes`), refresh — 14 дней; клиент обновляет его сам.
+
+OpenIddict сверяет адрес возврата строкой целиком, вместе с портом и путём. Разрешённые адреса —
+`Auth:McpClient:RedirectUris` в `appsettings.json`; там уже стоят адреса клиентов ниже:
+
+| Клиент | Адрес возврата |
+|---|---|
+| Claude Code, Gemini CLI, Codex | `http://localhost:33418/callback` (и `127.0.0.1`) — порт задаётся в клиенте |
+| VS Code | `http://127.0.0.1:33418`, `https://vscode.dev/redirect` |
+| OpenCode | `http://127.0.0.1:19876/mcp/oauth/callback` — его адрес по умолчанию |
+| Cursor | `cursor://anysphere.cursor-mcp/oauth/callback` |
+| Claude (веб, Desktop, мобильный) | `https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback` |
+
+Ниже `https://flow.example.com/mcp` — адрес вашего Flow (`{AUTH_ISSUER}/mcp`); локально — `http://localhost:8080/mcp`.
+Хост и порт должны совпадать с `AUTH_ISSUER` буквально: `localhost` и `127.0.0.1` — разные адреса для `resource`.
 
 ### Claude Code
 
@@ -33,14 +40,159 @@ claude mcp add --transport http flow https://flow.example.com/mcp \
   --client-id flow-mcp --callback-port 33418
 ```
 
-Затем `/mcp` → `flow` → Authenticate: откроется страница входа Flow. Если у пользователя обязательная смена пароля,
-сначала будет она — код без неё не выдаётся.
+Затем `/mcp` → `flow` → Authenticate. Если у пользователя обязательная смена пароля, сначала будет она.
 
-### Другие клиенты
+### OpenCode
 
-Клиенту с OAuth нужно указать URL сервера, `client_id = flow-mcp` и порт обратного вызова 33418. Клиенту без OAuth
-можно передать готовый токен заголовком `Authorization: Bearer <access_token>` — тем же, что для `/api`;
-он проживёт час.
+OpenCode 2.x (в стеке Flow — `ghcr.io/anomalyco/opencode:2.0.0`), `opencode.jsonc` проекта или `~/.config/opencode/opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "flow": {
+        "type": "remote",
+        "url": "https://flow.example.com/mcp",
+        "oauth": {
+          "client_id": "flow-mcp",
+          "scope": "flow-api offline_access",
+          "redirect_uri": "http://127.0.0.1:19876/mcp/oauth/callback"
+        }
+      }
+    }
+  }
+}
+```
+
+OpenCode 1.x — `opencode.json`, сервер прямо в `mcp`, поля в camelCase:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "flow": {
+      "type": "remote",
+      "url": "https://flow.example.com/mcp",
+      "oauth": { "clientId": "flow-mcp", "scope": "flow-api offline_access" }
+    }
+  }
+}
+```
+
+Вход — `opencode mcp auth flow` (или сам при первом вызове), проверка — `opencode mcp list`, выход — `opencode mcp logout flow`.
+Токены лежат в `~/.local/share/opencode/mcp-auth.json`.
+
+OpenCode из `docker-compose.data.yml` (`opencode serve` для `/agents/test`) — безголовый: браузера для входа у него нет.
+Ему годится только готовый токен в `headers` (см. «Готовый токен»), и тот живёт час.
+
+### VS Code (Copilot, агентный режим)
+
+`.vscode/mcp.json` или пользовательский `mcp.json` (команда «MCP: Open User Configuration»):
+
+```json
+{
+  "servers": {
+    "flow": {
+      "type": "http",
+      "url": "https://flow.example.com/mcp",
+      "oauth": { "clientId": "flow-mcp" }
+    }
+  }
+}
+```
+
+Старые версии VS Code без поля `oauth` сами спросят client ID, когда увидят, что регистрации нет: ввести `flow-mcp`,
+секрет оставить пустым.
+
+### Cursor
+
+`~/.cursor/mcp.json` или `.cursor/mcp.json` проекта:
+
+```json
+{
+  "mcpServers": {
+    "flow": {
+      "url": "https://flow.example.com/mcp",
+      "auth": { "CLIENT_ID": "flow-mcp", "scopes": ["flow-api", "offline_access"] }
+    }
+  }
+}
+```
+
+Затем Settings → MCP → flow → Login. Cursor менял адрес возврата между версиями: если вход падает с `invalid_request`,
+адрес, который он прислал, виден в строке браузера (`redirect_uri=`), — его нужно добавить в `Auth:McpClient:RedirectUris`.
+
+### Gemini CLI
+
+`~/.gemini/settings.json` или `.gemini/settings.json` проекта:
+
+```json
+{
+  "mcpServers": {
+    "flow": {
+      "httpUrl": "https://flow.example.com/mcp",
+      "oauth": {
+        "enabled": true,
+        "clientId": "flow-mcp",
+        "scopes": ["flow-api", "offline_access"],
+        "redirectUri": "http://localhost:33418/callback"
+      }
+    }
+  }
+}
+```
+
+Вход — `/mcp auth flow` внутри Gemini CLI.
+
+### Codex CLI
+
+`~/.codex/config.toml` или `.codex/config.toml` проекта:
+
+```toml
+[mcp_servers.flow]
+url = "https://flow.example.com/mcp"
+oauth = { client_id = "flow-mcp", callback_port = 33418, callback_url = "http://localhost:33418/callback" }
+```
+
+Вход — `codex mcp login flow`.
+
+### Claude (веб, Desktop, мобильный)
+
+Настройки → Connectors → Add custom connector: URL `https://flow.example.com/mcp`, в Advanced settings — OAuth Client ID
+`flow-mcp`, секрет пустой. Коннектор подключают серверы Anthropic, поэтому Flow должен быть доступен из интернета по HTTPS;
+`localhost` так не подключить — для локального Flow берите Claude Code.
+
+### Готовый токен (любой клиент без OAuth)
+
+Заголовок `Authorization: Bearer <access_token>` — тот же токен, что для `/api` (scope `flow-api`). Живёт час,
+сам не обновляется, поэтому годится для скриптов и проверки, а не для постоянной работы. Пример для OpenCode 2.x:
+
+```jsonc
+"flow": {
+  "type": "remote",
+  "url": "http://api:8080/mcp",
+  "headers": { "Authorization": "Bearer {env:FLOW_TOKEN}" }
+}
+```
+
+### Проверка
+
+```bash
+curl -i -X POST https://flow.example.com/mcp -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'               # 401 + resource_metadata
+curl https://flow.example.com/.well-known/oauth-protected-resource/mcp
+curl https://flow.example.com/.well-known/oauth-authorization-server
+```
+
+Интерактивно — `npx @modelcontextprotocol/inspector`: Streamable HTTP, URL `…/mcp`, client ID `flow-mcp`.
+
+| Симптом | Причина |
+|---|---|
+| `invalid_request` на шаге входа | адрес возврата клиента не в `Auth:McpClient:RedirectUris` (другой порт или путь) |
+| `invalid_target` | URL MCP не совпадает с `{AUTH_ISSUER}/mcp` — другой хост, порт или лишний `/` |
+| 401 с токеном | у токена нет scope `flow-api`, он истёк, или пользователь деактивирован |
+| «Проект … не найден» | проект приватный, и пользователь в нём не участвует |
 
 ## Инструменты
 
@@ -82,5 +234,5 @@ claude mcp add --transport http flow https://flow.example.com/mcp \
 
 - `Flow.Api.Tests/McpApiTests` — настоящий клиент SDK поверх тестового хоста: 401 без токена, список инструментов,
   жизненный цикл задачи по именам, ошибки текстом.
-- `Flow.Auth.Tests/McpOAuthTests` — путь клиента к токену целиком: `resource_metadata` в 401, метаданные ресурса
+- `Flow.Auth.Tests/McpOAuthTests` — каждый адрес возврата из таблицы выше принимается OpenIddict; путь клиента к токену целиком: `resource_metadata` в 401, метаданные ресурса
   и сервера авторизации, code + PKCE клиентом `flow-mcp` с `resource`, вызов `/mcp` с настоящей OpenIddict Validation.
