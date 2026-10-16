@@ -3,6 +3,7 @@ using Flow.Api.Bootstrap;
 using Flow.Api.Client;
 using Flow.Api.Components;
 using Flow.Api.Controllers;
+using Flow.Api.Mcp;
 using Flow.Api.OpenApi;
 using Flow.Api.Routing;
 using Flow.Application.Abstractions;
@@ -67,6 +68,8 @@ builder.Services.AddControllers(options =>
 builder.Services.AddRazorPages();
 // Swagger UI на /swagger, документ OpenAPI — /swagger/v1/swagger.json; оба за входом (см. OpenApi/SwaggerSetup).
 builder.Services.AddFlowSwagger();
+// MCP-сервер для агентов и IDE: /mcp, Streamable HTTP, Bearer того же OpenIddict (см. Mcp/McpSetup, docs/MCP.md).
+builder.Services.AddFlowMcp(builder.Configuration);
 
 // ---- Интерфейс Flow: серверный рендер (docs/TZ_client_mudblazor.md) ----
 // Клиент перестал быть отдельным приложением WebAssembly и стал библиотекой компонентов этого хоста.
@@ -171,6 +174,7 @@ app.MapPost("/account/logout", async (HttpContext context) =>
 
 app.MapRazorPages();
 app.MapControllers();
+app.MapFlowMcp();
 
 // Страницы (@page) лежат в сборке Flow.Client, поэтому её надо назвать явно: сам по себе хост
 // знает только про свои Components. Признак живости переехал на /health/live — прежний

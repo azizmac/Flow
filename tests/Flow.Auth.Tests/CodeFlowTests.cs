@@ -124,22 +124,35 @@ public sealed class CodeFlowTests(AuthFixture auth)
             Assert.Contains("error=invalid_request", response.Headers.Location!.ToString());
     }
 
-    /// <summary>authorize → login → authorize → redirect_uri?code= → token. Возвращает JSON ответа token endpoint.</summary>
-    private static async Task<JsonElement> AuthorizeAsync(HttpClient client, string login, string password, string scope = Scope)
+    /// <summary>
+    /// authorize → login → authorize → redirect_uri?code= → token. Возвращает JSON ответа token endpoint.
+    /// По умолчанию — клиент flow-client; MCP-тесты передают flow-mcp, его loopback-адрес и resource (RFC 8707).
+    /// </summary>
+    internal static async Task<JsonElement> AuthorizeAsync(
+        HttpClient client,
+        string login,
+        string password,
+        string scope = Scope,
+        string clientId = "flow-client",
+        string redirectUri = AuthFixture.ClientRedirectUri,
+        string? resource = null)
     {
         var verifier = Base64Url(RandomNumberGenerator.GetBytes(32));
         var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
 
-        var authorizeUrl = "/connect/authorize?" + await new FormUrlEncodedContent(new Dictionary<string, string>
+        var authorize = new Dictionary<string, string>
         {
-            ["client_id"] = "flow-client",
-            ["redirect_uri"] = AuthFixture.ClientRedirectUri,
+            ["client_id"] = clientId,
+            ["redirect_uri"] = redirectUri,
             ["response_type"] = "code",
             ["scope"] = scope,
             ["state"] = "s1",
             ["code_challenge"] = challenge,
             ["code_challenge_method"] = "S256"
-        }).ReadAsStringAsync();
+        };
+        if (resource is not null)
+            authorize["resource"] = resource;
+        var authorizeUrl = "/connect/authorize?" + await new FormUrlEncodedContent(authorize).ReadAsStringAsync();
 
         // 1. Без cookie — на страницу входа.
         using var first = await client.GetAsync(authorizeUrl);
@@ -155,21 +168,24 @@ public sealed class CodeFlowTests(AuthFixture auth)
         using var second = await client.GetAsync(login2.Headers.Location!.ToString());
         Assert.Equal(HttpStatusCode.Redirect, second.StatusCode);
         var location = second.Headers.Location!;
-        Assert.StartsWith(AuthFixture.ClientRedirectUri, location.ToString());
+        Assert.StartsWith(redirectUri, location.ToString());
         var query = QueryHelpers.ParseQuery(location.Query);
         Assert.Equal("s1", query["state"].ToString());
         var code = query["code"].ToString();
         Assert.False(string.IsNullOrEmpty(code));
 
         // 4. Обмен кода на токены.
-        using var token = await client.PostAsync("/connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
+        var exchange = new Dictionary<string, string>
         {
             ["grant_type"] = "authorization_code",
-            ["client_id"] = "flow-client",
+            ["client_id"] = clientId,
             ["code"] = code,
-            ["redirect_uri"] = AuthFixture.ClientRedirectUri,
+            ["redirect_uri"] = redirectUri,
             ["code_verifier"] = verifier
-        }));
+        };
+        if (resource is not null)
+            exchange["resource"] = resource;
+        using var token = await client.PostAsync("/connect/token", new FormUrlEncodedContent(exchange));
         var body = await token.Content.ReadAsStringAsync();
         Assert.True(token.StatusCode == HttpStatusCode.OK, body);
 

@@ -24,6 +24,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- MCP-сервер для агентов и IDE на /mcp (Mcp/McpSetup, docs/MCP.md). -->
+        <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
+    </ItemGroup>
+
+    <ItemGroup>
         <!-- Swagger: документ OpenAPI строит встроенный генератор ASP.NET Core, Swashbuckle даёт только UI (см. OpenApi/SwaggerSetup). -->
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.2.3" />
